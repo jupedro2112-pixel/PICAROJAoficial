@@ -1,0 +1,276 @@
+/* Modal de información */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.info-card {
+    background: linear-gradient(135deg, rgba(0,255,136,0.1) 0%, rgba(0,204,106,0.1) 100%);
+    border: 1px solid #00ff88;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.info-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 255, 136, 0.2);
+}
+
+.info-card-icon {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+}
+
+.info-card-title {
+    color: #00ff88;
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.info-card-desc {
+    color: #b0b0b0;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* MODAL INFO - RESPONSIVE PARA MÓVILES */
+#infoModal .modal-content {
+    max-height: 90dvh;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 20px;
+}
+
+/* Modals */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #1a0033 0%, #0a0015 100%);
+    border: 2px solid #d4af37;
+    border-radius: 20px;
+    padding: 25px;
+    padding-bottom: max(25px, var(--sab, env(safe-area-inset-bottom)));
+    width: 90%;
+    max-width: 400px;
+    max-height: calc(100dvh - 40px);
+    overflow-y: auto;
+    animation: modalSlide 0.3s ease;
+}
+
+@keyframes modalSlide {
+    from { opacity: 0; transform: translateY(-50px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    color: #d4af37;
+    margin-bottom: 10px;
+}
+
+.modal-header p {
+    color: #b0b0b0;
+    font-size: 14px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.modal-actions .btn {
+    flex: 1;
+}
+
+.refund-details, .fire-details {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.refund-info-row, .fire-info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.refund-info-row:last-child, .fire-info-row:last-child {
+    border-bottom: none;
+}
+
+.refund-info-row.highlight {
+    background: rgba(212, 175, 55, 0.1);
+    margin: 10px -15px -15px -15px;
+    padding: 15px;
+    border-radius: 0 0 12px 12px;
+}
+
+.refund-info-row.highlight span:last-child {
+    color: #00ff88;
+    font-weight: bold;
+    font-size: 18px;
+}
+
+.fire-info-row.highlight span:last-child {
+    color: #ff4500;
+    font-weight: bold;
+    font-size: 18px;
+}
+
+/* Tarjetas de la encuesta de plan de notificaciones */
+.notif-plan-card {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.04);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 13px 15px;
+    cursor: pointer;
+    transition: transform 0.2s ease, background 0.2s ease;
+    color: #fff;
+    position: relative;
+    font-family: inherit;
+}
+
+.notif-plan-card:hover:not(:disabled) {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.notif-plan-card:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.notif-plan-card .plan-name {
+    font-size: 16px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notif-plan-card .plan-dot {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.notif-plan-card .plan-detail {
+    font-size: 12px;
+    color: #ddd;
+    margin-top: 6px;
+}
+
+.notif-plan-card .plan-desc {
+    font-size: 11px;
+    color: #9a9a9a;
+    margin-top: 2px;
+}
+
+.notif-plan-card.plan-suave { border-color: rgba(0, 255, 136, 0.5); }
+.notif-plan-card.plan-normal { border-color: #ffd700; background: rgba(212, 175, 55, 0.1); }
+.notif-plan-card.plan-activo { border-color: rgba(255, 107, 107, 0.55); }
+.notif-plan-card.plan-reembolsos { border-color: rgba(0, 168, 255, 0.55); }
+
+.notif-plan-badge {
+    position: absolute;
+    top: -10px;
+    right: 14px;
+    background: linear-gradient(135deg, #d4af37, #ffd700);
+    color: #000;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 10px;
+}
+
+/* Settings modal responsive */
+@media (max-width: 600px) {
+    #infoModal .modal-content {
+        width: 96%;
+        max-width: 96%;
+        margin: 4px;
+        padding: 16px 14px 18px;
+        max-height: 92dvh;
+        max-height: 92vh;
+        border-radius: 14px;
+    }
+
+    #infoModal .info-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+    }
+
+    #infoModal .info-card {
+        padding: 8px 4px;
+        border-radius: 9px;
+    }
+
+    #infoModal .info-card-icon {
+        font-size: 1.5em;
+        margin-bottom: 3px;
+    }
+
+    #infoModal .info-card-title {
+        font-size: 9.5px;
+        margin-bottom: 3px;
+    }
+
+    #infoModal .info-card-desc {
+        font-size: 8.5px;
+        line-height: 1.3;
+    }
+
+    /* Botón X siempre visible aunque el scroll no esté arriba */
+    #infoModal .modal-content > button[onclick] {
+        position: sticky;
+        top: 4px;
+        float: right;
+        margin-bottom: -30px;
+        background: rgba(10,0,21,0.85) !important;
+        border-radius: 50% !important;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px !important;
+        z-index: 20;
+    }
+}
+
+@media (max-width: 380px) {
+    #infoModal .info-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}

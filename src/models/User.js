@@ -1,0 +1,882 @@
+
+/**
+ * Modelo de Usuario
+ * Gestiona usuarios, admins y roles
+ */
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const { generateReferralCode } = require('../utils/referralCode');
+
+const userSchema = new mongoose.Schema({
+  id: { 
+    type: String, 
+    required: true, 
+    unique: true, 
+    index: true 
+  },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 30
+  },
+  // Copia en minúsculas del username, indexada. Es el camino RÁPIDO de las
+  // búsquedas case-insensitive (login, check-username, unicidad al crear):
+  // el regex 'i' anclado no puede usar el índice de username → COLLSCAN.
+  // La mantiene el hook pre('save') + backfill al arranque (server.js).
+  usernameLower: {
+    type: String,
+    index: true,
+    default: null
+  },
+  password: { 
+    type: String, 
+    required: true,
+    minlength: 6
+  },
+  email: { 
+    type: String, 
+    default: null,
+    lowercase: true,
+    trim: true
+  },
+  phone: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  // Clave NORMALIZADA del teléfono (solo dígitos, últimos 10) para unicidad robusta:
+  // detecta el MISMO número aunque venga en distinto formato (+54.., 011.., con/sin 9).
+  // Se setea al verificar el teléfono. El chequeo de "número ya usado" se hace por acá.
+  phoneKey: {
+    type: String,
+    default: null,
+    index: true
+  },
+  phoneVerified: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  whatsapp: { 
+    type: String, 
+    default: null,
+    trim: true
+  },
+  // Consentimiento explícito del usuario para recibir SMS (incluye marketing/avisos masivos).
+  // Se setea automáticamente a true cuando el usuario verifica su teléfono vía OTP en el alta
+  // o en el cambio de contraseña, ya que en ese momento confirma tener acceso a la línea.
+  // Es uno de los filtros usados por el panel de SMS Masivo (ver buildBulkSmsQuery en server.js).
+  smsConsent: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  role: {
+    type: String,
+    enum: ['user', 'admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'],
+    default: 'user',
+    index: true
+  },
+  // Para cuentas con role='publisher_admin': código de la Campaign a la que
+  // están atadas. Todo usuario que crean queda atribuido a un código de su
+  // lista. Ignorado en cualquier otro rol.
+  // Desde 2026-08-07 una misma cuenta puede tener VARIOS publicistas:
+  // `publisherCampaignCodes` es la lista completa y `publisherCampaignCode`
+  // queda como "principal" (el primero) por compatibilidad — el server siempre
+  // resuelve los permitidos con la UNIÓN de ambos campos (_publisherCodesOf).
+  publisherCampaignCode: {
+    type: String,
+    default: null,
+    uppercase: true,
+    trim: true,
+    index: true
+  },
+  publisherCampaignCodes: {
+    type: [{ type: String, uppercase: true, trim: true }],
+    default: []
+  },
+  accountNumber: { 
+    type: String, 
+    unique: true,
+    sparse: true
+  },
+  balance: { 
+    type: Number, 
+    default: 0,
+    min: 0
+  },
+  isActive: { 
+    type: Boolean, 
+    default: true 
+  },
+  lastLogin: { 
+    type: Date, 
+    default: null 
+  },
+  createdAt: { 
+    type: Date, 
+    default: Date.now,
+    immutable: true
+  },
+  passwordChangedAt: { 
+    type: Date, 
+    default: null 
+  },
+  // Forces the user to change their password before they can use the rest of the app.
+  // Set to `true` when:
+  //   - A new user is auto-imported from JUGAYGANA (default password "asd123").
+  //   - Login detects the JUGAYGANA-default scenario (`needsPasswordChange`).
+  //   - An admin resets the user's password.
+  // Cleared (`false`) when the user successfully completes a password change
+  // (POST /api/auth/change-password) or a password reset by SMS
+  // (POST /api/auth/complete-password-reset).
+  // Enforced server-side by `authMiddleware`: any authenticated request to a
+  // non-allow-listed path returns 403 with `code: 'MUST_CHANGE_PASSWORD'` while
+  // this flag is true. This prevents bypassing the mandatory change modal by
+  // simply reloading the page.
+  mustChangePassword: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  // #401: SOPORTE — el cliente sólo ve los mensajes de soporte desde esta fecha (su "sesión" actual). La pone el cron
+  // de cierre automático (6 h sin respuesta del cliente tras una respuesta nuestra): para él el chat arranca de cero;
+  // el panel sigue viendo TODO el historial. null = nunca se cerró.
+  supportSessionSince: { type: Date, default: null },
+  tokenVersion: { 
+    type: Number, 
+    default: 0 
+  },
+  
+  // Campos JUGAYGANA
+  jugayganaUserId: { 
+    type: Number, 
+    default: null,
+    index: true
+  },
+  jugayganaUsername: { 
+    type: String, 
+    default: null 
+  },
+  jugayganaSyncStatus: { 
+    type: String, 
+    enum: ['pending', 'synced', 'linked', 'error', 'imported', 'not_applicable', 'na'], 
+    default: 'pending',
+    index: true
+  },
+  jugayganaSyncError: { 
+    type: String, 
+    default: null 
+  },
+  source: {
+    type: String,
+    enum: ['local', 'jugaygana'],
+    default: 'local'
+  },
+
+  // ============================================
+  // Campos 1girox (plataforma NUEVA)
+  // ============================================
+  // Se agregan APARTE de los de JUGAYGANA a propósito: mientras dure la migración
+  // los dos conviven, y si hay que revertir no se perdió el vínculo viejo.
+  //
+  // La Partner API de 1girox trabaja SÓLO por username (no devuelve IDs). Pero el
+  // panel de reportes —de donde sale el netwin para reembolsos y comisiones de
+  // referidos— exige el ID numérico del jugador (`player_id`). Por eso hace falta
+  // guardarlo igual, resuelto contra el panel. Mismo rol que `jugayganaUserId`:
+  // ⚠️ sin este ID NO se puede calcular el reembolso de ese usuario.
+  giroxUserId: {
+    type: Number,
+    default: null,
+    index: true
+  },
+  giroxSyncStatus: {
+    type: String,
+    // pending  = todavía no se intentó crear en 1girox
+    // synced   = lo creamos nosotros
+    // linked   = ya existía en 1girox y quedó vinculado
+    // error    = falló la creación (ver giroxSyncError)
+    // invalid_username = el username no cumple las reglas de 1girox (3-18 chars,
+    //            sólo letras/números/_) → necesita decisión manual, no se puede crear
+    // not_applicable = admins y roles internos (no son jugadores)
+    enum: ['pending', 'synced', 'linked', 'error', 'invalid_username', 'not_applicable'],
+    default: 'pending',
+    index: true
+  },
+  // Campaña DUEÑA del jugador en 1girox (fix 2026-08-05): se setea SOLO cuando el
+  // alta se hizo con la key del publicista (createUserAsPublisher OK). La key
+  // master NO ve a esos jugadores por Partner API, así que TODAS sus operaciones
+  // (cargas, retiros, saldo, stats, SSO) se firman con la key de ESTA campaña
+  // (resolver inyectado en giroxService). null = jugador de la cuenta master.
+  giroxOwnerCampaign: {
+    type: String,
+    default: null
+  },
+  giroxSyncError: {
+    type: String,
+    default: null
+  },
+  // true cuando la contraseña de VIPCARGAS ya se replicó en 1girox. Los usuarios
+  // migrados arrancan en false (se crean con una clave random porque la local está
+  // en bcrypt y es irrecuperable) y pasan a true en su próximo login o cambio de
+  // clave. No afecta al acceso: al casino se entra por SSO, no con la contraseña.
+  giroxPasswordSynced: {
+    type: Boolean,
+    default: false
+  },
+
+  // ============================================
+  // MULTI-PLATAFORMA (2026-10-16 — ver src/platforms/ y docs/PLATFORMS.md)
+  // ============================================
+  // Última plataforma en la que el cliente ELIGIÓ cargar ('girox' | 'ganamos' | …).
+  // Es el fallback cuando no responde la pregunta "¿dónde querés jugar?" (timeout)
+  // y la que se usa cuando el panel está en askMode 'first_time' / 'never'.
+  // null = nunca eligió → se usa la default de Config['platforms'].
+  // #304: avatar elegido en el perfil de la app (clave del set de la PWA; los íconos de nivel se desbloquean por vipLevel).
+  avatar: { type: String, default: null },
+  lastPlatform: {
+    type: String,
+    default: null,
+    index: true
+  },
+  // Plataforma FIJA elegida por el cliente desde la app (#225): si está seteada y habilitada,
+  // las cargas van directo ahí SIN preguntar. null = no fijó → se pregunta en cada carga
+  // (según askMode de Config['platforms']).
+  preferredPlatform: {
+    type: String,
+    default: 'girox' // #781 (owner): Girox preseleccionada (fija, con el tilde) para todo usuario nuevo
+  },
+  // Estado de la cuenta del jugador en CADA plataforma distinta de girox (la de girox
+  // sigue en giroxSyncStatus/giroxUserId para no tocar los ~110 call sites):
+  //   { ganamos: { status: 'pending'|'synced'|'linked'|'error', username, error, syncedAt } }
+  // Lo escribe server.js al crear/vincular al jugador en esa plataforma.
+  platforms: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+
+  // ============================================
+  // NIVELES VIP (por apostado acumulado — ver src/utils/vipLevels.js)
+  // ============================================
+  // Apostado de casino ACUMULADO de por vida, en pesos. Es un CACHE de la suma de
+  // los buckets VipWagerMonth (la fuente de verdad); lo mantiene el motor de sync.
+  // ⚠️ Sólo se actualiza con $max (nunca baja): un recálculo parcial (con meses
+  // todavía sin backfillear) no puede pisar un total mayor ya calculado.
+  lifetimeWagered: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  // Índice del nivel alcanzado (0 = ninguno, 1 = Bronce ... ver vipLevels.js).
+  // NUNCA baja. Se avanza recién DESPUÉS de acreditar el bono del nivel (la
+  // reference idempotente vip-lvl-{userId}-{idx} hace que reintentarlo sea gratis).
+  vipLevel: {
+    type: Number,
+    default: 0,
+    index: true
+  },
+  vipLevelUpdatedAt: {
+    type: Date,
+    default: null
+  },
+  // #257 (owner 2026-10-16): el bono de nivel YA NO se acredita solo. Al subir de nivel el motor
+  // deja el idx acá y el cliente lo RECLAMA desde la app eligiendo la plataforma
+  // (POST /api/vip/level-bonus/claim). Se saca del array recién cuando el crédito entró
+  // (reference vip-lvl-{userId}-{idx}: reintentar nunca paga dos veces).
+  vipPendingLevelBonuses: {
+    type: [Number],
+    default: []
+  },
+
+  // ============================================
+  // REEMBOLSO ACUMULATIVO de por vida (ESPEC-REEMBOLSO-1GIROX §3.4)
+  // ============================================
+  // La Partner API acepta rangos de hasta 92 días, así que el "neto de por vida"
+  // se lleva PLEGADO: `cashbackCarryNet` = netwin de casino consolidado de los
+  // tramos viejos (puede ser NEGATIVO: una ganancia resta para siempre),
+  // `cashbackCarryGranted` = bono otorgado (bonus.granted) en esos mismos tramos,
+  // `cashbackAnchorAt` = desde dónde se consulta en vivo (null = alta del usuario
+  // o arranque en 1girox). netoDePorVida = carryNet + netwin(ancla → hoy). El
+  // plegado es un update atómico condicionado al ancla previa (multi-instancia).
+  cashbackAnchorAt: { type: Date, default: null },
+  cashbackCarryNet: { type: Number, default: 0 },
+  cashbackCarryGranted: { type: Number, default: 0 },
+
+  // ============================================
+  // LINK DE ACCESO DE UN SOLO USO (alta desde el panel admin)
+  // ============================================
+  // Se guarda SOLO el hash sha256 del token — el link en claro lo ve únicamente
+  // el admin al generarlo (un dump de la base no regala logins). Al canjearse se
+  // borra en el MISMO findOneAndUpdate (un solo uso, a prueba de carreras).
+  // Regenerar desde el panel pisa el hash → el link anterior muere solo.
+  accessLinkHash: {
+    type: String,
+    default: null,
+    index: true
+  },
+  accessLinkCreatedAt: {
+    type: Date,
+    default: null
+  },
+  // #673: 'install' = token que pidió el PROPIO cliente para que la app instalada en iPhone arranque con su sesión (no fuerza
+  // cambio de clave al canjearse); null = link generado por un agente (flujo de siempre).
+  accessLinkPurpose: {
+    type: String,
+    default: null
+  },
+  // #826: tokens de INSTALACIÓN aparte del link del agente (antes compartían el único accessLinkHash ⇒ un link nuevo invalidaba el que ya
+  // estaba en el manifest del iPhone). Hasta 5 vigentes por 7 días, cada uno de un solo uso.
+  installLinks: { type: [{ hash: String, createdAt: Date, _id: false }], default: [] },
+  // #840: JUEGOS FAVORITOS que el cliente marca en la app (la Partner API de 1girox no expone los favoritos de su web). key =
+  // '<aggregator_id>/<game_id>' (el juego se abre en /play/<key>), img = foto del catálogo público de 1girox. Máx. 30.
+  favoriteGames: { type: [{ key: String, name: String, img: String, provider: String, at: Date, _id: false }], default: [] },
+  // #842: true = el cliente ya editó sus favoritos (antes de eso ve los 10 de entrada, DEFAULT_FAV_GAMES en server.js).
+  favoriteGamesCustom: { type: Boolean, default: false },
+  // #831: GRACIA del link de acceso (alta por landing / instalación): el mismo link vuelve a entrar durante 30 min después de canjearse
+  // (doble apertura in-app → Chrome, recarga, respuesta perdida en un corte). Pasado ese rato muere como siempre.
+  accessLinkGraceHash: { type: String, default: null, index: { sparse: true } },
+  accessLinkGraceUntil: { type: Date, default: null },
+
+
+  // Token FCM para notificaciones push (último registrado – se mantiene para compatibilidad y vista admin)
+  fcmToken: { 
+    type: String, 
+    default: null,
+    index: true
+  },
+  fcmTokenUpdatedAt: {
+    type: Date,
+    default: null
+  },
+  // Contexto en que se obtuvo el token: 'standalone' (PWA instalada) o 'browser'
+  fcmTokenContext: {
+    type: String,
+    default: null
+  },
+  // #823: último teléfono con el que entró (lo detecta index.html): { os, model, w, h, dpr, app, sat, at }.
+  lastDevice: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Último permiso de notificaciones reportado por el cliente: 'granted' / 'denied' / 'default'
+  notifPermission: {
+    type: String,
+    default: null
+  },
+  // Lista de todos los tokens FCM activos del usuario (uno por contexto/dispositivo).
+  // Cada entrada: { token, context, updatedAt, notifPermission }
+  // Permite enviar notificaciones a Chrome Y a la PWA instalada al mismo tiempo.
+  fcmTokens: [{
+    token: { type: String, required: true },
+    context: { type: String, default: 'browser' },
+    updatedAt: { type: Date, default: Date.now },
+    notifPermission: { type: String, default: null }
+  }],
+
+  // =============================================
+  // Campos de sistema de referidos
+  // =============================================
+  referralCode: {
+    type: String,
+    default: null,
+    unique: true,
+    sparse: true,
+    uppercase: true,
+    trim: true,
+    index: true
+  },
+  referredByUserId: {
+    type: String,
+    default: null,
+    index: true
+  },
+  referredByCode: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  referredAt: {
+    type: Date,
+    default: null
+  },
+  referralStatus: {
+    type: String,
+    enum: ['none', 'referred', 'active'],
+    default: 'none',
+    index: true
+  },
+  excludedFromReferral: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  // Para futura escalabilidad de tiers / tasas personalizadas
+  referralTier: {
+    type: String,
+    default: null
+  },
+  referralRateOverride: {
+    type: Number,
+    default: null,
+    min: 0,
+    max: 1
+  },
+
+  // =============================================
+  // Atribución de campañas / publicistas
+  // =============================================
+  // Código de la campaña (Campaign.code) que trajo a este usuario.
+  // Se setea durante el signup si el cliente envió un campaignCode válido
+  // (vía link ?p=CODE). Una vez seteado no debería cambiar (atribución first-touch
+  // a nivel de registro, last-touch a nivel de clic).
+  acquisitionCampaign: {
+    type: String,
+    default: null,
+    uppercase: true,
+    trim: true,
+    index: true
+  },
+  // UTM parameters capturados del link de pauta (para reporting cross-campaña
+  // y para cruzar con datos de Meta Ads).
+  acquisitionUtm: {
+    source: { type: String, default: null },
+    medium: { type: String, default: null },
+    campaign: { type: String, default: null },
+    content: { type: String, default: null },
+    term: { type: String, default: null }
+  },
+  acquiredAt: {
+    type: Date,
+    default: null
+  },
+  // 'organic' = el usuario llegó solo por link de pauta (?p=CODE o vanity URL).
+  // 'manual'  = lo creó un publisher_admin desde el panel.
+  // El default es 'organic' por compatibilidad con usuarios pre-existentes y
+  // con el flujo de registro público que no toca este campo.
+  acquisitionSource: {
+    type: String,
+    // 'landing' = alta por la landing puente externa (POST /api/landing/signup).
+    enum: ['organic', 'manual', 'landing'],
+    default: 'organic',
+    index: true
+  },
+  // true = la cuenta la creó UN AGENTE desde el panel (admin general, depositor
+  // o publisher_admin), NO el propio cliente registrándose. Lo usan los gates
+  // que distinguen auto-registro de alta asistida (ej. el bono de instalación
+  // no exige SMS a los creados por agente, owner 2026-08-05). Para cuentas
+  // viejas sin el campo hay señales de respaldo: acquisitionSource='manual' o
+  // accessLinkCreatedAt (el link de un solo uso lo genera siempre un agente).
+  createdByAgent: {
+    type: Boolean,
+    default: false
+  },
+  // Sólo se llena cuando acquisitionSource='manual': identifica al
+  // publisher_admin (o admin futuro) que creó el usuario desde el panel.
+  // Permite reportes de "cuántos usuarios trajo cada cuenta publicista".
+  createdByEmployeeId: {
+    type: String,
+    default: null,
+    index: true
+  },
+  createdByEmployeeUsername: {
+    type: String,
+    default: null
+  },
+  // Sub-atribución por influencer DENTRO de un publicista. Se setea cuando un
+  // publisher_admin crea el usuario y elige un influencer de la lista fija de su
+  // campaña (Campaign.influencers). Guarda el NOMBRE del influencer (la lista es
+  // gestionada → sin typos). Es sólo para desglosar la analítica del publicista
+  // por influencer; no tiene link ni creds propias.
+  acquisitionInfluencer: {
+    type: String,
+    default: null,
+    trim: true,
+    index: true
+  },
+  // Identificadores de Meta Ads capturados en el registro del usuario.
+  // Permiten atribuir conversiones server-side vía Conversions API — en
+  // particular el evento Purchase, que se dispara desde el endpoint de admin
+  // donde la cookie del navegador del jugador no viaja en el request.
+  //   metaFbc — cookie _fbc: identificador del clic del anuncio. Es lo que
+  //             ata la conversión al clic en Meta Ads. Formato fb.1.<ts>.<fbclid>.
+  //   metaFbp — cookie _fbp: identificador del navegador.
+  // Se envían sin hashear en user_data. Una vez seteados no se pisan con null.
+  metaFbc: {
+    type: String,
+    default: null
+  },
+  metaFbp: {
+    type: String,
+    default: null
+  },
+  // URL completa con la que aterrizó el usuario (incluye ?fbclid, ?p=,
+  // utm_*). Se manda en cada conversión al sistema externo fb-ads para
+  // que pueda atribuir al anuncio específico que lo trajo. Se actualiza
+  // last-touch (al registrarse y en cada login si hay nueva atribución).
+  landingUrl: {
+    type: String,
+    default: null
+  },
+  // True cuando el usuario se registró por el flujo rápido sin OTP de teléfono.
+  // El authMiddleware NO bloquea (a diferencia de mustChangePassword): el
+  // usuario puede usar todo normalmente excepto retirar. Los endpoints de
+  // retiro (/api/movements/withdraw y /api/admin/withdrawal) devuelven 403
+  // con code:'PHONE_VERIFICATION_REQUIRED' hasta que /api/auth/verify-phone
+  // se complete con éxito.
+  phoneVerificationPending: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+
+  // =============================================
+  // Bloqueo de cuenta (solo admin general puede bloquear/desbloquear)
+  // =============================================
+  isBlocked: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  blockReason: {
+    type: String,
+    default: null
+  },
+  blockedAt: {
+    type: Date,
+    default: null
+  },
+  blockedBy: {
+    type: String,
+    default: null
+  },
+
+  // =============================================
+  // Datos bancarios guardados para retiros
+  // =============================================
+  // Se completan/actualizan cuando el usuario marca "Guardar mis datos" en el
+  // modal de retiro, para autocompletar el formulario la próxima vez.
+  withdrawalAccount: {
+    titular: { type: String, default: null, trim: true },
+    cbu: { type: String, default: null, trim: true },
+    alias: { type: String, default: null, trim: true },
+    savedAt: { type: Date, default: null }
+  },
+
+  // Código temporal de 6 dígitos generado cuando el usuario no pudo verificar
+  // el SMS al cambiar la contraseña y eligió "entrar de forma temporal".
+  // El acceso real queda condicionado por `phoneVerificationPending`: el usuario
+  // puede usar la app pero NO puede retirar hasta verificar su teléfono por SMS.
+  pendingAccessCode: {
+    type: String,
+    default: null
+  },
+
+  // Bono one-time por instalar la app (PWA). Se reclama una sola vez, estando
+  // dentro de la app instalada (standalone).
+  //
+  // ⚠️ CAMBIÓ DE NATURALEZA (owner, 2026-07-31): antes acreditaba $5.000 al saldo
+  // en el acto. Ahora NO acredita nada: le deja al jugador un **100% en su próxima
+  // carga**, que el AGENTE aplica a mano cuando el cliente carga. Motivo: el bono
+  // en efectivo se lo llevaban cuentas que no cargaban nunca; atado a una carga,
+  // el beneficio sólo se paga si el cliente efectivamente deposita.
+  //
+  // `installBonusClaimed` sigue siendo el candado de "una vez por cuenta".
+  installBonusClaimed: {
+    type: Boolean,
+    default: false
+  },
+  installBonusClaimedAt: {
+    type: Date,
+    default: null
+  },
+
+  // Estado del 100% en la próxima carga:
+  //   'none'    = nunca lo reclamó
+  //   'pending' = lo reclamó y está esperando usarlo en su próxima carga
+  //   'used'    = el agente ya se lo aplicó → NO puede volver a reclamarlo nunca
+  firstChargeBonusStatus: {
+    type: String,
+    enum: ['none', 'pending', 'used'],
+    default: 'none',
+    index: true
+  },
+  // Quién y cuándo lo marcó como usado (trazabilidad: es plata que regala el agente).
+  firstChargeBonusUsedAt: {
+    type: Date,
+    default: null
+  },
+  firstChargeBonusUsedBy: {
+    type: String,
+    default: null
+  },
+  // % del bono CONGELADO al reclamar (2026-09-17). El % vigente vive en
+  // Config['installBonusPct'] y el owner lo cambia según el mes/día: el cliente
+  // tiene que cobrar el % que le prometió el cartel cuando reclamó, no el de hoy.
+  // null = reclamos anteriores a este campo: al boot los PENDIENTES se congelan al %
+  // vigente (2026-09-30: el 100% viejo ya no existe); en runtime null → % vigente.
+  firstChargeBonusPct: {
+    type: Number,
+    default: null
+  },
+  // #283 (2026-10-17): CARGA GRATIS por instalar la app, ofrecida en la PRIMERA carga de un cliente sin
+  // la app. status: none → offered (cartel) → deferred ("ahora quiero jugar": botón pendiente abajo)
+  // → claimed (acreditada desde la app instalada) | expired. Una sola vez en la vida (ref vip-igift-<id>).
+  installGift: {
+    status: { type: String, enum: ['none', 'offered', 'deferred', 'claimed', 'expired'], default: 'none' },
+    amount: { type: Number, default: 0 },      // regalo en $ (pct% de la primera carga, con tope)
+    baseAmount: { type: Number, default: 0 },  // la primera carga
+    pct: { type: Number, default: null },
+    offeredAt: { type: Date, default: null },
+    expiresAt: { type: Date, default: null },
+    deferredAt: { type: Date, default: null },
+    claimedAt: { type: Date, default: null },
+    claimTxId: { type: String, default: null },
+    platform: { type: String, default: null },
+    source: { type: String, default: null },
+    lastError: { type: String, default: null }
+  },
+  // RULETA DIARIA v2 (2026-09-18): % EXTRA ganado y todavía sin usar. Lo consume
+  // la próxima carga (manual o hgcash) vía resolveAutoBonus (server.js); un
+  // premio nuevo en % pisa uno anterior sin usar. 0 = nada pendiente.
+  // #504 (owner): BONO DE SEGUNDA CARGA. A las N horas de la primera carga, si no volvió a cargar, se le ofrece pct% EXTRA en su
+  // próxima carga por `validHours`. Lo consume resolveAutoBonus (claimSecondDepositPercent). Config['strategyClientes'].secondDeposit.
+  secondDepositOffer: {
+    status: { type: String, enum: ['none', 'offered', 'used', 'expired'], default: 'none' },
+    pct: { type: Number, default: null },
+    offeredAt: { type: Date, default: null },
+    expiresAt: { type: Date, default: null },
+    usedAt: { type: Date, default: null }
+  },
+  // #509 anti-estafa: banderas (ej. 'cbu_reuse' = cargó desde un CBU que ya usó OTRA cuenta → sin bonos de bienvenida/2ª carga/misiones)
+  fraudFlags: { type: [String], default: [] },
+  // #514 misiones por NIVEL: `promo` = niveles ganados por completar todas las misiones de una semana (baja si pasa 2 semanas sin cumplir ninguna)
+  missionTier: { promo: { type: Number, default: 0 }, updatedWeek: { type: String, default: null }, promotedWeek: { type: String, default: null }, lastTierId: { type: String, default: null } },
+  fraudNotes: { type: [{ at: Date, note: String }], default: [] },
+  // #873 revisión de una ALERTA DE ESTAFA: 'legit' (revisado, no se vuelve a mostrar) | 'watch' (en observación). by/at/note de quién lo revisó.
+  fraudReview: { status: { type: String, default: null }, by: { type: String, default: null }, at: { type: Date, default: null }, note: { type: String, default: null } },
+  dailyRoulettePendingPct: { type: Number, default: 0 },
+  dailyRoulettePendingLabel: { type: String, default: null },
+  // #742: bono reclamado desde una HISTORIA (se consume en la próxima carga antes que cualquier otro bono; vence con la historia)
+  storyBonus: {
+    storyId: { type: String, default: null },
+    pct: { type: Number, default: 0 },
+    label: { type: String, default: null },
+    claimedAt: { type: Date, default: null },
+    expiresAt: { type: Date, default: null }
+  },
+  dailyRouletteWonAt: { type: Date, default: null },
+
+  // ============================================
+  // CÓDIGO DE BIENVENIDA de la Comunidad de Telegram (2026-08-03)
+  // ============================================
+  // El owner publica un código en la comunidad; el usuario lo canjea UNA sola
+  // vez en la vida. Según la config, el bono es:
+  //   - 'cash'        → MONTO SORPRESA acreditado AUTOMÁTICO al canjear
+  //                     (status pasa a 'credited'; reference vip-welcome-{userId})
+  //   - 'next_charge' → bono extra en la PRÓXIMA CARGA, lo aplica el agente a
+  //                     mano (pending → used, mismo mecanismo que el bono 100%).
+  welcomeCodeBonusStatus: {
+    type: String,
+    // 'credited' = plata ya acreditada automáticamente (tipo cash).
+    enum: ['none', 'pending', 'used', 'credited'],
+    default: 'none',
+    index: true
+  },
+  // Tipo CONGELADO al canjear (igual que el monto): cambiar la config después no
+  // altera canjes ya hechos.
+  welcomeCodeBonusType: {
+    type: String,
+    enum: ['cash', 'next_charge', null],
+    default: null
+  },
+  // Monto CONGELADO al canjear: si el admin cambia el monto en la config después,
+  // los bonos ya otorgados no cambian.
+  welcomeCodeBonusAmount: {
+    type: Number,
+    default: 0
+  },
+  welcomeCodeClaimedAt: {
+    type: Date,
+    default: null
+  },
+  welcomeCodeBonusUsedAt: {
+    type: Date,
+    default: null
+  },
+  welcomeCodeBonusUsedBy: {
+    type: String,
+    default: null
+  },
+
+  // Plan de notificaciones elegido en la encuesta inicial (app instalada).
+  // Define el volumen de notificaciones push que el usuario quiere recibir.
+  // null = todavía no respondió la encuesta.
+  notificationPlan: {
+    type: String,
+    enum: ['suave', 'normal', 'activo', 'solo_reembolsos', null],
+    default: null,
+    index: true
+  },
+
+  // Cuando un admin lo activa, el cliente puede iniciar sesión solo con su
+  // usuario, sin contraseña ni SMS. Se controla por cliente desde el panel.
+  loginWithoutPassword: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+
+  // Conteo mensual de notificaciones de estrategia recibidas, para respetar
+  // los topes del plan de notificaciones del usuario. period = 'YYYY-MM';
+  // cuando cambia el mes, los contadores se resetean.
+  notifMonthlyCounts: {
+    period: { type: String, default: null },
+    bonos: { type: Number, default: 0 },
+    invitaciones: { type: Number, default: 0 },
+    regalos: { type: Number, default: 0 }
+  },
+
+  // Anti-multicuenta: IP y user-agent capturados al momento del registro.
+  // Permiten auditar cuentas creadas desde el mismo dispositivo/conexión y
+  // detectar patrones de abuso del bono de instalación.
+  registrationIp: {
+    type: String,
+    default: null,
+    index: true
+  },
+  registrationUserAgent: {
+    type: String,
+    default: null
+  },
+
+  // =============================================
+  // Etiquetas y notas internas (panel admin)
+  // =============================================
+  // Etiquetas para clasificar/marcar clientes (ej: 'comprobante-duplicado',
+  // 'comprobante-usado', 'sospechoso', 'confiable', 'VIP'). Sólo las usa el staff
+  // desde el panel admin: permiten filtrar la lista de usuarios y segmentar
+  // difusiones push por etiqueta. Se guardan normalizadas (minúsculas, sin espacios
+  // duplicados) desde el backend para que el filtro sea consistente.
+  tags: {
+    type: [String],
+    default: [],
+    index: true
+  },
+  // Nota libre interna sobre el cliente (sólo la ve el staff en el panel).
+  adminNotes: {
+    type: String,
+    default: ''
+  },
+  // Auditoría liviana de cambios de etiquetas: quién agregó/quitó qué y cuándo.
+  tagHistory: [{
+    tag: { type: String },
+    action: { type: String, enum: ['add', 'remove'] },
+    byUsername: { type: String },
+    at: { type: Date, default: Date.now }
+  }]
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Índices compuestos
+userSchema.index({ phone: 1 });
+userSchema.index({ role: 1, createdAt: -1 });
+userSchema.index({ isActive: 1, role: 1 });
+// Para el feed de reclamos y la vista admin del bono $5.000: filtra por
+// reclamado y ordena por fecha de reclamo sin ordenar en memoria.
+userSchema.index({ installBonusClaimed: 1, installBonusClaimedAt: -1 });
+// Multikey sobre el token FCM del array: lo consultan el reclamo del bono
+// instalación, el fraud-check de multicuenta y el logout/limpieza de tokens
+// (sin esto son COLLSCAN de toda la colección).
+userSchema.index({ 'fcmTokens.token': 1 });
+// Audiencias de recuperación/inactividad y cron de reglas (cada 5 min):
+// countDocuments/find por role + rango de lastLogin.
+userSchema.index({ role: 1, lastLogin: 1 });
+
+// Virtual para verificar si es admin
+userSchema.virtual('isAdmin').get(function() {
+  return this.role === 'admin';
+});
+
+// Virtual para verificar si es agente
+userSchema.virtual('isAgent').get(function() {
+  return ['admin', 'depositor', 'withdrawer', 'comunidad'].includes(this.role);
+});
+
+// Método para comparar contraseña
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Método para cambiar contraseña
+userSchema.methods.changePassword = async function(newPassword) {
+  this.password = await bcrypt.hash(newPassword, 12);
+  this.passwordChangedAt = new Date();
+  this.tokenVersion += 1;
+  await this.save();
+};
+
+// Método para verificar si cambió contraseña después de cierta fecha
+userSchema.methods.changedPasswordAfter = function(JWTTimestamp) {
+  if (this.passwordChangedAt) {
+    const changedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000, 10);
+    return JWTTimestamp < changedTimestamp;
+  }
+  return false;
+};
+
+// Método estático para buscar por username (case-insensitive)
+userSchema.statics.findByUsername = function(username) {
+  // Escapar metacaracteres de regex (anti-ReDoS / inyección de regex).
+  const escaped = String(username).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return this.findOne({
+    username: { $regex: new RegExp('^' + escaped + '$', 'i') }
+  });
+};
+
+// Método estático para buscar por teléfono
+userSchema.statics.findByPhone = function(phone) {
+  return this.findOne({ 
+    $or: [{ phone }, { whatsapp: phone }] 
+  });
+};
+
+// Middleware pre-save: mantener usernameLower sincronizado con username.
+userSchema.pre('save', function(next) {
+  if (this.isModified('username') || !this.usernameLower) {
+    this.usernameLower = String(this.username || '').toLowerCase();
+  }
+  next();
+});
+
+// Middleware pre-save para hashear contraseña
+userSchema.pre('save', async function(next) {
+  // Solo hashear si la contraseña fue modificada
+  if (!this.isModified('password')) return next();
+  
+  // Hashear con costo 12
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
+
+// Middleware pre-save para generar accountNumber si no existe
+userSchema.pre('save', async function(next) {
+  if (!this.accountNumber && this.isNew) {
+    this.accountNumber = 'ACC' + Date.now().toString().slice(-8) + 
+      Math.random().toString(36).substr(2, 4).toUpperCase();
+  }
+  next();
+});
+
+// Middleware pre-save para generar referralCode si no existe
+userSchema.pre('save', async function(next) {
+  if (!this.referralCode && this.isNew) {
+    this.referralCode = generateReferralCode();
+  }
+  next();
+});
+
+module.exports = mongoose.models['User'] || mongoose.model('User', userSchema);

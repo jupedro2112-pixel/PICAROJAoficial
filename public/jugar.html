@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Jugar</title>
+<!--
+  PÁGINA APARTE PARA JUGAR (#260, owner 2026-10-16): "que se abra aparte pero dejame arriba un
+  'volver a la página'". Sobre la web oficial del casino no se puede poner nada (es otro dominio), así
+  que la app abre ESTA página en una pestaña nueva: barra propia arriba con "‹ Volver a la app" y el
+  casino ocupando todo el resto. Parámetros: ?p=<id>&n=<nombre> y #u=<url> (el link de login único es
+  de UN solo uso y vence a los 60 s: la app lo pide y abre esto en el momento).
+  Si el casino no deja embeberse (X-Frame-Options), a los 15 s aparece "abrir en pantalla completa".
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #06070d; color: #f4f6fb; font-family: Montserrat, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  /* #296: línea FINITA arriba (no roba pantalla ni frena la página): ‹ Volver a cargas */
+  .bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 3px 8px; padding-top: max(3px, env(safe-area-inset-top, 3px)); background: rgba(6,7,13,.97); border-bottom: 1px solid rgba(255,255,255,.1); min-height: 26px; }
+  .back { background: linear-gradient(135deg, #ff1744, #ff6b6b); color: #06070d; border: 0; border-radius: 999px; padding: 4px 11px; font: 900 10.5px inherit; letter-spacing: .5px; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+  .name { font: 800 10px inherit; letter-spacing: 1px; text-transform: uppercase; color: #8f98ad; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hint { display: none; }
+  iframe { flex: 1; width: 100%; border: 0; background: #0d0d1a; }
+  .status { flex: 1; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center; color: #ff6b6b; font-weight: 700; }
+  .status a { display: inline-block; background: linear-gradient(135deg, #ff1744, #ff6b6b); color: #06070d; border-radius: 999px; padding: 12px 18px; font-weight: 900; text-decoration: none; text-transform: uppercase; letter-spacing: .6px; }
+  .loading { flex: 1; display: flex; align-items: center; justify-content: center; color: #ff6b6b; font-weight: 800; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <button type="button" class="back" id="back">‹ Volver a cargas</button>
+    <span class="name" id="name">Casino</span>
+    <span class="hint">Para cargar, volvé a la app</span>
+  </div>
+  <div class="loading" id="loading">🎰 Entrando…</div>
+  <iframe id="frame" title="Casino" allow="autoplay; fullscreen; payment" style="display:none"></iframe>
+  <div class="status" id="status">
+    <div>El casino no terminó de cargar acá adentro.</div>
+    <a id="full" href="#">Abrir en pantalla completa</a>
+    <div style="color:#8f98ad;font-weight:600;font-size:12px;">Después volvé a la app con el botón "atrás" o desde tu pantalla de inicio.</div>
+  </div>
+<script>
+(function () {
+  var qs = new URLSearchParams(location.search);
+  var name = qs.get('n') || 'Casino';
+  document.getElementById('name').textContent = name;
+  document.title = name;
+  var url = '';
+  try { url = decodeURIComponent((location.hash || '').replace(/^#u=/, '')); } catch (e) { url = ''; }
+  var frame = document.getElementById('frame'), loading = document.getElementById('loading'), status = document.getElementById('status'), full = document.getElementById('full');
+  var appUrl = qs.get('app') || '/';
+  document.getElementById('back').addEventListener('click', function () {
+    // Abierta por la app con window.open → se cierra y vuelve sola. Si no, vuelve a la app.
+    try { window.close(); } catch (e) {}
+    setTimeout(function () { location.href = appUrl; }, 150);
+  });
+  if (!/^https?:\/\//.test(url)) { loading.textContent = 'Link inválido. Volvé a la app y tocá de nuevo.'; return; }
+  full.href = url;
+  var shown = false;
+  frame.addEventListener('load', function () { shown = true; loading.style.display = 'none'; frame.style.display = ''; });
+  frame.src = url;
+  setTimeout(function () { if (!shown) { loading.style.display = 'none'; status.style.display = 'flex'; } }, 15000);
+})();
+</script>
+</body>
+</html>

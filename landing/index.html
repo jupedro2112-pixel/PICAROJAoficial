@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PICA ROJA — Creá tu cuenta</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    background:
+      radial-gradient(1100px 560px at 50% -14%, #17281b 0%, rgba(8,11,8,0) 60%),
+      #080b08;
+    color: #f3f5f1; min-height: 100%;
+    display: flex; flex-direction: column; align-items: center;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+
+  /* Header */
+  .top {
+    width: 100%; max-width: 460px; display: flex; align-items: center;
+    justify-content: space-between; padding: 8px 20px calc(0px + env(safe-area-inset-top,0px));
+  }
+  .logo { display: flex; align-items: center; gap: 9px; }
+  .logo img { width: 40px; height: 40px; border-radius: 12px; object-fit: cover; }
+  .logo b { display: block; font-size: 17px; font-weight: 900; letter-spacing: 1.2px; color: #f3f5f1; line-height: 1.1; }
+  .logo small { display: block; font-size: 10.5px; font-weight: 600; color: #8fa090; letter-spacing: .3px; }
+  .plus18 {
+    font-size: 11px; font-weight: 800; color: #cbd8cb;
+    border: 1px solid rgba(255,255,255,0.22); border-radius: 999px; padding: 3px 9px;
+  }
+
+  main {
+    width: 100%; max-width: 460px; flex: 1;
+    padding: 4px 16px calc(20px + env(safe-area-inset-bottom,0px));
+    display: flex; flex-direction: column;
+  }
+
+  /* Banner de bono */
+  .promo {
+    margin-top: 8px; border-radius: 18px; overflow: hidden;
+    border: 1px solid rgba(212,175,55,0.3);
+    background:
+      linear-gradient(160deg, rgba(227,189,72,0.14), rgba(15,122,61,0.10)),
+      #0e140e;
+    padding: 8px 14px 8px; text-align: center;
+  }
+  .promo .eyebrow {
+    font-size: 10.5px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+    color: #7bd39b;
+  }
+  .promo .big {
+    font-size: 32px; font-weight: 900; line-height: 1; letter-spacing: -1px;
+    color: #e3bd48; text-shadow: 0 4px 30px rgba(227,189,72,0.28); margin: 2px 0 0;
+  }
+  .promo .sub { font-size: 11.5px; font-weight: 800; color: #f3f5f1; letter-spacing: .5px; }
+  .promo .note { font-size: 10.5px; font-weight: 700; color: #8fa090; margin-top: 2px; }
+
+  /* Copy */
+  .pitch { text-align: center; color: #a7b7a8; font-size: 11.5px; line-height: 1.35; margin: 7px 4px 6px; }
+
+  /* Form */
+  .qname { text-align: center; font-size: 12.5px; font-weight: 800; color: #eaf2ea; margin-bottom: 5px; }
+  input {
+    width: 100%; padding: 10px 12px; font-size: 15px; color: #fff; text-align: center;
+    background: #0a0f0a; border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  input::placeholder { color: #667766; }
+  input:focus { border-color: #25d366; box-shadow: 0 0 0 3px rgba(37,211,102,0.16); }
+  .cta {
+    width: 100%; margin-top: 7px; padding: 11px; font-size: 14px; font-weight: 900; letter-spacing: .4px;
+    color: #05230f; background: linear-gradient(135deg, #2ce06e, #0f9a4b);
+    border: none; border-radius: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+    transition: transform .12s, filter .2s;
+  }
+  .cta:hover { filter: brightness(1.06); }
+  .cta:active { transform: scale(0.99); }
+  .cta:disabled { filter: saturate(.5) brightness(.85); cursor: default; }
+  .hint { text-align: center; font-size: 11px; color: #6b786c; margin-top: 5px; margin-bottom: 4px; }
+  .msg { text-align: center; font-size: 13px; min-height: 0; margin-top: 0; } .msg.err { margin-top: 6px; }
+  .msg.err { color: #ff9090; }
+
+  .spin {
+    width: 17px; height: 17px; border-radius: 50%;
+    border: 2px solid rgba(5,35,15,0.35); border-top-color: #05230f;
+    animation: rot .7s linear infinite;
+  }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* Trust */
+  .trust {
+    display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap;
+    margin-top: 12px; font-size: 11.5px; color: #8fa090;
+  }
+  .trust span { display: inline-flex; align-items: center; gap: 6px; }
+  .trust .d { width: 5px; height: 5px; border-radius: 50%; background: #25d366; }
+  .legal { text-align: center; font-size: 10px; color: #5d6a5e; line-height: 1.5; margin-top: 12px; }
+
+  /* Pantalla de credenciales */
+  .done { display: none; text-align: center; margin-top: 24px; }
+  .done.on { display: block; animation: fade .4s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .done h2 { font-size: 22px; font-weight: 900; margin-bottom: 4px; }
+  .done h2 .em { color: #25d366; }
+  .done .p { color: #a7b7a8; font-size: 14px; margin-bottom: 20px; }
+  .cred {
+    background: #0e140e; border: 1px solid rgba(212,175,55,0.3); border-radius: 14px;
+    padding: 16px; display: grid; gap: 12px; text-align: left; margin-bottom: 8px;
+  }
+  .cred .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .cred .k { font-size: 11px; font-weight: 800; letter-spacing: 1px; color: #8fa090; text-transform: uppercase; }
+  .cred .v { font-size: 20px; font-weight: 900; color: #f3f5f1; font-family: "Courier New", monospace; letter-spacing: 1px; }
+  .cred .v.gold { color: #e3bd48; }
+  .save-note { font-size: 12px; color: #e3bd48; margin-bottom: 16px; }
+
+  /* Popup de enganche */
+  .pop {
+    position: fixed; inset: 0; background: rgba(4,6,4,0.72);
+    display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50;
+  }
+  .pop.on { display: flex; animation: fade .25s ease; }
+  .pop .box {
+    width: 100%; max-width: 360px; background: #10160f; border: 1px solid rgba(212,175,55,0.35);
+    border-radius: 20px; padding: 26px 22px; text-align: center; box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+  }
+  .pop h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .pop p { color: #a7b7a8; font-size: 14px; line-height: 1.5; margin-bottom: 18px; }
+  .pop .later {
+    display: inline-block; margin-top: 12px; font-size: 13px; color: #8fa090;
+    text-decoration: underline; cursor: pointer; background: none; border: none;
+  }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .done.on, .pop.on { animation: none; } }
+
+  /* ── Plataformas (3 íconos) y servicios resumidos (sólo título) — pedido del owner 2026-10-19 ── */
+  /* #552: carrusel de juegos (como el Inicio de la app) */
+  .games-h { display: flex; align-items: baseline; justify-content: space-between; margin-top: 8px; padding: 0 2px; }
+  .games-h b { font-size: 13px; font-weight: 900; color: #eaf2ea; } .games-h small { font-size: 11px; color: #8fa090; display: inline-flex; align-items: center; gap: 5px; }
+  .games-h .d { width: 6px; height: 6px; border-radius: 50%; background: #25d366; box-shadow: 0 0 0 3px rgba(37,211,102,.2); display: inline-block; }
+  .games { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 6px -4px 0; padding: 0 4px 4px; }
+  .games::-webkit-scrollbar { display: none; }
+  .game { flex: 0 0 29%; max-width: 128px; scroll-snap-align: start; border-radius: 14px; overflow: hidden; background: #161622; border: 1px solid rgba(255,255,255,0.08); }
+  .game img { width: 100%; aspect-ratio: 300 / 330; height: auto; object-fit: contain; display: block; background: #161622; }
+  .game .gn { display: block; padding: 5px 7px 1px; font-size: 10.5px; font-weight: 800; color: #eaf2ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .game .gp { display: flex; align-items: center; gap: 4px; padding: 0 7px 6px; font-size: 10px; color: #8fa090; }
+  .game .gp i { width: 6px; height: 6px; border-radius: 50%; background: #25d366; display: inline-block; } .game .gp b { color: #eaf2ea; transition: opacity .25s; } .game .gp b.tick { opacity: .35; }
+  /* #554: "Todo nuestro servicio" plegable arriba + plataformas en una fila afuera */
+  details.svc { margin-top: 6px; border-radius: 14px; border: 1.5px solid rgba(227,189,72,0.55); background: linear-gradient(160deg, rgba(227,189,72,0.16), rgba(15,122,61,0.10)), #0e140e; padding: 0; }
+  details.svc summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; }
+  details.svc summary::-webkit-details-marker { display: none; }
+  .svc-t { font-size: 13.5px; font-weight: 900; color: #e3bd48; letter-spacing: .3px; }
+  .svc-more { font-size: 11px; font-weight: 800; color: #0b0f0b; background: #e3bd48; border-radius: 999px; padding: 4px 9px; display: inline-flex; align-items: center; gap: 4px; }
+  .svc-more i { font-style: normal; transition: transform .2s; } details[open] .svc-more i { transform: rotate(180deg); }
+  .svc-more .on-open { display: none; } details[open] .svc-more .on-open { display: inline; } details[open] .svc-more .on-closed { display: none; }
+  .svc-body { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 10px 10px; }
+  .sv { display: flex; gap: 7px; align-items: flex-start; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 11px; padding: 7px 8px; }
+  .sv i { width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%; background: rgba(227,189,72,0.16); color: #e3bd48; display: inline-flex; align-items: center; justify-content: center; } .sv i svg { width: 12px; height: 12px; }
+  .sv b { display: block; font-size: 11px; font-weight: 900; color: #eaf2ea; line-height: 1.2; } .sv b span { color: #25d366; }
+  .sv small { display: block; font-size: 9.5px; color: #8fa090; line-height: 1.3; margin-top: 1px; }
+  .plats-box { margin-top: 6px; }
+  .plats-k { text-align: center; font-size: 11px; font-weight: 900; color: #eaf2ea; margin-bottom: 5px; }
+  .plats-box .plats { grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 0; }
+  .plats-box .plat { padding: 7px 4px 6px; border-radius: 12px; font-size: 10.5px; gap: 4px; }
+  .plats-box .plat img, .plats-box .plat .ini { width: 28px; height: 28px; border-radius: 9px; }
+  /* centrado robusto (la página y el popup se veían corridos) */
+  html, body { overflow-x: hidden; }
+  .top, main { margin: 0 auto; }
+  .pop { width: 100vw; padding: 20px; }
+  .pop .box { width: min(100%, 340px); margin: 0 auto; }
+  /* (viejo bloque unificado, ya no se usa) */
+  .svc { margin-top: 10px; background: #0e140e; border: 1px solid rgba(255,255,255,0.10); border-radius: 16px; padding: 10px 10px 10px; }
+  .svc-h { text-align: center; margin-bottom: 8px; } .svc-h b { display: block; font-size: 13px; font-weight: 900; color: #eaf2ea; } .svc-h small { font-size: 10.5px; color: #8fa090; }
+  .plats-h { display: none; }
+  .plats-h b { display: block; font-size: 13px; font-weight: 800; color: #eaf2ea; }
+  .plats-h small { font-size: 11px; color: #8fa090; }
+  .plats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 0; }
+  /* #545 (owner): fondo BLANCO en las plataformas (sobre el fondo oscuro los logos se veían tapados) */
+  .plat { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; background: #ffffff; border: 1px solid rgba(255,255,255,0.35); border-radius: 12px; padding: 8px 4px 6px; font-size: 10.5px; font-weight: 800; color: #111; }
+  .plat img, .plat .ini { width: 30px; height: 30px; border-radius: 9px; object-fit: cover; background: #fff; }
+  .plat .ini { display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #e3bd48, #9c853a); color: #0b0f0b; font-size: 18px; font-weight: 900; }
+  .plat small { position: absolute; top: 6px; right: 6px; font-size: 8px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: #6f6f6f; background: #f1f1f1; border-radius: 999px; padding: 2px 6px; }
+  .plat.soon { color: #6f6f6f; } .plat.soon img { filter: grayscale(.4); opacity: .85; }
+  .sys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+  .sy { display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: #0a0f0a; border: 1px solid rgba(255,255,255,0.10); border-radius: 999px; padding: 5px 4px; font-size: 9.5px; font-weight: 700; color: #eaf2ea; white-space: nowrap; overflow: hidden; }
+  .sy i { width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%; background: rgba(227,189,72,0.14); color: #e3bd48; display: inline-flex; align-items: center; justify-content: center; }
+  .sy i svg { width: 10px; height: 10px; }
+  .sy b { color: #25d366; font-weight: 900; }
+  /* Barra de progreso: nombre → cuenta creada → entra solo */
+  .prog { display: none; margin-top: 14px; text-align: center; }
+  .prog.on { display: block; }
+  .prog b { display: block; font-size: 15px; font-weight: 900; color: #eaf2ea; margin-bottom: 8px; }
+  .bar { width: 100%; max-width: 300px; height: 10px; margin: 0 auto; border-radius: 999px; background: #0a0f0a; border: 1px solid rgba(255,255,255,0.10); overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 35%; margin-left: -35%; border-radius: 999px; background: linear-gradient(135deg, #2ce06e, #0f9a4b); animation: bar 1.6s ease-in-out infinite; }
+  .prog.in .bar i { width: 95%; margin-left: 0; animation: none; transition: width .9s ease; }
+  @keyframes bar { to { margin-left: 100%; } }
+  .prog small { display: block; margin-top: 8px; font-size: 11.5px; color: #8fa090; }
+  .refhint { display: none; margin: 0 0 10px; text-align: center; font-size: 12px; font-weight: 800; color: #e3bd48; background: rgba(227,189,72,0.10); border: 1px solid rgba(227,189,72,0.35); border-radius: 999px; padding: 6px 10px; }
+  .refhint.on { display: block; }
+  /* #800 (owner): "crear usuario más grande" */
+  .cta#cta { padding: 17px 16px !important; font-size: 18px !important; letter-spacing: .6px !important; border-radius: 16px !important; box-shadow: 0 8px 24px rgba(15, 154, 75, .35); animation: ctaPulse 1.6s ease-in-out infinite; }
+  @keyframes ctaPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+  @media (prefers-reduced-motion: reduce) { .cta#cta { animation: none; } }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="logo"><img id="brandLogo" src="" alt="PICA ROJA" style="display:none;"><span><b>PICA ROJA</b><small>oficial · cargas automáticas</small></span></div>
+    <div class="plus18">+18</div>
+  </div>
+
+  <main>
+    <!-- #554 (owner): "Todo nuestro servicio" ARRIBA, bien remarcado y plegable (Ver todo = el detalle); las plataformas debajo, afuera -->
+    <details class="svc" id="svc">
+      <summary><span class="svc-t">⭐ Todo nuestro servicio</span><span class="svc-more"><b class="on-closed">Ver todo</b><b class="on-open">Cerrar</b> <i>▾</i></span></summary>
+      <div class="svc-body">
+        <div class="sv" data-s="carga"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg></i><div><b>Carga automática 24 hs</b><small>Transferís, mandás el comprobante y se acredita solo.</small></div></div>
+        <div class="sv" data-s="reembolso"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg></i><div><b>Reembolso diario <span id="sysRefund"></span></b><small>Sobre lo que perdés con tu plata, todos los días. Se cobra desde la app.</small></div></div>
+        <div class="sv" data-s="ruleta"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M6.4 6.4l11.2 11.2M17.6 6.4L6.4 17.6"/></svg></i><div><b>Ruleta diaria</b><small>Un giro por día con % extra y premios en plata.</small></div></div>
+        <div class="sv" data-s="misiones"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v4a8 8 0 0 1-16 0z"/><path d="M12 16v4M8 20h8"/><path d="M4 6H2.5a2 2 0 0 0 0 4H4M20 6h1.5a2 2 0 0 1 0 4H20"/></svg></i><div><b>Misiones semanales</b><small>Cumplís objetivos y cobrás regalos automáticos.</small></div></div>
+        <div class="sv" data-s="referidos"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M15.5 14.2c2.6.3 4.5 2.4 4.5 4.8"/></svg></i><div><b>Referidos <span id="sysRef"></span></b><small>Invitás amigos y cobrás un % de su actividad, todos los meses.</small></div></div>
+        <div class="sv" data-s="vip"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z"/><path d="M5 20h14"/></svg></i><div><b>Niveles VIP</b><small>Subís de nivel con bonos y rakeback.</small></div></div>
+        <div class="sv" data-s="soporte"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5a7.5 7.5 0 0 1-11 6.6L4 20l1.2-4.4A7.5 7.5 0 1 1 20 12.5z"/></svg></i><div><b>Soporte real</b><small>Una persona te responde en minutos, por chat.</small></div></div>
+        <div class="sv" data-s="retiros"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></svg></i><div><b>Retiros a tu CBU</b><small>Pagos automáticos, sin límites, en el acto.</small></div></div>
+      </div>
+    </details>
+    <!-- #557 (owner): "Elegí dónde jugar" arriba y las 3 plataformas debajo, en 3 columnas (la fila horizontal se salía de la pantalla) -->
+    <div class="plats-box"><div class="plats-k">Elegí dónde jugar</div><div class="plats" id="plats"></div></div>
+
+    <!-- Pantalla 1: bono + form -->
+    <section id="scForm">
+      <div class="promo">
+        <div class="eyebrow">Bono de bienvenida</div>
+        <div class="big" id="bonusBig">100%</div>
+        <div class="sub" id="bonusSub">EN TU PRIMERA CARGA</div>
+        <div class="note" id="bonusNote">+50% EXTRA instalando la app y activando notificaciones</div>
+      </div>
+
+      <p class="pitch">Creá tu cuenta en un click y entrá a jugar. Sin formularios, sin esperas.</p>
+
+      <form id="form" autocomplete="off">
+        <div class="refhint" id="refHint">🤝 Te invitó un amigo · código <span id="refCode"></span> · queda vinculado a tu cuenta</div>
+        <div class="qname">¿Cuál es tu nombre?</div>
+        <input id="name" type="text" placeholder="Ej: Juan" maxlength="40" required>
+        <button class="cta" id="cta" type="submit"><span id="ctaLabel">CREAR MI CUENTA</span></button>
+        <div class="hint">Con tu nombre generamos tu usuario al instante.</div>
+        <div class="msg" id="msg" role="status" aria-live="polite"></div>
+      </form>
+
+      <!-- Barra de progreso: la cuenta se crea y ENTRA solo (usuario y clave quedan en Perfil, dentro de la app) -->
+      <div class="prog" id="prog" aria-live="polite">
+        <b id="progTxt">Creando tu cuenta…</b>
+        <div class="bar"><i></i></div>
+        <small>Tu usuario y tu clave quedan en Perfil. Es la misma clave para la app y para la plataforma.</small>
+      </div>
+
+      <!-- #546 (owner): se sacó la línea de confianza (acreditación · retiros · soporte) -->
+
+      <!-- #552 (owner): carrusel de juegos (las fotos del Inicio de la app) y debajo TODO el servicio en un solo bloque -->
+      <div class="games-h"><b>Top juegos</b><small><i class="d"></i><span id="gamesLive">0</span> jugando ahora</small></div>
+      <div class="games" id="games"></div>
+
+      <p class="legal">
+        Bono sujeto a términos: aplica sobre la primera carga. Solo nuevos jugadores.<br>
+        +18 · Jugá con responsabilidad.
+      </p>
+    </section>
+
+    <!-- Pantalla 2: credenciales -->
+    <section class="done" id="scDone">
+      <h2>¡Listo! <span class="em">Tu cuenta está creada</span></h2>
+      <p class="p">Anotá tus datos y entrá a jugar.</p>
+      <div class="cred">
+        <div class="row"><span class="k">Usuario</span><span class="v" id="outUser">—</span></div>
+        <div class="row"><span class="k">Clave</span><span class="v gold" id="outPass">—</span></div>
+      </div>
+      <div class="save-note">📌 Guardá tu usuario y clave para volver a entrar cuando quieras.</div>
+      <!-- #686 (owner): carga mínima IMPORTANTE apenas se registra -->
+      <div class="save-note" style="background:#fff7d6;border-left:5px solid #ffb300;color:#111;font-size:14px;line-height:1.4;"><b style="font-size:16px;">💵 Carga mínima: <span class="minAmt">$2.000</span></b><br>Con <span class="minAmt">$2.000</span> o más la carga se acredita <b>sola</b>. <b>Con una carga menor a <span class="minAmt">$2.000</span>, tu carga NO va a ser acreditada</b>: escribinos por <b>Soporte</b> en la app.</div>
+      <button class="cta" id="enterBtn" type="button">ENTRAR A MI CUENTA →</button>
+    </section>
+  </main>
+
+  <!-- Popup de enganche -->
+  <div class="pop" id="pop">
+    <div class="box">
+      <h3>¡Esperá! 🎁 Tu bono te espera</h3>
+      <p>Creá tu cuenta ahora y activá tu bono de bienvenida. Tarda menos de un minuto.</p>
+      <button class="cta" id="popCta" type="button">CREAR MI CUENTA</button>
+      <button class="later" id="popLater" type="button">seguir mirando</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  // ==== CONFIGURAR ====
+  var API_BASE_DEFAULT = 'https://picaroja.com';    // backend real de PICA ROJA (#570). ⚠️ vipcargas.com es VIPCARGAS (OTRA página: ahí no existe la pauta y Cloudflare bloquea el preflight → "Sin conexión"); chat1girox.com es otra más. NO usar el host .elasticbeanstalk.com (solo HTTP → mixed content).
+  var CAMPAIGN_CODE = '';                            // fijo, o vacío = tomar de la URL
+  var BONUS_BIG = '100%';                             // ⚠️ tu oferta REAL
+  var BONUS_SUB = 'EN TU PRIMERA CARGA';
+  var BONUS_NOTE = '+50% EXTRA instalando la app y activando notificaciones'; // #832          // línea chica debajo (vacío = no se muestra); si el backend responde, se pisa con los % reales
+  // ====================
+
+  // Override del backend por URL (para PROBAR contra otro entorno sin editar el
+  // archivo): agregá ?api=https://tuapp.onrender.com a la URL. Sin ese parámetro
+  // usa el backend de producción. Solo se acepta https://.
+  var API_BASE = API_BASE_DEFAULT;
+  try {
+    // #553 (seguridad): el override sólo acepta el entorno de PRUEBA conocido; antes aceptaba cualquier https:// y la landing
+    // podía usarse como fachada para mandar los datos a otro servidor y redirigir a donde quisiera.
+    var _apiOverride = new URLSearchParams(location.search).get('api');
+    if (_apiOverride === 'https://fabrioctubre.onrender.com') API_BASE = _apiOverride;
+  } catch (e) {}
+
+  try { var bl = document.getElementById('brandLogo'); bl.src = 'img/picaroja.png'; bl.style.display = ''; } catch (e) {}
+  document.getElementById('bonusBig').textContent = BONUS_BIG;
+  document.getElementById('bonusSub').textContent = BONUS_SUB;
+  document.getElementById('bonusNote').textContent = BONUS_NOTE; document.getElementById('bonusNote').style.display = BONUS_NOTE ? '' : 'none';
+
+  // ── Código de REFERIDO (?ref=CODIGO): queda vinculado a la cuenta nueva (el backend lo valida). ──
+  var REF_CODE = '';
+  try { REF_CODE = String(new URLSearchParams(location.search).get('ref') || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12); } catch (e) {}
+  if (REF_CODE) { try { document.getElementById('refCode').textContent = REF_CODE; document.getElementById('refHint').classList.add('on'); } catch (e) {} }
+
+  // ── #552: carrusel de juegos (fotos del Inicio de la app) con "N jugando" que varía rato a rato ──
+  (function games() {
+    var LIST = [['fortune-garuda-1000', 'Fortune Garuda 1000'], ['jokers-jewel', "Joker's Jewel"], ['fortune-garuda-500', 'Fortune Garuda 500'], ['fortune-tiger', 'Fortune Tiger'], ['fortune-gems-2', 'Fortune Gems 2'], ['fortune-rabbit', 'Fortune Rabbit'], ['fortune-gems', 'Fortune Gems'], ['fortune-dragon', 'Fortune Dragon'], ['golden-joker', 'Golden Joker']];
+    var box = document.getElementById('games'); if (!box) return;
+    var n = {}; LIST.forEach(function (g) { n[g[0]] = 50 + Math.floor(Math.random() * 151); });
+    box.innerHTML = LIST.map(function (g) { return '<div class="game" data-g="' + g[0] + '"><img src="img/games/' + g[0] + '.jpg" alt="' + g[1].replace(/"/g, '') + '" loading="lazy"><span class="gn">' + g[1].replace(/</g, '') + '</span><span class="gp"><i></i><b>' + n[g[0]] + '</b> jugando</span></div>'; }).join('');
+    function total() { var t = 0; LIST.forEach(function (g) { t += n[g[0]]; }); var e = document.getElementById('gamesLive'); if (e) e.textContent = t; }
+    total();
+    setInterval(function () {
+      if (document.hidden) return;
+      LIST.forEach(function (g) {
+        if (Math.random() > 0.45) return;
+        var d = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 9));
+        var v = Math.max(50, Math.min(200, n[g[0]] + d)); if (v === n[g[0]]) return; n[g[0]] = v;
+        var el = box.querySelector('.game[data-g="' + g[0] + '"] b'); if (!el) return;
+        el.textContent = v; el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick');
+      });
+      total();
+    }, 9000);
+  })();
+
+  // ── Las 3 plataformas + % reales (desde el backend; si no responde quedan los fijos) ──
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function paintPlats(list) {
+    var box = document.getElementById('plats'); if (!box) return;
+    var nm = function (n) { return /^jugaygana$/i.test(String(n || '')) ? 'Jugaygana' : String(n || ''); };
+    box.innerHTML = list.map(function (p) {
+      var soon = p.connected === false && p.id !== 'girox';
+      var src = LOCAL_LOGOS[p.id] || (p.logoUrl ? (/^https?:/.test(p.logoUrl) ? p.logoUrl : API_BASE + p.logoUrl) : '');
+      var ico = src ? '<img src="' + esc(src) + '" alt="">' : '<span class="ini">' + esc(String(p.name || '?').charAt(0).toUpperCase()) + '</span>';
+      return '<span class="plat' + (soon ? ' soon' : '') + '">' + ico + esc(nm(p.name)) + (soon ? '<small>Pronto</small>' : '') + '</span>';
+    }).join('');
+  }
+  // Logos LOCALES (carpeta img/ de la landing): no dependen del backend. Si el backend responde, sólo actualiza nombres/"Pronto".
+  var LOCAL_LOGOS = { girox: 'img/girox.png', ganamos: 'img/ganamos.png', jugaygana: 'img/jugaygana.png' };
+  paintPlats([
+    { id: 'girox', name: 'Girox', connected: true },
+    { id: 'ganamos', name: 'Ganamos', connected: false },
+    { id: 'jugaygana', name: 'Jugaygana', connected: false }
+  ]);
+  try {
+    fetch(API_BASE + '/api/landing/info').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d) return;
+      try { var md = Number(d.minDepositArs); if (md > 0) { var t = '$' + md.toLocaleString('es-AR'); document.querySelectorAll('.minAmt').forEach(function (e) { e.textContent = t; }); } } catch (e) {} // #686
+      if (Array.isArray(d.platforms) && d.platforms.length) paintPlats(d.platforms);
+      // #555: títulos y detalles de los servicios desde el panel (los que están apagados no se muestran)
+      if (Array.isArray(d.services)) {
+        var by = {}; d.services.forEach(function (x) { by[x.id] = x; });
+        document.querySelectorAll('.sv[data-s]').forEach(function (el) {
+          var x = by[el.getAttribute('data-s')];
+          if (!x) { el.style.display = 'none'; return; }
+          var b = el.querySelector('b'), sm = el.querySelector('small');
+          if (b) b.textContent = x.title; if (sm) sm.textContent = x.detail || '';
+        });
+      }
+      // #581 (owner): el bono de la landing es FIJO (BONUS_BIG/BONUS_NOTE de arriba); antes el backend lo pisaba y se veía 50 → 100.
+      try { var rf = d.refunds || {}; if (rf.dailyMax) document.getElementById('sysRefund').textContent = rf.dailyMax + '%'; } catch (e) {}
+      try { var rp = Number(d.referralPct); if (rp > 0) document.getElementById('sysRef').textContent = rp + '%'; } catch (e) {}
+    }).catch(function () {});
+  } catch (e) {}
+
+  // ============================================================
+  // ESCAPE del navegador EMBEBIDO de Instagram/Facebook/TikTok (#260).
+  // Los anuncios abren la landing DENTRO de la app (webview): la cuenta queda
+  // "presa" ahí (sin instalar la PWA, sin notificaciones, y al cerrar IG la
+  // pierden). Android: se puede saltar a Chrome con un intent:// (automático +
+  // botón). iPhone: no hay salto programático confiable → botón x-safari- +
+  // instrucciones del menú ⋯. SIEMPRE se preserva la URL completa (código de
+  // campaña + fbclid) para no perder la atribución. "Seguir acá" queda como
+  // salida chica para no perder la conversión si el escape falla.
+  (function escapeInAppBrowser() {
+    var ua = navigator.userAgent || '';
+    if (!/Instagram|FBAN|FBAV|FB_IAB|FBAG|TikTok|musical_ly|Bytedance/i.test(ua)) return;
+    var isAndroid = /Android/i.test(ua);
+    var full = location.href;
+    var tail = location.host + location.pathname + location.search;
+    var intentUrl = 'intent://' + tail + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(full) + ';end';
+    var safariUrl = 'x-safari-https://' + tail;
+    function mount() {
+      if (document.getElementById('iabEscape')) return;
+      var ov = document.createElement('div');
+      ov.id = 'iabEscape';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:radial-gradient(120% 90% at 50% 0%,#0d1f14 0%,#060d09 60%);' +
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px 22px;text-align:center;box-sizing:border-box;';
+      ov.innerHTML =
+        '<div style="font-size:40px;line-height:1;">🌐</div>' +
+        '<div style="font-size:20px;font-weight:900;color:#fff;margin:10px 0 6px;">Abrí la página en tu navegador</div>' +
+        '<div style="font-size:13.5px;color:#b9c4bd;line-height:1.5;max-width:340px;">Estás dentro de ' + (/TikTok|musical_ly|Bytedance/i.test(ua) ? 'TikTok' : (/Instagram/i.test(ua) ? 'Instagram' : 'Facebook')) + '. ' +
+          'Para que tu cuenta te quede <b style="color:#fff;">guardada</b> y puedas volver cuando quieras, abrila en ' + (isAndroid ? 'Chrome' : 'Safari') + '.</div>' +
+        (isAndroid
+          ? '<a href="' + intentUrl + '" style="display:block;width:100%;max-width:340px;margin-top:18px;background:linear-gradient(135deg,#26e07f,#0f9d58);' +
+            'color:#00301a;border-radius:14px;padding:16px;font-size:17px;font-weight:900;text-decoration:none;">🚀 ABRIR EN CHROME</a>'
+          : '<div style="margin-top:16px;background:rgba(38,224,127,0.10);border:1.5px solid #26e07f88;border-radius:14px;padding:14px 16px;max-width:340px;">' +
+              '<div style="font-size:15px;color:#fff;font-weight:900;line-height:1.6;text-align:left;">' +
+              '1️⃣ Tocá los <b style="color:#26e07f;">⋯</b> arriba a la derecha ↗️<br>' +
+              '2️⃣ Elegí <b style="color:#26e07f;">"Abrir en el navegador externo"</b></div></div>' +
+            '<div style="margin-top:10px;font-size:12px;color:#8fd7ae;max-width:340px;line-height:1.45;">🔒 Así tu usuario queda <b style="color:#fff;">guardado en tu celular</b> y no lo perdés al cerrar Instagram.</div>' +
+            '<button type="button" id="iabCopy" style="width:100%;max-width:340px;margin-top:12px;background:rgba(255,255,255,0.10);' +
+              'color:#fff;border:1px solid rgba(255,255,255,0.22);border-radius:12px;padding:12px;font-size:13.5px;font-weight:800;cursor:pointer;">📋 TOCÁ ACÁ y el link se copia solo → pegalo en Safari</button>') +
+        '<button type="button" id="iabStay" style="margin-top:16px;background:none;border:none;color:#7c8781;font-size:12px;text-decoration:underline;cursor:pointer;">Seguir acá de todos modos</button>';
+      document.body.appendChild(ov);
+      var stay = document.getElementById('iabStay');
+      if (stay) stay.onclick = function () { try { ov.parentNode.removeChild(ov); } catch (e) {} };
+      // iPhone: flecha animada hacia el menú ⋯ (arriba a la derecha) — es el
+      // ÚNICO camino confiable en el webview de IG iOS (x-safari- está
+      // bloqueado en las versiones nuevas; el botón "no hacía nada").
+      if (!isAndroid) {
+        var arrow = document.createElement('div');
+        arrow.textContent = '👆';
+        arrow.style.cssText = 'position:absolute;top:10px;right:18px;font-size:34px;animation:iabB 1s ease-in-out infinite;';
+        var st = document.createElement('style');
+        st.textContent = '@keyframes iabB{0%,100%{transform:translateY(0)}50%{transform:translateY(10px)}}';
+        ov.appendChild(st); ov.appendChild(arrow);
+        var cp = document.getElementById('iabCopy');
+        if (cp) cp.onclick = function () {
+          var done = function () { cp.textContent = '✅ Link copiado — abrí Safari y pegalo'; };
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(full).then(done).catch(function () {}); return; }
+          } catch (e) {}
+          try {
+            var ta = document.createElement('textarea');
+            ta.value = full; ta.style.cssText = 'position:fixed;opacity:0;';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
+          } catch (e) {}
+        };
+        // Intento silencioso del scheme por si esta versión del webview lo permite.
+        setTimeout(function () { try { location.href = safariUrl; } catch (e) {} }, 500);
+      }
+      // Android: intento AUTOMÁTICO una vez (si el webview lo permite, salta
+      // solo a Chrome con la MISMA URL; si no, queda el botón).
+      if (isAndroid) setTimeout(function () { try { location.href = intentUrl; } catch (e) {} }, 350);
+    }
+    if (document.body) mount();
+    else document.addEventListener('DOMContentLoaded', mount);
+  })();
+
+  // #797: píxel de Meta por campaña/publicista. El backend dice qué píxeles cargar (GET /api/meta-pixel-id?c=<campaña>, ids
+  // configurados en SSM); si no hay ninguno para esta campaña no se carga fbq. El registro dispara CompleteRegistration con el
+  // eventID que devuelve el backend (metaEventId) para que Meta deduplique con la CAPI server-side.
+  (function loadMetaPixel() {
+    var _inited = false;
+    function initPixels(ids) {
+      if (_inited || !ids || !ids.length) return;
+      _inited = true;
+      window.__giroxPixelIds = ids;
+      try {
+        !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+      } catch (e) { return; }
+      ids.forEach(function (id) { try { fbq('init', id); } catch (e) {} });
+      try { fbq('track', 'PageView'); } catch (e) {}
+    }
+    try {
+      var _pixCampaign = '';
+      try { _pixCampaign = resolveCampaign() || ''; } catch (e) {}
+      if (!_pixCampaign) return;
+      fetch(API_BASE + '/api/meta-pixel-id?c=' + encodeURIComponent(_pixCampaign))
+        .then(function (r) { return r.json(); })
+        .then(function (d) { initPixels(d && d.pixelIds ? d.pixelIds : []); })
+        .catch(function () {});
+    } catch (e) {}
+  })();
+
+  function resolveCampaign() {
+    if (CAMPAIGN_CODE) return CAMPAIGN_CODE;
+    var q = new URLSearchParams(location.search);
+    var c = q.get('p') || q.get('campaign');
+    if (c) return c;
+    var seg = location.pathname.replace(/^\/+/, '').split('/')[0];
+    if (seg && /^[A-Za-z0-9_-]{3,40}$/.test(seg)) return seg;
+    return '';
+  }
+  function utmFromUrl() {
+    var q = new URLSearchParams(location.search);
+    return { source: q.get('utm_source'), medium: q.get('utm_medium'),
+             campaign: q.get('utm_campaign'), content: q.get('utm_content'), term: q.get('utm_term') };
+  }
+  function cookie(n) { var m = document.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; }
+
+  // ATRIBUCIÓN DE PAUTA: la cookie _fbc la crea el pixel de navegador, pero puede
+  // NO haber cargado aún cuando el cliente se registra (fetch async del Pixel ID).
+  // Fallback: sin esto, el click del anuncio (?fbclid=...) se PERDÍA y la
+  // conversión no se atribuía a la campaña. Se
+  // construye el fbc a mano con el formato oficial (fb.1.<timestamp>.<fbclid>)
+  // y el backend lo persiste en el usuario → TODOS los eventos del embudo
+  // (registro, carga, retiro) viajan atribuidos al anuncio que trajo al lead.
+  function fbcFromUrl() {
+    var existing = cookie('_fbc');
+    if (existing) return existing;
+    try {
+      var id = new URLSearchParams(location.search).get('fbclid');
+      if (id) return 'fb.1.' + Date.now() + '.' + id;
+    } catch (e) {}
+    return null;
+  }
+
+  // fbp: identificador de navegador que crea el pixel de Meta. Ahora el pixel se
+  // carga (loadMetaPixel), pero el fetch del Pixel ID es async y puede no haber
+  // creado la cookie _fbp cuando el cliente se registra. Fallback: si _fbp no
+  // está todavía, se genera uno válido
+  // (fb.1.<timestamp>.<random>) y se PERSISTE en la cookie, así se reusa el MISMO
+  // valor siempre — y el pixel de la PWA lo reutiliza al entrar, correlacionándolo
+  // con el navegador. Mismo criterio que fbcFromUrl(). owner 2026-08-25.
+  function fbpFromCookieOrGen() {
+    var existing = cookie('_fbp');
+    if (existing) return existing;
+    try {
+      var v = 'fb.1.' + Date.now() + '.' + (Math.floor(1e9 + Math.random() * 9e9));
+      document.cookie = '_fbp=' + v + '; path=/; max-age=' + (90 * 24 * 3600) + '; SameSite=Lax';
+      return v;
+    } catch (e) { return null; }
+  }
+
+  var form = document.getElementById('form');
+  var nameEl = document.getElementById('name');
+  var cta = document.getElementById('cta');
+  var ctaLabel = document.getElementById('ctaLabel');
+  var msg = document.getElementById('msg');
+  var scForm = document.getElementById('scForm');
+  var scDone = document.getElementById('scDone');
+  var enterBtn = document.getElementById('enterBtn');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = nameEl.value.trim();
+    var campaign = resolveCampaign();
+    msg.className = 'msg'; msg.textContent = '';
+    if (name.length < 2) { msg.className = 'msg err'; msg.textContent = 'Escribí tu nombre.'; return; }
+    if (!campaign) { msg.className = 'msg err'; msg.textContent = 'Link inválido: falta el código de campaña.'; return; }
+
+    cta.disabled = true;
+    ctaLabel.textContent = 'Creando tu cuenta';
+    var sp = document.createElement('span'); sp.className = 'spin'; cta.appendChild(sp);
+    // Barra de progreso: se ve mientras se crea la cuenta y hasta que entra a la app.
+    var prog = document.getElementById('prog'), progTxt = document.getElementById('progTxt');
+    form.style.display = 'none'; prog.classList.remove('in'); prog.classList.add('on'); progTxt.textContent = 'Creando tu cuenta…';
+    var progFail = function () { prog.classList.remove('on'); form.style.display = ''; };
+
+    fetch(API_BASE + '/api/landing/signup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name, campaignCode: campaign, referralCode: REF_CODE || undefined, utm: utmFromUrl(),
+        fbc: fbcFromUrl(), fbp: fbpFromCookieOrGen(), landingUrl: location.href })
+    })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (res) {
+      if (res.ok && res.d && res.d.accessUrl) {
+        // FLUJO SOLAPADO (owner 2026-08-19): la landing NO muestra más las
+        // credenciales — redirige YA a la PWA, que muestra el recuadro de
+        // usuario+clave apenas carga (`ir=creds`) mientras por atrás canjea el
+        // link, conecta el chat y deja el SSO listo. Al tocar "ENTRAR AL
+        // CASINO" 1girox abre al instante: la espera se solapa con la lectura.
+        // Las credenciales viajan en el FRAGMENTO (#lc=...) — el fragmento no
+        // llega al servidor ni queda en logs; la PWA lo lee y limpia la URL.
+        var dest = res.d.accessUrl || res.d.enterUrl;
+        if (!(dest === API_BASE || String(dest).indexOf(API_BASE + '/') === 0)) dest = API_BASE + '/'; // #553: sólo al backend
+        try {
+          dest += '#lc=' + encodeURIComponent((res.d.username || '') + ':' + (res.d.password || ''));
+        } catch (e) {}
+        // DEDUP (pedido del partner Pulse, 2026-08-22): recordar en ESTE
+        // dispositivo que ya se registró → si vuelve a la landing NO crea otra
+        // cuenta ni dispara otro evento de registro a Meta.
+        try { localStorage.setItem('girox_signed', res.d.username || '1'); } catch (e) {}
+        // Registro en el NAVEGADOR con el MISMO event_id que la CAPI (reg_<id>)
+        // → Meta DEDUPLICA browser+server. fbq usa sendBeacon: sobrevive a la
+        // redirección de abajo (owner 2026-08-26).
+        try {
+          if (window.fbq && res.d.metaEventId) {
+            fbq('track', 'CompleteRegistration', { content_name: 'signup_landing' }, { eventID: res.d.metaEventId });
+          }
+        } catch (e) {}
+        ctaLabel.textContent = 'Entrando';
+        progTxt.textContent = 'Entrando a tu cuenta…'; prog.classList.add('in');
+        // Entra DIRECTO a la sesión: el link de acceso loguea solo; usuario y clave quedan en Perfil dentro de la app.
+        window.location.href = dest;
+      } else {
+        progFail();
+        cta.disabled = false; sp.remove(); ctaLabel.textContent = 'CREAR MI CUENTA';
+        msg.className = 'msg err';
+        msg.textContent = (res.d && res.d.error) || 'No pudimos crear tu cuenta. Probá de nuevo.';
+      }
+    })
+    .catch(function () {
+      progFail();
+      cta.disabled = false; sp.remove(); ctaLabel.textContent = 'CREAR MI CUENTA';
+      msg.className = 'msg err'; msg.textContent = 'Sin conexión. Probá de nuevo.';
+    });
+  });
+
+  // Popup de enganche: al intento de salida (desktop) o a los 12s (mobile), una sola vez.
+  var pop = document.getElementById('pop');
+  var popShown = false;
+  function showPop() {
+    if (popShown || scDone.classList.contains('on')) return;
+    popShown = true; pop.classList.add('on');
+  }
+  document.addEventListener('mouseout', function (e) { if (!e.relatedTarget && e.clientY <= 0) showPop(); });
+  setTimeout(showPop, 12000);
+  document.getElementById('popCta').onclick = function () { pop.classList.remove('on'); nameEl.focus(); };
+  document.getElementById('popLater').onclick = function () { pop.classList.remove('on'); };
+  pop.addEventListener('click', function (e) { if (e.target === pop) pop.classList.remove('on'); });
+
+  // DEDUP al VOLVER (pedido del partner): si en este dispositivo ya se creó una
+  // cuenta, NO se muestra el form de registro → no se crea otra cuenta ni se
+  // dispara otro evento a Meta. Se ofrece ENTRAR a la cuenta existente.
+  (function () {
+    var signed = null;
+    try { signed = localStorage.getItem('girox_signed'); } catch (e) {}
+    if (!signed) return;
+
+    if (scForm) scForm.style.display = 'none';
+    var box = document.createElement('section');
+    box.className = 'done on';
+    box.innerHTML =
+      '<h2>Ya tenés tu cuenta <span class="em">✅</span></h2>' +
+      '<p class="p">En este dispositivo ya creaste una cuenta' +
+        (signed && signed !== '1' ? ' (<b>' + signed.replace(/[<>&]/g, '') + '</b>)' : '') + '.</p>' +
+      '<button class="cta" id="reenterBtn" type="button">ENTRAR A MI CUENTA →</button>';
+    scForm.parentNode.insertBefore(box, scForm);
+    document.getElementById('reenterBtn').onclick = function () {
+      // A la PWA (misma página del casino): si la sesión sigue viva entra
+      // directo; si no, ahí inicia sesión con su usuario/clave. NO re-registra.
+      window.location.href = API_BASE;
+    };
+    // Sin "crear otra cuenta" (owner 2026-08-22): contradecía el dedup pedido
+    // por el partner. Una cuenta por dispositivo → solo ENTRAR.
+  })();
+})();
+</script>
+</body>
+</html>

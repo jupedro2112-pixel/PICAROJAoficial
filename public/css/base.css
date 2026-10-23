@@ -1,0 +1,137 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* iPhone con la PWA INSTALADA (viewport-fit=cover): la franja del home
+   indicator (abajo) y el rebote del scroll los pinta iOS con el fondo del
+   documento raíz (<html>), no con el del <body>. Sin esto, <html> queda
+   blanco por defecto → "línea blanca" abajo con la app instalada. */
+html {
+    background: #0a0015;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    /* Evita el "auto-boost" de texto del navegador. No bloquea el ajuste de
+       accesibilidad del SO, pero sí el inflado automático de Chrome. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    background: linear-gradient(135deg, #0a0015 0%, #1a0033 50%, #0a0015 100%);
+    background-attachment: fixed;
+    color: #ffffff;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+.btn {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 10px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #d4af37 0%, #00cc6a 100%);
+    color: #000;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 255, 136, 0.4);
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #9d4edd 0%, #6603a8 100%);
+    color: #fff;
+}
+
+.btn-secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(157, 78, 221, 0.4);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 255, 136, 0.5);
+    border-radius: 3px;
+}
+
+/* Toast */
+.toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+    color: #000;
+    padding: 15px 20px;
+    border-radius: 10px;
+    font-weight: bold;
+    z-index: 26000;
+    animation: slideIn 0.3s ease;
+}
+
+.toast.error {
+    background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+    color: #fff;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Botón "Entra YA y enviá tu comprobante de carga" — versión llamativa del
+   submit del login que aplica solo cuando el visitante llegó por un link
+   de publicista (publisherwelcome.js setea .publisher-cta sobre el botón). */
+.publisher-cta {
+    background: linear-gradient(135deg, #d4af37 0%, #ff8c00 60%, #ff4500 100%) !important;
+    color: #000 !important;
+    font-weight: 800 !important;
+    font-size: 15px !important;
+    letter-spacing: 0.3px;
+    box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.55);
+    animation: publisher-cta-pulse 1.6s infinite ease-in-out;
+    text-transform: none !important;
+}
+.publisher-cta:hover {
+    transform: translateY(-1px) scale(1.01);
+    box-shadow: 0 6px 20px rgba(255, 140, 0, 0.45);
+}
+@keyframes publisher-cta-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.65); }
+    70%  { box-shadow: 0 0 0 14px rgba(255, 140, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 140, 0, 0); }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

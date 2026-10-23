@@ -1,0 +1,624 @@
+/* Responsive - Pantallas grandes (desktops) */
+@media (min-width: 1441px) {
+    .chat-container {
+        /* Sin max-width ni margen: el chat tiene que ocupar el mismo ancho que la
+           barra de escribir y quedar pegado a ella. Con margen se veía el fondo
+           de la página metiéndose entre medio. */
+        margin: 0;
+    }
+
+    .message {
+        max-width: 55%;
+        padding: 9px 12px 20px 12px;
+        font-size: 15px;
+    }
+}
+
+/* Grandes monitores (1440px+) */
+@media (min-width: 1440px) {
+    .login-box {
+        max-width: 450px;
+        padding: 50px;
+    }
+    .chat-screen {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+}
+
+/* Responsive - Pantallas medianas (Mac, Windows laptops) */
+@media (min-width: 1025px) and (max-width: 1440px) {
+    .header {
+        padding: 10px 15px;
+        padding-top: calc(10px + var(--sat, env(safe-area-inset-top, 0px)));
+        min-height: 75px;
+    }
+
+    .chat-section {
+        margin-top: 120px;
+    }
+
+    .message {
+        max-width: 65%;
+        padding: 8px 11px 20px 11px;
+        font-size: 14px;
+    }
+}
+
+/* Mac (1280px - 1440px) */
+@media (min-width: 1024px) and (max-width: 1440px) {
+    .login-box {
+        max-width: 420px;
+    }
+}
+
+/* Responsive - Tablets */
+@media (max-width: 1024px) {
+    .header {
+        padding: 10px;
+        padding-top: calc(10px + var(--sat, env(safe-area-inset-top, 0px)));
+        min-height: 70px;
+    }
+
+    .fire-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 22px;
+    }
+
+    .refund-btn {
+        padding: 5px 8px;
+        min-width: 65px;
+        font-size: 9px;
+    }
+
+    .chat-section {
+        margin-top: 115px;
+    }
+}
+
+/* Tablets en portrait (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .header-center {
+        gap: 6px;
+    }
+    .refund-btn {
+        font-size: 9px !important;
+        padding: 6px 8px !important;
+    }
+    .chat-messages {
+        min-height: 300px;
+    }
+}
+
+/* Responsive - Tablets en landscape */
+@media (min-width: 769px) and (max-width: 1024px) and (orientation: landscape) {
+    .chat-section {
+        margin-top: 110px;
+    }
+
+    .message {
+        max-width: 60%;
+    }
+}
+
+/* Responsive - app-install-btn en tablet */
+@media (max-width: 768px) {
+    .app-install-btn {
+        padding: 4px 8px;
+        font-size: 9px;
+    }
+}
+
+/* Responsive - Móviles */
+@media (max-width: 768px) {
+    .login-box {
+        padding: 30px 20px;
+        margin: 10px;
+    }
+
+    .login-logo {
+        font-size: 3em;
+    }
+
+    .login-box h1 {
+        font-size: 1.5em;
+    }
+
+    /* header layout now handled by header.css flex row */
+
+    .fire-section {
+        margin-right: 5px;
+    }
+
+    .fire-btn {
+        width: 45px;
+        height: 45px;
+        font-size: 20px;
+    }
+
+    .fire-streak {
+        font-size: 9px;
+    }
+
+    .refunds-section {
+        gap: 3px;
+        position: static;
+        transform: none;
+        margin: 0 5px;
+        flex-shrink: 1;
+        min-width: 0;
+    }
+
+    .refund-btn {
+        padding: 4px 6px;
+        min-width: 0;
+        font-size: 9px;
+        border-radius: 8px;
+        flex-shrink: 1;
+    }
+
+    .refund-label-full {
+        display: none;
+    }
+
+    .refund-label-short {
+        display: block;
+        font-size: 14px;
+    }
+
+    .refund-amount {
+        font-size: 10px;
+    }
+
+    .refund-timer {
+        font-size: 8px;
+    }
+
+    .platform-section {
+        padding: 3px 6px;
+        margin-right: 5px;
+    }
+
+    .platform-label {
+        font-size: 6px;
+    }
+
+    .jugaygana-btn {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+
+    .plataforma-btn {
+        font-size: 9px;
+        padding: 3px 8px;
+    }
+
+    .user-section {
+        gap: 4px;
+    }
+
+    .support-btn {
+        padding: 4px 8px;
+        font-size: 9px;
+    }
+
+    .user-name {
+        font-size: 9px;
+        padding: 3px 6px;
+    }
+
+    .logout-btn, .settings-btn {
+        padding: 3px 6px;
+        font-size: 12px;
+    }
+
+    .promo-banner {
+        top: 60px;
+        height: 35px;
+    }
+
+    .promo-item {
+        font-size: 12px;
+        padding: 0 15px;
+    }
+
+    .chat-section {
+        margin-top: 100px;
+        margin-bottom: 114px;
+    }
+
+    .chat-container {
+        margin: 0;
+        border-radius: 0;
+    }
+
+    .message {
+        max-width: 85%;
+        padding: 7px 10px 20px 10px;
+        font-size: 14px;
+    }
+
+    .chat-input-container {
+        padding: 6px 9px;
+    }
+
+    .action-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+
+    #messageInput {
+        padding: 10px 14px;
+        font-size: 16px;
+    }
+
+    .send-btn {
+        width: 42px;
+        height: 42px;
+        padding: 0;
+    }
+
+    .modal-content {
+        width: 95%;
+        padding: 20px;
+        margin: 10px;
+    }
+
+    .modal-header h2 {
+        font-size: 1.3em;
+    }
+
+    .refund-info-row {
+        font-size: 13px;
+    }
+}
+
+/* Responsive - Móviles pequeños */
+@media (max-width: 480px) {
+    /* header layout handled by header.css flex row */
+
+    .fire-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+
+    .refunds-section {
+        gap: 2px;
+    }
+
+    .refund-btn {
+        padding: 4px 5px;
+        min-width: 0;
+        font-size: 8px;
+    }
+
+    .refund-label-short {
+        font-size: 13px;
+    }
+
+    .refund-amount {
+        font-size: 10px;
+    }
+
+    .platform-section {
+        font-size: 7px;
+        padding: 2px 4px;
+    }
+
+    .support-btn {
+        font-size: 8px;
+        padding: 3px 6px;
+    }
+
+    .plataforma-btn {
+        font-size: 8px;
+        padding: 3px 6px;
+    }
+
+    .user-name {
+        font-size: 8px;
+        padding: 2px 5px;
+        max-width: 80px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .info-btn {
+        font-size: 10px;
+        padding: 4px 7px;
+    }
+
+    .app-install-btn {
+        font-size: 8px !important;
+        padding: 3px 6px !important;
+    }
+
+    .logout-btn, .settings-btn {
+        padding: 3px 5px;
+        font-size: 11px;
+    }
+
+    .promo-banner {
+        top: 60px;
+        height: 30px;
+    }
+
+    .promo-item {
+        font-size: 10px;
+    }
+
+    .chat-section {
+        margin-top: 95px;
+    }
+
+    .message {
+        max-width: 90%;
+        padding: 6px 9px 19px 9px;
+        font-size: 13px;
+    }
+
+    .chat-input {
+        padding: 8px;
+        gap: 6px;
+    }
+
+    .chat-input textarea {
+        font-size: 14px;
+    }
+
+    #messageInput {
+        font-size: 14px !important;
+    }
+}
+
+/* Responsive - Móviles pequeños (iPhone SE, etc) */
+@media (max-width: 375px) {
+    /* header layout handled by header.css flex row */
+
+    .fire-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+    }
+
+    .refund-btn {
+        padding: 5px 6px;
+        min-width: 54px;
+        font-size: 7px;
+    }
+
+    .refund-amount {
+        font-size: 9px;
+    }
+
+    .promo-banner {
+        top: 60px;
+        height: 28px;
+    }
+
+    .chat-section {
+        margin-top: 92px;
+        margin-bottom: 109px;
+    }
+
+    .message {
+        max-width: 92%;
+        padding: 6px 9px 19px 9px;
+        font-size: 13px;
+    }
+
+    .action-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+    }
+
+    .send-btn {
+        width: 38px;
+        height: 38px;
+        padding: 0;
+    }
+}
+
+/* Responsive - Vista notebook - aún más compacto */
+@media (max-height: 800px) {
+    .chat-input-container {
+        padding: 6px 12px;
+    }
+
+    .chat-input {
+        gap: 6px;
+    }
+
+    .action-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 16px;
+    }
+
+    #messageInput {
+        padding: 8px 12px;
+        min-height: 38px;
+        font-size: 14px;
+    }
+
+    .send-btn {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+    }
+}
+
+/* Responsive - Modo landscape en móviles */
+@media (max-height: 500px) and (orientation: landscape) {
+    .header {
+        min-height: auto;
+        padding: 4px 8px;
+        padding-top: calc(4px + var(--sat, env(safe-area-inset-top, 0px)));
+        flex-direction: row;
+        flex-wrap: nowrap;
+        row-gap: 0;
+    }
+
+    .header-right {
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+        gap: 4px;
+        overflow: visible;
+    }
+
+    .promo-banner {
+        display: none;
+    }
+
+    .chat-section {
+        margin-top: 54px;
+        margin-bottom: 104px;
+    }
+
+    .fire-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+    }
+
+    .refund-btn {
+        padding: 3px 5px;
+        min-width: 48px;
+        font-size: 7px;
+    }
+
+    .refund-amount {
+        font-size: 8px;
+    }
+
+    .header-center {
+        gap: 3px;
+    }
+
+    .plataforma-btn, .support-btn, .user-name, .info-btn {
+        font-size: 8px;
+        padding: 2px 5px;
+    }
+
+    .logout-btn, .settings-btn {
+        padding: 2px 4px;
+        font-size: 10px;
+    }
+
+    .app-install-btn {
+        font-size: 7px !important;
+        padding: 2px 5px !important;
+    }
+
+    .chat-messages {
+        min-height: 150px;
+    }
+}
+
+/* Modo oscuro del sistema */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: linear-gradient(135deg, #0a0015 0%, #1a0033 50%, #0a0015 100%);
+    }
+}
+
+/* Alto contraste */
+@media (prefers-contrast: high) {
+    .message {
+        border: 1px solid currentColor;
+    }
+
+    .btn {
+        border: 2px solid currentColor;
+    }
+}
+
+/* ================================================
+   PWA STANDALONE (instalada): ajuste para safe area
+   Compensa el crecimiento del header en iPhone/iPad
+   cuando la app está instalada y el notch/isla
+   dinámica añade espacio al safe-area-inset-top.
+   ================================================ */
+@media (display-mode: standalone) {
+    /* banner de promociones: se ancla justo debajo del header real */
+    .promo-banner {
+        top: calc(80px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+    /* sección de chat: margen superior incluye la safe area */
+    .chat-section {
+        margin-top: calc(125px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+}
+
+@media (display-mode: standalone) and (max-width: 1024px) {
+    .promo-banner {
+        top: calc(70px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+    .chat-section {
+        margin-top: calc(115px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+}
+
+@media (display-mode: standalone) and (max-width: 768px) {
+    .chat-section {
+        margin-top: calc(100px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+}
+
+@media (display-mode: standalone) and (max-width: 480px) {
+    .promo-banner {
+        top: calc(60px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+    .chat-section {
+        margin-top: calc(95px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+}
+
+@media (display-mode: standalone) and (max-width: 375px) {
+    .chat-section {
+        margin-top: calc(92px + var(--sat, env(safe-area-inset-top, 0px)));
+    }
+}
+
+/* ================================================
+   COMPACTACIÓN POR ALTURA (2026-08-03)
+   La página NUNCA scrollea (body overflow:hidden): en pantallas bajas
+   (celulares chicos, notebooks) se achican las medidas del dashboard para
+   que entre todo; si aún así no entra, #homePanel scrollea ADENTRO y el
+   chat conserva su piso (min-height en .chat-container). Nada se recorta.
+   ================================================ */
+@media (max-height: 760px) {
+    .home-dash { margin: 6px auto 3px; gap: 7px; }
+    .dash-top { padding: 6px; gap: 6px; }
+    .dash-user, #rouletteHomeCard { flex: 0 0 76px; }
+    .dash-user { padding: 6px 4px; gap: 2px; }
+    .dash-user-avatar { width: 26px; height: 26px; font-size: 15px; }
+    .dash-refunds { padding: 5px 6px 6px; }
+    .dash-refunds-title { font-size: 10px; margin-bottom: 4px; }
+    .dash-play-btn { padding: 7px 9px; font-size: 11px; }
+    .dash-balance { padding: 5px 10px; }
+    .dash-balance-amount { font-size: 13px; }
+    .dash-tg-btn { padding: 6px 9px; }
+    .dash-tg-emoji { font-size: 17px; }
+    #homePanelToggle { padding: 4px 10px; margin-top: 2px; font-size: 10px; }
+    .chat-topbar { padding: 6px 11px; gap: 9px; }
+    .chat-topbar-avatar { width: 34px; height: 34px; }
+    .chat-topbar-name { font-size: 14.5px; }
+    .theme-topbar-btn { width: 34px; height: 34px; font-size: 15px; }
+    .fire-topbar-btn { width: 37px; height: 37px; font-size: 18px; }
+}
+
+@media (max-height: 640px) {
+    .chat-container { min-height: 140px; }
+    .home-dash { gap: 5px; margin-top: 4px; }
+    .dash-refunds-row .refund-label-full { font-size: 8.5px; }
+    .dash-user-cta { font-size: 6px; }
+    .chat-input-container { padding-top: 5px; }
+    .wa-icon-btn { height: 42px; }
+    #messageInput { min-height: 40px; padding: 9px 14px; }
+    .send-btn { width: 40px; height: 40px; }
+}
