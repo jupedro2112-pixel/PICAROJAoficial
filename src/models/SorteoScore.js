@@ -11,6 +11,15 @@ const schema = new mongoose.Schema({
   basePts: { type: Number, default: 0 },          // por lo apostado con plata real
   dayPts: { type: Number, default: 0 },           // gran: +N por cada día con cargas >= mínimo
   missionPts: { type: Number, default: 0 },       // gran: +% por semanas con misiones
+  weekPts: { type: Number, default: 0 },          // #981: +N por cada semana con K días con carga
+  wageredCounted: { type: Number, default: 0 },   // #981: apostado que contó (con el techo diario)
+  activeWeeks: { type: Number, default: 0 },
+  streakWeeks: { type: Number, default: 0 },
+  cum: { type: mongoose.Schema.Types.Mixed, default: null }, // #981: { 'YYYY-MM-DD': apostado acumulado del período a ese día } ⇒ apuesta por día
+  tickets: { type: Number, default: 0 },          // #981: tickets emitidos (total) y por origen
+  ticketsPlay: { type: Number, default: 0 },
+  ticketsDays: { type: Number, default: 0 },
+  ticketsMilestones: { type: Number, default: 0 },
   wagered: { type: Number, default: 0 },          // apostado bruto (stats)
   realShare: { type: Number, default: 1 },        // cargas / (cargas + bono otorgado) del período
   deposits: { type: Number, default: 0 },         // cantidad de cargas reales en el período

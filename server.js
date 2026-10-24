@@ -12903,6 +12903,8 @@ async function initializeData() {
   // después se cambia en Configuración → Registro de clientes.
   // #968 (owner): partidos del día en las historias automáticas ENCENDIDOS, y las campañas futuras del autopiloto de oct/nov se recrean con el
   // refuerzo (el autopiloto las vuelve a programar solo a los 5 min del arranque; sólo las 'scheduled' con fecha futura, nada enviado).
+  // #981: la explicación del sorteo guardada con el texto viejo pasa al nuevo (tickets + puntos con techo).
+  try { if (!(await getConfig('mig981SorteosV2', null))) { const r = await Command.updateOne({ name: '/sys_sq_sorteo', response: /cada \{ptsper\} apostados con plata real = \{pts\} puntos/ }, [{ $set: { response: { $replaceOne: { input: '$response', find: "🧮 Cómo sumás puntos: cada {ptsper} apostados con plata real = {pts} puntos (los bonos no suman). Se actualiza cada 20 minutos y ves tu puesto en vivo, con los demás nombres tapados.", replacement: "🧮 Puntos (ranking, 2° y 3° premio): {puntos}. Los bonos no suman.\\n\\n🎟️ Tickets (1° premio): {tickets}. Cada ticket es un número a tu nombre que ves en \"Mis tickets\"; al cierre publicamos la huella del sorteo y el día del sorteo la semilla: cualquiera puede verificar el ganador.\\n\\nTodo se actualiza cada 20 minutos y ves tu puesto, tus puntos y tus tickets en vivo, con los demás nombres tapados." } } } }]).catch(() => null); await Config.set('mig981SorteosV2', new Date().toISOString(), 'startup-migration'); logger.info('[mig981] explicación del sorteo: ' + ((r && r.modifiedCount) || 0) + ' actualizada(s)'); } } catch (e) { logger.warn('[mig981] ' + e.message); }
   // #979 (owner): bonos a las 19 h ⇒ las campañas futuras del autopiloto (programadas a las 20:00) se borran y el tick las rearma a las 19:00.
   try { if (!(await getConfig('mig979Hora19', null))) { const r = await _autopilotClearFuture(); await Config.set('mig979Hora19', new Date().toISOString(), 'startup-migration'); logger.info('[mig979] autopiloto a las 19 h: ' + r + ' campañas futuras rearmadas'); } } catch (e) { logger.warn('[mig979] ' + e.message); }
   // #976 (owner 2026-10-24): rollover de la CARGA ×1 (antes ×3; el bono sigue ×5), retiro mínimo $5.000 (antes $10.000), textos guardados que decían
@@ -22112,7 +22114,7 @@ const SUPPORT_QUICK_REPLIES = [
     text: '🔒 Todavía no podés retirar todo porque te falta completar el ROLLOVER (lo que tenés que APOSTAR antes de retirar; no es plata que ponés ni que perdés). Tus números de hoy:\n💰 Saldo: {saldo} · Podés retirar hoy: {retirable} · Bloqueado: {bloqueado}{bloqueado_bono}\n{detalle}\n👉 Te falta apostar {falta} en total para liberarlo. Cuenta cada apuesta que hacés, ganes o pierdas (no lo que cargás). Cuando llegues, retirás desde "Retirar premio".' },
   // #944 (owner): "agregá un botón en Soporte: explicación del sorteo, y resumí el sorteo explicando". Dinámico: los números salen de Config['sorteos'].
   { key: 'sorteo', dynamic: 'sorteo', label: '🏆 Explicación del sorteo', btn: { target: 'sorteo', label: '🏆 Ver el sorteo y anotarme' },
-    text: '🏆 Te explico los SORTEOS de PICA ROJA en corto:\n\n{mensual}\n\n{gran}\n\n🧮 Cómo sumás puntos: cada {ptsper} apostados con plata real = {pts} puntos (los bonos no suman). Se actualiza cada 20 minutos y ves tu puesto en vivo, con los demás nombres tapados.\n\n📝 Para participar tenés que anotarte en el sorteo desde la app ({requisitos}). Son dos sorteos separados: te anotás en cada uno.\n\n{extra}💵 Los premios se cobran {pago}, al titular de la cuenta con su DNI.\n\n👉 Tocá el botón de abajo para ver los premios, el ranking y anotarte. ¡Suerte! 🍀' },
+    text: '🏆 Te explico los SORTEOS de PICA ROJA en corto:\n\n{mensual}\n\n{gran}\n\n🧮 Puntos (ranking, 2° y 3° premio): {puntos}. Los bonos no suman.\n\n🎟️ Tickets (1° premio): {tickets}. Cada ticket es un número a tu nombre que ves en "Mis tickets"; al cierre publicamos la huella del sorteo y el día del sorteo la semilla: cualquiera puede verificar el ganador.\n\nTodo se actualiza cada 20 minutos y ves tu puesto, tus puntos y tus tickets en vivo, con los demás nombres tapados.\n\n📝 Para participar tenés que anotarte en el sorteo desde la app ({requisitos}). Son dos sorteos separados: te anotás en cada uno.\n\n{extra}💵 Los premios se cobran {pago}, al titular de la cuenta con su DNI.\n\n👉 Tocá el botón de abajo para ver los premios, el ranking y anotarte. ¡Suerte! 🍀' },
   { key: 'rollover_libre', hidden: true, label: '✅ Sin rollover pendiente (lo manda solo el botón de arriba cuando no hay nada bloqueado)',
     text: '✅ Hoy no tenés rollover pendiente: tu saldo es {saldo} y podés retirar {retirable} desde "Retirar premio" (mínimo {retiro_min}, a un CBU a tu nombre).' },
   { key: 'carga', label: '💳 Cómo cargar', text: '💳 Para cargar: transferí (mínimo {min}) al CBU que figura en la app y mandá el comprobante entero. Se acredita sola en minutos, con tu bono.', btn: { target: 'full', label: '⚡ Ir a cargar' } },
@@ -22169,10 +22171,11 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
       // #944: resumen de los dos sorteos con los números de la config (fechas, premios, puntos, SORTEO EXTRA, requisitos, cobro).
       const cfg = await _sorteosCfg(); const now = new Date(); const R = sorteosRules;
       const one = (s) => { const p = R.periodOf(s, now); const pr = (s.prizes || []).map((x) => x.pos + '° ' + x.name + (x.value ? ' (' + x.value + ')' : '')).join(' · ');
-        const cuando = p.status === 'soon' ? 'Empieza el ' + R.fmtDay(p.start) : (p.status === 'live' ? 'En curso hasta el ' + R.fmtDay(p.end) : 'Cerrado'); return s.emoji + ' ' + s.title.toUpperCase() + ': ' + cuando + '. Ganan los 3 anotados con más puntos. Premios: ' + pr + '.'; };
+        const cuando = p.status === 'soon' ? 'Empieza el ' + R.fmtDay(p.start) : (p.status === 'live' ? 'En curso hasta el ' + R.fmtDay(p.end) : 'Cerrado'); return s.emoji + ' ' + s.title.toUpperCase() + ': ' + cuando + '. El 1° premio se SORTEA entre los tickets de los anotados (más tickets, más chances; todos tienen alguna); el 2° y el 3° son para los dos anotados con más puntos. Premios: ' + pr + '.'; }; // #981
       const m = cfg.mensual, g = cfg.gran; const e = m.extra; const pm = R.periodOf(m, now);
-      const req = cfg.requirements || {}; const reqs = [req.app && 'app instalada', req.notif && 'notificaciones activadas', req.telegram && 'unido a nuestro Telegram', req.deposit && 'al menos una carga'].filter(Boolean).join(', ') || 'es gratis';
-      Object.assign(vars, { mensual: m.enabled ? one(m) : '', gran: g.enabled ? one(g) : '', pts: String(m.pts), ptsper: money(m.ptsPer), requisitos: reqs, pago: R.payWindow(pm.end).texto.replace(/ de d{4}$/, '') + ' (dentro de los primeros 10 días del mes siguiente al cierre)',
+      const req = cfg.requirements || {}; const reqs = [req.app && 'app instalada', req.notif && 'notificaciones activadas', req.telegram && 'unido a nuestro Telegram', req.phone && 'número de celular cargado en el Perfil', req.deposit && 'al menos una carga'].filter(Boolean).join(', ') || 'es gratis';
+      const rt = R.rulesText(m); // #981
+      Object.assign(vars, { puntos: rt.pts, tickets: rt.tickets, mensual: m.enabled ? one(m) : '', gran: g.enabled ? one(g) : '', pts: String(m.pts), ptsper: money(m.ptsPer), requisitos: reqs, pago: R.payWindow(pm.end).texto.replace(/ de d{4}$/, '') + ' (dentro de los primeros 10 días del mes siguiente al cierre)',
         extra: [m, g].filter((s) => s.enabled && s.extra && s.extra.enabled).map((s) => '🎁 ' + (s.extra.title || 'SORTEO EXTRA') + ' del ' + s.title + ': ' + s.extra.winners + ' premios de ' + money(s.extra.amount) + ' (' + money(s.extra.amount * s.extra.winners) + ') al azar entre ' + R.extraWho(s.extra, R.extraSpan(s.key)) + '. Con semilla publicada.').join('\n\n') + (m.extra && m.extra.enabled ? '\n\n' : '') }); // #969
     } else if (q.dynamic) {
       // #912: números REALES del cliente desde 1girox (lo mismo que ve en "Retirar premio"). Si la plataforma no responde, no se manda nada.
@@ -22188,7 +22191,7 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
       await _emitAdminOnlyChatNote(u.id, u.username, `🎯 Rollover leído de 1girox para la respuesta: saldo ${vars.saldo}, retirable ${vars.retirable}, bloqueado ${vars.bloqueado}, falta apostar ${vars.falta}.`).catch(() => {});
     }
     let text = q.builtin ? await renderSystemCommand('/sys_sq_' + q.key, q.text, vars) : String(q.text).replace(/\{(min|retiro_min|carga|rollover)\}/g, (m0, k) => vars[k]);
-    if (q.dynamic === 'sorteo') text = String(text || '').replace(/\{(mensual|gran|pts|ptsper|requisitos|pago|extra)\}/g, (m0, k) => vars[k] == null ? '' : vars[k]).replace(/\n{3,}/g, '\n\n').trim(); // #944: por si el texto editado no pasó por renderSystemCommand
+    if (q.dynamic === 'sorteo') text = String(text || '').replace(/\{(mensual|gran|pts|ptsper|puntos|tickets|requisitos|pago|extra)\}/g, (m0, k) => vars[k] == null ? '' : vars[k]).replace(/\n{3,}/g, '\n\n').trim(); // #944: por si el texto editado no pasó por renderSystemCommand
     if (!text) return res.status(400).json({ error: 'Esa respuesta está vacía en COMANDOS' });
     const now = new Date();
     await User.updateOne({ id: u.id }, { $set: { supportSessionSince: now } });
@@ -26545,6 +26548,8 @@ app.post('/api/admin/inicio/weekly-review/run', authMiddleware, adminMiddleware,
 // tope de 92). Entran TODOS los clientes con una carga real en el período; sólo los ANOTADOS (SorteoEntry) pueden ganar.
 const SorteoEntry = require('./src/models/SorteoEntry');
 const SorteoScore = require('./src/models/SorteoScore');
+const SorteoTicket = require('./src/models/SorteoTicket');   // #981
+const SorteoCounter = require('./src/models/SorteoCounter'); // #981
 const sorteosRules = require('./src/services/sorteos');
 const SORTEO_KEYS = ['mensual', 'gran'];
 const SORTEO_REAL_DEP = { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, description: { $not: /PRUEBA/i } };
@@ -26557,9 +26562,10 @@ function _sorteoChecksOf(user, telegramDeclared, hasDeposit) {
   const toks = Array.isArray(user.fcmTokens) ? user.fcmTokens : [];
   const app = user.fcmTokenContext === 'standalone' || toks.some((t) => t && t.context === 'standalone');
   const notif = !!(user.fcmToken || toks.length);
-  return { app, notif, telegram: !!telegramDeclared, deposit: !!hasDeposit };
+  const phone = /^\d{10}$/.test(String(user.phone || '').replace(/\D/g, '').slice(-10)); // #981: número de celular cargado (no hace falta verificado)
+  return { app, notif, telegram: !!telegramDeclared, phone, deposit: !!hasDeposit };
 }
-function _sorteoMissing(cfg, checks) { const r = cfg.requirements || {}; return ['app', 'notif', 'telegram', 'deposit'].filter((k) => r[k] && !checks[k]); }
+function _sorteoMissing(cfg, checks) { const r = cfg.requirements || {}; return ['app', 'notif', 'telegram', 'phone', 'deposit'].filter((k) => r[k] && !checks[k]); }
 // Apostado + bono otorgado por jugador en [start, until] (tramos ≤85 días, lotes de 100). Falla ⇒ null (no se tocan los puntajes).
 async function _sorteoStats(usernames, start, until) {
   const out = {}; const SPAN = 85 * sorteosRules.DAY;
@@ -26574,31 +26580,111 @@ async function _sorteoStats(usernames, start, until) {
   }
   return out;
 }
+// #981: emisión de TICKETS (números correlativos por sorteo y período): reserva un bloque en el contador y los inserta. Nunca se quitan.
+async function _sorteoIssueTickets(key, periodKey, userId, username, reasons, now) {
+  const want = reasons.length; if (!want) return null;
+  const c = await SorteoCounter.findOneAndUpdate({ key, periodKey }, { $inc: { next: want } }, { upsert: true, new: true }).lean();
+  const end = Number(c.next), start = end - want + 1; const docs = [];
+  for (let i = 0; i < want; i++) docs.push({ key, periodKey, n: start + i, userId, username, reason: reasons[i], at: now });
+  await SorteoTicket.insertMany(docs, { ordered: false });
+  return { from: start, to: end };
+}
+const _drawKey = (key, periodKey, kind, date) => key + ':' + periodKey + ':' + (kind === 'mid' ? 'mid:' + date : 'main');
+// Publica la HUELLA de una semilla nueva (compromiso) y congela la cantidad de tickets. Idempotente.
+async function _sorteoDrawCommit(key, periodKey, kind, date, by) {
+  const draws = (await getConfig('sorteoDraws', null)) || {}; const dk = _drawKey(key, periodKey, kind, date);
+  if (draws[dk] && draws[dk].seedHash) return draws[dk];
+  const total = await SorteoTicket.countDocuments({ key, periodKey }); const seed = sorteosRules.newSeed();
+  draws[dk] = { kind, key, periodKey, date: date || null, committedAt: new Date().toISOString(), by: by || 'automático', seed, seedHash: sorteosRules.commitHash(seed), total, revealedAt: null, winner: null, method: 'sha256(semilla|sorteo) mod tickets, v2' };
+  await Config.set('sorteoDraws', draws, by || 'system'); return draws[dk];
+}
+// Revela la semilla y calcula el ticket ganador; si el número es de alguien no anotado / bloqueado / marcado, pasa al siguiente.
+async function _sorteoDrawReveal(cfg, key, periodKey, kind, date, by) {
+  let draws = (await getConfig('sorteoDraws', null)) || {}; const dk = _drawKey(key, periodKey, kind, date); let d = draws[dk];
+  if (!d || !d.seedHash) { d = await _sorteoDrawCommit(key, periodKey, kind, date, by); draws = (await getConfig('sorteoDraws', null)) || {}; }
+  if (d.revealedAt) return d;
+  const total = Number(d.total) || 0; const skipped = []; let winner = null;
+  if (total > 0) {
+    const joined = new Set((await SorteoEntry.find({ key }).select('userId').lean()).map((e) => e.userId));
+    for (let skip = 0; skip < Math.min(total, 500) && !winner; skip++) {
+      const n = sorteosRules.drawNumber(d.seed, dk, total, skip); const t = await SorteoTicket.findOne({ key, periodKey, n }).select('n userId username').lean();
+      if (!t) { skipped.push({ n, why: 'sin ticket' }); continue; }
+      const u = await User.findOne({ id: t.userId }).select('id username isBlocked fraudFlags').lean();
+      const why = !u ? 'sin cuenta' : !joined.has(t.userId) ? 'no anotado' : u.isBlocked ? 'bloqueado' : (Array.isArray(u.fraudFlags) && u.fraudFlags.length) ? 'radar de estafas' : null;
+      if (why) { skipped.push({ n, username: t.username, why }); continue; }
+      winner = { n: t.n, userId: t.userId, username: t.username };
+    }
+  }
+  const s = cfg[key] || {};
+  Object.assign(d, { revealedAt: new Date().toISOString(), revealedBy: by || 'automático', winner, skipped, amount: kind === 'mid' ? Number((s.midDraws || {}).amount) || 0 : null, prize: kind === 'main' ? (((s.prizes || [])[0] || {}).name || '') : null, note: total ? null : 'sin tickets emitidos' });
+  draws[dk] = d; await Config.set('sorteoDraws', draws, by || 'system');
+  if (winner) {
+    const what = kind === 'mid' ? sorteosRules.money(d.amount) + ' del sorteo quincenal' : 'el 1° premio del ' + (s.title || key) + ' (' + d.prize + ')';
+    try { await sendNotificationToUsernames(User, [winner.username], kind === 'mid' ? '🎉 ¡Ganaste el sorteo quincenal!' : '🏆 ¡GANASTE EL 1° PREMIO!', 'Salió tu ticket #' + winner.n + ': ' + what + '. Te escribimos por Soporte para coordinar la entrega.', { url: '/', kind: 'personal', tag: 'sorteo-' + dk }); } catch (_) {}
+    try { await _emitAdminOnlyChatNote(winner.userId, winner.username, '🏆 GANÓ ' + what + ' con el ticket #' + winner.n + ' (sorteo ' + dk + '). Coordinar la entrega: titular con DNI y celular verificado. El premio se acredita / entrega a mano.'); } catch (_) {}
+  }
+  logger.info(`[sorteos] SORTEO ${dk}: ${total} tickets · ganador ${winner ? winner.username + ' #' + winner.n : 'ninguno'} · saltos ${skipped.length}`);
+  return d;
+}
+// Automático: al cerrar el período se publica la huella del 1° premio y, 48 h después de la hora de publicación, si nadie lo reveló desde el
+// panel, se revela solo. Quincenales: huella apenas empieza el día, semilla a las 20 h.
+async function _sorteoDrawsAuto(cfg, key, p, now) {
+  const s = cfg[key];
+  if (p.status === 'closed') { const d = await _sorteoDrawCommit(key, p.periodKey, 'main', null, 'automático'); if (!d.revealedAt && now.getTime() >= p.publishAt.getTime() + 48 * 3600000) await _sorteoDrawReveal(cfg, key, p.periodKey, 'main', null, 'automático'); }
+  const hourArt = (now.getUTCHours() + 21) % 24; const today = sorteosRules.artDay(now);
+  for (const md of sorteosRules.midDrawDates(s, p, now)) {
+    if (md.status !== 'due') continue;
+    const d = await _sorteoDrawCommit(key, p.periodKey, 'mid', md.date, 'automático');
+    if (!d.revealedAt && (today > md.date || hourArt >= 20)) await _sorteoDrawReveal(cfg, key, p.periodKey, 'mid', md.date, 'automático');
+  }
+}
+// Lo que ve el cliente de un sorteo (semilla sólo después de revelar; el ganador con el nombre tapado salvo que sea él).
+function _sorteoDrawPublic(d, userId) {
+  if (!d) return null;
+  return { kind: d.kind, date: d.date || null, total: d.total || 0, seedHash: d.seedHash, committedAt: d.committedAt, revealedAt: d.revealedAt || null, seed: d.revealedAt ? d.seed : null, amount: d.amount || null, prize: d.prize || null, skipped: (d.skipped || []).length,
+    winner: d.revealedAt && d.winner ? { n: d.winner.n, name: d.winner.userId === userId ? d.winner.username : sorteosRules.mask(d.winner.username), me: d.winner.userId === userId } : null, note: d.note || null };
+}
 async function _sorteoTickOne(cfg, key, now) {
   const s = cfg[key]; const p = sorteosRules.periodOf(s, now);
   if (p.status === 'soon') return { skipped: 'todavía no empezó' };
-  if (p.status === 'closed' && now - p.end > 3 * sorteosRules.DAY) return { skipped: 'cerrado' };
-  const t0 = Date.now(); const until = new Date(Math.min(now.getTime(), p.end.getTime()));
+  if (p.status === 'closed' && now - p.end > 3 * sorteosRules.DAY) { await _sorteoDrawsAuto(cfg, key, p, now).catch((e) => logger.warn('[sorteos] sorteo auto ' + key + ': ' + e.message)); return { skipped: 'cerrado' }; }
+  const t0 = Date.now(); const until = new Date(Math.min(now.getTime(), p.end.getTime())); const today = sorteosRules.artDay(until);
   const range = { timestamp: { $gte: p.start, $lte: until } };
-  const [deps, dayAgg, entries] = await Promise.all([
+  const [deps, dayAgg, entries, prevScores] = await Promise.all([
     Transaction.aggregate([{ $match: Object.assign({}, SORTEO_REAL_DEP, range) }, { $group: { _id: '$userId', n: { $sum: 1 }, total: { $sum: '$amount' }, first: { $min: '$timestamp' }, username: { $first: '$username' } } }]),
-    key === 'gran' ? Transaction.aggregate([{ $match: Object.assign({}, SORTEO_REAL_DEP, range) }, { $group: { _id: { u: '$userId', d: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: '-03:00' } } }, total: { $sum: '$amount' } } }, { $match: { total: { $gte: Number(s.dayDepositMin) || 0 } } }, { $group: { _id: '$_id.u', days: { $sum: 1 } } }]) : Promise.resolve([]),
-    SorteoEntry.find({ key }).select('userId').lean()
+    Transaction.aggregate([{ $match: Object.assign({}, SORTEO_REAL_DEP, range) }, { $group: { _id: { u: '$userId', d: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: '-03:00' } } }, total: { $sum: '$amount' } } }]),
+    SorteoEntry.find({ key }).select('userId').lean(),
+    SorteoScore.find({ key, periodKey: p.periodKey }).select('userId cum ticketsPlay ticketsDays ticketsMilestones').lean()
   ]);
   const cands = deps.filter((d) => d._id && d.username);
-  if (!cands.length) return { candidates: 0, scored: 0, ms: Date.now() - t0 };
+  if (!cands.length) { await _sorteoDrawsAuto(cfg, key, p, now).catch(() => {}); return { candidates: 0, scored: 0, ms: Date.now() - t0 }; }
   const stats = await _sorteoStats(cands.map((d) => d.username), p.start, until);
-  const days = new Map(dayAgg.map((x) => [x._id, x.days])); const joined = new Set(entries.map((e) => e.userId));
+  const depDays = new Map(); for (const x of dayAgg) { const u = x._id && x._id.u; if (!u) continue; if (!depDays.has(u)) depDays.set(u, {}); depDays.get(u)[x._id.d] = (depDays.get(u)[x._id.d] || 0) + (Number(x.total) || 0); }
+  const prev = new Map(prevScores.map((x) => [x.userId, x])); const joined = new Set(entries.map((e) => e.userId));
   let missions = new Map(); const weeksElapsed = Math.max(1, Math.ceil((until - p.start) / (7 * sorteosRules.DAY)));
-  if (key === 'gran') { const mw = await MissionClaim.aggregate([{ $match: { userId: { $in: cands.map((d) => d._id) }, weekKey: { $gte: sorteosRules.artDay(p.start) } } }, { $group: { _id: '$userId', w: { $addToSet: '$weekKey' } } }]); missions = new Map(mw.map((x) => [x._id, x.w.length])); }
-  const ops = cands.map((d) => {
-    const st = stats[d.username] || { wagered: 0, bonusGranted: 0 };
-    const pts = sorteosRules.computePoints(s, { wagered: st.wagered, bonusGranted: st.bonusGranted, depositTotal: d.total, depositDays: days.get(d._id) || 0, missionWeeks: missions.get(d._id) || 0, weeksElapsed });
+  if (key === 'gran') { const mw = await MissionClaim.aggregate([{ $match: { userId: { $in: cands.map((d) => d._id) }, weekKey: { $gte: sorteosRules.artDay(p.start) } } }, { $group: { _id: '$userId', w: { $addToSet: '$weekKey' } } }]); missions = new Map(mw.map((x) => [x._id, (x.w || []).length])); }
+  const ops = []; let issued = 0;
+  for (const d of cands) {
+    const st = stats[d.username] || { wagered: 0, bonusGranted: 0 }; const old = prev.get(d._id) || {};
+    // apuesta POR DÍA: diferencia entre los acumulados de 1girox guardados cada día (lo de hoy = acumulado a hoy − acumulado del último día guardado)
+    const cum = Object.assign({}, (old.cum && typeof old.cum === 'object') ? old.cum : {}); cum[today] = Math.max(Number(cum[today]) || 0, Math.round(Number(st.wagered) || 0));
+    const days = {}; let last = 0;
+    for (const k2 of Object.keys(cum).sort()) { const v = Math.max(0, Number(cum[k2]) || 0); days[k2] = { wag: Math.max(0, v - last), dep: 0 }; last = Math.max(last, v); }
+    const dd = depDays.get(d._id) || {}; for (const k2 of Object.keys(dd)) { days[k2] = days[k2] || { wag: 0, dep: 0 }; days[k2].dep = dd[k2]; }
+    const pts = sorteosRules.computePoints(s, { days, depositTotal: d.total, bonusGranted: st.bonusGranted, deposits: d.n, missionWeeks: missions.get(d._id) || 0, weeksElapsed });
+    // tickets: nunca bajan; se emite la diferencia por origen
+    const had = { play: Number(old.ticketsPlay) || 0, days: Number(old.ticketsDays) || 0, milestones: Number(old.ticketsMilestones) || 0 };
+    const reasons = []; for (const cat of ['play', 'days', 'milestones']) { const delta = Math.max(0, pts.tickets[cat] - had[cat]); for (let i = 0; i < delta; i++) reasons.push(cat === 'play' ? 'juego' : (cat === 'days' ? 'dia' : 'hito')); }
+    const tk = { play: Math.max(had.play, pts.tickets.play), days: Math.max(had.days, pts.tickets.days), milestones: Math.max(had.milestones, pts.tickets.milestones) };
+    if (reasons.length) { try { await _sorteoIssueTickets(key, p.periodKey, d._id, d.username, reasons, now); issued += reasons.length; } catch (e) { logger.warn('[sorteos] tickets ' + d.username + ': ' + e.message); Object.assign(tk, had); } }
     const isJ = joined.has(d._id);
-    return { updateOne: { filter: { key, periodKey: p.periodKey, userId: d._id }, update: { $set: { username: d.username, points: pts.points, basePts: pts.basePts, dayPts: pts.dayPts, missionPts: pts.missionPts, realShare: pts.realShare, wagered: Math.round(st.wagered), deposits: d.n, depositTotal: Math.round(d.total), depositDays: days.get(d._id) || 0, missionWeeks: missions.get(d._id) || 0, joined: isJ, eligible: isJ && d.n >= 1, firstDepositAt: d.first, updatedAt: new Date() } }, upsert: true } };
-  });
+    ops.push({ updateOne: { filter: { key, periodKey: p.periodKey, userId: d._id }, update: { $set: { username: d.username, points: pts.points, basePts: pts.basePts, dayPts: pts.dayPts, weekPts: pts.weekPts, missionPts: pts.missionPts, realShare: pts.realShare,
+      wagered: pts.wagered, wageredCounted: pts.wageredCounted, deposits: d.n, depositTotal: Math.round(d.total), depositDays: pts.depositDays, activeWeeks: pts.activeWeeks, streakWeeks: pts.streakWeeks, missionWeeks: missions.get(d._id) || 0,
+      joined: isJ, eligible: isJ && d.n >= 1, firstDepositAt: d.first, cum, tickets: tk.play + tk.days + tk.milestones, ticketsPlay: tk.play, ticketsDays: tk.days, ticketsMilestones: tk.milestones, updatedAt: now } }, upsert: true } });
+  }
   for (let i = 0; i < ops.length; i += 500) await SorteoScore.bulkWrite(ops.slice(i, i + 500), { ordered: false });
-  return { candidates: cands.length, scored: ops.length, ms: Date.now() - t0, period: p.periodKey, status: p.status };
+  await _sorteoDrawsAuto(cfg, key, p, now).catch((e) => logger.warn('[sorteos] sorteo auto ' + key + ': ' + e.message));
+  return { candidates: cands.length, scored: ops.length, tickets: issued, ms: Date.now() - t0, period: p.periodKey, status: p.status };
 }
 // #964: lock genérico para crons pesados en multi-instancia: una sola instancia corre la pasada; las demás saltean hasta que vence.
 async function _cronClaim(name, ttlMs) {
@@ -26638,7 +26724,7 @@ async function _sorteoTick(opts) {
 setTimeout(() => { _sorteoTick().catch(() => {}); setInterval(() => { _sorteoTick().catch(() => {}); }, 60 * 60 * 1000); }, 3 * 60 * 1000); // #957: cada hora
 const _sorteoSort = { points: -1, wagered: -1, firstDepositAt: 1 };
 async function _sorteoRankOf(key, periodKey, sc) { if (!sc) return null; const better = await SorteoScore.countDocuments({ key, periodKey, $or: [{ points: { $gt: sc.points } }, { points: sc.points, wagered: { $gt: sc.wagered } }] }); return better + 1; }
-async function _sorteoWinners(key, periodKey) { return SorteoScore.find({ key, periodKey, eligible: true, points: { $gt: 0 } }).sort(_sorteoSort).limit(3).lean(); }
+async function _sorteoWinners(key, periodKey, excludeUserId) { const f = { key, periodKey, eligible: true, points: { $gt: 0 } }; if (excludeUserId) f.userId = { $ne: excludeUserId }; return SorteoScore.find(f).sort(_sorteoSort).limit(2).lean(); } // #981: 2 por ranking (el 1° va por tickets)
 // #939: quiénes entran al SORTEO de $100.000 del mes: cargas >= minDeposits (y anotados sólo si requireJoin).
 function _sorteoExtraFilter(s, periodKey) { const f = { key: s.key || 'mensual', periodKey, deposits: { $gte: Number(s.extra.minDeposits) || 1 } }; if (s.extra.requireJoin) f.eligible = true; return f; }
 async function _sorteoTelegramUrl() { try { const c = (await getConfig('communityConfig')) || {}; return c.inviteUrl || c.channelUrl || c.url || (await getConfig('canalInformativoUrl', '')) || ''; } catch (_) { return ''; } }
@@ -26647,7 +26733,7 @@ app.get('/api/sorteos', authMiddleware, async (req, res) => {
   try {
     const cfg = await _sorteosCfg(); const now = new Date();
     if (!cfg.enabled) return res.json({ enabled: false, sorteos: [] });
-    const user = await User.findOne({ id: req.user.userId }).select('id username fcmToken fcmTokenContext fcmTokens').lean();
+    const user = await User.findOne({ id: req.user.userId }).select('id username phone fcmToken fcmTokenContext fcmTokens').lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     const hasDep = !!(await Transaction.findOne(Object.assign({ userId: user.id }, SORTEO_REAL_DEP)).select('_id').lean());
     const entries = await SorteoEntry.find({ userId: user.id }).lean(); const byKey = new Map(entries.map((e) => [e.key, e]));
@@ -26665,17 +26751,29 @@ app.get('/api/sorteos', authMiddleware, async (req, res) => {
       ]);
       const myRank = await _sorteoRankOf(key, p.periodKey, mine && mine.points > 0 ? mine : null);
       const rows = top.map((r, i) => ({ rank: i + 1, name: r.userId === user.id ? r.username : sorteosRules.mask(r.username), points: r.points, me: r.userId === user.id, joined: !!r.joined }));
-      if (mine && mine.points > 0 && !rows.some((r) => r.me)) rows.push({ rank: myRank, name: mine.username, points: mine.points, me: true, joined: !!mine.joined });
+      // #981: si estoy fuera del top, mis vecinos (2 arriba y 2 abajo) para que se entienda dónde estoy
+      let near = [];
+      if (mine && mine.points > 0 && !rows.some((r) => r.me)) {
+        const around = await SorteoScore.find({ key, periodKey: p.periodKey, points: { $gt: 0 } }).sort(_sorteoSort).skip(Math.max(0, myRank - 3)).limit(5).select('userId username points joined').lean();
+        near = around.map((r, i) => ({ rank: Math.max(1, myRank - 2) + i, name: r.userId === user.id ? r.username : sorteosRules.mask(r.username), points: r.points, me: r.userId === user.id, joined: !!r.joined }));
+        if (!near.some((r) => r.me)) near.push({ rank: myRank, name: mine.username, points: mine.points, me: true, joined: !!mine.joined });
+      }
+      const [tTotal, tMine, tList] = await Promise.all([SorteoTicket.countDocuments({ key, periodKey: p.periodKey }), SorteoTicket.countDocuments({ key, periodKey: p.periodKey, userId: user.id }), SorteoTicket.find({ key, periodKey: p.periodKey, userId: user.id }).sort({ n: 1 }).limit(200).select('n reason at').lean()]);
+      const third = top[2] || null; const gapTo3 = mine && third && myRank > 3 ? Math.max(0, third.points - mine.points) : null;
+      const mids = sorteosRules.midDrawDates(s, p, now).map((md) => Object.assign({}, md, { draw: _sorteoDrawPublic(draws[_drawKey(key, p.periodKey, 'mid', md.date)], user.id) }));
+      const mainDraw = _sorteoDrawPublic(draws[_drawKey(key, p.periodKey, 'main')], user.id);
       let winners = null, drawKey = key + ':' + p.periodKey, draw = null;
-      if (p.status === 'closed' && now >= p.publishAt) { winners = (await _sorteoWinners(key, p.periodKey)).map((w, i) => ({ pos: i + 1, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id })); }
-      if (key === 'mensual' && p.prevKey && now - p.start < 7 * sorteosRules.DAY) { const pw = await _sorteoWinners(key, p.prevKey); if (pw.length) winners = pw.map((w, i) => ({ pos: i + 1, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id, period: p.prevKey })); drawKey = key + ':' + p.prevKey; }
+      if (p.status === 'closed' && now >= p.publishAt) { const mainW = draws[_drawKey(key, p.periodKey, 'main')]; const exclude = mainW && mainW.winner ? mainW.winner.userId : null; winners = (await _sorteoWinners(key, p.periodKey, exclude)).map((w, i) => ({ pos: i + 2, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id })); } // #981: 2° y 3° por ranking
+      if (key === 'mensual' && p.prevKey && now - p.start < 7 * sorteosRules.DAY) { const pm = draws[_drawKey(key, p.prevKey, 'main')]; const pw = await _sorteoWinners(key, p.prevKey, pm && pm.winner ? pm.winner.userId : null); if (pw.length) winners = pw.map((w, i) => ({ pos: i + 2, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id, period: p.prevKey })); drawKey = key + ':' + p.prevKey; }
       if (draws[drawKey]) draw = { at: draws[drawKey].at, seed: draws[drawKey].seed, amount: draws[drawKey].amount, winners: (draws[drawKey].winners || []).map((w) => ({ name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), me: w.userId === user.id })) };
       out.push({
         key, title: s.title, emoji: s.emoji, status: p.status, periodKey: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt,
         startsInMs: Math.max(0, p.start - now), endsInMs: Math.max(0, p.end - now), prizes: s.prizes, extra: s.extra && s.extra.enabled ? s.extra : null, // #969: en los dos
-        rules: { pts: s.pts, ptsPer: s.ptsPer, dayDepositMin: s.dayDepositMin || 0, dayDepositPts: s.dayDepositPts || 0, missionWeekPct: s.missionWeekPct || 0 },
+        rules: { pts: s.pts, ptsPer: s.ptsPer, dayCapArs: s.dayCapArs || 0, dayDepositMin: s.dayDepositMin || 0, dayDepositPts: s.dayDepositPts || 0, weekActiveDays: s.weekActiveDays || 0, weekPts: s.weekPts || 0, missionWeekPct: s.missionWeekPct || 0, tickets: s.tickets, milestones: s.milestones, text: sorteosRules.rulesText(s) }, // #981
+        tickets: { total: tTotal, mine: tMine, list: tList.map((t) => ({ n: t.n, reason: t.reason, at: t.at })), chance: tTotal ? tMine / tTotal : 0 }, // #981
+        draws: { main: mainDraw, mid: mids }, near, // #981
         counts: await (async () => { const c = { anotados, participantes, extraWinners: 0, extraElegibles: 0 }; if (s.extra && s.extra.enabled) { c.extraElegibles = await SorteoScore.countDocuments(_sorteoExtraFilter(s, p.periodKey)); c.extraWinners = sorteosRules.extraWinners(s.extra, c.extraElegibles); } return c; })(),
-        me: { joined: !!ent, joinedAt: ent ? ent.joinedAt : null, checks, missing, canJoin: !ent && !missing.length, points: mine ? mine.points : 0, rank: myRank, wagered: mine ? mine.wagered : 0, eligible: !!(mine && mine.eligible), breakdown: mine ? { basePts: mine.basePts, dayPts: mine.dayPts, missionPts: mine.missionPts, realShare: mine.realShare, deposits: mine.deposits } : null },
+        me: { joined: !!ent, joinedAt: ent ? ent.joinedAt : null, checks, missing, canJoin: !ent && !missing.length, points: mine ? mine.points : 0, rank: myRank, wagered: mine ? mine.wagered : 0, eligible: !!(mine && mine.eligible), gapTo3, deposits: mine ? mine.deposits : 0, depositDays: mine ? mine.depositDays || 0 : 0, activeWeeks: mine ? mine.activeWeeks || 0 : 0, streakWeeks: mine ? mine.streakWeeks || 0 : 0, ticketsPlay: mine ? mine.ticketsPlay || 0 : 0, ticketsDays: mine ? mine.ticketsDays || 0 : 0, ticketsMilestones: mine ? mine.ticketsMilestones || 0 : 0, weekPts: mine ? mine.weekPts || 0 : 0, breakdown: mine ? { basePts: mine.basePts, dayPts: mine.dayPts, missionPts: mine.missionPts, realShare: mine.realShare, deposits: mine.deposits } : null },
         top: rows, winners, draw, terms: sorteosRules.terms(cfg, key, now)
       });
     }
@@ -26687,13 +26785,13 @@ app.post('/api/sorteos/:key/join', authMiddleware, async (req, res) => {
   try {
     const key = String(req.params.key || ''); if (!SORTEO_KEYS.includes(key)) return res.status(404).json({ error: 'Sorteo inexistente' });
     const cfg = await _sorteosCfg(); if (!cfg.enabled || !cfg[key].enabled) return res.status(400).json({ error: 'Este sorteo no está activo.' });
-    const user = await User.findOne({ id: req.user.userId }).select('id username fcmToken fcmTokenContext fcmTokens isBlocked').lean();
+    const user = await User.findOne({ id: req.user.userId }).select('id username phone fcmToken fcmTokenContext fcmTokens isBlocked').lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (user.isBlocked) return res.status(403).json({ error: 'Tu cuenta no puede participar.' });
     const hasDep = !!(await Transaction.findOne(Object.assign({ userId: user.id }, SORTEO_REAL_DEP)).select('_id').lean());
     const telegram = !!(req.body && req.body.telegram === true);
     const checks = _sorteoChecksOf(user, telegram, hasDep); const missing = _sorteoMissing(cfg, checks);
-    if (missing.length) { const names = { app: 'instalar la app', notif: 'activar las notificaciones', telegram: 'unirte a nuestro Telegram', deposit: 'hacer al menos una carga' }; return res.status(400).json({ error: 'Te falta: ' + missing.map((m) => names[m]).join(', ') + '.', checks, missing }); }
+    if (missing.length) { const names = { app: 'instalar la app', notif: 'activar las notificaciones', telegram: 'unirte a nuestro Telegram', phone: 'cargar tu número de celular en el Perfil', deposit: 'hacer al menos una carga' }; return res.status(400).json({ error: 'Te falta: ' + missing.map((m) => names[m]).join(', ') + '.', checks, missing }); }
     const ent = await SorteoEntry.findOneAndUpdate({ userId: user.id, key }, { $setOnInsert: { id: uuidv4(), username: user.username, joinedAt: new Date(), checks, source: 'app' }, $set: { telegramDeclared: telegram } }, { upsert: true, new: true }).lean();
     const p = sorteosRules.periodOf(cfg[key], new Date());
     await SorteoScore.updateMany({ key, periodKey: p.periodKey, userId: user.id }, [{ $set: { joined: true, eligible: { $gte: ['$deposits', 1] } } }]).catch(() => {});
@@ -26723,11 +26821,15 @@ app.get('/api/admin/sorteos', authMiddleware, adminMiddleware, async (req, res) 
           prev: p.prevKey ? { periodKey: p.prevKey, count: prev.length, winners: sorteosRules.extraWinners(s.extra, prev.length), candidates: prev, draw: draws[key + ':' + p.prevKey] || null, drawDay: p.start } : null };
       }
       const scByUser = new Map((await SorteoScore.find({ key, periodKey: p.periodKey, userId: { $in: entries.map((e) => e.userId) } }).select('userId points deposits depositTotal wagered eligible').lean()).map((x) => [x.userId, x]));
+      const [tTotal, tByReason, tLast, t7] = await Promise.all([SorteoTicket.countDocuments({ key, periodKey: p.periodKey }), SorteoTicket.aggregate([{ $match: { key, periodKey: p.periodKey } }, { $group: { _id: '$reason', n: { $sum: 1 } } }]), SorteoTicket.find({ key, periodKey: p.periodKey }).sort({ n: -1 }).limit(60).select('n username reason at').lean(), SorteoTicket.countDocuments({ key, periodKey: p.periodKey, at: { $gte: new Date(now.getTime() - 7 * sorteosRules.DAY) } })]); // #981
+      const mids = sorteosRules.midDrawDates(s, p, now).map((md) => Object.assign({}, md, { draw: draws[_drawKey(key, p.periodKey, 'mid', md.date)] || null }));
       out[key] = {
         period: { key: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt, status: p.status },
+        tickets: { total: tTotal, last7: t7, byReason: Object.fromEntries(tByReason.map((r) => [r._id, r.n])), last: tLast }, // #981
+        mainDraw: draws[_drawKey(key, p.periodKey, 'main')] || null, prevMainDraw: p.prevKey ? (draws[_drawKey(key, p.prevKey, 'main')] || null) : null, midDraws: mids, // #981
         counts: { anotados: entries.length, participantes, anotadosConPuntos: ranking.filter((r) => r.joined).length, extraElegibles: elig, extraGanadores: sorteosRules.extraWinners(s.extra, elig) },
         anotados: entries.map((e) => { const sc = scByUser.get(e.userId); return { id: e.id, userId: e.userId, username: e.username, joinedAt: e.joinedAt, checks: e.checks, telegram: !!e.telegramDeclared, points: sc ? sc.points : 0, deposits: sc ? sc.deposits : 0, depositTotal: sc ? sc.depositTotal : 0, wagered: sc ? sc.wagered : 0, eligible: !!(sc && sc.eligible) }; }),
-        ranking: ranking.map((r, i) => ({ rank: i + 1, userId: r.userId, username: r.username, points: r.points, basePts: r.basePts, dayPts: r.dayPts, missionPts: r.missionPts, wagered: r.wagered, realShare: r.realShare, deposits: r.deposits, depositTotal: r.depositTotal, depositDays: r.depositDays, missionWeeks: r.missionWeeks, joined: r.joined, eligible: r.eligible, updatedAt: r.updatedAt })),
+        ranking: ranking.map((r, i) => ({ rank: i + 1, userId: r.userId, username: r.username, points: r.points, basePts: r.basePts, dayPts: r.dayPts, weekPts: r.weekPts || 0, missionPts: r.missionPts, tickets: r.tickets || 0, activeWeeks: r.activeWeeks || 0, wagered: r.wagered, wageredCounted: r.wageredCounted || 0, realShare: r.realShare, deposits: r.deposits, depositTotal: r.depositTotal, depositDays: r.depositDays, missionWeeks: r.missionWeeks, joined: r.joined, eligible: r.eligible, updatedAt: r.updatedAt })),
         draw: draws[key + ':' + p.periodKey] || null, prevDraw: p.prevKey ? (draws[key + ':' + p.prevKey] || null) : null, extra
       };
     }
@@ -26782,6 +26884,63 @@ app.post('/api/admin/sorteos/recalc', authMiddleware, adminMiddleware, async (re
 });
 // SORTEO de $100.000 del mensual (#939): verificable, entre TODOS los que cargaron >= minDeposits veces en el mes (semilla publicada + shuffle
 // determinista SHA-256 sobre la lista ordenada por id). Se sortea el día 1 el mes CERRADO (periodKey del mes anterior); el mes en curso sólo con early:true.
+// #981: tickets de un cliente (buscador del panel)
+app.get('/api/admin/sorteos/:key/tickets', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const key = String(req.params.key || ''); if (!SORTEO_KEYS.includes(key)) return res.status(404).json({ error: 'Sorteo inexistente' });
+    const cfg = await _sorteosCfg(); const periodKey = String(req.query.periodKey || sorteosRules.periodOf(cfg[key], new Date()).periodKey);
+    const q = String(req.query.u || '').trim(); const f = { key, periodKey }; if (q) { if (/^\d+$/.test(q)) f.n = Number(q); else f.username = new RegExp('^' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+    const list = await SorteoTicket.find(f).sort({ n: 1 }).limit(500).select('n username userId reason at').lean();
+    res.json({ success: true, periodKey, total: await SorteoTicket.countDocuments({ key, periodKey }), list });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #981: sorteo del 1° premio / quincenal: 1) publicar la huella (commit) · 2) revelar la semilla y sacar el ganador (reveal)
+app.post('/api/admin/sorteos/:key/draw/:step', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const key = String(req.params.key || ''), step = String(req.params.step || ''); if (!SORTEO_KEYS.includes(key) || !['commit', 'reveal'].includes(step)) return res.status(404).json({ error: 'Sorteo inexistente' });
+    const cfg = await _sorteosCfg(); const s = cfg[key]; const b = req.body || {}; const kind = b.kind === 'mid' ? 'mid' : 'main'; const date = kind === 'mid' ? String(b.date || '') : null;
+    const pNow = sorteosRules.periodOf(s, new Date()); const periodKey = String(b.periodKey || pNow.periodKey);
+    if (kind === 'mid' && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Fecha del sorteo quincenal: AAAA-MM-DD' });
+    if (kind === 'main' && periodKey === pNow.periodKey && pNow.status === 'live' && b.early !== true) return res.status(400).json({ error: 'El período ' + periodKey + ' todavía no cerró: la huella se publica sola al cierre y el sorteo se revela el ' + sorteosRules.fmtDay(pNow.publishAt) + '. Para adelantarlo mandá early:true.' });
+    const d = step === 'commit' ? await _sorteoDrawCommit(key, periodKey, kind, date, req.user.username) : await _sorteoDrawReveal(cfg, key, periodKey, kind, date, req.user.username);
+    res.json({ success: true, draw: d });
+  } catch (e) { logger.error('[sorteos] draw/' + req.params.step + ': ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #981: estadística mínima para PRINCIPAL → "¿están sirviendo los sorteos?" (bajo la clave de INICIO)
+app.get('/api/admin/inicio/sorteos-stats', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const cfg = await _sorteosCfg(); const now = new Date(); const D = sorteosRules.DAY; const draws = (await getConfig('sorteoDraws', null)) || {}; const out = [];
+    for (const key of SORTEO_KEYS) {
+      const s = cfg[key]; if (!s.enabled) continue; const p = sorteosRules.periodOf(s, now); const pk = p.periodKey;
+      const [anotados, joins7, cargadores, participantes, byJoined, tTotal, t7, tPrev7, topTickets] = await Promise.all([
+        SorteoEntry.countDocuments({ key }), SorteoEntry.countDocuments({ key, joinedAt: { $gte: new Date(now.getTime() - 7 * D) } }),
+        SorteoScore.countDocuments({ key, periodKey: pk, deposits: { $gte: 1 } }), SorteoScore.countDocuments({ key, periodKey: pk, points: { $gt: 0 } }),
+        SorteoScore.aggregate([{ $match: { key, periodKey: pk, deposits: { $gte: 1 } } }, { $group: { _id: '$joined', n: { $sum: 1 }, days: { $avg: '$depositDays' }, deps: { $avg: '$deposits' }, total: { $avg: '$depositTotal' }, weeks: { $avg: { $ifNull: ['$activeWeeks', 0] } }, tickets: { $avg: { $ifNull: ['$tickets', 0] } } } }]),
+        SorteoTicket.countDocuments({ key, periodKey: pk }), SorteoTicket.countDocuments({ key, periodKey: pk, at: { $gte: new Date(now.getTime() - 7 * D) } }), SorteoTicket.countDocuments({ key, periodKey: pk, at: { $gte: new Date(now.getTime() - 14 * D), $lt: new Date(now.getTime() - 7 * D) } }),
+        SorteoScore.find({ key, periodKey: pk, tickets: { $gt: 0 } }).sort({ tickets: -1 }).limit(1).select('tickets').lean()
+      ]);
+      const J = byJoined.find((x) => x._id === true) || { n: 0, days: 0, deps: 0, total: 0, weeks: 0, tickets: 0 }, N = byJoined.find((x) => x._id !== true) || { n: 0, days: 0, deps: 0, total: 0, weeks: 0, tickets: 0 };
+      const joinRate = cargadores ? J.n / cargadores : null; const topShare = tTotal && topTickets[0] ? topTickets[0].tickets / tTotal : null;
+      let verdict = 'espera', reasons = [];
+      if (p.status === 'soon') reasons.push('Todavía no empezó: ' + anotados + ' anotados esperando (' + joins7 + ' en la última semana).');
+      else {
+        const good = joinRate != null && joinRate >= 0.35, bad = joinRate != null && joinRate < 0.15;
+        const stick = J.n && N.n ? J.days >= N.days * 1.2 : null; const trendOk = tPrev7 < 50 || t7 >= tPrev7 * 0.8; const trendBad = tPrev7 >= 50 && t7 < tPrev7 * 0.5;
+        verdict = (good && stick !== false && trendOk) ? 'bien' : (bad || trendBad) ? 'mal' : 'regular';
+        reasons.push(joinRate == null ? 'Todavía nadie cargó en el período.' : Math.round(joinRate * 100) + ' % de los que cargaron en el período están anotados (sano desde 35 %).');
+        if (J.n && N.n) reasons.push('Los anotados cargan ' + (Number(J.days) || 0).toFixed(1) + ' días en promedio vs ' + (Number(N.days) || 0).toFixed(1) + ' los no anotados' + (stick ? ': el sorteo retiene.' : ': el sorteo no está cambiando el hábito.'));
+        reasons.push('Tickets: ' + tTotal + ' emitidos · ' + t7 + ' en los últimos 7 días' + (tPrev7 ? ' vs ' + tPrev7 + ' en los 7 anteriores' : '') + (trendBad ? ' (cayó a menos de la mitad).' : '.'));
+        if (topShare != null && topShare > 0.15) reasons.push('El que más tickets tiene concentra ' + Math.round(topShare * 100) + ' % de la rifa: revisar el techo diario.');
+        if (verdict === 'mal') reasons.push('Qué hacer: empujar la inscripción (historia + push "anotate, es gratis"), y mostrar los tickets en la Carga rápida.');
+      }
+      out.push({ key, title: s.title, emoji: s.emoji, period: { key: pk, status: p.status, start: p.start, end: p.end, publishAt: p.publishAt }, verdict, reasons,
+        counts: { anotados, joins7, cargadores, participantes, joinedDepositors: J.n, nonJoinedDepositors: N.n, joinRate }, avg: { joined: { days: J.days || 0, deposits: J.deps || 0, total: J.total || 0, weeks: J.weeks || 0, tickets: J.tickets || 0 }, nonJoined: { days: N.days || 0, deposits: N.deps || 0, total: N.total || 0, weeks: N.weeks || 0, tickets: N.tickets || 0 } },
+        tickets: { total: tTotal, last7: t7, prev7: tPrev7, topShare }, draws: { main: draws[_drawKey(key, pk, 'main')] ? { committed: true, revealed: !!draws[_drawKey(key, pk, 'main')].revealedAt, winner: draws[_drawKey(key, pk, 'main')].winner } : null, mid: sorteosRules.midDrawDates(s, p, now).map((md) => { const d = draws[_drawKey(key, pk, 'mid', md.date)]; return { date: md.date, amount: md.amount, status: md.status, committed: !!d, revealed: !!(d && d.revealedAt), winner: d && d.winner ? d.winner.username : null }; }) } });
+    }
+    res.json({ success: true, now, sorteos: out });
+  } catch (e) { logger.error('[sorteos] stats: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.post('/api/admin/sorteos/:key/draw-extra', authMiddleware, adminMiddleware, async (req, res) => { // #969: mensual y gran
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
