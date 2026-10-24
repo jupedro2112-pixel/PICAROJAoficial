@@ -217,7 +217,7 @@
         if (bar) {
             bar.hidden = !openBar;
             if (openBar) { const p1 = (s0.prizes || [])[0] || {};
-                bar.innerHTML = '<button type="button" class="csb-main" onclick="VIP.sorteos.openMini(\'' + s0.key + '\')">' + pic(p1.img || s0.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s0.title) + '</b><small>' + esc(cardSub(s0)) + '</small></span><em>Anotate, es gratis ›</em></button><button type="button" class="csb-x" onclick="VIP.sorteos.casinoBar(false)" title="Cerrar: queda arriba, en el medio" aria-label="Cerrar">–</button>';
+                bar.innerHTML = '<button type="button" class="csb-main" onclick="VIP.sorteos.openMini(\'' + s0.key + '\')">' + pic(p1.img || s0.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s0.title) + '</b><small>' + esc(cardSub(s0)) + '</small></span><em>Anotate, es gratis ›</em></button><button type="button" class="csb-x" onclick="VIP.sorteos.casinoBar(false)" title="Cerrar: vuelve arriba, al medio de la barra" aria-label="Cerrar">✕</button>';
             } else bar.innerHTML = '';
         }
     }
