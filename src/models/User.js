@@ -359,6 +359,7 @@ const userSchema = new mongoose.Schema({
   },
   // #823: último teléfono con el que entró (lo detecta index.html): { os, model, w, h, dpr, app, sat, at }.
   lastDevice: { type: mongoose.Schema.Types.Mixed, default: null },
+  deviceIds: { type: [String], default: [], index: true }, // #952: IDs propios del celular (localStorage) vistos en el ping; el radar cruza cuentas por acá
   // Último permiso de notificaciones reportado por el cliente: 'granted' / 'denied' / 'default'
   notifPermission: {
     type: String,

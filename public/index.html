@@ -620,11 +620,11 @@
             </div>
         </div>
         <!-- #414 (owner): SOPORTE PARA VISITANTES (sin cuenta): burbuja + panel con la asistente de PICA ROJA (js/guestsupport.js) -->
-        <button type="button" id="gsBubble" class="gs-bubble" onclick="VIP.guestSupport.open()" aria-label="Hablar con Soporte"><span class="gs-av"><svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#ffe9ec"/><path d="M9 64c2.5-13 11.5-19 23-19s20.5 6 23 19z" fill="#e60023"/><rect x="27" y="36" width="10" height="11" rx="4" fill="#e8b48f"/><ellipse cx="32" cy="28" rx="12" ry="13" fill="#f3c7a4"/><path d="M20 27c0-9 5-14 12-14s12 5 12 14c-2-4-6-6-12-6s-10 2-12 6z" fill="#3b2a24"/><circle cx="27.5" cy="29" r="1.4" fill="#2b1d18"/><circle cx="36.5" cy="29" r="1.4" fill="#2b1d18"/><path d="M28 34.5c2 1.6 6 1.6 8 0" stroke="#b5664e" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M18 30c-2 0-3 2-2 4s2 3 4 2" fill="#3b2a24"/><rect x="44" y="30" width="5" height="7" rx="2.5" fill="#e60023"/><path d="M46 30c0-8-5-13-14-13" stroke="#e60023" stroke-width="2.2" fill="none"/></svg></span><span class="gs-bubble-t"><b>Soporte</b><small>en línea · te respondemos en minutos</small></span></button>
+        <button type="button" id="gsBubble" class="gs-bubble" onclick="VIP.guestSupport.open()" aria-label="Hablar con Soporte"><span class="gs-av"><svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#ffe9ec"/><path d="M9 64c2.5-13 11.5-19 23-19s20.5 6 23 19z" fill="#e60023"/><rect x="27" y="36" width="10" height="11" rx="4" fill="#e8b48f"/><ellipse cx="32" cy="28" rx="12" ry="13" fill="#f3c7a4"/><path d="M20 27c0-9 5-14 12-14s12 5 12 14c-2-4-6-6-12-6s-10 2-12 6z" fill="#3b2a24"/><circle cx="27.5" cy="29" r="1.4" fill="#2b1d18"/><circle cx="36.5" cy="29" r="1.4" fill="#2b1d18"/><path d="M28 34.5c2 1.6 6 1.6 8 0" stroke="#b5664e" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M18 30c-2 0-3 2-2 4s2 3 4 2" fill="#3b2a24"/><rect x="44" y="30" width="5" height="7" rx="2.5" fill="#e60023"/><path d="M46 30c0-8-5-13-14-13" stroke="#e60023" stroke-width="2.2" fill="none"/></svg></span><span class="gs-bubble-t"><b>Soporte sin iniciar sesión</b><small>registro desactivado · te respondemos en minutos</small></span></button><!-- #953 -->
         <div id="gsPanel" class="gs-panel" role="dialog" aria-label="Soporte">
             <div class="gs-head">
                 <span class="gs-av"><svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true"><circle cx="32" cy="32" r="32" fill="#ffe9ec"/><path d="M9 64c2.5-13 11.5-19 23-19s20.5 6 23 19z" fill="#e60023"/><rect x="27" y="36" width="10" height="11" rx="4" fill="#e8b48f"/><ellipse cx="32" cy="28" rx="12" ry="13" fill="#f3c7a4"/><path d="M20 27c0-9 5-14 12-14s12 5 12 14c-2-4-6-6-12-6s-10 2-12 6z" fill="#3b2a24"/><circle cx="27.5" cy="29" r="1.4" fill="#2b1d18"/><circle cx="36.5" cy="29" r="1.4" fill="#2b1d18"/><path d="M28 34.5c2 1.6 6 1.6 8 0" stroke="#b5664e" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M18 30c-2 0-3 2-2 4s2 3 4 2" fill="#3b2a24"/><rect x="44" y="30" width="5" height="7" rx="2.5" fill="#e60023"/><path d="M46 30c0-8-5-13-14-13" stroke="#e60023" stroke-width="2.2" fill="none"/></svg></span>
-                <div class="gs-head-t"><b id="gsAgentName">Soporte</b><small>Asistente PICA ROJA · <i class="gs-dot"></i>en línea</small></div>
+                <div class="gs-head-t"><b id="gsAgentName">Soporte</b><small>Sin inicio de sesión (registro desactivado) · <i class="gs-dot"></i>en línea</small></div><!-- #953 -->
                 <button type="button" class="gs-x" onclick="VIP.guestSupport.close()" aria-label="Cerrar">✕</button>
             </div>
             <form id="gsForm" class="gs-form" onsubmit="VIP.guestSupport.start(event)">
@@ -2653,7 +2653,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v634</div>
+                    <div class="pf-build" id="appBuildTag">app v635</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">

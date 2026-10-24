@@ -5005,7 +5005,7 @@ function switchSection(section) {
     if (section === 'referrals') loadAdminReferralSummary();
     if (section === 'stories') loadStories(); // #361
     if (section === 'depositReviews') loadDepositReviews(); // #376
-    if (section === 'support') loadSupport(); // #377
+    if (section === 'support') { loadSupport(); gsLoad(); } // #377 · #953: + gente sin acceso
     if (section === 'payReview') loadPayReview(); // #566
     if (section === 'cargasAuto') loadCargasAuto(); // #763
     if (section === 'gastos') { datosIaGate('Gastos').then(function (ok) { if (ok) loadGastos(); }); } // #770 clave

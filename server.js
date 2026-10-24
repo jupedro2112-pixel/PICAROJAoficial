@@ -21018,8 +21018,10 @@ app.post('/api/activity/ping', authMiddleware, async (req, res) => {
     try {
       const d = req.body && req.body.device;
       if (d && typeof d === 'object') {
-        const dev = { os: String(d.os || '').slice(0, 10), model: String(d.model || '').slice(0, 60), w: Math.round(Number(d.w) || 0), h: Math.round(Number(d.h) || 0), dpr: Math.round((Number(d.dpr) || 0) * 100) / 100, app: d.app === true, sat: Math.round(Number(d.sat) || 0), at: now };
-        await User.updateOne({ id: userId, $or: [{ lastDevice: null }, { 'lastDevice.model': { $ne: dev.model } }, { 'lastDevice.app': { $ne: dev.app } }, { 'lastDevice.at': { $lt: new Date(now - 86400000) } }] }, { $set: { lastDevice: dev } });
+        const did = /^[A-Za-z0-9-]{8,64}$/.test(String(d.id || '')) ? String(d.id) : null; // #952: ID propio del celular
+        const dev = { os: String(d.os || '').slice(0, 10), model: String(d.model || '').slice(0, 60), w: Math.round(Number(d.w) || 0), h: Math.round(Number(d.h) || 0), dpr: Math.round((Number(d.dpr) || 0) * 100) / 100, app: d.app === true, sat: Math.round(Number(d.sat) || 0), id: did, at: now };
+        await User.updateOne({ id: userId, $or: [{ lastDevice: null }, { 'lastDevice.model': { $ne: dev.model } }, { 'lastDevice.app': { $ne: dev.app } }, { 'lastDevice.id': { $ne: did } }, { 'lastDevice.at': { $lt: new Date(now - 86400000) } }] }, { $set: { lastDevice: dev } });
+        if (did) await User.updateOne({ id: userId, deviceIds: { $ne: did } }, { $push: { deviceIds: { $each: [did], $slice: -6 } } }); // #952: últimos 6 celulares distintos
       }
     } catch (_) {}
     const last = await AppSession.findOne({ userId }).sort({ lastPingAt: -1 }).select('id lastPingAt').lean();

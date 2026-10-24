@@ -28,6 +28,7 @@ const RULES = {
   cbu_dep_shared: { pts: 30, label: 'Carga desde una cuenta bancaria que usan OTROS clientes' },
   cbu_wd_shared: { pts: 35, label: 'Retira a una cuenta bancaria que usan OTROS clientes' },
   device_shared: { pts: 40, label: 'Mismo celular que otras cuentas' },
+  phone_shared: { pts: 35, label: 'Mismo número de celular que otras cuentas' }, // #952
   third_party_payers: { pts: 20, label: 'Carga desde cuentas de varias personas distintas' },
   wd_other_person: { pts: 30, label: 'Retira a nombre de otra persona (distinta de la que carga)' },
   bonus_abuse: { pts: 25, label: 'Abuso de bonos: recibió mucho en regalos y retira enseguida' },
@@ -60,7 +61,7 @@ async function scan(deps, opts = {}) {
   if (!ids.length) return { days, scanned: 0, alerts: [] };
 
   const users = await User.find({ id: { $in: ids }, role: 'user' })
-    .select('id username createdAt phoneVerified isBlocked blockReason registrationIp fcmToken fcmTokens fraudFlags fraudReview referredByUserId acquisitionSource acquisitionCampaign withdrawalAccount').lean();
+    .select('id username createdAt phone phoneVerified isBlocked blockReason registrationIp fcmToken fcmTokens deviceIds lastDevice fraudFlags fraudReview referredByUserId acquisitionSource acquisitionCampaign withdrawalAccount').lean();
   const byId = new Map(users.map((u) => [u.id, u]));
 
   // 2) Plata por cliente (de por vida, 180 d): cargas reales, regalos, retiros pagados/pedidos.
@@ -88,6 +89,15 @@ async function scan(deps, opts = {}) {
   const tokens = []; for (const u of users) { if (u.fcmToken) tokens.push(u.fcmToken); for (const t of u.fcmTokens || []) if (t && t.token) tokens.push(t.token); }
   const devOthers = tokens.length ? await User.aggregate([{ $match: { $or: [{ fcmToken: { $in: tokens } }, { 'fcmTokens.token': { $in: tokens } }] } }, { $project: { username: 1, id: 1, t: { $concatArrays: [{ $cond: [{ $ifNull: ['$fcmToken', false] }, ['$fcmToken'], []] }, { $map: { input: { $ifNull: ['$fcmTokens', []] }, as: 'x', in: '$$x.token' } }] } } }, { $unwind: '$t' }, { $match: { t: { $in: tokens } } }, { $group: { _id: '$t', users: { $addToSet: '$username' } } }]) : [];
   const devMap = new Map(devOthers.map((x) => [x._id, x.users]));
+  // #952 (owner): "el posible duplicado no por IP: por teléfono y por algo del celular". ID propio del celular (deviceIds, lo manda la app en
+  // cada ping) y NÚMERO de teléfono (últimos 10 dígitos) compartidos con otras cuentas.
+  const allDevIds = [...new Set(users.flatMap((u) => u.deviceIds || []).filter(Boolean))];
+  const devIdOthers = allDevIds.length ? await User.aggregate([{ $match: { deviceIds: { $in: allDevIds } } }, { $unwind: '$deviceIds' }, { $match: { deviceIds: { $in: allDevIds } } }, { $group: { _id: '$deviceIds', users: { $addToSet: '$username' } } }]) : [];
+  const devIdMap = new Map(devIdOthers.map((x) => [x._id, x.users]));
+  const tel = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+  const myTels = [...new Set(users.map((u) => tel(u.phone)).filter((t) => t.length === 10))];
+  const telOthers = myTels.length ? await User.find({ phone: { $exists: true, $nin: [null, ''] }, role: 'user' }).select('username phone').lean() : [];
+  const telMap = new Map(); for (const o of telOthers) { const t = tel(o.phone); if (t.length === 10 && myTels.includes(t)) { if (!telMap.has(t)) telMap.set(t, new Set()); telMap.get(t).add(o.username); } }
   // (#877: sin cruce por IP en el escaneo — se repite mucho; la IP queda en el caso como dato)
   // Referidos de cada candidato (para "granja de referidos").
   const refs = await User.find({ referredByUserId: { $in: ids } }).select('username referredByUserId registrationIp fcmToken fcmTokens').lean();
@@ -123,7 +133,12 @@ async function scan(deps, opts = {}) {
     // Mismo celular
     const devO = new Set(); const myTok = [u.fcmToken, ...(u.fcmTokens || []).map((t) => t && t.token)].filter(Boolean);
     for (const t of myTok) for (const o of devMap.get(t) || []) if (o && o !== u.username) devO.add(o);
-    if (devO.size) add('device_shared', `Mismo celular que: ${[...devO].slice(0, 8).join(', ')}`);
+    const devIdO = new Set(); for (const id of u.deviceIds || []) for (const o of devIdMap.get(id) || []) if (o && o !== u.username) devIdO.add(o);
+    for (const o of devIdO) devO.add(o);
+    if (devO.size) { const ld = u.lastDevice || {}; add('device_shared', `Mismo celular${ld.model ? ' (' + ld.model + (ld.os ? ' · ' + ld.os : '') + ')' : ''}${devIdO.size ? ' · ID del celular ' + String((u.deviceIds || []).slice(-1)[0] || '').slice(-6) : ' · token de notificaciones'} que: ${[...devO].slice(0, 8).join(', ')}`); }
+    // Mismo número de teléfono (#952)
+    const myTel = tel(u.phone); const telO = new Set(); if (myTel.length === 10) for (const o of telMap.get(myTel) || []) if (o && o !== u.username) telO.add(o);
+    if (telO.size) add('phone_shared', `Mismo número (…${myTel.slice(-4)}) que: ${[...telO].slice(0, 8).join(', ')}`);
     // (#877: la IP NO suma — se repite muchísimo: wifi de la casa, datos del celular. Queda como dato en el caso.)
     // Cuentas de terceros (varias personas distintas le cargan)
     const payers = new Map(); for (const b of myIn) { const k = tail(b.fromCUIT, 11) || normName(b.fromName); if (k) payers.set(k, b.fromName || b.fromCUIT); }

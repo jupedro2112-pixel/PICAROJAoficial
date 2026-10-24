@@ -8,6 +8,23 @@
 
 ## Sesión 2026-10-24
 
+### 952. 🕵️ Radar: posible duplicado por ID del CELULAR y por NÚMERO de teléfono (no por IP) — SW v635
+**Pedido (owner):** "el posible duplicado dejá de hacerlo por IP, hacelo por teléfono, y que tome algo del celular (IMEI) y ahí sí detallalo".
+- El navegador no expone el IMEI: la app genera UNA vez un ID propio del celular (`localStorage vip_device_id`, activity.js `_deviceId`) y lo manda en
+  cada ping; el server lo guarda en `User.deviceIds` (últimos 6) y en `lastDevice.id`. La IP ya no sumaba desde #877 (queda sólo como dato del caso).
+- `fraudRadar`: `device_shared` cruza por ID del celular además del token de push y detalla modelo/OS e ID (`Mismo celular (Samsung A12 · android)
+  · ID del celular …a1b2c3 que: juan, pedro`); regla nueva `phone_shared` (35 pts): mismo número (últimos 10 dígitos) que otras cuentas.
+- Registro: ya estaba SÓLO con invitación (#872, `registrationMode='invite'`): se llega por link de referido o de publicidad; no hay autoregistro
+  desde el inicio. No hubo que tocar nada.
+
+### 953. 🌐 Soporte para gente SIN ACCESO: al lado de los soportes en el panel; en la app "Soporte sin iniciar sesión (registro desactivado)" — admin SW v195
+**Pedido (owner):** "si cierran sesión ponemos el soporte afuera y lo ubicamos del lado chat agente al lado de los soportes, con usuario de gente sin
+acceso, para escuchar lo que quieran preguntar; y que el título diga sin inicio de sesión (registro desactivado)".
+- Pantalla de ingreso (sin sesión): la burbuja dice "Soporte sin iniciar sesión · registro desactivado" y el panel del chat "Sin inicio de sesión
+  (registro desactivado)". Es el soporte de visitantes de #414 (GuestThread), que ya aparecía al cerrar sesión.
+- Panel → Soporte: debajo de la lista de clientes vuelve la lista "🌐 Sin inicio de sesión (registro desactivado)" (estaba oculta desde #747); se
+  carga al abrir la sección y al responder se usa el mismo chat de la derecha (`gsSelect`).
+
 ### 951. 🎁 Detalle del cierre: caja REGALADO (fichas) por tipo + guía de lectura — admin SW v194
 **Pedido (owner):** "en el detalle anotá también lo regalado; acomodalo bien como corresponde y dónde iría, para no marearse".
 - "Ver detalle" abre con una línea "Cómo leerlo" (plata vs fichas) y cuatro cajas en 2 × 2: 💰 INGRESOS · 💸 GASTOS · 🎁 REGALADO (bonos de carga,
