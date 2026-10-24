@@ -6567,7 +6567,7 @@ app.get('/api/platforms', authMiddleware, async (req, res) => {
         return { id: p.id, name: p.name, emoji: p.emoji, connected: p.connected, externalUrl: p.externalUrl || null, playUrl: play, logoUrl: p.logoUrl || '', isDefault: p.isDefault }; }),
       askMode: s.askMode, askTimeoutMin: s.askTimeoutMin, defaultPlatform: s.defaultPlatform, lastPlatform, preferredPlatform,
       choiceEnabled, minDeposit: minDep, withdrawMinArs: wdMin, withdrawOtp, // #299 / #379 / #382
-      depositRolloverX: await getDepositRolloverX().catch(() => 3), bonusRolloverX: await _giftRolloverX().catch(() => 5), // #885: avisos de rollover en la app
+      depositRolloverX: await getDepositRolloverX().catch(() => 1), bonusRolloverX: await _giftRolloverX().catch(() => 5), // #885: avisos de rollover en la app
       // #385: textos de los botones de abajo de la carga automática (COMANDOS). #266 homeBanner · #349 entryNews · #372 refundPromo ·
       // #373 supportIntro (nombre de turno #377). text === null ⇒ el comando se vació en COMANDOS → la app no lo muestra.
       actionBtns: { load, loadSub, withdraw, withdrawSub },
