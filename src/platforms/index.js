@@ -32,7 +32,8 @@ const Config = require('../models/Config');
 const ADAPTERS = {
   girox: require('./girox'),
   ganamos: require('./ganamos'),
-  jugaygana: require('./jugaygana') // #378: esqueleto, "Próximamente" hasta tener API
+  jugaygana: require('./jugaygana'), // #378: esqueleto, "Próximamente" hasta tener API
+  picaroja: require('./picaroja')     // #986: plataforma propia (white-label de 1girox), conecta con PICAROJA_API_URL/KEY
 };
 
 const DEFAULT_ID = 'girox';
@@ -45,7 +46,9 @@ const DEFAULT_ITEMS = {
   // #298 (owner): Ganamos HABILITADA y visible, pero sin API se muestra "Próximamente" y no se puede elegir (connected=false).
   ganamos: { enabled: true, name: 'Ganamos', emoji: '🎲', order: 2, externalUrl: 'https://www.ganamosvip.me', logoUrl: '/images/ganamos-net.png' }, // #350: logo real (pica violeta)
   // #378 (owner 2026-10-18): JUGAYGANA visible como "Próximamente" (sin API ni web pública todavía; la URL se carga en el panel).
-  jugaygana: { enabled: true, name: 'JUGAYGANA', emoji: '🃏', order: 3, externalUrl: '', logoUrl: '/images/jugaygana.png' }
+  jugaygana: { enabled: true, name: 'JUGAYGANA', emoji: '🃏', order: 3, externalUrl: '', logoUrl: '/images/jugaygana.png' },
+  // #986: PICA ROJA, la plataforma propia (white-label de 1girox). Sin API conectada la app la muestra como "Pronto" (igual que las otras).
+  picaroja: { enabled: true, name: 'PICA ROJA', emoji: '🔴', order: 4, externalUrl: '', logoUrl: '/icons/icon-192x192.png' }
 };
 
 const DEFAULT_SETTINGS = {

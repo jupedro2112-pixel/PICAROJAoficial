@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 986. Plataforma PICA ROJA (white-label de 1girox) lista para conectar con credenciales; las tres plataformas del otro proyecto no necesitan código
+**Pedido (owner):** "de allá se usa todo sobre Girox, son páginas que salen de un mismo lado; de allá sólo las plataformas (Ganamos, Pica Roja y
+Jugaygana), el proyecto es éste". Verificado: los adaptadores `ganamos.js` y `jugaygana.js` ya implementan la Partner API de 1girox tal cual (mismos
+endpoints, `X-Api-Key`, mapeo de `wagering`): conectar = cargar `<PREFIJO>_API_URL` + `_API_KEY` (+ `_PLAY_URL`) en SSM.
+- Nuevo `src/platforms/picaroja.js` (copia del de Ganamos con prefijo `PICAROJA_`), registrado en `src/platforms/index.js` (ADAPTERS + DEFAULT_ITEMS, id
+  `picaroja`, logo el ícono de la app). La tarjeta "Pronto" de la PWA (`_withPicaroja`) ya desaparece sola cuando la plataforma `picaroja` existe en la
+  lista; mapeo de logo por id agregado. `docs/PLATFORMS.md`: tabla de variables por plataforma. Nada que pedirle al otro proyecto salvo las credenciales.
+
 ### 985. Girox embebido: login único en MODO EMBEBIDO (sin controles de sesión del casino)
 **Pedido (owner):** "armemos un Girox para la gente usando la misma página, como plataforma principal interna de Pica Roja: sacarle el menú superior y
 que en el Perfil no se pueda cambiar la contraseña de Girox; siempre desde la app, que la cambia también en Girox".

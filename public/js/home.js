@@ -285,7 +285,7 @@
         const b = _el('navPlat'); if (!b) return;
         const p = _platChosen();
         const img = _el('navPlatLogo'), ico = _el('navPlatIco'), lbl = _el('navPlatLbl');
-        const logo = p && (p.logoUrl || (p.id === 'girox' ? '/images/soporte-1girox.png' : (p.id === 'ganamos' ? '/images/ganamos.png' : (p.id === 'jugaygana' ? '/images/jugaygana.png' : ''))));
+        const logo = p && (p.logoUrl || (p.id === 'girox' ? '/images/soporte-1girox.png' : (p.id === 'ganamos' ? '/images/ganamos.png' : (p.id === 'picaroja' ? '/icons/icon-192x192.png' : (p.id === 'jugaygana' ? '/images/jugaygana.png' : '')))));
         if (img && logo) { img.src = logo; img.hidden = false; if (ico) ico.hidden = true; } else { if (img) img.hidden = true; if (ico) ico.hidden = false; }
         if (lbl) lbl.textContent = 'JUGÁ AQUÍ'; // #623 (owner): dice JUGÁ AQUÍ; el logo muestra la elegida
         b.title = 'Elegí dónde jugar con tu saldo';

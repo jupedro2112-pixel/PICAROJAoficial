@@ -32,6 +32,7 @@
 | `src/platforms/girox.js` | Adaptador girox = envoltura fina de `giroxService` (+ `id`, `isConnected`, `capabilities`). |
 | `src/platforms/ganamos.js` | **Esqueleto** de Ganamos con el mismo contrato. `isConnected()` = `GANAMOS_API_URL` + `GANAMOS_API_KEY` presentes. Sin eso, todo devuelve `not_configured`. |
 | `src/platforms/jugaygana.js` | **Esqueleto** de JUGAYGANA (#378, copia del de Ganamos): `JUGAYGANA_API_URL` + `JUGAYGANA_API_KEY`; sin web pública por defecto (se carga en el panel). Mismo checklist que §4 cambiando el prefijo. |
+| `src/platforms/picaroja.js` | **PICA ROJA**, la plataforma propia (#986): white-label de 1girox, copia exacta del adaptador de Ganamos con prefijo `PICAROJA_`. `isConnected()` = `PICAROJA_API_URL` + `PICAROJA_API_KEY` (opcional `PICAROJA_PLAY_URL`). Al conectarse, la tarjeta "Pronto" de la app desaparece sola. |
 | `server.js` | `_platformAskUser`, `_platformRedirectUser`, `_resolvePlatformChoice`, `_resolvePlatformChoiceMessage`, `_platformChoiceTick`, `_hgcashCreditToPlatform` (segunda mitad de `hgcashAutoCarga`), `_bonusMultiplierFor`, `_sendUserSystemMessage`; endpoints `GET /api/platforms`, `POST /api/platform-choice`, `POST /api/admin/hgcash/movements/:id/platform`, `GET /api/admin/users/:id/platform-pending`, `GET/POST /api/admin/platforms`. |
 | `public/js/chat.js` | Render de los botones (`_renderPlatformWidget`), `choosePlatform`, `markPlatformChoiceResolved`. CSS en `public/css/chat.css` (`.plat-*`). |
 | `public/adminprivado2026/` | `populateDepositPlatforms`, `loadPlatformBanner`, `agentChoosePlatform`, `loadPlatformsCfg/savePlatformsCfg`; etiquetas hgcash `awaiting_platform` / `redirected`. |
@@ -122,3 +123,19 @@ como `{success:false, error:'<texto para el usuario>', code, httpStatus}`; env l
   verse en la otra instancia de EB.
 - Con `redirected` NO hay Transaction local: la plata la carga la otra página. Si hubiera
   que cargarla acá igual, es carga MANUAL (el movimiento ya está consumido).
+
+
+## Conectar las plataformas que son white-label de 1girox (#986, 2026-10-24)
+
+Ganamos, JUGAYGANA y PICA ROJA salen del mismo proveedor que Girox: **misma Partner API** (`X-Api-Key`, `/players/{u}/deposit`, `/withdraw`, `/bonus`,
+`/stats`, `/session`…). Los adaptadores ya hablan esa API: NO hace falta código, sólo credenciales. Por plataforma hay que cargar en SSM (bajo
+`SSM_PATH`, se levantan todas solas al arrancar) o en el env:
+
+| Plataforma | Variables |
+|---|---|
+| Ganamos | `GANAMOS_API_URL` (base sin barra final), `GANAMOS_API_KEY`, `GANAMOS_PLAY_URL` (web pública del casino) |
+| JUGAYGANA | `JUGAYGANA_API_URL`, `JUGAYGANA_API_KEY`, `JUGAYGANA_PLAY_URL` |
+| PICA ROJA | `PICAROJA_API_URL`, `PICAROJA_API_KEY`, `PICAROJA_PLAY_URL` |
+
+Con URL + key presentes el adaptador pasa a `connected: true`: el panel (Configuración → Plataformas de juego) la muestra conectada, la landing crea
+el jugador también ahí, la carga automática la ofrece y la app la deja elegir. Probar con `GET /api/admin/platforms` y una carga manual chica.

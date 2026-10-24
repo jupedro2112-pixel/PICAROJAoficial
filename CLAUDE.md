@@ -58,8 +58,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - `src/utils/periodRanges.js` — rangos de fecha (ayer / semana / mes) en hora argentina.
 - `src/platforms/` — **multi-plataforma (2026-10-16):** registro (`index.js`), adaptador girox
   (envoltura de giroxService), **esqueleto de Ganamos** (`ganamos.js`, mismo contrato, sin API
-  hasta cargar `GANAMOS_API_URL`/`GANAMOS_API_KEY`) **y de JUGAYGANA** (`jugaygana.js`, #378, ídem con `JUGAYGANA_*`;
-  logo en `public/images/jugaygana.png`). Checklist para conectarla: `docs/PLATFORMS.md`.
+  hasta cargar `GANAMOS_API_URL`/`GANAMOS_API_KEY`), **de JUGAYGANA** (`jugaygana.js`, #378, ídem con `JUGAYGANA_*`;
+  logo en `public/images/jugaygana.png`) **y de PICA ROJA** (`picaroja.js`, #986, ídem con `PICAROJA_*`). Las tres son white-label de 1girox:
+  misma Partner API, se conectan SOLO con credenciales (SSM). Checklist: `docs/PLATFORMS.md`.
 - `src/models/` — schemas Mongoose canónicos (fuente de verdad). `Story.js` (#361) = HISTORIAS de la app que
   publica el admin (panel → Historias; PWA `js/stories.js`, anillo arriba a la derecha al lado de Perfil; vencen por
   horas, `Config['storiesConfig']`). No confundir con `InfluencerStory` (placements de publicistas).
