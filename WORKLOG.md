@@ -8,6 +8,10 @@
 
 ## Sesión 2026-10-24
 
+### 947. ▭ Menú básico: los sorteos abajo de todo — SW v633
+**Pedido (owner, captura):** "en el menú básico esto ponelo abajo de todo". `#basicView .srt-cards { order: 999 }` (la vista es flex-column): quedan después
+de "¿Querés ver más?". En el intermedio y en Girox directo no cambia.
+
 ### 946. ⭐ Reseñas de 5 estrellas aprobadas automáticamente
 **Pedido (owner):** "las reseñas de 5 estrellas aprobalas directamente".
 - `POST /api/reviews`: con 5★ nace `approved:true` (`approvedBy:'auto-5-estrellas'`) y sale al instante en el registro público; 1-4★ siguen pendientes

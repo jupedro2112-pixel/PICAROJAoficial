@@ -2910,3 +2910,6 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 .srt-tc-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 0; background: none; padding: 2px 0; color: var(--p-text); font: 900 14.5px var(--p-font); cursor: pointer; text-align: left; }
 .srt-tc-toggle i { font-style: normal; font-size: 12px; font-weight: 900; color: var(--srt-g2); white-space: nowrap; }
 .srt-tc-sec .srt-tc { margin-top: 8px; } .srt-tc-sec .srt-tc[hidden] { display: none; }
+
+/* #947 (owner, captura): en el menú BÁSICO los sorteos van abajo de todo (la columna es flex ⇒ order) */
+#basicView .srt-cards { order: 999; margin: 10px 0 4px !important; }
