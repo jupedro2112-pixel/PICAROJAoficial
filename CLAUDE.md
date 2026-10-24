@@ -252,8 +252,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   **#762:** `Config['closeSince']` (YYYY-MM-DD) = desde qué día valen los cierres (lo fija "Limpiar datos de prueba"); `_closeTick` y
   `GET /api/admin/cierres` ignoran días anteriores. Las cargas/retiros de PRUEBA se reconocen por "PRUEBA" en la descripción / titular
   "PRUEBA TEST": un flujo de prueba nuevo tiene que mantener esa marca para que la limpieza y Cargas automáticas los excluyan.
-  **#913 CIERRE — INGRESOS EXTERNOS:** retiros pagados por BANCO EXTERNO (`paidVia:'other_bank'`) y fondeos se restan de la diferencia del arqueo
-  (las fichas salieron, la plata quedó en la cuenta); no tocan el RESULTADO. INICIO mide la aceptación de la app sobre los que CARGARON alguna vez.
+  **#913/#948 CIERRE:** INGRESOS = depósitos + retiros pagados por BANCO EXTERNO (`paidVia:'other_bank'`) + fondeos · GASTOS = retiros + comisión del banco +
+  $ por transferencia (`closeConfig.perDepositFee`, 50 × cargas) + gastos · RESULTADO (plata) = ingresos − gastos; NETO (fichas) aparte; caja: saldo 00 hs +
+  resultadoCaja = esperado vs real. USDT ya no es parte del cierre. INICIO mide la aceptación de la app sobre los que CARGARON alguna vez.
   **#500/#744 CIERRES AUTOMÁTICOS:** `DailyClose` (uno por día ART, cron `_closeTick` cada 20 min, idempotente por `dateKey`). Desde #744 se
   FINALIZAN SOLOS (día anterior a hoy, `finalizedBy:'auto'`; los últimos 3 días se recalculan en cada pasada; USDT opcional) y
   `_closeReconcile` guarda en `detalle` la conciliación sistema vs banco con las posibles causas de la diferencia. Un flujo nuevo que

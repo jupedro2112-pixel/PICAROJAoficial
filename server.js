@@ -21230,12 +21230,24 @@ async function _closeAttachBalances(doc) {
   doc.bankBalanceStart = s0 && s0.balance != null ? s0.balance : null; doc.bankBalanceEnd = s1 && s1.balance != null ? s1.balance : null;
 }
 setTimeout(() => { _bankBalanceSnapshotTick(); setInterval(_bankBalanceSnapshotTick, 60 * 1000); }, 60 * 1000);
-async function _closeConfig() { const c = (await getConfig('closeConfig', null)) || {}; return { bankCommissionPct: Number(c.bankCommissionPct) || 0, autoUsdt: c.autoUsdt !== false }; }
+// #948 (owner): + costo por transferencia ($50 por cada carga del día, editable); USDT ya no forma parte del cierre.
+async function _closeConfig() { const c = (await getConfig('closeConfig', null)) || {}; return { bankCommissionPct: Number(c.bankCommissionPct) || 0, perDepositFee: c.perDepositFee == null ? 50 : Math.max(0, Number(c.perDepositFee) || 0), autoUsdt: false }; }
 function _closeApply(doc, cfg) {
   // comisión: monto a mano > % del día (a mano) > % por defecto sobre depósitos (#501: el % se puede cambiar en cada cierre)
   if (doc.bankCommissionSource === 'manual_pct') { doc.bankCommissionArs = Math.round(doc.depositos * (doc.bankCommissionPct || 0) / 100); }
   else if (doc.bankCommissionSource !== 'manual') { const pct = cfg.bankCommissionPct || 0; doc.bankCommissionPct = pct; doc.bankCommissionArs = Math.round(doc.depositos * pct / 100); doc.bankCommissionSource = pct ? 'default' : null; }
-  doc.resultado = Math.round((doc.neto || 0) - (doc.bankCommissionArs || 0) - (doc.gastos || 0)); // #770: − gastos del día
+  // #948 (owner): "el cierre diario por banco automático; comprobantes pagados desde otro banco = INGRESO; detalle de ingresos y de todos los
+  // gastos; saldo del CBU a las 00 hs; depósitos del banco y lo que cobró de comisión; $50 de gasto por cada transferencia de carga; USDT no va".
+  //   INGRESOS = depósitos + pagos por banco externo (las fichas salieron, la plata quedó) + fondeos
+  //   GASTOS   = retiros pagados + comisión del banco + costo por transferencia (cargas × $50) + gastos registrados
+  //   RESULTADO (plata) = ingresos − gastos · resultadoCaja = lo mismo pero sólo con los gastos que salieron de ESTE banco (para el arqueo 00 hs)
+  //   NETO (fichas) = venta − regalos sigue aparte (es la cuenta de la plataforma, no de la caja).
+  doc.feePerDeposit = cfg.perDepositFee == null ? 50 : cfg.perDepositFee;
+  doc.feeDepositsArs = Math.round((doc.cargas || 0) * (doc.feePerDeposit || 0));
+  doc.ingresosTotal = Math.round((doc.depositos || 0) + (doc.pagosExternos || 0) + (doc.fondeos || 0));
+  doc.egresosTotal = Math.round((doc.retiros || 0) + (doc.bankCommissionArs || 0) + (doc.feeDepositsArs || 0) + (doc.gastos || 0));
+  doc.resultado = Math.round(doc.ingresosTotal - doc.egresosTotal);
+  doc.resultadoCaja = Math.round(doc.resultado + ((doc.gastos || 0) - (doc.gastosBanco || 0)));
   // #501 ARQUEO: banco (manual > automático) vs sistema
   doc.bankIn = doc.bankInManual != null ? doc.bankInManual : (doc.bankInAuto || 0);
   doc.bankOut = doc.bankOutManual != null ? doc.bankOutManual : (doc.bankOutAuto || 0);
@@ -21252,11 +21264,13 @@ function _closeApply(doc, cfg) {
   const bs = doc.bankBalanceStartManual != null ? doc.bankBalanceStartManual : doc.bankBalanceStart, be = doc.bankBalanceEndManual != null ? doc.bankBalanceEndManual : doc.bankBalanceEnd;
   doc.bankBalanceSource = (doc.bankBalanceStartManual != null || doc.bankBalanceEndManual != null) ? 'manual' : (bs != null || be != null ? 'api' : null);
   doc.bankBalanceDelta = bs != null && be != null ? Math.round(be - bs) : null;
-  if (doc.bankBalanceDelta != null) doc.diferencia = Math.round(doc.bankBalanceDelta - (doc.depositos - doc.retiros) + (doc.bankCommissionArs || 0) - doc.ingresosExternos); // #913
+  // #948: con saldos 00 hs el arqueo es directo: saldo inicio + resultado de caja = saldo esperado al cierre; diferencia = real − esperado
+  doc.bankBalanceExpectedEnd = bs != null ? Math.round(bs + doc.resultadoCaja) : null;
+  if (bs != null && be != null) doc.diferencia = Math.round(be - doc.bankBalanceExpectedEnd);
   const hasAny = hasBank || doc.bankBalanceDelta != null;
   if (!hasAny) doc.diferencia = 0; // sin datos del banco no hay faltante que reportar: queda en 0 (owner #502)
   doc.arqueo = !hasAny ? 'sin_datos' : (Math.abs(doc.diferencia) <= tol ? 'cuadra' : (doc.diferencia < 0 ? 'faltante' : 'sobrante'));
-  doc.resultadoUsd = doc.usdtRate > 0 ? Math.round((doc.resultado / doc.usdtRate) * 100) / 100 : null;
+  doc.resultadoUsd = null; // #948: USDT no es parte del cierre
   return doc;
 }
 // #744 (owner): CONCILIACIÓN DEL DÍA — "al ser automático tiene que dar 0; pero hay gente confirmando pagos o cargas y ahí quiero ver
@@ -21403,7 +21417,7 @@ async function _closeEnsure(dayKey, recalc) {
     try { doc = await DailyClose.create({ id: uuidv4(), ...t }); } catch (e) { if (e && e.code === 11000) doc = await DailyClose.findOne({ dateKey: dayKey }); else throw e; }
   } else if (doc.status !== 'finalizado' || recalc) { Object.assign(doc, t, { recalculatedAt: new Date() }); }
   await _closeAttachBalances(doc); _closeApply(doc, cfg);
-  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); const _ds = (doc.detalle && doc.detalle.sistema) || {}; doc.gastos = Number(_ds.gastos) || 0; doc.pagosExternos = Number(_ds.pagosExternos) || 0; doc.fondeos = Number(_ds.fondeos) || 0; _closeApply(doc, cfg); } /* #913: pagos externos + fondeos → arqueo */ catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
+  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); const _ds = (doc.detalle && doc.detalle.sistema) || {}; doc.gastos = Number(_ds.gastos) || 0; doc.pagosExternos = Number(_ds.pagosExternos) || 0; doc.fondeos = Number(_ds.fondeos) || 0; doc.gastosBanco = Number(_ds.gastosBanco) || 0; _closeApply(doc, cfg); } /* #913: pagos externos + fondeos → arqueo */ catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
   await doc.save(); return doc;
 }
 // Cron: cada 20 min asegura el cierre de AYER y rellena hasta 7 días hacia atrás (idempotente por dateKey; corre en cada instancia sin duplicar).
@@ -21434,7 +21448,7 @@ app.get('/api/admin/cierres', authMiddleware, adminMiddleware, async (req, res) 
     let since = datosIa.dateKeyART(new Date(Date.now() - days * 86400000)); if (_cs && _cs > since) since = _cs;
     const items = await DailyClose.find({ dateKey: { $gte: since } }).sort({ dateKey: -1 }).lean();
     const cfg = await _closeConfig(); let usdt = null; try { usdt = (await getConfig('usdtRate', null)) || null; } catch (_) {}
-    const tot = items.reduce((a, c) => ({ depositos: a.depositos + c.depositos, retiros: a.retiros + c.retiros, venta: a.venta + c.venta, regalos: a.regalos + c.regalos, neto: a.neto + c.neto, comision: a.comision + (c.bankCommissionArs || 0), resultado: a.resultado + (c.resultado || 0), resultadoUsd: a.resultadoUsd + (c.resultadoUsd || 0), finalizados: a.finalizados + (c.status === 'finalizado' ? 1 : 0), diferencia: a.diferencia + (c.arqueo && c.arqueo !== 'sin_datos' ? (c.diferencia || 0) : 0), faltantes: a.faltantes + (c.arqueo === 'faltante' ? 1 : 0), sobrantes: a.sobrantes + (c.arqueo === 'sobrante' ? 1 : 0) }), { depositos: 0, retiros: 0, venta: 0, regalos: 0, neto: 0, comision: 0, resultado: 0, resultadoUsd: 0, finalizados: 0, diferencia: 0, faltantes: 0, sobrantes: 0 });
+    const tot = items.reduce((a, c) => ({ depositos: a.depositos + c.depositos, retiros: a.retiros + c.retiros, venta: a.venta + c.venta, regalos: a.regalos + c.regalos, neto: a.neto + c.neto, comision: a.comision + (c.bankCommissionArs || 0), ingresos: (a.ingresos || 0) + (c.ingresosTotal || 0), egresos: (a.egresos || 0) + (c.egresosTotal || 0), fee: (a.fee || 0) + (c.feeDepositsArs || 0), gastos: (a.gastos || 0) + (c.gastos || 0), resultado: a.resultado + (c.resultado || 0), resultadoUsd: a.resultadoUsd + (c.resultadoUsd || 0), finalizados: a.finalizados + (c.status === 'finalizado' ? 1 : 0), diferencia: a.diferencia + (c.arqueo && c.arqueo !== 'sin_datos' ? (c.diferencia || 0) : 0), faltantes: a.faltantes + (c.arqueo === 'faltante' ? 1 : 0), sobrantes: a.sobrantes + (c.arqueo === 'sobrante' ? 1 : 0) }), { depositos: 0, retiros: 0, venta: 0, regalos: 0, neto: 0, comision: 0, resultado: 0, resultadoUsd: 0, finalizados: 0, diferencia: 0, faltantes: 0, sobrantes: 0 });
     res.json({ success: true, items, totals: tot, config: cfg, usdtRate: usdt && Number(usdt.rate) || null });
   } catch (e) { logger.error('[cierres] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
@@ -21446,7 +21460,8 @@ app.post('/api/admin/cierres/config', authMiddleware, adminMiddleware, async (re
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
     const pct = Number(req.body && req.body.bankCommissionPct); if (!Number.isFinite(pct) || pct < 0 || pct > 50) return res.status(400).json({ error: 'La comisión tiene que ser un % entre 0 y 50' });
-    await Config.set('closeConfig', { bankCommissionPct: Math.round(pct * 100) / 100, autoUsdt: req.body.autoUsdt !== false, updatedAt: new Date().toISOString(), by: req.user.username }, req.user.username);
+    const fee = req.body.perDepositFee == null || req.body.perDepositFee === '' ? (await _closeConfig()).perDepositFee : Number(req.body.perDepositFee); if (!Number.isFinite(fee) || fee < 0 || fee > 100000) return res.status(400).json({ error: 'El costo por transferencia tiene que ser un monto entre 0 y 100.000' });
+    await Config.set('closeConfig', { bankCommissionPct: Math.round(pct * 100) / 100, perDepositFee: Math.round(fee), updatedAt: new Date().toISOString(), by: req.user.username }, req.user.username); // #948
     // re-aplica el % a los cierres pendientes con comisión por defecto
     const cfg = await _closeConfig(); const pend = await DailyClose.find({ status: 'pendiente', bankCommissionSource: { $ne: 'manual' } }); for (const d of pend) { _closeApply(d, cfg); await d.save(); }
     res.json({ success: true, config: cfg });

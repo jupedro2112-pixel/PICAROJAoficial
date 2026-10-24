@@ -1417,21 +1417,20 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
             <!-- #459/#461 (owner): DATOS IA — análisis completo (día/semana/mes), comparativa, calculador de inversión e historial -->
             <section id="cierresSection" class="section dia">
                 <div class="panel-header cfg-head">
-                    <div><h2>🧾 Cierres automáticos</h2><div class="cfg-sub">Se cierran solos cada día con los datos del sistema y del banco (sin esperar confirmación; USDT es opcional). Si un día no da 0, tocá <b>Ver detalle</b>: te marca qué fue automático, qué se confirmó a mano y de dónde puede venir la diferencia.</div></div>
+                    <div><h2>🧾 Cierres automáticos</h2><div class="cfg-sub">Se cierran solos cada día con los datos del sistema y del banco. INGRESOS (depósitos + pagos por banco externo + fondeos) − GASTOS (retiros + comisión del banco + $ por transferencia + gastos) = RESULTADO en plata; el saldo del CBU a las 00 hs cierra el arqueo. Si un día no da 0, tocá <b>Ver detalle</b>: te marca qué fue automático, qué se confirmó a mano y de dónde puede venir la diferencia.</div></div>
                     <button class="refresh-btn" onclick="cierresLoad()" title="Actualizar">🔄</button>
                 </div>
                 <div class="dia-card"><div class="dia-card-h"><b>⚙️ Comisión del banco por defecto</b><small>% sobre los depósitos del día. Es el punto de partida: en cada cierre lo podés cambiar (% de ese día o monto exacto) porque puede variar.</small></div>
                     <div class="dia-bar dia-bar-in">
                         <label>Comisión %<input type="number" id="clPct" min="0" max="50" step="0.01" style="width:90px;"></label>
                         <button class="btn-primary btn-small" onclick="cierresSaveConfig()">Guardar</button>
+                        <label>Costo por transferencia $<input type="number" id="clFee" min="0" max="100000" step="1" style="width:90px;" title="#948: se cuenta como gasto por cada carga del día"></label>
                         <span id="clCfgInfo" class="dia-pill">…</span>
-                        <span class="dia-pill" id="clUsdtInfo">USDT: —</span>
-                        <button class="btn-secondary btn-small" onclick="cierresUsdtFetch()" title="Trae la cotización de hoy para usarla en los cierres pendientes">⟳ Cotización de hoy</button>
                         <button class="btn-secondary btn-small" onclick="cierresBankBalance()" title="Consulta el saldo del banco por API ahora y muestra el último saldo guardado de las 00:00">🏦 Saldo del banco</button>
                     </div>
                 </div>
                 <div id="cierresTotals" class="dia-kpis" style="margin-bottom:10px;"></div>
-                <div class="dia-card"><div class="dia-card-h"><b>📅 Últimos 30 días</b><small>Depósitos − retiros = VENTA (netwin) · − regalos = NETO · − comisión del banco = RESULTADO · ÷ USDT = resultado en dólares. <b>Arqueo:</b> lo que entró y salió del BANCO (automático desde los movimientos del banco; si el resumen dice otra cosa, escribilo "según banco") contra lo que dice el sistema → la <b>diferencia</b> queda en 0 si cuadra, negativa = faltante, positiva = sobrante. Además, todas las noches a las 00:00 se guarda el <b>saldo del banco</b> por API: con saldo inicial y final, el arqueo real es (saldo fin − saldo inicio) − (depósitos − retiros) + comisión; si la API no lo informa, se escribe a mano. La comisión se puede cambiar por día (% o monto).</small></div>
+                <div class="dia-card"><div class="dia-card-h"><b>📅 Últimos 30 días</b><small>INGRESOS − GASTOS = RESULTADO (plata). NETO (fichas) = depósitos − retiros − regalos, aparte. Caja: saldo 00 hs + resultado = saldo esperado al cierre vs el real. <b>Arqueo:</b> lo que entró y salió del BANCO (automático desde los movimientos del banco; si el resumen dice otra cosa, escribilo "según banco") contra lo que dice el sistema → la <b>diferencia</b> queda en 0 si cuadra, negativa = faltante, positiva = sobrante. Además, todas las noches a las 00:00 se guarda el <b>saldo del banco</b> por API: con saldo inicial y final, el arqueo real es (saldo fin − saldo inicio) − (depósitos − retiros) + comisión; si la API no lo informa, se escribe a mano. La comisión se puede cambiar por día (% o monto).</small></div>
                     <div id="cierresList" style="overflow-x:auto;"></div>
                 </div>
             </section>

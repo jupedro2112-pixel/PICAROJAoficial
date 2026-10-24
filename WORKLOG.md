@@ -8,6 +8,31 @@
 
 ## Sesión 2026-10-24
 
+### 948. 🧾 Cierre diario: INGRESOS / GASTOS detallados, pagos por banco externo como ingreso, caja del CBU a las 00 hs, $50 por transferencia, sin USDT — admin SW v193
+**Pedido (owner):** "el cierre diario por banco automático; lo de USDT no va; dieron 2 cierres mal; los comprobantes que se marcan pagados desde otro banco
+tomalos como INGRESO y en el detalle poné ingresos y el detalle de todos los gastos; el CBU a las 00 hs plasmalo en el cierre, con los depósitos
+del banco y lo que cobró el banco de comisión; y las transacciones de cargas del día: $50 de gasto por transferencia, para que cierre perfecto".
+- `_closeApply`: `ingresosTotal = depósitos + pagosExternos + fondeos`; `egresosTotal = retiros + comisión + feeDepositsArs + gastos` con
+  `feeDepositsArs = cargas × closeConfig.perDepositFee` (default 50, editable en Cierres); **RESULTADO (plata) = ingresos − gastos** (antes neto −
+  comisión − gastos); `resultadoCaja` descuenta sólo los gastos pagados por este banco; con saldo 00 hs: `bankBalanceExpectedEnd = inicio + resultadoCaja`
+  y `diferencia = real − esperado`. USDT fuera (`resultadoUsd = null`, sin cotización ni botón). NETO (fichas) sigue aparte. Campos nuevos en `DailyClose`.
+- Panel → Cierres: config con "Costo por transferencia $"; KPIs INGRESOS / GASTOS / RESULTADO; tabla con columnas INGRESOS, GASTOS (comisión ·
+  transferencias · gastos), RESULTADO (plata) y Caja 00 hs (inicio → esperado · real); detalle con tres cajas arriba: 💰 INGRESOS (depósitos, banco
+  externo, fondeos), 💸 GASTOS (retiros, comisión %, N × $50, gastos registrados + lista) y 🏦 CAJA 00 hs (inicio, + resultado, esperado, real, dif.).
+- Los cierres de los últimos 3 días se recalculan solos con la regla nueva (`_closeTick`); los más viejos, con ↻ en la fila.
+
+### 949. 🎰 PICA ROJA como 4ª plataforma (Pronto) en el básico, el completo y la Info · Girox con fondo verde oscuro — (SW v634)
+**Pedido (owner, capturas):** "en ambos lados agregá un recuadro al final con el logo y PICA ROJA como plataforma, Pronto; el fondo de Girox verde
+oscuro, mirando el verde de Girox; en la Info poné PICA ROJA también con las 3 plataformas".
+- `PICAROJA_SOON` + `_withPicaroja(list)` en home.js (sólo visual: chips del básico y tarjetas del completo; tocarla dice Pronto). Info: título
+  "¿Por qué elegir Girox o Ganamos o Jugaygana o PICA ROJA?" y la tarjeta "La plataforma que quieras" la nombra. CSS: Girox verde oscuro
+  (#0f5132→#083d25) con logo en círculo blanco; PICA ROJA roja con el logo.
+
+### 950. 📌 Soporte "Cómo funciona todo": legible en el teléfono — (SW v634)
+**Pedido (owner, captura):** "hacé que sea todo legible, en el usuario del teléfono se corta" (el botón quedaba debajo de la barra inferior).
+- `.sp-faq-modal` por encima de la barra inferior, alineado arriba y con lugar reservado abajo (72 px + safe area); caja con alto máximo que lo respeta;
+  letra 15 px / 1.5.
+
 ### 947. ▭ Menú básico: los sorteos abajo de todo — SW v633
 **Pedido (owner, captura):** "en el menú básico esto ponelo abajo de todo". `#basicView .srt-cards { order: 999 }` (la vista es flex-column): quedan después
 de "¿Querés ver más?". En el intermedio y en Girox directo no cambia.

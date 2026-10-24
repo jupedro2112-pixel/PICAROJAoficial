@@ -42,6 +42,10 @@ const schema = new mongoose.Schema({
   // #913: INGRESOS de la cuenta que el sistema no tiene como depósito: retiros pagados por BANCO EXTERNO (las fichas salieron, la plata no)
   // y FONDEOS (#904). Se restan de la diferencia del arqueo (no tocan el RESULTADO).
   pagosExternos: { type: Number, default: 0 }, fondeos: { type: Number, default: 0 }, ingresosExternos: { type: Number, default: 0 },
+  // #948: INGRESOS / GASTOS del día en plata. feeDepositsArs = cargas × feePerDeposit ($50 por transferencia); gastosBanco = gastos pagados por la API.
+  // resultado = ingresosTotal − egresosTotal · resultadoCaja = sólo con lo que salió de ESTE banco · bankBalanceExpectedEnd = saldo 00 hs + resultadoCaja.
+  feePerDeposit: { type: Number, default: 50 }, feeDepositsArs: { type: Number, default: 0 }, gastosBanco: { type: Number, default: 0 },
+  ingresosTotal: { type: Number, default: 0 }, egresosTotal: { type: Number, default: 0 }, resultadoCaja: { type: Number, default: 0 }, bankBalanceExpectedEnd: { type: Number, default: null },
   autoFinalizedAt: { type: Date, default: null },
   generatedAt: { type: Date, default: Date.now },
   recalculatedAt: { type: Date, default: null },

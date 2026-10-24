@@ -5884,17 +5884,17 @@ async function cierresLoad() {
         const r = await authFetch('/api/admin/cierres?days=30'); const j = await r.json(); if (!r.ok) { if (list) list.textContent = j.error || 'Error'; return; }
         _clItems = j.items || []; _clUsdt = j.usdtRate || null;
         const p = document.getElementById('clPct'); if (p && document.activeElement !== p) p.value = j.config.bankCommissionPct || 0;
-        const ci = document.getElementById('clCfgInfo'); if (ci) ci.textContent = j.config.bankCommissionPct ? 'Hoy: ' + j.config.bankCommissionPct + '% sobre depósitos' : 'Sin % por defecto';
-        const ui = document.getElementById('clUsdtInfo'); if (ui) ui.textContent = 'USDT (opcional): ' + (_clUsdt ? '$' + _clUsdt.toLocaleString('es-AR') : '—');
+        const fe = document.getElementById('clFee'); if (fe && document.activeElement !== fe) fe.value = j.config.perDepositFee == null ? 50 : j.config.perDepositFee; // #948
+        const ci = document.getElementById('clCfgInfo'); if (ci) ci.textContent = (j.config.bankCommissionPct ? 'Comisión ' + j.config.bankCommissionPct + '% sobre depósitos' : 'Sin % de comisión') + ' · $' + Number(j.config.perDepositFee == null ? 50 : j.config.perDepositFee).toLocaleString('es-AR') + ' por transferencia';
         const malos = _clItems.filter(function (x) { return x.arqueo === 'faltante' || x.arqueo === 'sobrante'; }).length; const bd = document.getElementById('cierresBadge'); if (bd) { bd.textContent = malos; bd.style.display = malos ? '' : 'none'; }
         const t = j.totals || {};
-        document.getElementById('cierresTotals').innerHTML = _diaKpi('Depósitos (30 d)', _clM(t.depositos)) + _diaKpi('Retiros', _clM(t.retiros)) + _diaKpi('VENTA (netwin)', _clC(t.venta)) + _diaKpi('Regalos', _clM(t.regalos)) + _diaKpi('NETO', _clC(t.neto)) + _diaKpi('Días con diferencia', String(malos));
+        document.getElementById('cierresTotals').innerHTML = _diaKpi('INGRESOS (30 d)', _clM(t.ingresos)) + _diaKpi('GASTOS', _clM(t.egresos), 'transf. ' + _clM(t.fee) + ' · gastos ' + _clM(t.gastos) + ' · comisión ' + _clM(t.comision)) + _diaKpi('RESULTADO (plata)', _clC(t.resultado)) + _diaKpi('Depósitos', _clM(t.depositos)) + _diaKpi('Retiros', _clM(t.retiros)) + _diaKpi('NETO (fichas)', _clC(t.neto)) + _diaKpi('Días con diferencia', String(malos)); // #948
         if (!list) return;
         // #744 (owner): cierres día a día, automáticos. Diferencia SIEMPRE visible (0 = cuadra) y "Ver detalle" con la conciliación.
         const arq = function (c) { const d = Number(c.diferencia) || 0; const num = (d > 0 ? '+' : '') + _clM(d).replace('$-', '-$'); if (c.arqueo === 'sin_datos') return '<span class="cl-st">— sin datos del banco</span>'; return c.arqueo === 'cuadra' ? '<span class="cl-st fin">✅ Da 0</span>' : ('<span class="cl-st bad">⚠ ' + (c.arqueo === 'faltante' ? 'Faltante' : 'Sobrante') + ' <b>' + num + '</b></span>'); };
         const det = function (c) { const d = c.detalle || {}; const s = d.sistema || {}, b = d.banco || {}; return '<small>auto ' + _clM(s.depositosAuto || 0) + (s.depositosManual ? ' · <b class="cl-warn">a mano ' + _clM(s.depositosManual) + '</b>' : '') + (s.depositosPrueba ? ' · prueba ' + _clM(s.depositosPrueba) : '') + '</small>'; };
         const detR = function (c) { const d = c.detalle || {}; const s = d.sistema || {}; return '<small>banco ' + _clM(s.pagosBanco || 0) + (s.pagosManual ? ' · <b class="cl-warn">a mano ' + _clM(s.pagosManual) + '</b>' : '') + (s.pagosExternos ? ' · <b style="color:var(--p-green,#16a34a)">banco externo ' + _clM(s.pagosExternos) + ' (ingreso)</b>' : '') + '</small>'; }; // #913
-        list.innerHTML = '<table class="data-table cl-table" style="width:100%;"><thead><tr><th>Día</th><th>Estado</th><th>Depósitos</th><th>Retiros</th><th>Banco entró / salió</th><th>Regalos</th><th>NETO</th><th>Comisión</th><th>Gastos</th><th>RESULTADO</th><th>Diferencia</th><th></th></tr></thead><tbody>' + _clItems.map(function (c) {
+        list.innerHTML = '<table class="data-table cl-table" style="width:100%;"><thead><tr><th>Día</th><th>Estado</th><th>Depósitos</th><th>Retiros</th><th>Banco entró / salió</th><th>Regalos</th><th>NETO (fichas)</th><th>INGRESOS</th><th>GASTOS</th><th>RESULTADO (plata)</th><th>Caja 00 hs</th><th>Diferencia</th><th></th></tr></thead><tbody>' + _clItems.map(function (c) {
             const fin = c.status === 'finalizado';
             return '<tr class="' + (fin ? 'fin' : 'pend') + (c.arqueo === 'faltante' || c.arqueo === 'sobrante' ? ' dif' : '') + '" id="cl-' + c.dateKey + '"><td><b>' + c.dateKey + '</b><br><small>' + c.nuevos + ' nuevos · ' + c.retenidos + ' ret.</small></td>' +
                 '<td>' + (fin ? '<span class="cl-st fin">✅ Cerrado' + (c.finalizedBy === 'auto' ? ' (auto)' : '') + '</span>' : '<span class="cl-st">⏳ Hoy / en curso</span>') + '</td>' +
@@ -5902,12 +5902,13 @@ async function cierresLoad() {
                 '<td><b>' + _clM(c.retiros) + '</b><br>' + detR(c) + '</td>' +
                 '<td><small>' + (c.bankSource === 'api' ? 'API' : 'avisos') + '</small> ' + _clM(c.bankIn) + ' / ' + _clM(c.bankOut) + '</td>' +
                 '<td>' + _clM(c.regalos) + '</td><td>' + _clC(c.neto) + '</td>' +
-                '<td>' + _clM(c.bankCommissionArs || 0) + '<br><small>' + (c.bankCommissionPct != null ? c.bankCommissionPct + '%' : '—') + '</small></td>' +
-                '<td>' + (c.gastos ? '<b class="cl-warn">' + _clM(c.gastos) + '</b>' : '—') + '</td>' + // #770
-                '<td><b>' + _clC(c.resultado) + '</b>' + (c.resultadoUsd != null ? '<br><small>' + _clU(c.resultadoUsd) + '</small>' : '') + '</td>' +
+                '<td><b>' + _clM(c.ingresosTotal) + '</b><br><small>' + (c.pagosExternos ? 'ext. ' + _clM(c.pagosExternos) + ' · ' : '') + (c.fondeos ? 'fondeo ' + _clM(c.fondeos) : '') + '</small></td>' + // #948
+                '<td><b>' + _clM(c.egresosTotal) + '</b><br><small>com. ' + _clM(c.bankCommissionArs || 0) + ' · transf. ' + _clM(c.feeDepositsArs || 0) + (c.gastos ? ' · <b class="cl-warn">gastos ' + _clM(c.gastos) + '</b>' : '') + '</small></td>' +
+                '<td><b>' + _clC(c.resultado) + '</b></td>' +
+                '<td><small>' + (c.bankBalanceStart != null || c.bankBalanceStartManual != null ? '00 hs ' + _clM(c.bankBalanceStartManual != null ? c.bankBalanceStartManual : c.bankBalanceStart) + ' → esp. ' + _clM(c.bankBalanceExpectedEnd) + (c.bankBalanceEnd != null || c.bankBalanceEndManual != null ? ' · real ' + _clM(c.bankBalanceEndManual != null ? c.bankBalanceEndManual : c.bankBalanceEnd) : ' · real —') : 'sin saldo 00 hs') + '</small></td>' +
                 '<td>' + arq(c) + '</td>' +
                 '<td style="white-space:nowrap;"><button class="btn-secondary btn-small" onclick="cierresDetalle(\'' + c.dateKey + '\')">🔍 Ver detalle</button> <button class="btn-secondary btn-small" onclick="cierresSave(\'' + c.dateKey + '\', {recalc:true})" title="Vuelve a calcular con los datos de ahora">↻</button></td></tr>' +
-                '<tr class="cl-det" id="cld-' + c.dateKey + '" style="display:none;"><td colspan="12"></td></tr>';
+                '<tr class="cl-det" id="cld-' + c.dateKey + '" style="display:none;"><td colspan="13"></td></tr>';
         }).join('') + '</tbody></table>';
     } catch (_) { if (list) list.textContent = 'Error de conexión'; }
 }
@@ -5923,6 +5924,25 @@ async function cierresDetalle(dk) {
         const signed = function (n) { return (n > 0 ? '+' : '') + money(n); };
         const sev = { alta: 'cl-sev-alta', media: 'cl-sev-media', baja: 'cl-sev-baja' };
         let html = '<div class="cl-rec">';
+        // #948: INGRESOS · GASTOS · CAJA 00 hs del día (de DailyClose) arriba de la conciliación
+        { const c = _clItems.find(function (x) { return x.dateKey === dk; }) || {}; const g = s.gastos || 0;
+          const bs = c.bankBalanceStartManual != null ? c.bankBalanceStartManual : c.bankBalanceStart, be = c.bankBalanceEndManual != null ? c.bankBalanceEndManual : c.bankBalanceEnd;
+          html += '<div class="cl-rec-cols"><div class="cl-rec-box"><b>💰 INGRESOS</b>' +
+            '<div>Depósitos de clientes (banco): <b>' + money(c.depositos || 0) + '</b> · ' + (c.cargas || 0) + ' cargas</div>' +
+            '<div>Pagos por banco externo (fichas afuera, plata adentro): <b style="color:var(--p-green,#16a34a)">' + money(c.pagosExternos || 0) + '</b></div>' +
+            '<div>Fondeos de la cuenta: <b style="color:var(--p-green,#16a34a)">' + money(c.fondeos || 0) + '</b></div>' +
+            '<div style="border-top:1px solid var(--p-border);margin-top:4px;padding-top:4px"><b>Total ingresos: ' + money(c.ingresosTotal || 0) + '</b></div></div>' +
+            '<div class="cl-rec-box"><b>💸 GASTOS</b>' +
+            '<div>Retiros pagados: <b>' + money(c.retiros || 0) + '</b> · ' + (c.retirosN || 0) + '</div>' +
+            '<div>Comisión del banco (' + (c.bankCommissionPct != null ? c.bankCommissionPct + '%' : '—') + ' sobre depósitos): <b>' + money(c.bankCommissionArs || 0) + '</b></div>' +
+            '<div>Costo por transferencia (' + (c.cargas || 0) + ' × ' + money(c.feePerDeposit == null ? 50 : c.feePerDeposit) + '): <b>' + money(c.feeDepositsArs || 0) + '</b></div>' +
+            '<div>Gastos registrados: <b class="' + (g ? 'cl-warn' : '') + '">' + money(g) + '</b>' + (s.gastosBanco ? ' <small>(' + money(s.gastosBanco) + ' por API del banco)</small>' : '') + '</div>' +
+            '<div style="border-top:1px solid var(--p-border);margin-top:4px;padding-top:4px"><b>Total gastos: ' + money(c.egresosTotal || 0) + '</b> · <b>RESULTADO: ' + signed(c.resultado || 0) + '</b></div></div>' +
+            '<div class="cl-rec-box"><b>🏦 CAJA · saldo del CBU a las 00 hs</b>' +
+            '<div>Inicio del día (00 hs): <b>' + (bs != null ? money(bs) : '—') + '</b>' + (c.bankBalanceSource ? ' <small>(' + c.bankBalanceSource + ')</small>' : '') + '</div>' +
+            '<div>+ resultado de caja: <b>' + signed(c.resultadoCaja || 0) + '</b> <small>(sin los gastos pagados por fuera de este banco)</small></div>' +
+            '<div>= esperado al cierre (00 hs sig.): <b>' + (c.bankBalanceExpectedEnd != null ? money(c.bankBalanceExpectedEnd) : '—') + '</b></div>' +
+            '<div>Real al cierre: <b>' + (be != null ? money(be) : '— (todavía sin saldo)') + '</b>' + (bs != null && be != null ? ' · diferencia <b class="' + (Math.abs(c.diferencia || 0) <= 1000 ? '' : 'cl-warn') + '">' + signed(c.diferencia || 0) + '</b>' : '') + '</div></div></div>'; }
         html += '<div class="cl-rec-cols"><div class="cl-rec-box"><b>🖥️ Sistema</b>' +
             '<div>Depósitos automáticos (banco): <b>' + money(s.depositosAuto || 0) + '</b> · ' + (s.depositosAutoN || 0) + '</div>' +
             '<div>Depósitos a mano (agente): <b class="' + (s.depositosManual ? 'cl-warn' : '') + '">' + money(s.depositosManual || 0) + '</b> · ' + (s.depositosManualN || 0) + '</div>' +
@@ -5947,7 +5967,7 @@ async function cierresDetalle(dk) {
         html += lst('Cargas de prueba', it.depositosPrueba, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['nota', 'Nota']]);
         html += lst('Gastos del día', it.gastos, [['hora', 'Hora'], ['usuario', 'Destino'], ['monto', 'Monto'], ['agente', 'Cargó'], ['nota', 'Concepto']]); // #770
         html += _cierresGiroxHtml(dk, d.girox || {}, money, signed); // #888
-        html += '<div class="cl-rec-adj"><details><summary>⚙️ Ajustes manuales del día (comisión, banco, USDT)</summary>' + _cierresAdjHtml(dk) + '</details></div></div>';
+        html += '<div class="cl-rec-adj"><details><summary>⚙️ Ajustes manuales del día (comisión, banco, saldos 00 hs)</summary>' + _cierresAdjHtml(dk) + '</details></div></div>';
         cell.innerHTML = html;
     } catch (e) { cell.innerHTML = '<div style="color:#ff8080;">Error de conexión</div>'; }
 }
@@ -5960,7 +5980,6 @@ function _cierresAdjHtml(dk) {
         '<label>Banco salió (manual)<input type="number" class="cl-in" id="clBout-' + dk + '" value="' + (c.bankOutManual != null ? c.bankOutManual : '') + '" step="1" ' + dis + '></label>' +
         '<label>Saldo 00:00<input type="number" class="cl-in" id="clBs-' + dk + '" value="' + (c.bankBalanceStartManual != null ? c.bankBalanceStartManual : '') + '" step="1" ' + dis + '></label>' +
         '<label>Saldo 24:00<input type="number" class="cl-in" id="clBe-' + dk + '" value="' + (c.bankBalanceEndManual != null ? c.bankBalanceEndManual : '') + '" step="1" ' + dis + '></label>' +
-        '<label>USDT (opcional)<input type="number" class="cl-in" id="clUsd-' + dk + '" value="' + (c.usdtRate || '') + '" placeholder="' + (_clUsdt || '') + '" min="1" step="1" ' + dis + '></label>' +
         '</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' +
         (fin && c.finalizedBy !== 'auto' ? '<button class="btn-secondary btn-small" onclick="cierresSave(\'' + dk + '\', {reopen:true})">Reabrir</button>' : '<button class="btn-primary btn-small" onclick="cierresSave(\'' + dk + '\', {})">Guardar ajustes</button> <button class="btn-secondary btn-small" onclick="cierresSave(\'' + dk + '\', {finalize:true})">Cerrar a mano</button>') +
         '</div>';
@@ -5979,7 +5998,7 @@ async function cierresSave(dk, extra) {
     try { const r = await authFetch('/api/admin/cierres/' + dk, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } showToast(extra && extra.finalize ? 'Cierre ' + dk + ' FINALIZADO' : (extra && extra.reopen ? 'Cierre reabierto' : 'Cierre guardado'), 'success'); cierresLoad(); } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function cierresSaveConfig() {
-    try { const r = await authFetch('/api/admin/cierres/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bankCommissionPct: document.getElementById('clPct').value }) }); const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } showToast('Comisión por defecto guardada', 'success'); cierresLoad(); } catch (_) { showToast('Error de conexión', 'error'); }
+    try { const r = await authFetch('/api/admin/cierres/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bankCommissionPct: document.getElementById('clPct').value, perDepositFee: (document.getElementById('clFee') || {}).value }) }); /* #948 */ const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } showToast('Comisión por defecto guardada', 'success'); cierresLoad(); } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function cierresUsdtFetch() { try { const r = await authFetch('/api/admin/datos-ia/usdt?fetch=1'); const j = await r.json(); if (j.rate) showToast('Cotización de hoy: $' + Number(j.rate).toLocaleString('es-AR') + ' (quedó como sugerida en los pendientes)', 'success'); else showToast('No se pudo traer la cotización', 'error'); cierresLoad(); } catch (_) { showToast('Error de conexión', 'error'); } }
 async function cierresBankBalance() { try { const r = await authFetch('/api/admin/cierres/bank-balance'); const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } const n = j.now || {}; const last = (j.snapshots || [])[0]; const mv = j.movements || {}; alert((n.ok && n.balance != null ? 'Saldo del banco AHORA: $' + Number(n.balance).toLocaleString('es-AR') : 'La API del banco no informó saldo' + (n.error ? ': ' + n.error : '')) + '\n\nMovimientos de AYER por API: ' + (mv.ok ? mv.count + ' movimientos (' + mv.endpoint + ') · entró $' + Number(mv.inbound).toLocaleString('es-AR') + ' · salió $' + Number(mv.outbound).toLocaleString('es-AR') : 'no disponible' + (mv.error ? ' — ' + mv.error : '')) + (n.raw ? '\n\nCampos que devuelve la cuenta: ' + Object.keys(n.raw).join(', ') : '') + (last ? '\n\nÚltimo saldo de las 00:00 (' + last.dateKey + '): ' + (last.balance != null ? '$' + Number(last.balance).toLocaleString('es-AR') : 'sin saldo' + (last.error ? ' · ' + last.error : '')) : '\n\nTodavía no hay saldos de las 00:00 guardados.')); } catch (_) { showToast('Error de conexión', 'error'); } }

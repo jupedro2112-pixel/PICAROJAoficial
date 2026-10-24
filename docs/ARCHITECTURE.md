@@ -1427,7 +1427,10 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
 - Uno por día ART (`dateKey` único); `_closeTick` cada 20 min recalcula los últimos 3 días y finaliza solo el día anterior (#744). Números del
   sistema salen de `datosIa.dayTotals` (Transaction); lado banco de la API de hgcash (`_bankDayFromApi`) o de los avisos, y saldos 00:00
   (`BankBalanceSnapshot`). `resultado = neto − comisión − gastos` (#770).
-- **Arqueo (#913):** `diferencia = (bancoEntró − bancoSalió) − (depósitos − retiros) − ingresosExternos`, donde `ingresosExternos = pagosExternos
+- **#948 INGRESOS / GASTOS:** `ingresosTotal = depósitos + pagosExternos + fondeos`; `egresosTotal = retiros + comisión + feeDepositsArs (cargas × perDepositFee, $50) +
+  gastos`; `resultado = ingresos − egresos` (plata); `resultadoCaja` = ídem sólo con `gastosBanco`; con saldos 00 hs: `bankBalanceExpectedEnd = inicio + resultadoCaja`,
+  `diferencia = real − esperado`. `neto` (fichas) y USDT quedan fuera del resultado (resultadoUsd = null).
+- **Arqueo por movimientos (#913):** `diferencia = (bancoEntró − bancoSalió) − (depósitos − retiros) − ingresosExternos`, donde `ingresosExternos = pagosExternos
   (retiros pagados por BANCO EXTERNO, #904 `PendingPayout.paidVia:'other_bank'`) + fondeos (Expense kind 'fondeo')`. Son plata de la cuenta que el
   sistema no tiene como depósito: las fichas del retiro salieron en 1girox pero la plata no salió de este banco. Variante por saldos: igual,
   restando lo mismo. No tocan el RESULTADO. `dayTotals.payoutsPaid` excluye los `other_bank`.

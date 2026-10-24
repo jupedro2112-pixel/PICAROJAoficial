@@ -2913,3 +2913,22 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 
 /* #947 (owner, captura): en el menú BÁSICO los sorteos van abajo de todo (la columna es flex ⇒ order) */
 #basicView .srt-cards { order: 999; margin: 10px 0 4px !important; }
+
+/* #949 (owner): Girox con fondo VERDE OSCURO (el verde de Girox) en el básico y en el completo; PICA ROJA como 4ª plataforma (Pronto), roja */
+.bv-chip.plat-girox, .bv-chip.plat-girox.on, .bv-chip.plat-girox.soon { background: linear-gradient(160deg, #0f5132, #083d25) !important; border-color: #1f8a5a !important; color: #fff !important; box-shadow: 0 0 0 3px rgba(31, 138, 90, .18) !important; }
+.bv-chip.plat-girox b, .bv-chip.plat-girox small, .bv-chip.plat-girox.on small { color: #fff !important; }
+.bv-chip.plat-girox img { background: #fff !important; border-radius: 50%; padding: 2px; }
+.plat-play-btn.plat-girox, .plat-play-btn.plat-girox.is-pref { background: linear-gradient(160deg, #0f5132, #083d25) !important; border-color: transparent !important; color: #fff !important; }
+.plat-play-btn.plat-girox .plat-play-name, .plat-play-btn.plat-girox .plat-play-sub { color: #fff !important; }
+.plat-play-btn.plat-girox .plat-logo { background: #fff !important; border-radius: 50% !important; }
+.plat-play-btn.plat-girox .plat-check { background: #fff !important; color: #0f5132 !important; }
+.bv-chip.plat-picaroja, .bv-chip.plat-picaroja.soon { background: linear-gradient(160deg, #e60023, #9b0018) !important; border-color: #ff4d6a !important; color: #fff !important; }
+.bv-chip.plat-picaroja b, .bv-chip.plat-picaroja small { color: #fff !important; } .bv-chip.plat-picaroja img { background: #fff !important; border-radius: 9px; padding: 1px; }
+.plat-play-btn.plat-picaroja, .plat-play-btn.plat-picaroja.soon { background: linear-gradient(160deg, #e60023, #9b0018) !important; border-color: transparent !important; color: #fff !important; }
+.plat-play-btn.plat-picaroja .plat-play-name, .plat-play-btn.plat-picaroja .plat-play-sub { color: #fff !important; } .plat-play-btn.plat-picaroja .plat-logo { background: #fff !important; border-radius: 9px !important; }
+.plat-play-btn.plat-picaroja .plat-soon-badge, .bv-chip.plat-picaroja small { background: rgba(255,255,255,.22) !important; color: #fff !important; }
+/* #950 (owner, captura): "Cómo funciona todo" de Soporte: todo legible en el teléfono (antes el botón quedaba abajo de la barra inferior) */
+.sp-faq-modal { z-index: 100010 !important; align-items: flex-start !important; padding: calc(14px + var(--sat, env(safe-area-inset-top, 0px))) 12px calc(14px + 72px + var(--sab, env(safe-area-inset-bottom, 0px))) !important; }
+.sp-faq-box { max-height: calc(100dvh - 28px - 72px - var(--sat, env(safe-area-inset-top, 0px)) - var(--sab, env(safe-area-inset-bottom, 0px))) !important; }
+.sp-faq-scroll ul { font-size: 15px !important; line-height: 1.5 !important; } .sp-faq-scroll li { margin-bottom: 10px; }
+.sp-faq-ok { flex: 0 0 auto; }

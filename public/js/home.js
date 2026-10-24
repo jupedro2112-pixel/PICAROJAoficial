@@ -232,7 +232,7 @@
         const box = _el('basicPlats'); if (!box) return;
         const defId = (_platforms && _platforms.defaultPlatform) || 'girox'; const pref = (_platforms && _platforms.preferredPlatform) || null;
         const soon = (p) => p.connected === false && p.id !== defId && p.id !== 'girox';
-        box.innerHTML = _entryList().map((p) => { const on = pref ? pref === p.id : p.id === defId; return '<button type="button" class="bv-chip plat-' + _esc(p.id) + (on ? ' on' : '') + (soon(p) ? ' soon' : '') + '" onclick="VIP.home.basicPick(\'' + _esc(p.id) + '\',' + (soon(p) ? 'true' : 'false') + ')">' + (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '') + '<b>' + _esc(/^jugaygana$/i.test(p.name || '') ? 'Jugaygana' : (p.name || p.id)) + '</b>' + (soon(p) ? '<small>Pronto</small>' : (on ? '<small>✓</small>' : '')) + '</button>'; }).join('');
+        box.innerHTML = _withPicaroja(_entryList()).map((p) => { const on = pref ? pref === p.id : p.id === defId; return '<button type="button" class="bv-chip plat-' + _esc(p.id) + (on ? ' on' : '') + (soon(p) ? ' soon' : '') + '" onclick="VIP.home.basicPick(\'' + _esc(p.id) + '\',' + (soon(p) ? 'true' : 'false') + ')">' + (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '') + '<b>' + _esc(/^jugaygana$/i.test(p.name || '') ? 'Jugaygana' : (p.name || p.id)) + '</b>' + (soon(p) ? '<small>Pronto</small>' : (on ? '<small>✓</small>' : '')) + '</button>'; }).join('');
     }
     async function basicPick(id, isSoon) {
         if (isSoon) { try { VIP.ui.showToast('Pronto: esta plataforma se habilita en breve', 'info'); } catch (_) {} return; }
@@ -792,6 +792,10 @@
     ];
     let _entryPlat = null, _entryUrl = '', _entryTimer = null, _entryBound = false;
     function _entryList() { const l = (_platforms && _platforms.platforms) || []; return l.length ? l : ENTRY_FALLBACK; }
+    // #949 (owner): "agregá un recuadro al final con el logo de Pica Roja y PICA ROJA como plataforma, Pronto" (sólo visual: no es una
+    // plataforma del server; tocarla dice Pronto como Ganamos/Jugaygana).
+    const PICAROJA_SOON = { id: 'picaroja', name: 'PICA ROJA', logoUrl: '/icons/icon-192x192.png', connected: false };
+    function _withPicaroja(list) { return (list || []).some((p) => p && p.id === 'picaroja') ? list : (list || []).concat([PICAROJA_SOON]); }
     // ---------------- #304: AVATAR DEL PERFIL ----------------
     // (owner: "una personita tipo avatar en el nombre, que se pueda abrir y ajustar con diferentes íconos; según el
     //  nivel: nivel 1 avatar común, al avanzar el ícono del nivel que le corresponda"). La clave se guarda en el
@@ -923,7 +927,7 @@
         const one = list.length === 1 ? list[0] : null;
         const names = list.map((p) => p.name);
         const why = _el('infoCardWhyTitle');
-        if (why) why.textContent = one ? ('¿Por qué elegir ' + one.name + '?') : ('¿Por qué elegir ' + names.join(' o ') + '?');
+        if (why) why.textContent = one ? ('¿Por qué elegir ' + one.name + '?') : ('¿Por qué elegir ' + names.concat(['PICA ROJA']).join(' o ') + '?'); // #949: + PICA ROJA
         // #710 (owner): la tarjeta "La plataforma que quieras" (Girox, Ganamos y Jugaygana, todas originales) se ve SIEMPRE en Info; texto fijo en el HTML.
         // #407 (owner): título "La plataforma que quieras"; jugaygana en minúscula ACÁ (sólo en Info); lista "A, B y C".
         const _infoName = (n) => (/^jugaygana$/i.test(String(n || '')) ? 'Jugaygana' : String(n || '')); // #431: J mayúscula
@@ -2165,7 +2169,7 @@
             // Sin respuesta del server (o backend viejo): girox como siempre.
             box.innerHTML = _platBtn({ id: 'girox', name: 'Girox', emoji: '🎰', connected: true, isDefault: true }, null);
         } else {
-            box.innerHTML = list.map(p => _platBtn(p, list.length >= 2 ? pref : null)).join('');
+            box.innerHTML = _withPicaroja(list).map(p => _platBtn(p, list.length >= 2 ? pref : null)).join(''); // #949
         }
         try { renderSupportTests(); } catch (_) {}
         const sub = _el('platformsSub');
