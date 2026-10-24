@@ -27,6 +27,7 @@
         try {
             const r = await fetch(VIP.config.API_URL + '/api/sorteos', { headers: { 'Authorization': 'Bearer ' + tok } });
             if (!r.ok) return; _data = await r.json(); paintCards(); if (_open) paintView(_open);
+            if (_inline && _inlineKey && _inlineView === 'main') paintView(_inlineKey, _el('srtInlineBody'), null); // #928
         } catch (_) {} finally { _loading = false; }
     }
     // ---- Tarjetas (básico / intermedio) y banner (Girox directo)
@@ -40,10 +41,11 @@
         const list = (_data && _data.enabled && _data.sorteos) || [];
         // #926 (owner): las tarjetas del básico/intermedio van IGUAL que en el completo: dos mitades lado a lado (Gran Sorteo | Sorteo mensual).
         const ordered = ['gran', 'mensual'].map((k) => list.find((x) => x.key === k)).filter(Boolean).concat(list.filter((x) => !['gran', 'mensual'].includes(x.key)));
-        const pair = () => ordered.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\')">' + pic(p1.img || s.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small><em>Ver más ›</em></span></button>'; }).join('');
+        const pair = () => ordered.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\', event)">' + pic(p1.img || s.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small><em>Ver más ›</em></span></button>'; }).join('');
         document.querySelectorAll('[data-srt-cards]').forEach((box) => {
             if (!ordered.length) { box.hidden = true; box.innerHTML = ''; return; }
             box.hidden = false; box.classList.toggle('one', ordered.length === 1); box.innerHTML = pair();
+            if (_inline && _inline.previousElementSibling === box) { const idx = ['gran', 'mensual'].indexOf(_inlineKey); const btns = box.querySelectorAll('.srt-ban'); if (btns[idx]) btns[idx].classList.add('on'); }
         });
         // #917: pill del medio de la barra del casino (Girox directo): título del sorteo vigente + subtítulo vivo.
         try {
@@ -62,7 +64,13 @@
         });
     }
     // ---- Pantalla del sorteo
-    function open(key) {
+    // #928 (owner): "cuando la gente aprieta sorteo, que se vea ahí adentro sin que se abra en el menú y que se pueda sacar desde ahí".
+    // Tocando una de las dos mitades el sorteo se DESPLIEGA debajo (panel .srt-inline con ✕); la pantalla completa queda para el botón de adentro
+    // del casino (no hay dónde desplegar).
+    let _inline = null, _inlineKey = null, _inlineView = 'main';
+    function open(key, ev) {
+        const host = ev && ev.target && ev.target.closest ? ev.target.closest('[data-srt-cards],[data-srt-banner]') : null;
+        if (host) return openInline(key || 'mensual', host);
         const m = _el('srtModal'); if (!m) return;
         _open = key || 'mensual'; m.hidden = false; document.documentElement.classList.add('srt-lock');
         const t = _el('srtTerms'); if (t) t.hidden = true;
@@ -71,7 +79,22 @@
         clearInterval(_tick); _tick = setInterval(tickCd, 1000);
         try { document.addEventListener('keydown', _esc); } catch (_) {}
     }
-    function close() { const m = _el('srtModal'); if (m) m.hidden = true; _open = null; clearInterval(_tick); document.documentElement.classList.remove('srt-lock'); try { document.removeEventListener('keydown', _esc); } catch (_) {} }
+    function close() { closeInline(); const m = _el('srtModal'); if (m) m.hidden = true; _open = null; if (!_inline) clearInterval(_tick); document.documentElement.classList.remove('srt-lock'); try { document.removeEventListener('keydown', _esc); } catch (_) {} }
+    function openInline(key, host) {
+        if (_inline && _inlineKey === key && _inline.previousElementSibling === host) { closeInline(); return; } // mismo botón ⇒ se pliega
+        closeInline();
+        const s = get(key); const p = document.createElement('div'); p.className = 'srt-inline'; p.id = 'srtInline';
+        p.innerHTML = '<div class="srt-inline-head"><b id="srtInlineTitle">' + esc(s ? s.emoji + ' ' + s.title : 'Sorteo') + '</b><button type="button" class="srt-inline-x" onclick="VIP.sorteos.closeInline()" aria-label="Cerrar">✕ Cerrar</button></div><div class="srt-inline-body" id="srtInlineBody"><div class="srt-note">Cargando…</div></div>';
+        host.insertAdjacentElement('afterend', p); _inline = p; _inlineKey = key; _inlineView = 'main';
+        try { host.querySelectorAll('.srt-ban').forEach((b) => b.classList.remove('on')); const btns = host.querySelectorAll('.srt-ban'); const idx = ['gran', 'mensual'].indexOf(key); if (btns[idx]) btns[idx].classList.add('on'); } catch (_) {}
+        if (_data) paintView(key, _el('srtInlineBody'), null); load();
+        clearInterval(_tick); _tick = setInterval(tickCd, 1000);
+        try { setTimeout(() => { p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); } catch (_) {}
+    }
+    function closeInline() {
+        if (_inline) { try { const host = _inline.previousElementSibling; if (host) host.querySelectorAll('.srt-ban.on').forEach((b) => b.classList.remove('on')); } catch (_) {} _inline.remove(); }
+        _inline = null; _inlineKey = null; _inlineView = 'main'; if (!_open) clearInterval(_tick);
+    }
     function _esc(e) { if (e && e.key === 'Escape') { const t = _el('srtTerms'); if (t && !t.hidden) termsClose(); else close(); } }
     function tickCd() {
         document.querySelectorAll('[data-cd]').forEach((el) => { const c = cd(Number(el.getAttribute('data-cd')) - Date.now()); const q = (k) => el.querySelector('[data-k="' + k + '"]'); ['d', 'h', 'm', 's'].forEach((k) => { const x = q(k); if (x) x.textContent = String(c[k]).padStart(2, '0'); }); });
@@ -143,10 +166,11 @@
         const lbl = s.status === 'soon' ? '⏳ Empieza en <b data-cd-short="' + until + '">' + esc(cdShort(s.startsInMs)) + '</b>' : (s.status === 'live' ? '<em class="srt-live">● EN VIVO</em> · termina en <b data-cd-short="' + until + '">' + esc(cdShort(s.endsInMs)) + '</b>' : '🔒 Cerrado · ganadores el ' + esc(fday(s.publishAt)));
         return '<div class="srt-strip"><span>' + lbl + '</span><small>Del ' + esc(fday(s.start)) + ' al ' + esc(fday(s.end)) + '</small></div>';
     }
-    function paintView(key) {
-        const s = get(key); const b = _el('srtBody'), t = _el('srtTitle'); if (!b) return;
+    function paintView(key, bodyEl, titleEl) {
+        const s = get(key); const b = bodyEl || _el('srtBody'), t = titleEl === undefined ? _el('srtTitle') : titleEl; if (!b) return;
         if (!s) { b.innerHTML = '<div class="srt-note">' + (_data && _data.enabled === false ? 'Por ahora no hay sorteos activos.' : 'Este sorteo no está disponible.') + '</div>'; return; }
         if (t) t.textContent = s.emoji + ' ' + s.title;
+        try { const it = _el('srtInlineTitle'); if (bodyEl && it) it.textContent = s.emoji + ' ' + s.title; } catch (_) {}
         let h = strip(s);                 // 1) inicio, chico
         h += joinBlock(s, true);          // 2) anotarse, compacto
         h += hero(s);                     // 3) el premio
@@ -169,15 +193,25 @@
         } catch (_) { toast('Sin conexión. Probá de nuevo.', 'error'); }
     }
     function tgOpen() { const u = _data && _data.telegramUrl; if (u) window.open(u, '_blank', 'noopener'); }
+    function termsHtml(s) { return '<h2>📜 Bases y condiciones · ' + esc(s.title) + '</h2><ol class="srt-tc">' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol><p class="srt-p srt-muted">PICA ROJA · ' + esc(fday(_data.now)) + '</p>'; }
     function terms(key) {
-        const s = get(key || _open); const box = _el('srtTermsBody'), lay = _el('srtTerms'); if (!s || !box || !lay) return;
-        box.innerHTML = '<h2>📜 Bases y condiciones · ' + esc(s.title) + '</h2><ol class="srt-tc">' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol><p class="srt-p srt-muted">PICA ROJA · ' + esc(fday(_data.now)) + '</p>';
-        lay.hidden = false; try { box.scrollTop = 0; } catch (_) {}
+        const s = get(key || _inlineKey || _open); if (!s) return;
+        if (_inline && _inlineKey === s.key) { // #928: las Bases también ahí adentro, con "Volver al sorteo"
+            const b = _el('srtInlineBody'); if (!b) return; _inlineView = 'terms';
+            b.innerHTML = '<button type="button" class="srt-back-inline" onclick="VIP.sorteos.termsClose()">‹ Volver al sorteo</button>' + termsHtml(s);
+            try { _inline.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+            return;
+        }
+        const box = _el('srtTermsBody'), lay = _el('srtTerms'); if (!box || !lay) return;
+        box.innerHTML = termsHtml(s); lay.hidden = false; try { box.scrollTop = 0; } catch (_) {}
     }
-    function termsClose() { const lay = _el('srtTerms'); if (lay) lay.hidden = true; }
+    function termsClose() {
+        if (_inline && _inlineView === 'terms') { _inlineView = 'main'; paintView(_inlineKey, _el('srtInlineBody'), null); try { _inline.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {} return; }
+        const lay = _el('srtTerms'); if (lay) lay.hidden = true;
+    }
     function init() {
         load(); clearInterval(_poll); _poll = setInterval(load, 5 * 60 * 1000);
         try { document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); }); } catch (_) {}
     }
-    VIP.sorteos = { init, load, open, close, join, terms, termsClose, tgOpen };
+    VIP.sorteos = { init, load, open, close, closeInline, join, terms, termsClose, tgOpen };
 })();

@@ -2803,3 +2803,15 @@ body.casino-open .srt-modal { z-index: 100002 !important; }
 #basicView .srt-cards .srt-ban-t b, #easyView .srt-cards .srt-ban-t b { font-size: 12px !important; }
 #basicView .srt-cards .srt-ban-t small, #easyView .srt-cards .srt-ban-t small { font-size: 10.5px !important; }
 #basicView .srt-cards .srt-ban-t em, #easyView .srt-cards .srt-ban-t em { font-size: 10.5px !important; margin-top: 1px !important; }
+
+/* #928: el sorteo DESPLEGADO ahí mismo (debajo de las dos mitades), con cabecera violeta y ✕ Cerrar */
+.srt-inline { margin: 0 12px 10px; border: 1.5px solid var(--srt-g3); border-radius: 16px; background: var(--p-bg); overflow: hidden; box-shadow: 0 8px 24px var(--srt-sh); }
+#basicView .srt-inline, #easyView .srt-inline { margin-left: 0; margin-right: 0; }
+.srt-inline-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: #fff; }
+.srt-inline-head b { font-size: 15px; font-weight: 900; }
+.srt-inline-x { border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 5px 10px; background: rgba(255,255,255,.14); color: #fff; font: 900 12px var(--p-font); cursor: pointer; }
+.srt-inline-body { padding: 10px 10px 12px; }
+.srt-inline-body .srt-sec, .srt-inline-body .srt-hero, .srt-inline-body .srt-join, .srt-inline-body .srt-extra { margin-bottom: 8px; }
+.srt-inline-body .srt-tc { padding-left: 16px; } .srt-inline-body h2 { margin: 6px 0 8px; font-size: 15px; font-weight: 900; }
+.srt-back-inline { border: 1px solid var(--srt-line); border-radius: 999px; padding: 6px 12px; background: var(--srt-soft); color: var(--srt-g); font: 900 12px var(--p-font); cursor: pointer; margin-bottom: 6px; }
+.srt-ban.on { outline: 2px solid var(--srt-lite); outline-offset: 1px; }

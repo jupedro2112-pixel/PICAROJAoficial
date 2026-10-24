@@ -8,6 +8,13 @@
 
 ## Sesión 2026-10-24
 
+### 928. 📂 El sorteo se despliega AHÍ MISMO debajo de las mitades (con ✕ Cerrar), sin abrir la pantalla completa — SW v617
+**Pedido (owner):** "cuando la gente aprieta sorteo, que se pueda ver ahí adentro sin que se abra en el menú y que se pueda sacar desde ahí".
+- `open(key, ev)`: si el toque viene de `[data-srt-cards]`/`[data-srt-banner]` ⇒ `openInline`: panel `.srt-inline` insertado DEBAJO del par (cabecera
+  violeta con el título y "✕ Cerrar", mismo contenido que la pantalla: inicio, anotarse, premios, puntos, ranking, Bases). Tocar la misma mitad lo
+  pliega; la mitad abierta queda marcada (`.srt-ban.on`). Las Bases se abren también ahí adentro con "‹ Volver al sorteo". `load()` repinta el
+  panel cada 5 min (salvo que estén abiertas las Bases). La pantalla completa (`#srtModal`) queda sólo para el recuadro de adentro del casino.
+
 ### 927. 📏 Sorteos compactos en el básico/intermedio, mismas medidas que en el completo — SW v616
 **Pedido (owner):** "y achicá como el completo en el básico". Reglas `#basicView .srt-cards` / `#easyView .srt-cards`: márgenes, padding, foto y letras
 del mismo tamaño que el banner de Girox directo.
