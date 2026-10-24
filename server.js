@@ -13183,6 +13183,13 @@ async function initializeData() {
       response: '🔒 El agente cerró el chat. Para cualquier consulta, volvé a seleccionar una opción.'
     },
     {
+      // #970 (owner): aviso diario a los que perdieron ayer y no reclamaron el reembolso diario (push; al tocar abre Reembolso).
+      name: '/sys_refund_reminder',
+      description: 'Push automática (una vez por día, 11 h) a quien PERDIÓ ayer y no reclamó el reembolso diario. Variable: {pct} (% diario). Al tocarla la app abre Reembolso. Vacío = no se manda.',
+      type: 'message',
+      response: '🔁 Ayer no fue tu día, pero te devolvemos el {pct}% 💸 Tocá acá y reclamá tu reembolso de ayer: se acredita al toque.'
+    },
+    {
       // #916 (owner 2026-10-24): cierre AUTOMÁTICO de Soporte cuando el cliente no contesta en {min} minutos.
       name: '/sys_support_autoclosed',
       description: 'Soporte: mensaje que ve el cliente cuando la charla se cierra SOLA porque no contestó en {min} minutos después de nuestra respuesta (Config supportAutoCloseMinutes, 30). Vacío = cierra sin aviso.',
@@ -26050,6 +26057,42 @@ function _newbieImg(n, pct, hours, rx, dx) {
     bullets: [['✓', 'Tocá "Reclamar ahora"', 'Acá, en esta historia'], ['$', 'Tu próxima carga', `Lleva +${pct}% EXTRA automático`], ['★', 'Sólo para vos', `Por tus ${n} días en Pica Roja`]],
     cta: 'Reclamar ahora', note: `El bono se juega ×${rx} y la carga ×${dx} (rollover)` };
 }
+// #970 (owner 2026-10-24): "notificaciones automáticas a todos los que se registran y pierden: 'no te olvides de reclamar tu reembolso'; al tocar la
+// notificación, que los mande directo a ver el reembolso del día anterior". Una vez por día (entre las 11 y las 21 h ART): clientes activos
+// (cargaron en los últimos 15 días) con push, que AYER perdieron en el casino (netwin de 1girox > 0, mismo criterio que el reembolso diario) y
+// todavía no reclamaron el diario de ayer. Push con url /?open=refund ⇒ la app abre Reembolso. Texto editable: /sys_refund_reminder ({pct}).
+const REFUND_REMIND_DEFAULT = '🔁 Ayer no fue tu día, pero te devolvemos el {pct}% 💸 Tocá acá y reclamá tu reembolso de ayer: se acredita al toque.';
+let _refundRemindRunning = false;
+async function _refundReminderTick() {
+  if (_refundRemindRunning || process.env.REFUND_REMIND_DISABLED === '1') return; _refundRemindRunning = true;
+  try {
+    const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (hourArt < 11 || hourArt >= 21) return;
+    const today = _schedArtKey(now), yday = _schedArtKey(new Date(now.getTime() - 86400000));
+    const last = await getConfig('refundRemindLast', null); if (last && last.day === today) return; // ya salió hoy
+    if (!(await _cronClaim('refundremind', 10 * 60000))) return; // una instancia por pasada
+    const pct = await getDailyRefundPct(); if (!(pct > 0)) return;
+    const r = periodRanges.getYesterdayRangeArgentinaEpoch(); const from = new Date(r.fromEpoch * 1000), to = new Date(r.toEpoch * 1000);
+    const ids = await Transaction.distinct('userId', { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, timestamp: { $gte: new Date(now.getTime() - 15 * 86400000) } });
+    const users = ids.length ? await User.find({ id: { $in: ids }, role: 'user', isActive: { $ne: false }, isBlocked: { $ne: true }, $or: [{ fcmToken: { $nin: [null, ''] } }, { 'fcmTokens.0': { $exists: true } }] }).select('id username').lean() : [];
+    const claimed = new Set((await RefundClaim.find({ type: 'daily', periodKey: 'daily:' + yday, userId: { $in: users.map((u) => u.id) } }).select('userId').lean()).map((c) => c.userId));
+    const names = users.filter((u) => !claimed.has(u.id)).map((u) => u.username);
+    const losers = []; let apiErr = null;
+    for (let i = 0; i < names.length && !apiErr; i += 100) {
+      const chunk = names.slice(i, i + 100); const b = await girox.getPlayersStatsBatch(chunk, from, to, 'refund-remind');
+      if (!b.success) { apiErr = b.error || b.code || 'stats batch falló'; break; }
+      for (const n of chunk) { const p = b.players[n]; if (p && Number(p.casinoNetwin) > 0) losers.push(n); }
+    }
+    if (apiErr) { logger.warn('[reembolso-aviso] ' + apiErr + ': se reintenta en la próxima pasada'); return; }
+    let sent = null;
+    if (losers.length) {
+      const text = await renderSystemCommand('/sys_refund_reminder', REFUND_REMIND_DEFAULT, { pct: String(pct) });
+      if (String(text || '').trim()) sent = await sendNotificationToUsernames(User, losers, '🔁 No te olvides de reclamar tu reembolso', text, { url: '/?open=refund', type: 'refund_reminder', tag: 'refund-' + yday });
+    }
+    await Config.set('refundRemindLast', { day: today, at: now.toISOString(), candidates: names.length, losers: losers.length, sent: sent ? (sent.successCount || sent.sent || 0) : 0 }, 'system');
+    logger.info(`[reembolso-aviso] ${today}: ${names.length} activos sin reclamar · ${losers.length} perdieron ayer · push ${JSON.stringify(sent || {}).slice(0, 120)}`);
+  } catch (e) { logger.warn('[reembolso-aviso] ' + e.message); } finally { _refundRemindRunning = false; }
+}
+setTimeout(() => { _refundReminderTick().catch(() => {}); setInterval(() => { _refundReminderTick().catch(() => {}); }, 15 * 60 * 1000); }, 6 * 60 * 1000);
 let _newbieRunning = false;
 async function _newbieOffersTick() {
   if (_newbieRunning || process.env.NEWBIE_OFFERS_DISABLED === '1') return;

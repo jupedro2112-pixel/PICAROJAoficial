@@ -8,6 +8,17 @@
 
 ## Sesión 2026-10-24
 
+### 970. 🔔 Push automática "No te olvides de reclamar tu reembolso" a los que perdieron ayer; al tocarla abre Reembolso — SW v642
+**Pedido (owner):** "configurá en notificaciones automáticas a todos los que se registran y pierden: no te olvides de reclamar tu reembolso; y cuando
+aprietan la notificación que los mande directo a ver el reembolso del día anterior".
+- `_refundReminderTick` (cada 15 min; manda UNA vez por día entre las 11 y las 21 h ART, una instancia por pasada): clientes activos (carga real en
+  los últimos 15 días) con push, que AYER perdieron en el casino (netwin de 1girox > 0 por stats batch, mismo criterio que el reembolso diario) y no
+  reclamaron el diario de ayer (`RefundClaim daily:<ayer>`). Marca `Config['refundRemindLast']` (día, candidatos, perdedores, enviados). Si 1girox
+  falla, reintenta en la pasada siguiente. Texto editable `/sys_refund_reminder` ({pct}); vacío = no se manda. `REFUND_REMIND_DISABLED=1` lo apaga.
+- La push lleva `url: /?open=refund`: app.js abre Reembolso al entrar por la notificación, y con la app abierta el service worker avisa (`vip-open`) y
+  también la abre. (Las reglas B1/B2 viejas del reembolso diario seguían borradas y la audiencia semanal/mensual usa `DailyPlayerStats`, que ya no se
+  alimenta: por eso esto va aparte, con datos reales de 1girox.)
+
 ### 969. 🎁 SORTEO EXTRA $1.000.000 en LOS DOS sorteos (10 × $100.000 cada uno), aclarado por separado — SW v641 · admin SW v198
 **Pedido (owner):** "el sorteo extra es en el del iPhone y en el del auto: 10 personas de $100.000, serían $1.000.000 extra en cada sorteo; aclaralo
 individualmente y ponelo en la info del detalle, todo".

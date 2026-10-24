@@ -490,6 +490,12 @@ function setupEventListeners() {
         }
         if (VIP.stories && typeof VIP.stories.init === 'function') VIP.stories.init(); // #361
         if (VIP.sorteos && typeof VIP.sorteos.init === 'function') VIP.sorteos.init(); // #915
+        // #970: la push "reclamá tu reembolso" trae /?open=refund ⇒ abrir Reembolso (al entrar por la notificación o, con la app abierta, por el aviso del SW)
+        try {
+            const openRefund = () => { try { if (VIP.home && VIP.home.svcRefund) VIP.home.svcRefund(); } catch (_) {} };
+            if (/[?&]open=refund\b/.test(location.search)) { try { history.replaceState(null, '', location.pathname); } catch (_) {} setTimeout(openRefund, 900); }
+            if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', (e) => { const d = e && e.data; if (d && d.type === 'vip-open' && /[?&]open=refund\b/.test(String(d.url || ''))) openRefund(); });
+        } catch (_) {}
 
         // Cambio de contraseña — entrada temporal (fallback cuando el SMS no llega)
         // "Omitir por ahora" el teléfono en el cambio obligatorio de contraseña.
