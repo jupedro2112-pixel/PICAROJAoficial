@@ -8,6 +8,12 @@
 
 ## Sesión 2026-10-24
 
+### 924/925. 🧱 Servicios del completo en UNA fila como el básico · sin tarjeta cruzada al pie del sorteo — SW v614
+**Pedidos (owner, capturas):** "este recuadro del completo quiero que lo dejes como el básico" y "sacá adentro del auto sorteo, en la parte inferior, el del iPhone".
+- #924: bloque final en pin.css que pisa el 2 × 2 de #758: `.ev-services` en grilla de 4 en todos los modos (completo, Girox directo, entrada), cada
+  `.ev-svc` en columna con ícono en círculo rojo suave, título y "Ver más ›" (el detalle `<small>` oculto), igual que `.bv-quick` del básico.
+- #925: la pantalla de cada sorteo ya no muestra la tarjeta del otro sorteo al final (`crossCard` queda sin usar).
+
 ### 923. 🚗 Foto del Peugeot 208 como premio del Gran Sorteo (emoji o FOTO por premio) — SW v613 · admin SW v189
 **Pedido (owner):** "usá fotos de auto 208".
 - `public/images/sorteos/peugeot-208.jpg` (+ `-sq`): foto CC BY 2.0 de Wikimedia Commons (autor Charles, Port Chester NY), recortada; crédito en
