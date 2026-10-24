@@ -22,7 +22,7 @@ const ctx = { require: (p) => { if (p.endsWith('SorteoEntry')) return SorteoEntr
 vm.createContext(ctx); vm.runInContext(block, ctx);
 const call = async (key, req) => { const h = routes[key]; if (!h) throw new Error('ruta ' + key); let out = null, status = 200; const res = { json: (j) => { out = j; return res; }, status: (s) => { status = s; return res; }, set: () => res }; await h(Object.assign({ user: { userId: 'u1', username: 'lalodj', role: 'admin' }, body: {}, params: {}, query: {}, get: () => '' }, req || {}), res); return { status, out }; };
 (async () => {
-  const RealDate = Date; const fixed = new RealDate('2026-12-15T15:00:00Z'); // #942: los dos sorteos en curso ctx.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [fixed])); } static now() { return fixed.getTime(); } };
+  const RealDate = Date; const fixed = new RealDate('2026-12-15T15:00:00Z'); /* #942: los dos sorteos en curso */ ctx.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [fixed])); } static now() { return fixed.getTime(); } };
   // motor
   await call('POST /api/admin/sorteos/recalc'); const diag = store.config.sorteoDiag; if (!diag || diag.lastError) throw new Error('tick: ' + JSON.stringify(diag)); if (!(store.scores.length >= 2)) throw new Error('sin puntajes'); const lalo = store.scores.find((s) => s.userId === 'u1' && s.key === 'mensual');
   console.log('✔ tick:', JSON.stringify(diag.runs), '· lalodj mensual pts', lalo.points, 'share', lalo.realShare, '· gran', store.scores.find((s) => s.userId === 'u1' && s.key === 'gran').points);
