@@ -8,6 +8,10 @@
 
 ## Sesión 2026-10-24
 
+### 927. 📏 Sorteos compactos en el básico/intermedio, mismas medidas que en el completo — SW v616
+**Pedido (owner):** "y achicá como el completo en el básico". Reglas `#basicView .srt-cards` / `#easyView .srt-cards`: márgenes, padding, foto y letras
+del mismo tamaño que el banner de Girox directo.
+
 ### 926. 🟣 Sorteos en el básico/intermedio IGUAL que en el completo: dos mitades lado a lado — SW v615
 **Pedido (owner, capturas):** "esto del menú básico dejalo como el de completo".
 - `paintCards` arma el mismo par (`.srt-ban` Gran Sorteo | Sorteo mensual, con foto, estado vivo y "Ver más ›") para `[data-srt-cards]` y
