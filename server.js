@@ -20904,19 +20904,28 @@ app.get('/api/admin/inicio/stats', async (req, res) => {
     const ref = new Date(Math.min(Date.now(), end.getTime())); const cut72 = new Date(ref.getTime() - 72 * 3600000); // retención = cuenta de +72 h
     const isAd = (u) => !!(u && (u.acquisitionSource === 'landing' || (u.acquisitionCampaign && u.acquisitionCampaign !== 'INGRESO')));
     const REAL = { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } };
-    const [activeNow, enteredIds, regs, depAgg, wd, totalUsers, withApp, withNotif] = await Promise.all([
+    const prevDay = _schedArtKey(new Date(start.getTime() - 43200000)); // #913: día anterior (ART) para "volvieron"
+    const [activeNow, enteredIds, regs, depAgg, wd, totalUsers, depositorIds, prevDepIds, prevEnteredIds] = await Promise.all([
       day === today ? AppSession.distinct('userId', { lastPingAt: { $gte: new Date(Date.now() - 3 * 60000) } }) : Promise.resolve(null),
       AppSession.distinct('userId', { dateKey: day }),
       User.find({ role: 'user', createdAt: { $gte: start, $lt: end } }).select('id acquisitionSource acquisitionCampaign').lean(),
       Transaction.aggregate([{ $match: Object.assign({ timestamp: { $gte: start, $lt: end } }, REAL) }, { $group: { _id: '$userId', total: { $sum: '$amount' }, n: { $sum: 1 } } }]),
       PendingPayout.aggregate([{ $match: { createdAt: { $gte: start, $lt: end } } }, { $group: { _id: '$status', n: { $sum: 1 }, total: { $sum: '$amount' } } }]),
       User.countDocuments({ role: 'user' }),
-      User.countDocuments({ role: 'user', $or: [{ fcmTokenContext: 'standalone' }, { 'fcmTokens.context': 'standalone' }] }),
-      User.countDocuments({ role: 'user', $or: [{ fcmToken: { $nin: [null, ''] } }, { 'fcmTokens.0': { $exists: true } }] })
+      Transaction.distinct('userId', REAL), // #913: todos los que cargaron alguna vez (base de la aceptación de la app)
+      Transaction.distinct('userId', Object.assign({ timestamp: { $gte: new Date(start.getTime() - 86400000), $lt: start } }, REAL)), // cargaron el día anterior
+      AppSession.distinct('userId', { dateKey: prevDay }) // entraron el día anterior
+    ]);
+    // #913 (owner): "la aceptación de la app hacela con usuarios que cargaron, no que se registraron": instalaron / notificaciones
+    // se cuentan SÓLO entre los que tienen al menos una carga real.
+    const depBase = { role: 'user', id: { $in: depositorIds.filter(Boolean) } };
+    const [withApp, withNotif] = await Promise.all([
+      User.countDocuments(Object.assign({ $or: [{ fcmTokenContext: 'standalone' }, { 'fcmTokens.context': 'standalone' }] }, depBase)),
+      User.countDocuments(Object.assign({ $or: [{ fcmToken: { $nin: [null, ''] } }, { 'fcmTokens.0': { $exists: true } }] }, depBase))
     ]);
     // Quiénes entraron / cargaron: edad de la cuenta y si vinieron por publicidad.
     const depIds = depAgg.map((d) => d._id).filter(Boolean);
-    const people = await User.find({ id: { $in: [...new Set([...enteredIds, ...depIds])] } }).select('id createdAt acquisitionSource acquisitionCampaign').lean();
+    const people = await User.find({ id: { $in: [...new Set([...enteredIds, ...depIds])] } }).select('id username createdAt acquisitionSource acquisitionCampaign').lean();
     const P = new Map(people.map((u) => [u.id, u])); const old = (id) => { const u = P.get(id); return !!(u && u.createdAt && new Date(u.createdAt) < cut72); };
     const enteredRet = enteredIds.filter(old);
     // Primera carga de la vida en este día.
@@ -20926,15 +20935,26 @@ app.get('/api/admin/inicio/stats', async (req, res) => {
     const depAll = sum(depAgg), depFirst = sum(depAgg.filter((d) => firstSet.has(d._id))), depRet = sum(depAgg.filter((d) => old(d._id) && !firstSet.has(d._id))), depNew = sum(depAgg.filter((d) => !old(d._id) && !firstSet.has(d._id)));
     const wdAll = wd.reduce((a, x) => ({ n: a.n + x.n, total: a.total + (x.total || 0) }), { n: 0, total: 0 }); const wdPaid = wd.filter((x) => x._id === 'paid').reduce((a, x) => ({ n: a.n + x.n, total: a.total + (x.total || 0) }), { n: 0, total: 0 });
     const regAd = regs.filter(isAd).length;
+    // #913: cuántas veces cargó cada uno en el día (1 / 2 / más de 2) y quiénes VOLVIERON del día anterior (cargaron ayer y hoy;
+    // entraron a la app ayer y hoy).
+    const times = { once: sum(depAgg.filter((d) => d.n === 1)), twice: sum(depAgg.filter((d) => d.n === 2)), more: sum(depAgg.filter((d) => d.n > 2)) };
+    const prevDepSet = new Set(prevDepIds), prevEntSet = new Set(prevEnteredIds);
+    const backDep = depAgg.filter((d) => prevDepSet.has(d._id));
+    const cameBack = {
+      prevDay, depositedPrev: prevDepIds.length, enteredPrev: prevEnteredIds.length,
+      deposited: Object.assign(sum(backDep), { names: backDep.map((d) => (P.get(d._id) || {}).username).filter(Boolean).slice(0, 40) }),
+      entered: enteredIds.filter((id) => prevEntSet.has(id)).length
+    };
     res.set('Cache-Control', 'no-store');
     res.json({
-      day, isToday: day === today, generatedAt: new Date().toISOString(),
+      day, isToday: day === today, prevDay, generatedAt: new Date().toISOString(),
       app: { activeNow: activeNow ? activeNow.length : null, enteredToday: enteredIds.length, enteredRetention: enteredRet.length, enteredRetentionAds: enteredRet.filter((id) => isAd(P.get(id))).length, enteredNew72: enteredIds.length - enteredRet.length },
       registrations: { total: regs.length, fromAds: regAd, organic: regs.length - regAd, firstDepositSameDay: regs.filter((u) => firstSet.has(u.id)).length },
-      deposits: { all: depAll, first: depFirst, retention: depRet, new72: depNew, avg: depAll.n ? Math.round(depAll.total / depAll.n) : 0 },
+      deposits: { all: depAll, first: depFirst, retention: depRet, new72: depNew, avg: depAll.n ? Math.round(depAll.total / depAll.n) : 0, times },
+      cameBack,
       withdrawals: { requested: { n: wdAll.n, total: Math.round(wdAll.total) }, paid: { n: wdPaid.n, total: Math.round(wdPaid.total) } },
       net: Math.round(depAll.total - wdPaid.total),
-      adoption: { totalUsers, withApp, withNotif, appPct: totalUsers ? Math.round(withApp * 1000 / totalUsers) / 10 : 0, notifPct: totalUsers ? Math.round(withNotif * 1000 / totalUsers) / 10 : 0 }
+      adoption: { base: 'cargadores', totalUsers, depositors: depositorIds.length, withApp, withNotif, appPct: depositorIds.length ? Math.round(withApp * 1000 / depositorIds.length) / 10 : 0, notifPct: depositorIds.length ? Math.round(withNotif * 1000 / depositorIds.length) / 10 : 0 }
     });
   } catch (e) { logger.error('[inicio] stats: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
@@ -21172,14 +21192,19 @@ function _closeApply(doc, cfg) {
   doc.bankIn = doc.bankInManual != null ? doc.bankInManual : (doc.bankInAuto || 0);
   doc.bankOut = doc.bankOutManual != null ? doc.bankOutManual : (doc.bankOutAuto || 0);
   const hasBank = doc.bankInManual != null || doc.bankOutManual != null || doc.bankInAuto > 0 || doc.bankOutAuto > 0;
-  doc.difIn = Math.round(doc.bankIn - doc.depositos); doc.difOut = Math.round(doc.bankOut - doc.retiros);
-  doc.diferencia = Math.round((doc.bankIn - doc.bankOut) - (doc.depositos - doc.retiros));
+  // #913 (owner): "si hay pagos de forma externa tomalos como un INGRESO en el cierre: en el panel van a estar las fichas y la plata también".
+  // Un retiro pagado por BANCO EXTERNO descuenta las fichas (cuenta como retiro) pero la plata NO salió de la cuenta; un FONDEO (#904)
+  // entró a la cuenta sin ser carga de nadie. Los dos son ingresos de la cuenta que el sistema no tiene como depósito: se restan de la
+  // diferencia para que el arqueo dé 0 cuando todo está registrado.
+  doc.ingresosExternos = Math.round((doc.pagosExternos || 0) + (doc.fondeos || 0));
+  doc.difIn = Math.round(doc.bankIn - (doc.fondeos || 0) - doc.depositos); doc.difOut = Math.round(doc.bankOut - (doc.retiros - (doc.pagosExternos || 0)));
+  doc.diferencia = Math.round((doc.bankIn - doc.bankOut) - (doc.depositos - doc.retiros) - doc.ingresosExternos);
   const tol = Math.max(1000, Math.round(doc.depositos * 0.001));
   // #502: si hay saldo del banco al inicio y al fin del día, el arqueo REAL es (saldo fin − saldo inicio) − (depósitos − retiros)
   const bs = doc.bankBalanceStartManual != null ? doc.bankBalanceStartManual : doc.bankBalanceStart, be = doc.bankBalanceEndManual != null ? doc.bankBalanceEndManual : doc.bankBalanceEnd;
   doc.bankBalanceSource = (doc.bankBalanceStartManual != null || doc.bankBalanceEndManual != null) ? 'manual' : (bs != null || be != null ? 'api' : null);
   doc.bankBalanceDelta = bs != null && be != null ? Math.round(be - bs) : null;
-  if (doc.bankBalanceDelta != null) doc.diferencia = Math.round(doc.bankBalanceDelta - (doc.depositos - doc.retiros) + (doc.bankCommissionArs || 0));
+  if (doc.bankBalanceDelta != null) doc.diferencia = Math.round(doc.bankBalanceDelta - (doc.depositos - doc.retiros) + (doc.bankCommissionArs || 0) - doc.ingresosExternos); // #913
   const hasAny = hasBank || doc.bankBalanceDelta != null;
   if (!hasAny) doc.diferencia = 0; // sin datos del banco no hay faltante que reportar: queda en 0 (owner #502)
   doc.arqueo = !hasAny ? 'sin_datos' : (Math.abs(doc.diferencia) <= tol ? 'cuadra' : (doc.diferencia < 0 ? 'faltante' : 'sobrante'));
@@ -21215,10 +21240,13 @@ async function _closeReconcile(dayKey) {
   const wds = await Transaction.find({ type: 'withdrawal', status: okSt, timestamp: { $gte: d0, $lte: d1 } }).select('amount username timestamp').lean();
   out.sistema.retiros = sum(wds); out.sistema.retirosN = wds.length;
   const pays = await PendingPayout.find({ status: 'paid', paidAt: { $gte: d0, $lte: d1 } }).select('amount username paidBy paidVia hgTransactionId paidAt').lean();
-  const payAuto = pays.filter((p) => p.hgTransactionId), payMan = pays.filter((p) => !p.hgTransactionId);
+  // #913: pagados por BANCO EXTERNO (#904, paidVia 'other_bank') aparte de los pagados a mano: son un INGRESO (la plata quedó en la cuenta).
+  const payAuto = pays.filter((p) => p.hgTransactionId), payExt = pays.filter((p) => !p.hgTransactionId && p.paidVia === 'other_bank'), payMan = pays.filter((p) => !p.hgTransactionId && p.paidVia !== 'other_bank');
   out.sistema.pagosBanco = sum(payAuto); out.sistema.pagosBancoN = payAuto.length;
   out.sistema.pagosManual = sum(payMan); out.sistema.pagosManualN = payMan.length;
+  out.sistema.pagosExternos = sum(payExt); out.sistema.pagosExternosN = payExt.length;
   out.items.pagosManual = payMan.slice(0, 50).map((p) => ({ hora: p.paidAt, usuario: p.username, monto: r0(p.amount), agente: p.paidBy || null, via: p.paidVia || null }));
+  out.items.pagosExternos = payExt.slice(0, 50).map((p) => ({ hora: p.paidAt, usuario: p.username, monto: r0(p.amount), agente: p.paidBy || null, via: 'banco externo' }));
   // ---- BANCO: movimientos del día (fecha del banco o de alta)
   const movs = await BankMovement.find({ createdAt: { $gte: new Date(d0.getTime() - 86400000), $lte: new Date(d1.getTime() + 86400000) } }).select('amount direction status matchStatus date createdAt fromName toName username').lean();
   const inDay = movs.filter((m) => { const dd = m.date || m.createdAt; return dd >= d0 && dd <= d1 && !/reject|fail|cancel|error/i.test(String(m.status || '')); });
@@ -21252,6 +21280,7 @@ async function _closeReconcile(dayKey) {
   add('in_sin_acreditar', 'Entradas del banco SIN acreditar a ningún cliente', Math.max(0, (out.banco.entradasSinAcreditar || 0) - _fondeoExpl), +1, 'Plata que entró al banco y no se cargó a nadie (sin match, pendiente o en revisión). Revisar en Cargas pendientes / Movimientos.', 'alta');
   add('in_devueltas', 'Entradas devueltas al origen (rebote por carga menor al mínimo)', out.banco.entradasDevueltas, +1, 'Entró y se devolvió: la entrada cuenta en el banco pero la salida de la devolución también. Neutro si la devolución salió el mismo día.', 'baja');
   add('in_dup', 'Entradas duplicadas o ignoradas por el sistema', out.banco.entradasDupIgn, +1, 'El banco las informó pero el sistema las descartó (duplicado o ignorado). Verificar que no sean cargas reales.', 'media');
+  add('pago_externo', 'Retiros pagados por BANCO EXTERNO (ingreso: la plata quedó en la cuenta)', out.sistema.pagosExternos, +1, 'Las fichas se descontaron en 1girox (cuenta como retiro) pero se pagó desde otra cuenta: la plata NO salió de este banco. Se toma como INGRESO del día y explica ese sobrante.', 'baja'); // #913
   add('pago_manual', 'Retiros pagados A MANO (por fuera de la API del banco)', out.sistema.pagosManual, +1, 'El sistema los cuenta como retiro pero el banco no registra la salida por API. Si se pagaron desde otra cuenta, es normal; si no, verificar.', 'alta');
   add('gastos_banco', 'Gastos pagados por la API del banco (registrados en Gastos)', out.sistema.gastosBanco, -1, 'Salieron del banco como gasto cargado en el panel: explican esa parte de las salidas; se descuentan del resultado del día.', 'baja');
   const salidasOtras = r0(out.banco.salidas - out.sistema.pagosBanco - out.banco.entradasDevueltas - out.sistema.gastosBanco);
@@ -21326,7 +21355,7 @@ async function _closeEnsure(dayKey, recalc) {
     try { doc = await DailyClose.create({ id: uuidv4(), ...t }); } catch (e) { if (e && e.code === 11000) doc = await DailyClose.findOne({ dateKey: dayKey }); else throw e; }
   } else if (doc.status !== 'finalizado' || recalc) { Object.assign(doc, t, { recalculatedAt: new Date() }); }
   await _closeAttachBalances(doc); _closeApply(doc, cfg);
-  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); doc.gastos = Number(doc.detalle && doc.detalle.sistema && doc.detalle.sistema.gastos) || 0; _closeApply(doc, cfg); } catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
+  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); const _ds = (doc.detalle && doc.detalle.sistema) || {}; doc.gastos = Number(_ds.gastos) || 0; doc.pagosExternos = Number(_ds.pagosExternos) || 0; doc.fondeos = Number(_ds.fondeos) || 0; _closeApply(doc, cfg); } /* #913: pagos externos + fondeos → arqueo */ catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
   await doc.save(); return doc;
 }
 // Cron: cada 20 min asegura el cierre de AYER y rellena hasta 7 días hacia atrás (idempotente por dateKey; corre en cada instancia sin duplicar).

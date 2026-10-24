@@ -5892,7 +5892,7 @@ async function cierresLoad() {
         // #744 (owner): cierres día a día, automáticos. Diferencia SIEMPRE visible (0 = cuadra) y "Ver detalle" con la conciliación.
         const arq = function (c) { const d = Number(c.diferencia) || 0; const num = (d > 0 ? '+' : '') + _clM(d).replace('$-', '-$'); if (c.arqueo === 'sin_datos') return '<span class="cl-st">— sin datos del banco</span>'; return c.arqueo === 'cuadra' ? '<span class="cl-st fin">✅ Da 0</span>' : ('<span class="cl-st bad">⚠ ' + (c.arqueo === 'faltante' ? 'Faltante' : 'Sobrante') + ' <b>' + num + '</b></span>'); };
         const det = function (c) { const d = c.detalle || {}; const s = d.sistema || {}, b = d.banco || {}; return '<small>auto ' + _clM(s.depositosAuto || 0) + (s.depositosManual ? ' · <b class="cl-warn">a mano ' + _clM(s.depositosManual) + '</b>' : '') + (s.depositosPrueba ? ' · prueba ' + _clM(s.depositosPrueba) : '') + '</small>'; };
-        const detR = function (c) { const d = c.detalle || {}; const s = d.sistema || {}; return '<small>banco ' + _clM(s.pagosBanco || 0) + (s.pagosManual ? ' · <b class="cl-warn">a mano ' + _clM(s.pagosManual) + '</b>' : '') + '</small>'; };
+        const detR = function (c) { const d = c.detalle || {}; const s = d.sistema || {}; return '<small>banco ' + _clM(s.pagosBanco || 0) + (s.pagosManual ? ' · <b class="cl-warn">a mano ' + _clM(s.pagosManual) + '</b>' : '') + (s.pagosExternos ? ' · <b style="color:var(--p-green,#16a34a)">banco externo ' + _clM(s.pagosExternos) + ' (ingreso)</b>' : '') + '</small>'; }; // #913
         list.innerHTML = '<table class="data-table cl-table" style="width:100%;"><thead><tr><th>Día</th><th>Estado</th><th>Depósitos</th><th>Retiros</th><th>Banco entró / salió</th><th>Regalos</th><th>NETO</th><th>Comisión</th><th>Gastos</th><th>RESULTADO</th><th>Diferencia</th><th></th></tr></thead><tbody>' + _clItems.map(function (c) {
             const fin = c.status === 'finalizado';
             return '<tr class="' + (fin ? 'fin' : 'pend') + (c.arqueo === 'faltante' || c.arqueo === 'sobrante' ? ' dif' : '') + '" id="cl-' + c.dateKey + '"><td><b>' + c.dateKey + '</b><br><small>' + c.nuevos + ' nuevos · ' + c.retenidos + ' ret.</small></td>' +
@@ -5927,6 +5927,7 @@ async function cierresDetalle(dk) {
             '<div>Depósitos a mano (agente): <b class="' + (s.depositosManual ? 'cl-warn' : '') + '">' + money(s.depositosManual || 0) + '</b> · ' + (s.depositosManualN || 0) + '</div>' +
             (s.depositosPrueba ? '<div>Depósitos de prueba: <b>' + money(s.depositosPrueba) + '</b> · ' + (s.depositosPruebaN || 0) + '</div>' : '') +
             '<div>Retiros: <b>' + money(s.retiros || 0) + '</b> · ' + (s.retirosN || 0) + ' (pagados por banco ' + money(s.pagosBanco || 0) + ' · a mano <b class="' + (s.pagosManual ? 'cl-warn' : '') + '">' + money(s.pagosManual || 0) + '</b>)</div>' +
+            (s.pagosExternos ? '<div>🏦 Pagados por banco externo (ingreso: la plata quedó en la cuenta): <b style="color:var(--p-green,#16a34a)">' + money(s.pagosExternos) + '</b> · ' + (s.pagosExternosN || 0) + '</div>' : '') + // #913
             (s.fondeos ? '<div>🏦 Fondeo (ingreso): <b style="color:var(--p-green,#16a34a)">' + money(s.fondeos) + '</b> · ' + (s.fondeosN || 0) + (d.fondeoNoVistoEnBanco ? ' <small class="cl-warn">(' + money(d.fondeoNoVistoEnBanco) + ' todavía no figura en el banco)</small>' : '') + '</div>' : '') + '</div>' + // #904
             '<div class="cl-rec-box"><b>🏦 Banco</b>' +
             '<div>Entró: <b>' + money(b.entradas || 0) + '</b> · ' + (b.entradasN || 0) + ' (acreditadas ' + money(b.entradasAcreditadas || 0) + ')</div>' +
@@ -5941,6 +5942,7 @@ async function cierresDetalle(dk) {
         html += lst('Cargas acreditadas a mano', it.depositosManual, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['nota', 'Nota']]);
         html += lst('Entradas del banco sin acreditar', it.entradasSinAcreditar, [['hora', 'Hora'], ['de', 'De'], ['monto', 'Monto'], ['estado', 'Estado']]);
         html += lst('Retiros pagados a mano', it.pagosManual, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['via', 'Vía']]);
+        html += lst('Retiros pagados por banco externo (ingreso)', it.pagosExternos, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['via', 'Vía']]); // #913
         html += lst('Cargas de prueba', it.depositosPrueba, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['nota', 'Nota']]);
         html += lst('Gastos del día', it.gastos, [['hora', 'Hora'], ['usuario', 'Destino'], ['monto', 'Monto'], ['agente', 'Cargó'], ['nota', 'Concepto']]); // #770
         html += _cierresGiroxHtml(dk, d.girox || {}, money, signed); // #888
@@ -16646,7 +16648,7 @@ async function atencionAnalisis(kind, offset) {
         } else {
             const tot = (s.pagosBancoN || 0) + (s.pagosManualN || 0); const pctAuto = tot ? Math.round((s.pagosBancoN || 0) * 100 / tot) : 100;
             const ver = !tot ? '<span class="at-ver">Sin retiros pagados ese día</span>' : (s.pagosManualN ? '<span class="at-ver bad">⚠ ' + s.pagosManualN + ' retiro(s) pagado(s) a mano · el banco pagó solo el ' + pctAuto + '%</span>' : '<span class="at-ver ok">✅ Todos pagados por el banco: ' + tot + ' retiro(s)</span>');
-            box.innerHTML = tabs + '<div class="at-kpis">' + _diaKpi('Retiros pedidos', m(s.retiros) + ' · ' + (s.retirosN || 0)) + _diaKpi('Pagados por el banco (API)', m(s.pagosBanco) + ' · ' + (s.pagosBancoN || 0)) + _diaKpi('Pagados a mano', m(s.pagosManual) + ' · ' + (s.pagosManualN || 0)) + _diaKpi('Banco: salidas', m(b.salidas) + ' · ' + (b.salidasN || 0)) + '</div>' + ver + lst('Ver los retiros pagados a mano', j.items && j.items.pagosManual, 'via');
+            box.innerHTML = tabs + '<div class="at-kpis">' + _diaKpi('Retiros pedidos', m(s.retiros) + ' · ' + (s.retirosN || 0)) + _diaKpi('Pagados por el banco (API)', m(s.pagosBanco) + ' · ' + (s.pagosBancoN || 0)) + _diaKpi('Pagados a mano', m(s.pagosManual) + ' · ' + (s.pagosManualN || 0)) + (s.pagosExternosN ? _diaKpi('Por banco externo (ingreso)', m(s.pagosExternos) + ' · ' + s.pagosExternosN) : '') + _diaKpi('Banco: salidas', m(b.salidas) + ' · ' + (b.salidasN || 0)) + '</div>' + ver + lst('Ver los retiros pagados a mano', j.items && j.items.pagosManual, 'via') + lst('Ver los pagados por banco externo', j.items && j.items.pagosExternos, 'via'); // #913
         }
     } catch (_) { box.innerHTML = '<div style="color:#ff8080;">Error de conexión</div>'; }
 }
@@ -17470,9 +17472,12 @@ async function inicioChangePin() {
 function _inicioEmpty(day) {
     const z = { users: 0, n: 0, total: 0 }; const today = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
     return { day: day || today, isToday: !day || day === today, generatedAt: new Date().toISOString(), app: { activeNow: 0, enteredToday: 0, enteredRetention: 0, enteredRetentionAds: 0, enteredNew72: 0 },
-        registrations: { total: 0, fromAds: 0, organic: 0, firstDepositSameDay: 0 }, deposits: { all: z, first: z, retention: z, new72: z, avg: 0 },
-        withdrawals: { requested: { n: 0, total: 0 }, paid: { n: 0, total: 0 } }, net: 0, adoption: { totalUsers: 0, withApp: 0, withNotif: 0, appPct: 0, notifPct: 0 } };
+        registrations: { total: 0, fromAds: 0, organic: 0, firstDepositSameDay: 0 }, deposits: { all: z, first: z, retention: z, new72: z, avg: 0, times: { once: z, twice: z, more: z } },
+        cameBack: { prevDay: '', depositedPrev: 0, enteredPrev: 0, deposited: { users: 0, n: 0, total: 0, names: [] }, entered: 0 },
+        withdrawals: { requested: { n: 0, total: 0 }, paid: { n: 0, total: 0 } }, net: 0, adoption: { base: 'cargadores', totalUsers: 0, depositors: 0, withApp: 0, withNotif: 0, appPct: 0, notifPct: 0 } };
 }
+// #913 (owner): "en INICIO poné ayer también y hoy por defecto".
+function inicioAyer() { const el = document.getElementById('inDay'); if (el) el.value = new Date(Date.now() - 3 * 3600000 - 86400000).toISOString().slice(0, 10); loadInicio(); }
 async function loadInicio() {
     const box = document.getElementById('inBody'); if (!box) return;
     clearTimeout(_inTimer);
@@ -17494,7 +17499,9 @@ function _renderInicio(box, d, notice) {
         const box1 = (ico, label, val, sub, col) => '<div class="in-box" style="border-top:3px solid ' + (col || '#6366f1') + '"><div class="in-l">' + ico + ' ' + label + '</div><div class="in-v">' + val + '</div>' + (sub ? '<div class="in-s">' + sub + '</div>' : '') + '</div>';
         const grp = (t, inner) => '<h3 class="in-h">' + t + '</h3><div class="in-grid">' + inner + '</div>';
         const lbl = new Date(d.day + 'T12:00:00Z').toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
-        box.innerHTML = (notice || '') + '<div style="color:#a5b4fc;font-size:.85rem;margin-bottom:.4rem;text-transform:capitalize">' + (d.isToday ? 'Hoy · ' : '') + lbl + ' · actualizado ' + new Date(d.generatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + '</div>' +
+        const isYest = !d.isToday && d.day === new Date(Date.now() - 3 * 3600000 - 86400000).toISOString().slice(0, 10); // #913
+        const tm = d.deposits.times || {}, cb = d.cameBack || {}; const z0 = { users: 0, n: 0, total: 0 };
+        box.innerHTML = (notice || '') + '<div style="color:#a5b4fc;font-size:.85rem;margin-bottom:.4rem;text-transform:capitalize">' + (d.isToday ? 'Hoy · ' : (isYest ? 'Ayer · ' : '')) + lbl + ' · actualizado ' + new Date(d.generatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + '</div>' +
             grp('📱 Gente en la app',
                 box1('🟢', 'Activos ahora', d.isToday ? n(d.app.activeNow || 0) : '—', d.isToday ? 'con la app abierta en los últimos 3 min' : 'sólo para hoy', '#22c55e') +
                 box1('👥', 'Entraron en el día', n(d.app.enteredToday), 'personas distintas', '#6366f1') +
@@ -17510,14 +17517,21 @@ function _renderInicio(box, d, notice) {
                 box1('🥇', 'Primeras cargas', m(d.deposits.first.total), n(d.deposits.first.users) + ' clientes cargaron por primera vez', '#f59e0b') +
                 box1('🔁', 'Retención (+72 h)', m(d.deposits.retention.total), n(d.deposits.retention.n) + ' cargas · ' + n(d.deposits.retention.users) + ' clientes', '#0ea5e9') +
                 box1('🆕', 'Nuevos (−72 h, no 1ª)', m(d.deposits.new72.total), n(d.deposits.new72.n) + ' cargas · ' + n(d.deposits.new72.users) + ' clientes', '#a855f7')) +
+            grp('🔂 Cuántas veces cargaron en el día', // #913
+                box1('1️⃣', 'Cargaron 1 vez', n((tm.once || z0).users), m((tm.once || z0).total), '#6366f1') +
+                box1('2️⃣', 'Cargaron 2 veces', n((tm.twice || z0).users), m((tm.twice || z0).total) + ' · ' + n((tm.twice || z0).n) + ' cargas', '#0ea5e9') +
+                box1('🔥', 'Cargaron más de 2 veces', n((tm.more || z0).users), m((tm.more || z0).total) + ' · ' + n((tm.more || z0).n) + ' cargas', '#f59e0b')) +
+            grp('↩️ Volvieron del día anterior' + (cb.prevDay ? ' (' + cb.prevDay.slice(8, 10) + '/' + cb.prevDay.slice(5, 7) + ')' : ''), // #913
+                box1('💵', 'Cargaron ayer y volvieron a cargar', n((cb.deposited || z0).users), m((cb.deposited || z0).total) + ' · de ' + n(cb.depositedPrev) + ' que cargaron el día anterior' + (((cb.deposited || {}).names || []).length ? '<br><span style="font-weight:400">' + escHtml(((cb.deposited || {}).names || []).join(', ')) + '</span>' : ''), '#16a34a') +
+                box1('📱', 'Entraron ayer y volvieron a entrar', n(cb.entered), 'de ' + n(cb.enteredPrev) + ' que entraron el día anterior' + (cb.enteredPrev ? ' · ' + Math.round(cb.entered * 100 / cb.enteredPrev) + '%' : ''), '#0ea5e9')) +
             grp('🏧 Retiros y neto',
                 box1('📤', 'Retiros pedidos', m(d.withdrawals.requested.total), n(d.withdrawals.requested.n) + ' pedidos', '#ef4444') +
                 box1('✅', 'Retiros pagados', m(d.withdrawals.paid.total), n(d.withdrawals.paid.n) + ' pagos', '#ef4444') +
                 box1('📊', 'Neto (cargas − pagados)', m(d.net), 'no incluye bonos', d.net >= 0 ? '#16a34a' : '#ef4444')) +
-            grp('📲 Aceptación de la app (todos los clientes)',
-                box1('👤', 'Registrados', n(d.adoption.totalUsers), 'clientes en total', '#6366f1') +
-                box1('📲', 'Instalaron la app', n(d.adoption.withApp), d.adoption.appPct + '% del total', '#0ea5e9') +
-                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% del total', '#f59e0b'));
+            grp('📲 Aceptación de la app (clientes que cargaron alguna vez)', // #913: base = cargadores, no registrados
+                box1('💳', 'Cargaron alguna vez', n(d.adoption.depositors), 'de ' + n(d.adoption.totalUsers) + ' registrados', '#6366f1') +
+                box1('📲', 'Instalaron la app', n(d.adoption.withApp), d.adoption.appPct + '% de los que cargaron', '#0ea5e9') +
+                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b'));
     }
 }
 

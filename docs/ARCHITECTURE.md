@@ -1402,6 +1402,26 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
 - **Casino (#695):** `ui.js enterCasino` espera 4×30 s y el error dice el motivo (`_fetchCasinoSession` devuelve `status`/`timedOut`);
   en Render el arranque en frío (~50 s) y los redeploys son la causa típica del "No pudimos abrirte el casino".
 
+## Cierres diarios y arqueo (#500 → #913) — `DailyClose`, `_closeEnsure` / `_closeApply` / `_closeReconcile` (server.js)
+- Uno por día ART (`dateKey` único); `_closeTick` cada 20 min recalcula los últimos 3 días y finaliza solo el día anterior (#744). Números del
+  sistema salen de `datosIa.dayTotals` (Transaction); lado banco de la API de hgcash (`_bankDayFromApi`) o de los avisos, y saldos 00:00
+  (`BankBalanceSnapshot`). `resultado = neto − comisión − gastos` (#770).
+- **Arqueo (#913):** `diferencia = (bancoEntró − bancoSalió) − (depósitos − retiros) − ingresosExternos`, donde `ingresosExternos = pagosExternos
+  (retiros pagados por BANCO EXTERNO, #904 `PendingPayout.paidVia:'other_bank'`) + fondeos (Expense kind 'fondeo')`. Son plata de la cuenta que el
+  sistema no tiene como depósito: las fichas del retiro salieron en 1girox pero la plata no salió de este banco. Variante por saldos: igual,
+  restando lo mismo. No tocan el RESULTADO. `dayTotals.payoutsPaid` excluye los `other_bank`.
+- **Conciliación (`detalle`):** sistema (auto / a mano / prueba / pagos banco / a mano / externos / gastos / fondeos) vs banco (entradas acreditadas,
+  sin acreditar, devueltas, dup) y `causas[]` con impacto firmado; `sinExplicar` = lo que queda para revisar. Lado 1girox (#888) en
+  `detalle.girox` vs `DailyClose.giroxPanel` que carga el owner.
+- **Regla para flujos nuevos:** todo lo que mueva plata por fuera de la API del banco deja rastro (`paidVia`, `adminUsername`, Expense) para que la
+  conciliación lo nombre; un pago desde otra cuenta se marca `other_bank` (botón "Pagado por banco externo") y entra solo como ingreso.
+
+## INICIO del panel (#876 → #913) — `GET /api/admin/inicio/stats?day=`
+- Clave propia `Config['inicioPinHash']` (header `x-inicio-pin`). Día por defecto hoy; botones Hoy / Ayer / fecha. Grupos: gente en la app
+  (AppSession), registros del día, cargas (1ª / retención +72 h / nuevos), **veces que cargaron** (1 / 2 / más de 2 por cliente en el día),
+  **volvieron del día anterior** (cargaron ayer y hoy, con nombres; entraron ayer y hoy), retiros y neto, **aceptación de la app sobre los que
+  cargaron alguna vez** (instalaron / notificaciones; `totalUsers` sólo de referencia). Todo por agregaciones; no bajar movimientos sueltos.
+
 ## Historias automáticas (#827 → #909)
 
 `src/services/storyAutopilot.js` arma el PLAN del día (`planDay(dayKey, matches, ctx)`: determinístico para un mismo día) y `_storyAutoTick`

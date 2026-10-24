@@ -39,6 +39,9 @@ const schema = new mongoose.Schema({
   // #888: totales del CIERRE DEL PANEL DE 1GIROX que carga el owner ({ cargas, retiros, bonos, by, at }) para compararlos con la app.
   giroxPanel: { type: mongoose.Schema.Types.Mixed, default: null },
   gastos: { type: Number, default: 0 }, // #770: gastos del día (Expense) — se descuentan del RESULTADO
+  // #913: INGRESOS de la cuenta que el sistema no tiene como depósito: retiros pagados por BANCO EXTERNO (las fichas salieron, la plata no)
+  // y FONDEOS (#904). Se restan de la diferencia del arqueo (no tocan el RESULTADO).
+  pagosExternos: { type: Number, default: 0 }, fondeos: { type: Number, default: 0 }, ingresosExternos: { type: Number, default: 0 },
   autoFinalizedAt: { type: Date, default: null },
   generatedAt: { type: Date, default: Date.now },
   recalculatedAt: { type: Date, default: null },

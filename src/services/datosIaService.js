@@ -480,7 +480,8 @@ async function dayTotals(models, dayKey) {
       const bm = await BankMovement.aggregate([{ $match: { createdAt: { $gte: new Date(d0.getTime() - DAY), $lte: new Date(d1.getTime() + DAY) } } }, { $addFields: { dd: { $ifNull: ['$date', '$createdAt'] } } }, { $match: { dd: { $gte: d0, $lte: d1 }, status: { $nin: ['rejected', 'failed', 'cancelled', 'REJECTED', 'FAILED', 'CANCELLED'] } } }, { $group: { _id: '$direction', amt: { $sum: '$amount' }, n: { $sum: 1 } } }]);
       bm.forEach((x) => { if (String(x._id).toLowerCase() === 'inbound') bankMovsIn = x.amt; else if (String(x._id).toLowerCase() === 'outbound') bankMovsOut = x.amt; });
     }
-    if (PendingPayout) { const pp = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: d0, $lte: d1 } } }, { $group: { _id: null, amt: { $sum: '$amount' } } }]); payoutsPaid = (pp[0] && pp[0].amt) || 0; }
+    // #913: los pagados por BANCO EXTERNO (other_bank) no salieron de esta cuenta: no cuentan como salida del banco.
+    if (PendingPayout) { const pp = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: d0, $lte: d1 }, paidVia: { $ne: 'other_bank' } } }, { $group: { _id: null, amt: { $sum: '$amount' } } }]); payoutsPaid = (pp[0] && pp[0].amt) || 0; }
   } catch (_) {}
   const ids = depU.map((x) => x._id).filter(Boolean);
   const firsts = ids.length ? await Transaction.aggregate([{ $match: { ...realDep, userId: { $in: ids } } }, { $group: { _id: '$userId', first: { $min: '$timestamp' } } }]) : [];

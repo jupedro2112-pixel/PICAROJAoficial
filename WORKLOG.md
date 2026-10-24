@@ -8,6 +8,28 @@
 
 ## Sesión 2026-10-24
 
+### 913. 🏠 INICIO: aceptación sobre CARGADORES, Ayer, veces que cargaron, volvieron del día anterior · 🏦 pagos por banco externo = INGRESO del cierre — admin SW v186
+**Pedido (owner):** "la aceptación de la app de INICIO hacela con usuarios que cargaron, no que se registraron; tema cierres: si hay pagos de
+forma externa tomalos como un ingreso en el cierre porque en el panel van a estar las fichas y la plata también, manejalo para que el próximo
+cierre dé bien" + "en INICIO poné ayer también y hoy por defecto, detallá cuántos cargaron 2 veces y más de 2, qué gente volvió del día anterior".
+- **INICIO (`GET /api/admin/inicio/stats`):** `adoption` ahora se calcula sobre los que tienen al menos una carga real (`Transaction.distinct`
+  con el mismo filtro REAL): `depositors`, `withApp`/`withNotif` y los % son "de los que cargaron"; `totalUsers` queda como referencia.
+  Nuevo `deposits.times` {once, twice, more} (clientes/cargas/$ según cuántas veces cargó cada uno en el día) y `cameBack`: `deposited`
+  (cargaron el día anterior Y volvieron a cargar, con hasta 40 nombres), `entered` (entraron a la app ayer y hoy), más los totales del día
+  anterior para el %. Panel: botón **Ayer** (Hoy sigue por defecto), grupos "🔂 Cuántas veces cargaron en el día" y "↩️ Volvieron del día
+  anterior", y "📲 Aceptación de la app (clientes que cargaron alguna vez)".
+- **Cierre:** los retiros pagados con **🏦 Pagado por banco externo** (#904, `paidVia:'other_bank'`) ya no van en "pagados a mano": son
+  `sistema.pagosExternos` (+ items) y la causa `pago_externo` (+, severidad baja, "ingreso: la plata quedó en la cuenta"). `DailyClose` guarda
+  `pagosExternos`, `fondeos` e `ingresosExternos` (= suma) y `_closeApply` los **resta de la diferencia del arqueo** (también en la variante por
+  saldo inicio/fin): con todo registrado el arqueo da 0. `dayTotals.payoutsPaid` excluye los `other_bank` (antes inflaban `bankOutAuto` y
+  tapaban la diferencia). El RESULTADO del día NO cambia (las fichas salieron igual; es un ingreso de la CUENTA, no ganancia). El lado 1girox
+  sigue contando el retiro (ahí están las fichas). Panel: tabla de cierres ("banco externo $X (ingreso)"), detalle, lista propia y el análisis
+  de Retiros de Atención.
+- Verificación a mano: dep $1.000.000, retiros $300.000 (100.000 externos), fondeo $1.650.000, banco entró $2.650.000 / salió $200.000 ⇒
+  diferencia 0 en las dos variantes; la conciliación lo explica con 'fondeo' + 'pago_externo'.
+**Para el owner:** el próximo cierre toma solos los pagos marcados "banco externo" y los fondeos registrados en Gastos con la FECHA en que entró la
+plata. Si querés que esos ingresos sumen también al RESULTADO (hoy no), decímelo.
+
 ### 912. 🔒 Soporte: botón "No cumple rollover y quiere retirar" con los números REALES del cliente
 **Pedido (owner):** "un botón de rollover para la gente que no entiende cuánto tiene que apostar para completar el rollover, del bono y del
 saldo cargado; para la gente de soporte, que se le envíe eso y detalle todo" · "ponele al botón: no cumple rollover y quiere retirar".

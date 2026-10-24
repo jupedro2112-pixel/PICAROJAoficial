@@ -2807,7 +2807,7 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
             <!-- #873 (owner): ALERTAS DE ESTAFA — reglas + puntaje (src/services/fraudRadar.js); bloquear usa /api/admin/users/:id/block -->
             <!-- #876 INICIO: números del día en recuadros (clave propia: Config inicioPinHash) -->
             <section id="inicioSection" class="section">
-                <div class="panel-header"><h2>🏠 INICIO</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="date" id="inDay" class="form-input" style="width:auto" onchange="loadInicio()"><button class="btn btn-secondary" onclick="document.getElementById('inDay').value='';loadInicio()">Hoy</button><button class="btn btn-secondary" onclick="loadInicio()">🔄</button><button class="btn btn-secondary" onclick="inicioChangePin()">🔑 Clave</button></div></div>
+                <div class="panel-header"><h2>🏠 INICIO</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="date" id="inDay" class="form-input" style="width:auto" onchange="loadInicio()"><button class="btn btn-secondary" onclick="document.getElementById('inDay').value='';loadInicio()">Hoy</button><button class="btn btn-secondary" onclick="inicioAyer()">Ayer</button><button class="btn btn-secondary" onclick="loadInicio()">🔄</button><button class="btn btn-secondary" onclick="inicioChangePin()">🔑 Clave</button></div></div>
                 <div id="inBody">Cargando…</div>
             </section>
             <section id="fraudSection" class="section">
