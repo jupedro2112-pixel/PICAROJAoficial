@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 919. 🟣 Sorteos: violeta OSCURO como la captura (fondo profundo #2a0a4f→#4a1283, borde lila #b05cff, texto blanco, "Ver más" lila claro) — SW v609
+**Pedido (owner, captura de la gemela):** "este color así".
+- Tokens `--srt-*` (claro y dark) + `--srt-lite`; borde lila de 1,5 px en tarjetas, banner, tarjeta cruzada, botón Anotarme, recuadro "Tu puesto", cabeceras
+  de la pantalla y de las Bases, y el recuadro de la barra de Girox (hereda el gradiente). Acentos que eran lila claro sobre fondo claro pasan a `--srt-g2`.
+
 ### 918. 🟣 Sorteos en VIOLETA, tarjetas separadas, Bases con paso a paso y cobro del 1 al 10, recuadro rectangular en Girox — SW v608
 **Pedido (owner):** "los recuadros del sorteo dejalos separados, en dos, no juntos; los términos y condiciones adentro de cada uno, cómo funciona
 todo perfecto y cómo se cobra, el día y demás: dentro del mes de diciembre se paga el premio dentro de los primeros 10 días; un color
