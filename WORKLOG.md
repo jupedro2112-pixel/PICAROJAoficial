@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 917. 🎰 Girox directo: el pill del medio de la barra pasa de "PICA ROJA · OFICIAL" a "🏆 Sorteo mensual · NOVEDAD" (abre el sorteo) — SW v607
+**Pedido (owner, captura):** "acá adentro de Girox poné Sorteo mensual (NOVEDAD) con ese tamaño, sacá PICA ROJA y que se pueda expandir desde
+ahí adentro para ver la novedad".
+- `casinoTopBar` (home.js): el `<span class="casino-brand">` pasa a `<button id="casinoSrtBtn" class="casino-brand casino-srt">` con el mismo
+  `.cb-box` (mismo tamaño), ícono del premio, título del sorteo vigente y subtítulo vivo que pinta sorteos.js: "NOVEDAD · 7 D 23 H" antes de
+  empezar, "EN VIVO · NOVEDAD" o "PUESTO #N" durante, "CERRADO" después. Toca ⇒ `VIP.sorteos.open('mensual')` encima del casino
+  (`body.casino-open .srt-modal` z-index 100002 > overlay 99999). Verde (`--srt-*`). Si los sorteos están apagados el botón se oculta.
+
 ### 916. ⏱️ Soporte: cierre automático a los 30 min sin respuesta del cliente, con mensaje de cierre y cerrado en el panel
 **Pedido (owner):** "hacé cierre de mensaje si el usuario no contesta dentro de los 30 min: 'por no recibir respuestas cerramos la conversación
 de forma automática', eso en Soporte".

@@ -2733,3 +2733,13 @@ html.srt-lock, html.srt-lock body { overflow: hidden; }
 .srt-terms-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px calc(30px + env(safe-area-inset-bottom, 0px)); }
 .srt-terms-body h2 { margin: 0 0 10px; font-size: 17px; font-weight: 900; }
 .srt-tc { margin: 0; padding-left: 18px; } .srt-tc li { font-size: 13.5px; line-height: 1.45; margin-bottom: 9px; } .srt-tc li b { color: var(--srt-g); }
+
+/* #917: pill "Sorteo mensual · NOVEDAD" en el medio de la barra del casino (mismo tamaño que el PICA ROJA que reemplaza; verde) */
+.casino-brand.casino-srt { pointer-events: auto !important; border: 0; background: none; padding: 0 2px; cursor: pointer; font-family: var(--p-font); }
+.casino-brand.casino-srt .cb-box { border-color: var(--srt-g3) !important; background: var(--srt-soft) !important; }
+.casino-brand.casino-srt .cb-ico { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1; flex: 0 0 auto; }
+.casino-brand.casino-srt b { color: var(--srt-g) !important; }
+.casino-brand.casino-srt small { color: var(--srt-g2) !important; display: block !important; }
+.casino-topbar .casino-brand.casino-srt .cb-ico { width: 22px; height: 22px; font-size: 16px; }
+@media (max-width: 360px) { .casino-brand.casino-srt .cb-txt { display: flex !important; } .casino-brand.casino-srt .cb-box { border-radius: 999px !important; padding: 3px 7px 3px 3px !important; } .casino-brand.casino-srt small { display: none !important; } }
+body.casino-open .srt-modal { z-index: 100002 !important; }

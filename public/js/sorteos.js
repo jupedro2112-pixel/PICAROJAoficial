@@ -40,6 +40,16 @@
             box.hidden = false;
             box.innerHTML = list.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-card" onclick="VIP.sorteos.open(\'' + s.key + '\')"><span class="srt-card-img">' + esc(p1.img || s.emoji) + '</span><span class="srt-card-t"><b>' + esc(s.title) + '</b><i>' + esc(p1.name || '') + '</i><small>' + esc(cardSub(s)) + '</small></span></button>'; }).join('');
         });
+        // #917: pill del medio de la barra del casino (Girox directo): título del sorteo vigente + subtítulo vivo.
+        try {
+            const s0 = list.find((x) => x.status === 'live') || list[0]; const btn = _el('casinoSrtBtn');
+            if (btn) {
+                btn.hidden = !s0;
+                if (s0) { const ti = btn.querySelector('[data-srt-brand-title]'), su = btn.querySelector('[data-srt-brand-sub]'), ic = btn.querySelector('[data-srt-brand-ico]'); const p1 = (s0.prizes || [])[0] || {};
+                    if (ti) ti.textContent = s0.title; if (ic) ic.textContent = p1.img || s0.emoji || '🏆';
+                    if (su) su.textContent = s0.status === 'live' ? (s0.me && s0.me.joined && s0.me.points > 0 ? 'PUESTO #' + num(s0.me.rank) : 'EN VIVO · NOVEDAD') : (s0.status === 'soon' ? 'NOVEDAD · ' + cdShort(s0.startsInMs).toUpperCase() : 'CERRADO'); }
+            }
+        } catch (_) {}
         document.querySelectorAll('[data-srt-banner]').forEach((box) => {
             const s = list.find((x) => x.status === 'live') || list[0];
             if (!s) { box.hidden = true; box.innerHTML = ''; return; }
