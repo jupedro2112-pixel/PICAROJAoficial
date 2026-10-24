@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 923. 🚗 Foto del Peugeot 208 como premio del Gran Sorteo (emoji o FOTO por premio) — SW v613 · admin SW v189
+**Pedido (owner):** "usá fotos de auto 208".
+- `public/images/sorteos/peugeot-208.jpg` (+ `-sq`): foto CC BY 2.0 de Wikimedia Commons (autor Charles, Port Chester NY), recortada; crédito en
+  `public/images/sorteos/CREDITS.txt`. Default del 1° premio del Gran Sorteo: "Peugeot 208 0 km" con esa foto.
+- El `img` de cualquier premio acepta emoji o imagen (ruta `/images/...` o URL https): `pic()` en sorteos.js la pinta en tarjetas, banner de Girox
+  directo, portada (1° con foto grande a lo ancho), tarjeta cruzada y el recuadro de la barra del casino. Panel: el campo del premio dice "emoji o URL de
+  la foto". Para usar la foto del auto real: subir la imagen y pegar la URL ahí.
+
 ### 922. 🚗📱 Banner de Girox directo en DOS: Gran Sorteo (auto) a la izquierda y Sorteo mensual (iPhone) a la derecha — SW v612
 **Pedido (owner, captura):** "dividilo en 2 y poné de un lado el del auto y del otro, segundo, el del iPhone".
 - `[data-srt-banner]` pasa a grilla de 2 columnas (`.srt-banner`, clase `one` si hay un solo sorteo); orden fijo gran → mensual. Cada mitad: imagen

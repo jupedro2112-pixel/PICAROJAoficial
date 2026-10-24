@@ -30,7 +30,7 @@ function defaults() {
       enabled: true, key: 'gran', title: 'Gran Sorteo', emoji: '🚗', start: '2026-11-01', end: '2027-01-31',
       pts: 100, ptsPer: 100000, dayDepositMin: 10000, dayDepositPts: 10, missionWeekPct: 10,
       prizes: [
-        { pos: 1, img: '🚗', name: 'Auto 0 km', value: 'Valorado en $30.000.000' },
+        { pos: 1, img: '/images/sorteos/peugeot-208.jpg', name: 'Peugeot 208 0 km', value: 'Valorado en $30.000.000' }, // #923: foto (CC BY, ver public/images/sorteos/CREDITS.txt)
         { pos: 2, img: '🏝️', name: 'Viaje al Caribe para 2', value: 'Todo incluido · 5 días' },
         { pos: 3, img: '💵', name: 'USD 2.000', value: 'En efectivo' }
       ],

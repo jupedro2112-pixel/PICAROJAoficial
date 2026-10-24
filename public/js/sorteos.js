@@ -18,6 +18,9 @@
     function cdShort(ms) { const c = cd(ms); return c.d > 0 ? c.d + ' d ' + c.h + ' h' : (c.h > 0 ? c.h + ' h ' + c.m + ' min' : c.m + ' min'); }
     function untilOf(s) { return new Date(s.status === 'soon' ? s.start : s.end).getTime(); }
     function get(key) { return _data && (_data.sorteos || []).find((x) => x.key === key); }
+    // #923 (owner: "usá fotos del auto 208"): el `img` de un premio puede ser un emoji o una FOTO (ruta /images/... o URL http). `cls` = clase del contenedor.
+    const isPic = (v) => /^(\/|https?:\/\/)/.test(String(v || ''));
+    function pic(v, cls, alt) { v = v || '🎁'; return isPic(v) ? '<span class="' + cls + ' pic"><img src="' + esc(v) + '" alt="' + esc(alt || '') + '" loading="lazy"></span>' : '<span class="' + cls + '">' + esc(v) + '</span>'; }
 
     async function load() {
         if (_loading) return; const tok = VIP.state && VIP.state.currentToken; if (!tok) return; _loading = true;
@@ -38,7 +41,7 @@
         document.querySelectorAll('[data-srt-cards]').forEach((box) => {
             if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
             box.hidden = false;
-            box.innerHTML = list.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-card" onclick="VIP.sorteos.open(\'' + s.key + '\')"><span class="srt-card-img">' + esc(p1.img || s.emoji) + '</span><span class="srt-card-t"><b>' + esc(s.title) + '</b><i>' + esc(p1.name || '') + '</i><small>' + esc(cardSub(s)) + '</small></span></button>'; }).join('');
+            box.innerHTML = list.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-card" onclick="VIP.sorteos.open(\'' + s.key + '\')">' + pic(p1.img || s.emoji, 'srt-card-img', p1.name) + '<span class="srt-card-t"><b>' + esc(s.title) + '</b><i>' + esc(p1.name || '') + '</i><small>' + esc(cardSub(s)) + '</small></span></button>'; }).join('');
         });
         // #917: pill del medio de la barra del casino (Girox directo): título del sorteo vigente + subtítulo vivo.
         try {
@@ -46,7 +49,7 @@
             if (btn) {
                 btn.hidden = !s0;
                 if (s0) { const ti = btn.querySelector('[data-srt-brand-title]'), su = btn.querySelector('[data-srt-brand-sub]'), ic = btn.querySelector('[data-srt-brand-ico]'); const p1 = (s0.prizes || [])[0] || {};
-                    if (ti) ti.textContent = s0.title; if (ic) ic.textContent = p1.img || s0.emoji || '🏆';
+                    if (ti) ti.textContent = s0.title; if (ic) { const v = p1.img || s0.emoji || '🏆'; if (isPic(v)) { ic.classList.add('pic'); ic.innerHTML = '<img src="' + esc(v) + '" alt="">'; } else { ic.classList.remove('pic'); ic.textContent = v; } }
                     if (su) su.textContent = s0.status === 'live' ? (s0.me && s0.me.joined && s0.me.points > 0 ? 'PUESTO #' + num(s0.me.rank) : 'EN VIVO · NOVEDAD') : (s0.status === 'soon' ? 'NOVEDAD · ' + cdShort(s0.startsInMs).toUpperCase() : 'CERRADO'); }
             }
         } catch (_) {}
@@ -55,7 +58,7 @@
             const ordered = ['gran', 'mensual'].map((k) => list.find((x) => x.key === k)).filter(Boolean).concat(list.filter((x) => !['gran', 'mensual'].includes(x.key)));
             if (!ordered.length) { box.hidden = true; box.innerHTML = ''; return; }
             box.hidden = false; box.classList.toggle('one', ordered.length === 1);
-            box.innerHTML = ordered.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\')"><span class="srt-ban-img">' + esc(p1.img || s.emoji) + '</span><span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small><em>Ver más ›</em></span></button>'; }).join('');
+            box.innerHTML = ordered.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\')">' + pic(p1.img || s.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small><em>Ver más ›</em></span></button>'; }).join('');
         });
     }
     // ---- Pantalla del sorteo
@@ -85,9 +88,9 @@
     function hero(s) {
         const P = (s.prizes || []); const by = (n) => P.find((p) => p.pos === n) || { name: '', value: '', img: '🎁' };
         const p1 = by(1), p2 = by(2), p3 = by(3);
-        const side = (p) => '<div class="srt-hero-s"><span class="srt-hero-img s">' + esc(p.img) + '</span><i class="srt-hero-pos">' + p.pos + '° puesto</i><b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>';
+        const side = (p) => '<div class="srt-hero-s">' + pic(p.img, 'srt-hero-img s', p.name) + '<i class="srt-hero-pos">' + p.pos + '° puesto</i><b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>';
         return '<div class="srt-hero"><div class="srt-hero-t">' + (s.key === 'mensual' ? '🎁 Lo que se sortea este mes' : '🎁 Lo que se sortea') + '</div>' +
-            '<div class="srt-hero-1"><span class="srt-hero-img">' + esc(p1.img) + '</span><div class="srt-hero-1t"><i class="srt-hero-pos">🥇 1° puesto</i><b>' + esc(p1.name) + '</b>' + (p1.value ? '<small>' + esc(p1.value) + '</small>' : '') + '</div></div>' +
+            '<div class="srt-hero-1' + (isPic(p1.img) ? ' has-pic' : '') + '">' + pic(p1.img, 'srt-hero-img', p1.name) + '<div class="srt-hero-1t"><i class="srt-hero-pos">🥇 1° puesto</i><b>' + esc(p1.name) + '</b>' + (p1.value ? '<small>' + esc(p1.value) + '</small>' : '') + '</div></div>' +
             '<div class="srt-hero-row">' + side(p2) + side(p3) + '</div>' +
             '<p class="srt-hero-p">Ganan los 3 anotados con más puntos al cierre. Cada premio se puede cobrar en efectivo por su valor.</p></div>';
     }
@@ -131,7 +134,7 @@
     function crossCard(s) {
         const o = (_data.sorteos || []).find((x) => x.key !== s.key); if (!o) return '';
         const p1 = (o.prizes || [])[0] || {};
-        return '<button type="button" class="srt-cross" onclick="VIP.sorteos.open(\'' + o.key + '\')"><span class="srt-card-img">' + esc(p1.img || o.emoji) + '</span><span class="srt-card-t"><b>' + esc(o.title) + '</b><i>' + esc(p1.name) + '</i><small>' + esc(cardSub(o)) + '</small></span><em>Ver ›</em></button>';
+        return '<button type="button" class="srt-cross" onclick="VIP.sorteos.open(\'' + o.key + '\')">' + pic(p1.img || o.emoji, 'srt-card-img', p1.name) + '<span class="srt-card-t"><b>' + esc(o.title) + '</b><i>' + esc(p1.name) + '</i><small>' + esc(cardSub(o)) + '</small></span><em>Ver ›</em></button>';
     }
     // #921 (owner): orden de la pantalla — 1) inicio del sorteo bien chico arriba · 2) anotarse compacto · 3) el premio · 4) cómo sumar puntos ·
     // 5) ranking · 6) Bases (y la tarjeta del otro sorteo al final).
