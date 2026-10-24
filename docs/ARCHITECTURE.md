@@ -1541,5 +1541,4 @@ misiones, sorteos, VIP y referidos no miran el flag. Un regalo de bienvenida nue
 - `Config['depositRolloverX']` = 1 (bono `bonusRolloverX` = 5). Textos: `.rx-dep`/`.rx-bon` los pinta home.js desde `/api/platforms`; los comandos
   usan {carga}/{rollover}. Retiro mínimo `Config['withdrawMinArs']` = 5.000; la app lo lee de `platformsData.withdrawMinArs` (fallback 5.000).
 - Registro abierto (`User.noWelcomeGifts`): `retentionJourney.pickStep` calcula `trusted = !noWelcome || deposits ≥ TRUST_DEPOSITS`; sin confianza los
-  regalos `fixed` se convierten en percent `UNTRUSTED_PCT` y no existe oferta de 2ª carga. Con confianza, una vez, sale `trust-5` (clave
-  `trust-5@reg`) y el cliente queda como cualquier otro. El Centro de avisos muestra el segmento "confianza" el día que les toca.
+  regalos `fixed` se convierten en percent `UNTRUSTED_PCT` y no existe oferta de 2ª carga. Con confianza el cliente queda como cualquier otro (sin paso especial, #977).
