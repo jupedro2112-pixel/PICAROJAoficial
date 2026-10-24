@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 946. ⭐ Reseñas de 5 estrellas aprobadas automáticamente
+**Pedido (owner):** "las reseñas de 5 estrellas aprobalas directamente".
+- `POST /api/reviews`: con 5★ nace `approved:true` (`approvedBy:'auto-5-estrellas'`) y sale al instante en el registro público; 1-4★ siguen pendientes
+  para el panel. One-shot `mig946Approve5Stars` al boot: aprueba las 5★ que estaban esperando. El regalo por opinar (#875) no cambia.
+
 ### 945. 🎰 Casino: el banner del sorteo cierra con ✕ (en vez de –) y vuelve a la píldora del medio — SW v632
 **Pedido (owner, capturas):** "eso dejalo fijo así (píldora) y si lo abren que se abra así (banner abajo); en la punta, en vez de un menos, una X y que vuelva
 a su lugar". Sólo cambia el botón: ✕ ⇒ `casinoBar(false)` (banner oculto, píldora en el medio). El resto ya era así desde #935/#937.

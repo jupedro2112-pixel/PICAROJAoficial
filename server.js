@@ -12744,6 +12744,14 @@ async function initializeData() {
         await Config.set('migration_reviews_avg_48_done', true, 'startup-migration');
       }
     } catch (e) { console.warn('[startup-migration] reseñas 4,8:', e.message); }
+    // #946 (owner 2026-10-24): las 5★ que estaban esperando aprobación se aprueban de una (una sola vez; las nuevas nacen aprobadas).
+    try {
+      if (!(await getConfig('mig946Approve5Stars', null))) {
+        await Config.set('mig946Approve5Stars', new Date().toISOString(), 'startup-migration');
+        const r = await Review.updateMany({ approved: false, stars: 5 }, { $set: { approved: true, approvedBy: 'auto-5-estrellas', approvedAt: new Date(), updatedAt: new Date() } });
+        console.log('✅ Reseñas (#946): ' + (r.modifiedCount || r.nModified || 0) + ' de 5★ pendientes aprobadas');
+      }
+    } catch (e) { console.warn('[startup-migration] reseñas 5★:', e.message); }
   } catch (e) { console.warn('[startup-migration] reseñas seed:', e.message); }
 
   // #281 (owner 2026-10-17, "ponele 10 %"): en producción Config['autoLoadBonusPct'] quedó en 0 y el cartel
@@ -25345,9 +25353,12 @@ app.post('/api/reviews', authMiddleware, async (req, res) => {
     }
     const now = new Date();
     try {
+      // #946 (owner): "las reseñas de 5 estrellas aprobalas directamente" ⇒ nacen aprobadas (salen al instante en el registro público);
+      // las de 1-4★ siguen esperando al panel (Reseñas) como siempre.
+      const auto5 = stars === 5;
       await Review.create({
         id: uuidv4(), userId, username, stars, comment, contactPhone,
-        approved: false, createdAt: now, updatedAt: now
+        approved: auto5, approvedBy: auto5 ? 'auto-5-estrellas' : null, approvedAt: auto5 ? now : null, createdAt: now, updatedAt: now
       });
     } catch (e) {
       if (e && e.code === 11000) {
