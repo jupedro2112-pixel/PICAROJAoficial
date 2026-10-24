@@ -2648,23 +2648,17 @@ html.sat-fixed.ios-notch #casinoTopBar { padding-top: var(--sat) !important; }
 .ncta-go { display: block; width: 100%; border: 0; border-radius: 999px; padding: 12px; background: var(--p-red, #e60023); color: #fff; font: 800 15px var(--p-font); cursor: pointer; }
 .ncta-no { display: block; width: 100%; margin-top: 6px; border: 0; background: none; color: var(--p-muted, #666); font: 700 13px var(--p-font); padding: 8px; cursor: pointer; }
 
-/* #900 resumen "Cómo funciona todo" en Soporte */
-.sp-faq { margin: 8px 0 2px; border: 1px solid var(--p-border); border-radius: 12px; background: var(--p-surface); }
-.sp-faq summary { cursor: pointer; padding: 8px 10px; font: 800 12.5px var(--p-font); color: var(--p-text); list-style: none; }
-.sp-faq summary::-webkit-details-marker { display: none; }
-.sp-faq[open] summary { border-bottom: 1px solid var(--p-border); }
-.sp-faq ul { margin: 0; padding: 8px 12px 10px 26px; display: grid; gap: 6px; font: 500 12.5px/1.4 var(--p-font); color: var(--p-muted); }
-.sp-faq li b { color: var(--p-text); }
-/* #907 (owner: "no aparece la forma de ver menos, no se puede cerrar"): el resumen tiene alto MÁXIMO con scroll propio (nunca tapa
-   el chat ni la caja), flecha ▾/▴ en el título y botón "Ver menos · cerrar" al pie. Abierto, la tarjeta compacta vuelve a columna. */
-.sp-faq summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; -webkit-tap-highlight-color: transparent; }
-.sp-faq summary span { flex: 1 1 auto; min-width: 0; }
-.sp-faq-arrow { flex: 0 0 auto; font-style: normal; font: 700 11px var(--p-font); color: var(--p-muted); }
-.sp-faq-arrow::before { content: 'ver ▾'; }
-.sp-faq[open] .sp-faq-arrow::before { content: 'ver menos ▴'; color: var(--p-red); }
-.sp-faq ul { max-height: 38vh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.sp-faq-less { display: block; width: 100%; border: 0; border-top: 1px solid var(--p-border); border-radius: 0 0 12px 12px; background: var(--p-card); color: var(--p-red); font: 800 12.5px var(--p-font); padding: 9px 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.sp-faq-less:active { background: var(--p-surface-2); }
-body.sp-sent .sp-intro.sp-faq-open:not(.sp-open) .sp-body { flex-direction: column; align-items: stretch; }
-.sp-intro.sp-faq-open .sp-faq { width: 100%; }
-@media (max-height: 640px) { .sp-faq ul { max-height: 32vh; } }
+/* #900 → #910 (owner: "que aparezca arriba y se pueda leer, un recuadro para ver, bajar y cerrar"): el resumen "Cómo funciona todo" de
+   Soporte es un BOTÓN en la tarjeta y abre un recuadro fijo encima de todo (#spFaqModal) con cabecera, lista con scroll y botón cerrar. */
+.sp-faq-btn { margin: 8px 0 2px; width: 100%; text-align: left; border: 1px solid var(--p-border); border-radius: 12px; background: var(--p-surface); color: var(--p-text); padding: 10px 12px; font: 800 12.5px var(--p-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sp-faq-btn:active { background: var(--p-surface-2); }
+body.sp-sent .sp-intro:not(.sp-open) .sp-faq-btn { width: auto; margin: 0; padding: 7px 10px; border-radius: 999px; font-size: 11.5px; }
+.sp-faq-modal { position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .55); }
+.sp-faq-modal[hidden] { display: none; }
+.sp-faq-box { width: 100%; max-width: 420px; max-height: min(84vh, calc(100dvh - 32px)); display: flex; flex-direction: column; background: var(--p-card, #fff); color: var(--p-text, #111); border-radius: 18px; box-shadow: 0 18px 50px rgba(0, 0, 0, .35); overflow: hidden; }
+.sp-faq-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--p-border); font: 900 16px var(--p-font); color: var(--p-text); }
+.sp-faq-x { flex: 0 0 auto; border: 0; background: var(--p-surface); color: var(--p-text); width: 34px; height: 34px; border-radius: 50%; font: 800 16px var(--p-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sp-faq-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 12px 16px; }
+.sp-faq-scroll ul { margin: 0; padding: 0 0 0 20px; display: grid; gap: 11px; font: 500 14.5px/1.5 var(--p-font); color: var(--p-text); }
+.sp-faq-scroll li b { color: var(--p-text); }
+.sp-faq-ok { margin: 0 16px 16px; border: 0; border-radius: 999px; padding: 12px; background: var(--p-red); color: #fff; font: 800 15px var(--p-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }

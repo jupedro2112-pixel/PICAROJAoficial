@@ -8,6 +8,13 @@
 
 ## Sesión 2026-10-24
 
+### 910. 💬 Soporte: "Cómo funciona todo" en un RECUADRO encima de todo (legible, con scroll y cerrar) — SW v605
+**Pedido (owner):** "el ver más y ver menos no se puede leer el texto; necesito que aparezca arriba y que se pueda leer, abrí un recuadro
+como para ver y bajar y se pueda cerrar". Reemplaza el plegable de #907: en la tarjeta queda un BOTÓN y abre `#spFaqModal` (fijo,
+z-index alto, tarjeta blanca con cabecera "📌 Cómo funciona todo" + ✕, lista a 14,5 px con scroll propio y botón "Entendido · cerrar";
+se cierra también tocando el fondo o con Esc). `VIP.home.supportFaqOpen/Close`. Los `<span class="md-amt|wd-min|rx-dep|rx-bon">` siguen
+pintándose por clase (ahora viven en el recuadro, fuera de `#supportIntro`).
+
 ### 909. 📖 Historias automáticas: 5 por día SIN repetir las de ayer · llave de PARTIDOS (apagada) · diagnóstico del motor — admin SW v184
 **Pedidos (owner, por Telegram 2026-10-23 15:17 y chat 2026-10-24):** "vi que mañana tenemos un partido, pero no vamos a publicar aún los
 partidos de fútbol, quiero ir primero con publicaciones explicando la app" · "este partido ni lo publicaron, quiero que revises bien las

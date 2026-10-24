@@ -1351,6 +1351,23 @@
                     <button type="button" class="bv-sw" onclick="VIP.home.setMenuPref('girox')"><b>🎰 Girox directo</b><small>Entrás a jugar al toque (hoy Girox, la plataforma seleccionada); cargás y retirás desde adentro.</small></button><!-- #670/#672 -->
                 </div>
             </div>
+            <!-- #910 (owner): el resumen de Soporte en un RECUADRO encima de todo, con scroll y botón cerrar -->
+            <div id="spFaqModal" class="sp-faq-modal" hidden role="dialog" aria-modal="true" aria-labelledby="spFaqTitle" onclick="if (event.target === this) VIP.home.supportFaqClose(event)">
+                <div class="sp-faq-box">
+                    <div class="sp-faq-head"><b id="spFaqTitle">📌 Cómo funciona todo</b><button type="button" class="sp-faq-x" aria-label="Cerrar" onclick="VIP.home.supportFaqClose(event)">✕</button></div>
+                    <div class="sp-faq-scroll">
+                        <ul>
+                                <li><b>💳 Carga:</b> mínimo <span class="md-amt">$2.000</span>. Transferís al CBU de la app, mandás el comprobante entero (titular, monto, fecha y N° de operación) y se acredita sola en minutos. Un comprobante repetido no se acredita.</li>
+                                <li><b>💸 Retiro:</b> mínimo <span class="wd-min">$10.000</span>, a un CBU a tu nombre. Sale solo a tu cuenta.</li>
+                                <li><b>🔒 ¿No te deja retirar todo?</b> Cada carga se juega <span class="rx-dep">×3</span> y cada bono <span class="rx-bon">×5</span> antes de retirarlos (antifraude). En <b>Retirar premio</b> ves cuánto podés retirar hoy y cuánto te falta apostar. Se libera solo jugando: no hace falta escribir.</li>
+                                <li><b>⏳ “Retiro procesado, lo estamos verificando”:</b> ya está en camino, en breve lo ves en tu cuenta.</li>
+                                <li><b>🎁 Bonos y reembolso:</b> los bonos de carga se aplican solos; el reembolso diario se reclama desde la app.</li>
+                                <li><b>❗ ¿Nada de esto es tu caso?</b> Escribinos acá qué pasó, cuándo y con qué monto, y te respondemos.</li>
+                            </ul>
+                    </div>
+                    <button type="button" class="sp-faq-ok" onclick="VIP.home.supportFaqClose(event)">Entendido · cerrar</button>
+                </div>
+            </div>
             <div id="menuChooser" class="menu-chooser" role="dialog" aria-modal="true" aria-labelledby="mcTitle">
                 <div class="mc-card">
                     <div class="mc-kicker">BIENVENIDO/A</div>
@@ -1791,18 +1808,7 @@
                             <button type="button" onclick="VIP.home.supportQuick('otro')">❓ Otra cosa</button>
                         </div>
                         <!-- #900 (owner): "si van a Soporte, un breve resumen de cómo funciona todo según el problema que pueden tener" -->
-                        <details class="sp-faq" id="spFaq" ontoggle="VIP.home.supportFaqToggled(this)"><!-- #907: plegable con "Ver menos", alto máximo y scroll propio -->
-                            <summary><span>📌 Cómo funciona todo (mirá antes de escribir)</span><i class="sp-faq-arrow" aria-hidden="true"></i></summary>
-                            <ul>
-                                <li><b>💳 Carga:</b> mínimo <span class="md-amt">$2.000</span>. Transferís al CBU de la app, mandás el comprobante entero (titular, monto, fecha y N° de operación) y se acredita sola en minutos. Un comprobante repetido no se acredita.</li>
-                                <li><b>💸 Retiro:</b> mínimo <span class="wd-min">$10.000</span>, a un CBU a tu nombre. Sale solo a tu cuenta.</li>
-                                <li><b>🔒 ¿No te deja retirar todo?</b> Cada carga se juega <span class="rx-dep">×3</span> y cada bono <span class="rx-bon">×5</span> antes de retirarlos (antifraude). En <b>Retirar premio</b> ves cuánto podés retirar hoy y cuánto te falta apostar. Se libera solo jugando: no hace falta escribir.</li>
-                                <li><b>⏳ “Retiro procesado, lo estamos verificando”:</b> ya está en camino, en breve lo ves en tu cuenta.</li>
-                                <li><b>🎁 Bonos y reembolso:</b> los bonos de carga se aplican solos; el reembolso diario se reclama desde la app.</li>
-                                <li><b>❗ ¿Nada de esto es tu caso?</b> Escribinos acá qué pasó, cuándo y con qué monto, y te respondemos.</li>
-                            </ul>
-                            <button type="button" class="sp-faq-less" onclick="VIP.home.supportFaqClose(event)">▲ Ver menos · cerrar</button>
-                        </details>
+                        <button type="button" class="sp-faq-btn" onclick="VIP.home.supportFaqOpen(event)">📌 Cómo funciona todo (mirá antes de escribir) ›</button><!-- #910: abre un recuadro encima de todo (legible, con scroll y cerrar) -->
                         <div class="sp-closed" id="spClosed" hidden>🔒 Chat cerrado</div><!-- #613: fijado debajo de las opciones, con fecha -->
                         <div class="sp-sla" id="spSla">⏱ Responde dentro de los 10 minutos</div>
                     </div>
@@ -2631,7 +2637,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v604</div>
+                    <div class="pf-build" id="appBuildTag">app v605</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
