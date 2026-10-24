@@ -213,8 +213,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `Config['vipLevelsConfig']` (panel → Niveles VIP → escalera), recargados por `vipLevels.refreshFromConfig`.
   Los idx se persisten en `User.vipLevel` y en las references `vip-lvl-*`: sólo agregar niveles AL FINAL.
 
-- **% EXTRA por instalar la app (#283/#290, 2026-10-17):** en la PRIMERA carga de un cliente sin la app se le
-  ofrece pct% (50%) de esa carga (tope) como EXTRA si la instala; queda como botón grande pendiente abajo hasta que reclame
+- **% EXTRA por instalar la app (#283/#290, 2026-10-17 → #974 MONTO FIJO):** en la PRIMERA carga de un cliente sin la app se le
+  ofrece `Config['installGift'].fixedArs` ($5.000; 0 = pct% con tope) como EXTRA si la instala; el bono de 1ª carga tiene TOPE propio
+  `Config['firstDepositCapArs']` ($15.000, 0 = libre) y `_welcomeAbuseOf` niega TODA la bienvenida (sin bloquear) si el teléfono / celular /
+  notificaciones ya están en otra cuenta; queda como botón grande pendiente abajo hasta que reclame
   desde la app instalada (`User.installGift`, rutas `/api/install-gift/*`, `Config['installGift']`, ref
   `vip-igift-<userId>`, Transaction `install_gift` — un tipo de regalo nuevo va SIEMPRE a
   `CASHBACK_GIFT_TX_TYPES`). Detalle: ARCHITECTURE Home 2.0 (#283).

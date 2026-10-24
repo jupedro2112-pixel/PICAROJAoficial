@@ -1757,9 +1757,11 @@ async function maybeSendRecoveryMessage(user) {
 // Se acredita SOLO al reclamar desde la app instalada (token FCM standalone, igual que la ruleta),
 // como regalo (bono 0) vía creditGift, reference `vip-igift-<userId>` (una vez en la vida).
 // Config['installGift'] = { enabled, pct, capArs, days } (panel → COMANDOS → Bonos automáticos).
-const INSTALL_GIFT_DEFAULT = { enabled: true, pct: 50, capArs: 20000, days: 7 }; // #290: 50% EXTRA (owner)
-const INSTALL_GIFT_OFFER_DEFAULT = '🎁 ¡{username}, instalando la app tenés un *{pct}% EXTRA* en tu carga!\n\nSon *${monto} extra* sobre tu carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo.';
-const INSTALL_GIFT_CREDITED_DEFAULT = '🎁 ¡Listo {username}! Te cargamos *${monto} extra* ({pct}%) en {plataforma} por instalar la app. ✅\n\n¡A jugar! 🎰';
+// #974 (owner 2026-10-24): el extra por instalar es un MONTO FIJO (fixedArs, $5.000) y no un % de la carga: al que carga poco le da más (es el que
+// más necesita el empujón) y al que carga mucho deja de regalarle una fortuna. fixedArs = 0 ⇒ vuelve al % con tope. Nunca más que la carga.
+const INSTALL_GIFT_DEFAULT = { enabled: true, pct: 50, capArs: 20000, days: 7, fixedArs: 5000 }; // #290: 50% EXTRA (owner) · #974 fijo
+const INSTALL_GIFT_OFFER_DEFAULT = "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo.";
+const INSTALL_GIFT_CREDITED_DEFAULT = "🎁 ¡Listo {username}! Te cargamos *${monto} extra* en {plataforma} por instalar la app. ✅\n\n¡A jugar! 🎰";
 async function getInstallGiftConfig() {
   let raw = null;
   try { raw = await getConfig('installGift', null); } catch (_) { raw = null; }
@@ -1769,13 +1771,39 @@ async function getInstallGiftConfig() {
     enabled: r.enabled == null ? INSTALL_GIFT_DEFAULT.enabled : r.enabled === true,
     pct: Math.round(num(r.pct, INSTALL_GIFT_DEFAULT.pct, 0, 500)),
     capArs: Math.round(num(r.capArs, INSTALL_GIFT_DEFAULT.capArs, 0, 10000000)),
-    days: Math.round(num(r.days, INSTALL_GIFT_DEFAULT.days, 1, 365))
+    days: Math.round(num(r.days, INSTALL_GIFT_DEFAULT.days, 1, 365)),
+    fixedArs: Math.round(num(r.fixedArs, INSTALL_GIFT_DEFAULT.fixedArs, 0, 10000000)) // #974
   };
 }
 function installGiftAmount(baseAmount, cfg) {
   const b = Math.max(0, Number(baseAmount) || 0);
+  if (cfg.fixedArs > 0) return Math.round(Math.min(b, cfg.fixedArs)); // #974: monto fijo (nunca más que la carga)
   const capped = cfg.capArs > 0 ? Math.min(b, cfg.capArs) : b;
   return Math.round(capped * cfg.pct / 100);
+}
+// Cómo se describe el extra al cliente: "$5.000" (fijo) o "50%" (porcentaje).
+function installGiftLabel(cfg) { return cfg.fixedArs > 0 ? '$' + Math.round(cfg.fixedArs).toLocaleString('es-AR') : cfg.pct + '%'; }
+// #974 (owner): "sin bono de bienvenida si el teléfono o el dispositivo ya se usó en otra cuenta" (la cuenta no se bloquea: sólo el regalo).
+// Devuelve el motivo (texto) o null. Mira teléfono normalizado (10 dígitos), ID del celular (deviceIds) y tokens de push compartidos.
+async function _welcomeAbuseOf(userIn) {
+  try {
+    const u = await User.findOne({ id: userIn.id }).select('id username phone deviceIds fcmToken fcmTokens').lean(); if (!u) return null;
+    const or = []; const tel = String(u.phone || '').replace(/\D/g, '').slice(-10);
+    if (Array.isArray(u.deviceIds) && u.deviceIds.length) or.push({ deviceIds: { $in: u.deviceIds } });
+    const toks = [].concat(u.fcmToken ? [u.fcmToken] : [], (u.fcmTokens || []).map((t) => t && t.token).filter(Boolean));
+    if (toks.length) or.push({ $or: [{ fcmToken: { $in: toks } }, { 'fcmTokens.token': { $in: toks } }] });
+    if (tel.length === 10) or.push({ phone: { $regex: tel.slice(-8) } });
+    if (!or.length) return null;
+    const others = await User.find({ id: { $ne: u.id }, role: 'user', $or: or }).select('username phone deviceIds fcmToken fcmTokens').limit(20).lean();
+    const hits = [];
+    for (const o of others) {
+      const otel = String(o.phone || '').replace(/\D/g, '').slice(-10);
+      if (tel.length === 10 && otel === tel) hits.push('mismo teléfono que ' + o.username);
+      else if (Array.isArray(u.deviceIds) && u.deviceIds.length && (o.deviceIds || []).some((d) => u.deviceIds.includes(d))) hits.push('mismo celular que ' + o.username);
+      else if (toks.length && (toks.includes(o.fcmToken) || (o.fcmTokens || []).some((t) => t && toks.includes(t.token)))) hits.push('mismas notificaciones que ' + o.username);
+    }
+    return hits.length ? hits.slice(0, 3).join(', ') : null;
+  } catch (e) { logger.warn('[welcome-abuse] ' + e.message); return null; }
 }
 function _installGiftExpired(ig) { return !!(ig && ig.expiresAt && new Date(ig.expiresAt).getTime() < Date.now()); }
 // Devuelve true si se OFRECIÓ (el que llama puede omitir el cartel genérico "instalá la app").
@@ -1788,6 +1816,7 @@ async function maybeOfferInstallGift(userIn, { amount, platform = null, source =
     if (!user) return false;
     const st = user.installGift && user.installGift.status;
     if (st && st !== 'none') return false;            // ya ofrecida / reclamada / vencida
+    const _abuse = await _welcomeAbuseOf(user); if (_abuse) { logger.warn(`[install-gift] ${user.username}: sin extra por instalar — ${_abuse}`); _emitAdminOnlyChatNote(user.id, user.username, `⚠️ SIN EXTRA POR INSTALAR LA APP: ${_abuse}. Si es un cliente legítimo, cargáselo a mano desde Bonificación.`).catch(() => {}); return false; } // #974
     if (_rouletteHasAppInstalled(user)) return false; // ya tiene la app: no hay nada que incentivar
     // Sólo la PRIMERA carga real (la recién acreditada ya está en Transaction).
     const n = await Transaction.countDocuments({
@@ -1803,13 +1832,13 @@ async function maybeOfferInstallGift(userIn, { amount, platform = null, source =
     const base = Math.round(Number(amount) || 0);
     const reserved = await User.findOneAndUpdate(
       { id: user.id, $or: [{ 'installGift.status': 'none' }, { 'installGift.status': { $exists: false } }] },
-      { $set: { installGift: { status: 'offered', amount: gift, baseAmount: base, pct: cfg.pct, offeredAt: now, expiresAt, deferredAt: null, claimedAt: null, claimTxId: null, platform: platforms.normalizeId(platform) || null, source: String(source || '').slice(0, 30), lastError: null } } }
+      { $set: { installGift: { status: 'offered', amount: gift, baseAmount: base, pct: cfg.fixedArs > 0 ? null : cfg.pct, offeredAt: now, expiresAt, deferredAt: null, claimedAt: null, claimTxId: null, platform: platforms.normalizeId(platform) || null, source: String(source || '').slice(0, 30), lastError: null } } }
     );
     if (!reserved) return false;
-    const vars = { username: user.username, monto: gift.toLocaleString('es-AR'), pct: cfg.pct, dias: cfg.days, carga: base.toLocaleString('es-AR') };
-    const text = (await renderSystemCommand('/sys_install_gift_offer', INSTALL_GIFT_OFFER_DEFAULT, vars)) || _renderVars('🎁 Instalando la app tenés un {pct}% extra: ${monto} sobre tu carga.', vars);
-    const md = { kind: 'install_gift_offer', amount: gift, baseAmount: base, pct: cfg.pct, expiresAt: expiresAt.toISOString() };
-    await _sendUserSystemMessage(user, text, { metadata: md, push: { title: `🎁 ${cfg.pct}% extra por instalar la app`, body: `Instalá la app y cargá $${vars.monto} extra sobre tu carga.` } });
+    const vars = { username: user.username, monto: gift.toLocaleString('es-AR'), pct: cfg.fixedArs > 0 ? '' : cfg.pct, dias: cfg.days, carga: base.toLocaleString('es-AR') };
+    const text = (await renderSystemCommand('/sys_install_gift_offer', INSTALL_GIFT_OFFER_DEFAULT, vars)) || _renderVars('🎁 Instalando la app te regalamos ${monto} extra en fichas.', vars);
+    const md = { kind: 'install_gift_offer', amount: gift, baseAmount: base, pct: cfg.fixedArs > 0 ? null : cfg.pct, expiresAt: expiresAt.toISOString() };
+    await _sendUserSystemMessage(user, text, { metadata: md, push: { title: `🎁 $${vars.monto} extra por instalar la app`, body: `Instalá la app y cargá $${vars.monto} extra en fichas.` } });
     await _emitAdminOnlyChatNote(user.id, user.username,
       `🎁 ${cfg.pct}% EXTRA por instalar la app OFRECIDO: $${vars.monto} (${cfg.pct}% de su primera carga de $${vars.carga}; tope $${cfg.capArs.toLocaleString('es-AR')}). Vence en ${cfg.days} días. Se acredita SOLA cuando reclama desde la app instalada: no hay que hacer nada.`
     ).catch(() => {});
@@ -12867,6 +12896,15 @@ async function initializeData() {
   // después se cambia en Configuración → Registro de clientes.
   // #968 (owner): partidos del día en las historias automáticas ENCENDIDOS, y las campañas futuras del autopiloto de oct/nov se recrean con el
   // refuerzo (el autopiloto las vuelve a programar solo a los 5 min del arranque; sólo las 'scheduled' con fecha futura, nada enviado).
+  // #974: textos del extra por instalar y del cartel de primera carga: de "% EXTRA" a monto fijo y tope (sólo si siguen con el texto viejo).
+  try { if (!(await getConfig('mig974WelcomeCaps', null))) {
+    const r1 = await Command.updateOne({ name: '/sys_install_gift_offer', response: /\{pct\}%/ }, { $set: { response: "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo." } });
+    const r2 = await Command.updateOne({ name: '/sys_install_gift_credited', response: /\{pct\}%/ }, { $set: { response: "🎁 ¡Listo {username}! Te cargamos *${monto} extra* en {plataforma} por instalar la app. ✅\n\n¡A jugar! 🎰" } });
+    const r3 = await Command.updateOne({ name: '/sys_first_deposit_popup', response: /\{extra\}%/ }, { $set: { response: "Tu primera carga lleva {pct}% de regalo automático (hasta ${tope}). Después, instalando la app y activando las notificaciones, te regalamos ${extraMonto} EXTRA en fichas." } });
+    const r4 = await Command.updateOne({ name: '/sys_sq_bono', response: /\+50% extra instalando/ }, { $set: { response: '🎁 Los bonos se aplican solos al cargar: 1ª carga {fd_pct}% (hasta {fd_tope}){ig_txt}. Se juegan ×{rollover} antes de retirarlos.' } });
+    await Config.set('mig974WelcomeCaps', new Date().toISOString(), 'startup-migration');
+    logger.info('[mig974] textos del extra por instalar / cartel de primera carga / FAQ bono actualizados: ' + [r1, r2, r3, r4].map((r) => (r && r.modifiedCount) || 0).join('/'));
+  } } catch (e) { logger.warn('[mig974] ' + e.message); }
   // #971: las campañas futuras del autopiloto se rearman solas con el tope de 1 aviso por día y sin los días de la historia con bono.
   try { if (!(await getConfig('mig971NotifCenter', null))) { const r = await _autopilotClearFuture(); await Config.set('mig971NotifCenter', new Date().toISOString(), 'startup-migration'); logger.info('[mig971] autopiloto: ' + r + ' campañas futuras borradas para rearmar con el Centro de avisos'); } } catch (e) { logger.warn('[mig971] ' + e.message); }
   try { if (!(await getConfig('mig968GiftBoost', null))) { await Config.set('storyAutoMatches', true, 'mig#968'); const r = await ScheduledCampaign.deleteMany({ autoKey: { $regex: '^ap-2026-(10|11)-' }, status: 'scheduled', runAt: { $gt: new Date() } }); await Config.set('mig968GiftBoost', new Date().toISOString(), 'mig#968'); console.log('✅ #968: partidos en historias ON · ' + (r.deletedCount || 0) + ' campañas futuras del autopiloto se reprograman con el refuerzo'); } } catch (e) { console.warn('[startup-migration] #968:', e.message); }
@@ -13099,13 +13137,13 @@ async function initializeData() {
       name: '/sys_install_gift_offer',
       description: '% EXTRA por instalar la app: mensaje al acreditarse la PRIMERA carga de un cliente que no tiene la app (los botones "Instalar ahora y cargar el extra" / "Seguir jugando, lo cargo después" los pone la app). Variables: {username}, {monto} (sin $, el extra), {pct}, {dias}, {carga} (la carga). Vacío = texto corto por defecto (el cartel igual sale). El % / tope / días se editan en Bonos automáticos.',
       type: 'message',
-      response: '🎁 ¡{username}, instalando la app tenés un *{pct}% EXTRA* en tu carga!\n\nSon *${monto} extra* sobre tu carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo.'
+      response: "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo."
     },
     {
       name: '/sys_install_gift_credited',
       description: '% EXTRA por instalar la app: mensaje cuando se acredita (el cliente lo cargó desde la app instalada). Variables: {username}, {monto} (sin $), {pct}, {plataforma}. Vacío = no se manda mensaje.',
       type: 'message',
-      response: '🎁 ¡Listo {username}! Te cargamos *${monto} extra* ({pct}%) en {plataforma} por instalar la app. ✅\n\n¡A jugar! 🎰'
+      response: "🎁 ¡Listo {username}! Te cargamos *${monto} extra* en {plataforma} por instalar la app. ✅\n\n¡A jugar! 🎰"
     },
     {
       name: '/sys_svc_carga',
@@ -14194,6 +14232,10 @@ async function getAutoLoadBonusPct() {
 // #290 (owner 2026-10-17): "la publi va a venir con un 50% automático en la primera carga". % que lleva la
 // PRIMERA carga real de cada cliente (manual o hgcash) cuando no tiene otro bono pendiente, con el tope de
 // siempre. Config['firstDepositBonusPct'] (default 50), editable en COMANDOS → Bonos automáticos. 0 = apagado.
+// #974 (owner 2026-10-24): el 100% de la primera carga vuelve a tener TOPE propio (Config['firstDepositCapArs'], $15.000; 0 = sin tope) y nada sobre
+// el resto. Antes era libre (#812): una carga de $500.000 regalaba $500.000. Al cliente típico ($5.000–$10.000) no le cambia nada.
+const FIRST_DEPOSIT_CAP_DEFAULT = 15000;
+async function getFirstDepositCapArs() { try { const n = Number(await getConfig('firstDepositCapArs', null)); if (Number.isFinite(n) && n >= 0) return Math.round(n); } catch (_) {} return FIRST_DEPOSIT_CAP_DEFAULT; }
 const FIRST_DEPOSIT_BONUS_PCT_DEFAULT = 100; // #810 (owner 2026-10-22): 100% en la primera carga
 async function getFirstDepositBonusPct() {
   try {
@@ -14459,6 +14501,7 @@ async function _supportQuickReply(userId, username, quick, text) {
       if (recent) return;
     }
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), rollover: String(await _giftRolloverX()), carga: String(await getDepositRolloverX()) }; // #883: {carga}
+    try { const _fd = await getFirstDepositBonusPct(), _cap = await getFirstDepositCapArs(), _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
     if (topic === 'otro') {
       const t = await renderSystemCommand('/sys_support_topic_otro', SUPPORT_TOPIC_OTRO_DEFAULT, vars);
       if (t) await _sendUserSystemMessage(u, t, { metadata: Object.assign({}, SUPPORT_TERMS_BTN, { topic }) });
@@ -14578,11 +14621,12 @@ app.post('/api/admin/install-bonus-config', authMiddleware, adminMiddleware, asy
     if (igRaw && typeof igRaw === 'object') {
       const cur = await getInstallGiftConfig();
       const pick = (v, d) => (v == null || v === '' ? d : Number(v));
-      const next = { enabled: igRaw.enabled == null ? cur.enabled : igRaw.enabled === true, pct: pick(igRaw.pct, cur.pct), capArs: pick(igRaw.capArs, cur.capArs), days: pick(igRaw.days, cur.days) };
+      const next = { enabled: igRaw.enabled == null ? cur.enabled : igRaw.enabled === true, pct: pick(igRaw.pct, cur.pct), capArs: pick(igRaw.capArs, cur.capArs), days: pick(igRaw.days, cur.days), fixedArs: pick(igRaw.fixedArs, cur.fixedArs) };
+      if (!Number.isFinite(next.fixedArs) || next.fixedArs < 0) return res.status(400).json({ error: 'El monto fijo del extra por instalar tiene que ser 0 (usa el %) o un número mayor a 0.' });
       if (!Number.isFinite(next.pct) || next.pct < 0 || next.pct > 500) return res.status(400).json({ error: 'El % de la carga gratis tiene que ser un número entre 0 y 500.' });
       if (!Number.isFinite(next.capArs) || next.capArs < 0) return res.status(400).json({ error: 'El tope de la carga gratis tiene que ser un número mayor o igual a 0.' });
       if (!Number.isFinite(next.days) || next.days < 1 || next.days > 365) return res.status(400).json({ error: 'Los días de vigencia de la carga gratis tienen que estar entre 1 y 365.' });
-      await Config.set('installGift', { enabled: next.enabled, pct: Math.round(next.pct), capArs: Math.round(next.capArs), days: Math.round(next.days) }, req.user.username);
+      await Config.set('installGift', { enabled: next.enabled, pct: Math.round(next.pct), capArs: Math.round(next.capArs), days: Math.round(next.days), fixedArs: Math.round(next.fixedArs) }, req.user.username);
       logger.info(`[install-gift] config ${JSON.stringify(next)} por ${req.user.username}`);
     }
     res.json({ success: true, pct: await getInstallBonusPct(), enabled: await getInstallBonusEnabled(), autoLoadPct: await getAutoLoadBonusPct(), firstDepositPct: await getFirstDepositBonusPct(), installGift: await getInstallGiftConfig(), minDepositArs: await getMinDepositArs() });
@@ -14779,7 +14823,10 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   const none = { pct: 0, bonus: 0, source: null, label: null, claimed: false, rule: '', revert: async () => {} };
   if (!user || !(Number(amount) > 0)) return none;
   // #509: cuenta marcada por multicuenta → sin bonos de bienvenida ni 2ª carga (sí ruleta/lotes, que ya ganó)
-  const blockWelcome = opts.noWelcome || _isFlagged(user);
+  // #974: teléfono / celular / notificaciones compartidas con otra cuenta ⇒ sin bonos de bienvenida (se chequea sólo en la primera carga real).
+  let _abuse = null;
+  if (!opts.noWelcome && !_isFlagged(user)) { try { if (await _isFirstRealDeposit(user)) _abuse = await _welcomeAbuseOf(user); } catch (_) {} }
+  const blockWelcome = opts.noWelcome || _isFlagged(user) || !!_abuse;
   // #832 (owner 2026-10-22): "en la primera carga el 100% automático, libre y con rollover ×5" ⇒ la PRIMERA carga real lleva SIEMPRE el
   // bono de primera carga (antes un bono pendiente de ruleta/historia/lote lo reemplazaba). Esos otros quedan pendientes para la próxima carga.
   let c = { claimed: false };
@@ -14790,7 +14837,7 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
     // #839: que se SEPA por qué una primera carga entró sin el bono de bienvenida (antes no quedaba rastro visible para el agente).
     try {
       if ((await getFirstDepositBonusPct()) > 0 && await _isFirstRealDeposit(user)) {
-        const why = (Array.isArray(user.fraudFlags) && user.fraudFlags.length) ? `la cuenta está marcada por anti-estafa (${user.fraudFlags.join(', ')})` : 'cargó desde un CBU que ya usó otra cuenta';
+        const why = _abuse ? _abuse : (Array.isArray(user.fraudFlags) && user.fraudFlags.length) ? `la cuenta está marcada por anti-estafa (${user.fraudFlags.join(', ')})` : 'cargó desde un CBU que ya usó otra cuenta';
         _emitAdminOnlyChatNote(user.id, user.username, `⚠️ PRIMERA CARGA SIN BONO DE BIENVENIDA: ${why}. Si es un cliente legítimo, cargale el bono a mano desde Bonificación.`).catch(() => {});
         logger.warn(`[auto-bonus] ${user.username}: primera carga sin bono de bienvenida — ${why}`);
       }
@@ -14819,7 +14866,9 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   if (!c.claimed) return none;
   // #812 (owner): "el 100% de la PRIMERA carga es LIBRE (sin tope); después respetar hasta $20.000 si es 100% y después un 20%" ⇒ el bono de
   // primera carga no pasa por el tope; todas las demás fuentes sí. El rollover ×5 es el global de siempre (Config['bonusRolloverX']).
-  const cfg = c.source === 'first_deposit' ? Object.assign({}, await getBonusCapConfig(), { enabled: false }) : await getBonusCapConfig();
+  // #974: la primera carga tiene su propio tope (Config['firstDepositCapArs'], 0 = libre) y 0% sobre el resto.
+  const _fdCap = c.source === 'first_deposit' ? await getFirstDepositCapArs() : 0;
+  const cfg = c.source === 'first_deposit' ? Object.assign({}, await getBonusCapConfig(), _fdCap > 0 ? { enabled: true, capArs: _fdCap, restPct: 0 } : { enabled: false }) : await getBonusCapConfig();
   // Lote: _loteBonusAmount (#172, mismo tope, mismo resultado que bonusWithCap);
   // el resto de las fuentes: bonusWithCap.
   const bonus = c.source === 'promo_bonus' ? _loteBonusAmount(amount, c.pct, _loteCfgFor(c, cfg)) : bonusCap.bonusWithCap(amount, c.pct, cfg); // #CAP tope propio del lote
@@ -15054,16 +15103,18 @@ app.post('/api/install-bonus/claim', authMiddleware, async (req, res) => {
 // X = Config['firstDepositBonusPct']; Y = X + % extra por instalar (Config['installGift'], si está activo). Texto editable: /sys_first_deposit_popup.
 // #839 (owner): 100% automático en la 1ª carga y DESPUÉS +50% EXTRA instalando la app y activando las notificaciones (no "150% con la app").
 const FIRST_DEPOSIT_POPUP_OLD = 'Tu primera carga viene con {pct}% de regalo. Si la hacés desde la app instalada, {pctApp}%.';
-const FIRST_DEPOSIT_POPUP_DEFAULT = 'Tu primera carga lleva {pct}% de regalo automático. Después, instalando la app y activando las notificaciones, te sumamos +{extra}% EXTRA sobre esa carga.';
+const FIRST_DEPOSIT_POPUP_DEFAULT = "Tu primera carga lleva {pct}% de regalo automático (hasta ${tope}). Después, instalando la app y activando las notificaciones, te regalamos ${extraMonto} EXTRA en fichas."; // #974: {tope} y {extraMonto}
 app.get('/api/first-deposit-promo', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.userId;
     const n = await Transaction.countDocuments({ userId, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } });
     const pct = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig();
-    const extra = ig && ig.enabled ? (Number(ig.pct) || 0) : 0; const pctApp = pct + extra;
-    const text = await renderSystemCommand('/sys_first_deposit_popup', FIRST_DEPOSIT_POPUP_DEFAULT, { pct, pctApp, extra }); // #839
+    const fixed = ig && ig.enabled && ig.fixedArs > 0 ? Math.round(ig.fixedArs) : 0; // #974 extra fijo
+    const extra = ig && ig.enabled && !fixed ? (Number(ig.pct) || 0) : 0; const pctApp = pct + extra;
+    const cap = await getFirstDepositCapArs(); const fmt = (v) => Math.round(v).toLocaleString('es-AR');
+    const text = await renderSystemCommand('/sys_first_deposit_popup', FIRST_DEPOSIT_POPUP_DEFAULT, { pct, pctApp, extra, extraMonto: fmt(fixed), tope: cap > 0 ? fmt(cap) : 'sin tope' }); // #839 · #974
     res.set('Cache-Control', 'no-store');
-    res.json({ show: n === 0 && pct > 0, noDeposits: n === 0, depositsCount: n, pct, pctApp, extra, installGiftEnabled: extra > 0, text }); // #675: noDeposits para la guía · #690: depositsCount (la franja de carga mínima se muestra hasta la 3ª carga)
+    res.json({ show: n === 0 && pct > 0, noDeposits: n === 0, depositsCount: n, pct, pctApp, extra, extraMonto: fixed, capArs: cap, installGiftEnabled: extra > 0 || fixed > 0, text }); // #675: noDeposits para la guía · #690: depositsCount (la franja de carga mínima se muestra hasta la 3ª carga)
   } catch (e) { res.json({ show: false }); }
 });
 app.get('/api/install-gift/status', authMiddleware, async (req, res) => {
@@ -21898,7 +21949,7 @@ app.get('/api/admin/strategy', authMiddleware, adminMiddleware, async (req, res)
       MissionClaim.countDocuments({ weekKey: wk, status: 'failed' }),
       User.aggregate([{ $match: { role: 'user', 'missionTier.promo': { $gt: 0 } } }, { $group: { _id: '$missionTier.promo', n: { $sum: 1 } } }])
     ]);
-    res.json({ success: true, firstDeposit: { pct: fd, installExtraEnabled: ig.enabled, installExtraPct: ig.pct, withApp: fd + (ig.enabled ? ig.pct : 0) }, secondDeposit: cfg.secondDeposit, missions: cfg.missions, missionTypes: MISSION_TYPES, vipLevels: vipLevels.listLevels().map((l) => ({ idx: l.idx, name: l.name, emoji: l.emoji })), stats: { secondDeposit: { offered30: offered, used30: used, expired30: expired }, missionsWeek: claimsWeek, missions30: claims30[0] || { n: 0, amt: 0 }, failedWeek, promos, weekKey: wk } });
+    res.json({ success: true, firstDeposit: { pct: fd, capArs: await getFirstDepositCapArs(), installExtraEnabled: ig.enabled, installExtraPct: ig.pct, installExtraFixedArs: ig.fixedArs, withApp: fd + (ig.enabled && !(ig.fixedArs > 0) ? ig.pct : 0) }, secondDeposit: cfg.secondDeposit, missions: cfg.missions, missionTypes: MISSION_TYPES, vipLevels: vipLevels.listLevels().map((l) => ({ idx: l.idx, name: l.name, emoji: l.emoji })), stats: { secondDeposit: { offered30: offered, used30: used, expired30: expired }, missionsWeek: claimsWeek, missions30: claims30[0] || { n: 0, amt: 0 }, failedWeek, promos, weekKey: wk } });
   } catch (e) { logger.error('[strategy] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
 // #509: ROLLOVER GLOBAL ×N para todos los bonos: bonos de carga (1ª, 2ª, automática, ruleta %, lotes), fueguito, código de bienvenida,
@@ -21922,7 +21973,12 @@ app.post('/api/admin/strategy', authMiddleware, adminMiddleware, async (req, res
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
     const b = req.body || {};
-    if (b.firstDeposit) { const p = Number(b.firstDeposit.pct); if (Number.isFinite(p) && p >= 0 && p <= 500) await Config.set('firstDepositBonusPct', Math.round(p), req.user.username); const cur = (await getConfig('installGift', null)) || {}; const ep = Number(b.firstDeposit.installExtraPct); await Config.set('installGift', Object.assign({}, cur, { enabled: b.firstDeposit.installExtraEnabled !== false, pct: Number.isFinite(ep) && ep >= 0 && ep <= 500 ? Math.round(ep) : (cur.pct != null ? cur.pct : 50) }), req.user.username); }
+    if (b.firstDeposit) {
+      const p = Number(b.firstDeposit.pct); if (Number.isFinite(p) && p >= 0 && p <= 500) await Config.set('firstDepositBonusPct', Math.round(p), req.user.username);
+      if (b.firstDeposit.capArs !== undefined && b.firstDeposit.capArs !== '') { const cap = Number(b.firstDeposit.capArs); if (Number.isFinite(cap) && cap >= 0) await Config.set('firstDepositCapArs', Math.round(cap), req.user.username); } // #974
+      const cur = (await getConfig('installGift', null)) || {}; const ep = Number(b.firstDeposit.installExtraPct); const ef = Number(b.firstDeposit.installExtraFixedArs);
+      await Config.set('installGift', Object.assign({}, cur, { enabled: b.firstDeposit.installExtraEnabled !== false, pct: Number.isFinite(ep) && ep >= 0 && ep <= 500 ? Math.round(ep) : (cur.pct != null ? cur.pct : 50) }, b.firstDeposit.installExtraFixedArs !== undefined && b.firstDeposit.installExtraFixedArs !== '' && Number.isFinite(ef) && ef >= 0 ? { fixedArs: Math.round(ef) } : {}), req.user.username);
+    }
     const cur = await getStrategyConfig();
     const next = { secondDeposit: Object.assign({}, cur.secondDeposit, b.secondDeposit || {}), missions: { enabled: b.missions && b.missions.enabled != null ? b.missions.enabled !== false : cur.missions.enabled, items: b.missions && Array.isArray(b.missions.items) ? b.missions.items : cur.missions.items, tiers: b.missions && Array.isArray(b.missions.tiers) && b.missions.tiers.length ? b.missions.tiers : cur.missions.tiers, demoteAfterWeeks: b.missions && b.missions.demoteAfterWeeks != null ? Number(b.missions.demoteAfterWeeks) : cur.missions.demoteAfterWeeks, antiFraud: Object.assign({}, cur.missions.antiFraud, (b.missions && b.missions.antiFraud) || {}) } };
     await Config.set('strategyClientes', next, req.user.username);
@@ -22024,7 +22080,7 @@ const SUPPORT_QUICK_REPLIES = [
   { key: 'minimo', label: '⚠️ Carga menor al mínimo', text: '⚠️ La carga mínima es {min}. Con menos no se acredita sola: la devolvemos a tu cuenta de origen o se completa con otra transferencia.' },
   { key: 'retiro', label: '💸 Cómo retirar', text: '💸 Para retirar: entrá a "Retirar premio" (mínimo {retiro_min}, a un CBU a tu nombre). Ahí ves cuánto podés retirar hoy y el pago sale solo a tu cuenta.', btn: { target: 'withdraw', label: '💸 Retirar premio' } },
   { key: 'procesado', label: '✅ Retiro en proceso', text: '✅ Tu retiro ya está procesado y lo estamos verificando. En breve lo vas a ver en tu cuenta; te avisamos por acá.' },
-  { key: 'bono', label: '🎁 Bonos', text: '🎁 Los bonos se aplican solos al cargar: 1ª carga 100% y +50% extra instalando la app y activando las notificaciones. Se juegan ×{rollover} antes de retirarlos.' },
+  { key: 'bono', label: '🎁 Bonos', text: '🎁 Los bonos se aplican solos al cargar: 1ª carga {fd_pct}% (hasta {fd_tope}){ig_txt}. Se juegan ×{rollover} antes de retirarlos.' }, // #974: valores vigentes
   { key: 'reembolso', label: '📉 Reembolso', text: '📉 El reembolso diario se calcula sobre lo que perdiste ayer y lo reclamás vos desde la app. Tocá el botón para ver el tuyo.', btn: { target: 'refund', label: '📉 Ver mi reembolso' } },
   { key: 'clave', label: '🔑 Recuperar clave', text: '🔑 Para recuperar tu clave tocá "Recuperar contraseña" en la pantalla de ingreso y seguí los pasos con tu celular.' },
   { key: 'sms', label: '📱 No llega el SMS', text: '📱 Escribí tu número todo junto: código de área sin 0 y número sin 15 (ej.: 1155551234). Si no llega en 1 minuto, tocá "Reenviar código".' }
@@ -22069,6 +22125,7 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), carga: String(await getDepositRolloverX().catch(() => 3)), rollover: String(await _giftRolloverX().catch(() => 5)) };
+    try { const _fd = await getFirstDepositBonusPct(), _cap = await getFirstDepositCapArs(), _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
     if (q.dynamic === 'sorteo') {
       // #944: resumen de los dos sorteos con los números de la config (fechas, premios, puntos, SORTEO EXTRA, requisitos, cobro).
       const cfg = await _sorteosCfg(); const now = new Date(); const R = sorteosRules;

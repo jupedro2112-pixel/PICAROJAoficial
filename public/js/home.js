@@ -328,17 +328,19 @@
     // #626 (owner): el aviso de PRIMERA CARGA (+pct% · +pctApp% con la app) va RESUMIDO adentro de cada lugar donde se adjunta el
     // comprobante (básico, inicio completo, carga rápida del casino), sólo mientras no hizo la primera carga. Antes era una franja arriba (#608).
     let _fdJ = null;
+    // #974: el extra por instalar puede ser un monto fijo ($5.000) o un % → un solo texto para las dos formas.
+    const _fdExtraTxt = (j) => { if (!j) return ''; const m = Number(j.extraMonto) || 0; if (m > 0) return '$' + m.toLocaleString('es-AR'); const e = Number(j.extra) || 0; return e > 0 ? e + '%' : ''; };
     const _FD_NOTE_INNER = (pct, extra) => '<span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">' + pct + '%</span> automático</b></span>' +
-        '<span class="fd-app"' + (extra ? '' : ' hidden') + '>📲 Después, <b>+<span class="fd-pct-app">' + extra + '%</span> EXTRA</b> instalando la app y activando las notificaciones</span>';
+        '<span class="fd-app"' + (extra ? '' : ' hidden') + '>📲 Después, <b>+<span class="fd-pct-app">' + extra + '</span> EXTRA</b> instalando la app y activando las notificaciones</span>';
     function _fdNotesPaint() {
         _fdPromoLoad().then((j) => {
             _fdJ = j || null;
-            const show = !!(j && j.show && Number(j.pct) > 0); const extra = show && Number(j.extra) > 0 ? Number(j.extra) : 0;
+            const show = !!(j && j.show && Number(j.pct) > 0); const extra = show ? _fdExtraTxt(j) : ''; // #974: "$5.000" o "50%"
             try { firstGuidePaint(j); } catch (_) {} // #675
             document.querySelectorAll('.fd-note').forEach((el) => {
                 el.hidden = !show; if (!show) return;
                 el.querySelectorAll('.fd-pct').forEach((x) => { x.textContent = j.pct + '%'; });
-                el.querySelectorAll('.fd-pct-app').forEach((x) => { x.textContent = extra + '%'; }); // #839: el EXTRA, no la suma
+                el.querySelectorAll('.fd-pct-app').forEach((x) => { x.textContent = extra; }); // #839: el EXTRA, no la suma · #974 monto o %
                 el.querySelectorAll('.fd-app').forEach((x) => { x.hidden = !extra; });
             });
         }).catch(() => {});
@@ -360,7 +362,7 @@
     function firstGuideClose() { try { localStorage.setItem('vip_fguide_off', '1'); } catch (_) {} ['firstGuide', 'firstGuideBasic'].forEach((id) => { const g = _el(id); if (g) g.hidden = true; }); ['evCtaTop', 'bvLoadBtn'].forEach((id) => { const b = _el(id); if (b) b.classList.remove('fg-hi'); }); }
     function _fdNoteHtml() {
         const j = _fdJ; if (!(j && j.show && Number(j.pct) > 0)) return '<p class="fd-note" hidden></p>';
-        const extra = Number(j.extra) > 0 ? Number(j.extra) : 0;
+        const extra = _fdExtraTxt(j); // #974
         // #839 (owner): "no es 150% si instalás: es 100% por la primera carga y el 50% EXTRA después de la carga, instalando la app y activando
         // las notificaciones (que exija esos 2 pasos)". Dos líneas claras; nunca la suma.
         return '<p class="fd-note">' + _FD_NOTE_INNER(j.pct, extra) + '</p>';
@@ -373,7 +375,7 @@
             const j = await _fdPromoLoad();
             if (!j || !j.show) return;
             const p = _el('fdPct'), pa = _el('fdPctApp'), ap = _el('fdApp'), tx = _el('fdTxt');
-            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (Number(j.extra) || 0) + '% EXTRA'; // #839 if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || '';
+            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (_fdExtraTxt(j) || '0%') + ' EXTRA'; // #839 · #974 if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || '';
             try { sessionStorage.setItem('vip_fd_seen', '1'); } catch (_) {}
             VIP.ui.showModal('fdModal');
         } catch (_) {}

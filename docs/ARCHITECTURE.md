@@ -1513,3 +1513,15 @@ redondeadas a 500) y `_autopilotMonthItemsRaw` (`tb`: pct + apPctPlus, entre 10 
 
 **Trampas:** la decisión necesita cierres (`giftRatio` null ⇒ se trata como "hay margen") y ≥ 30 contactados para juzgar una conversión; no
 cambiar los umbrales sin correr `scripts/test-weekly-review.js`. El informe en texto (`reportText`) es lo que el owner copia para analizar afuera.
+
+
+## Bienvenida acotada (#974, 2026-10-24)
+
+- **Bono de 1ª carga:** `Config['firstDepositBonusPct']` (100) con tope `Config['firstDepositCapArs']` ($15.000; 0 = libre) y 0 % sobre el resto. Se
+  aplica en `resolveAutoBonus` (fuente `first_deposit`) ⇒ manual y hgcash por igual. Panel → Estrategia clientes → 1️⃣ Primera carga.
+- **Extra por instalar:** `Config['installGift']` = { enabled, fixedArs ($5.000), pct, capArs, days }. `installGiftAmount` = min(fixedArs, carga) si
+  fixedArs > 0; si no, pct con tope. En modo fijo `User.installGift.pct = null` (la app muestra sólo el monto). Textos con {monto}; el cartel de 1ª carga
+  (`/api/first-deposit-promo`) devuelve `extraMonto`, `capArs` y renderiza `/sys_first_deposit_popup` con {tope} y {extraMonto}.
+- **Anti-multicuenta de bienvenida:** `_welcomeAbuseOf(user)` busca otra cuenta con el mismo teléfono (últimos 10 dígitos), mismo `deviceIds` o mismo
+  token FCM. Si hay, `resolveAutoBonus` bloquea todos los bonos de bienvenida en la primera carga (nota interna al agente) y `maybeOfferInstallGift` no
+  ofrece el extra. No bloquea la cuenta ni toca ruleta/lotes/reembolsos. Sólo se evalúa cuando es la primera carga real (`_isFirstRealDeposit`).

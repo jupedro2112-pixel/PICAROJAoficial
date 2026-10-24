@@ -934,7 +934,9 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                             <!-- #283/#290: % EXTRA por instalar la app (se ofrece al acreditarse la PRIMERA carga de un cliente sin la app) -->
                             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
                                 <label style="margin:0;display:flex;align-items:center;gap:5px;cursor:pointer;" title="Al acreditarse la PRIMERA carga de un cliente que no tiene la app instalada, la app le ofrece este % EXTRA sobre esa carga si la instala (ahora, o después de jugar: le queda un botón grande pendiente abajo). Se acredita solo cuando lo carga desde la app instalada con notificaciones."><input type="checkbox" id="installGiftEnabledChk" style="width:auto;"> 🎁 % EXTRA por instalar la app (sobre la 1ª carga) ACTIVO</label>
-                                <label style="margin:0;">% extra:</label>
+                                <label style="margin:0;" title="#974: monto fijo en fichas (0 = usar el % con tope)">monto fijo $:</label>
+                                <input type="number" id="installGiftFixedInput" min="0" step="500" style="width:100px;">
+                                <label style="margin:0;">o % extra:</label>
                                 <input type="number" id="installGiftPctInput" min="0" max="500" step="1" style="width:80px;">
                                 <label style="margin:0;">tope $:</label>
                                 <input type="number" id="installGiftCapInput" min="0" step="500" style="width:100px;">
@@ -1464,8 +1466,10 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                 <div class="dia-card"><div class="dia-card-h"><b>1️⃣ Primera carga</b><small>Bono de bienvenida en la primera carga real + extra si instala la app (con notificaciones). El cliente lo ve al entrar y sobre CARGAR AHORA.</small></div>
                     <div class="dia-bar dia-bar-in">
                         <label>Bono 1ª carga %<input type="number" id="stFdPct" min="0" max="500" style="width:80px;"></label>
+                        <label title="#974: máximo del bono de la primera carga en pesos (0 = sin tope). Nada sobre el resto.">Tope $<input type="number" id="stFdCap" min="0" step="500" style="width:100px;"></label>
                         <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="stIgOn" style="width:auto;"> Extra por instalar la app</label>
-                        <label>Extra %<input type="number" id="stIgPct" min="0" max="500" style="width:80px;"></label>
+                        <label title="#974: monto FIJO en fichas por instalar la app (0 = usar el % de abajo)">Extra fijo $<input type="number" id="stIgFixed" min="0" step="500" style="width:100px;"></label>
+                        <label>o Extra %<input type="number" id="stIgPct" min="0" max="500" style="width:80px;"></label>
                         <span class="dia-pill" id="stFdInfo">…</span>
                     </div>
                 </div>

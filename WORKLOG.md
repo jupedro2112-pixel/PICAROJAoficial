@@ -8,6 +8,23 @@
 
 ## Sesión 2026-10-24
 
+### 974. 🛡️ Bono de bienvenida con TOPE ($15.000), extra por instalar como MONTO FIJO ($5.000) y sin bienvenida para teléfono/celular repetido (manual y hgcash) — SW v644 · admin SW v201
+**Pedido (owner):** "¿el 100% y el 50% es mucho?" → revisado: la primera carga era 100% SIN tope (#812: $500.000 de carga = $500.000 de regalo) y el
+extra por instalar 50% hasta $10.000. "Armalo todo como vos digas, y que funcione así también en las cargas automáticas; cambiá todas las infos y
+mensajes".
+- **Tope propio del bono de 1ª carga:** `Config['firstDepositCapArs']` (default $15.000; 0 = libre), `getFirstDepositCapArs`. En `resolveAutoBonus` la
+  fuente `first_deposit` pasa por `bonusWithCap` con { capArs: tope, restPct: 0 } (antes `enabled:false`). Vale para la carga manual y para hgcash
+  (las dos llaman `resolveAutoBonus`). $5.000 → $5.000 · $10.000 → $10.000 · $50.000 → $15.000. Panel → Estrategia → "Tope $".
+- **Extra por instalar = monto fijo:** `Config['installGift'].fixedArs` (default $5.000; 0 = vuelve al % con tope). `installGiftAmount` devuelve
+  min(fijo, carga). Al que carga $5.000 le da $5.000 (antes $2.500); al que carga $50.000, $5.000 (antes $10.000). `User.installGift.pct` queda null
+  en modo fijo ⇒ la app muestra sólo el monto. Panel → Estrategia → "Extra fijo $" y COMANDOS → Bonos automáticos → "monto fijo $".
+- **Sin bienvenida con teléfono / celular / notificaciones compartidas:** `_welcomeAbuseOf(user)` (teléfono normalizado a 10 dígitos, `deviceIds`,
+  tokens FCM) ⇒ en la PRIMERA carga real `blockWelcome` (sin bono de 1ª carga, código, instalar, 2ª carga; la cuenta NO se bloquea) con nota interna
+  para el agente (#839), y `maybeOfferInstallGift` tampoco ofrece el extra. Se chequea sólo cuando es la primera carga (una consulta por cliente nuevo).
+- **Textos:** `/sys_install_gift_offer`, `/sys_install_gift_credited` ("${monto} EXTRA en fichas"), `/sys_first_deposit_popup` ({tope}, {extraMonto}),
+  FAQ de Soporte "🎁 Bonos" ({fd_pct}, {fd_tope}, {ig_txt}) y el cartel/notas de primera carga de la PWA (`_fdExtraTxt`: "$5.000" o "50%"). Migración
+  `mig974WelcomeCaps` pisa los guardados que todavía dicen "% EXTRA".
+
 ### 973. 📏 REVISIÓN SEMANAL automática (mide y ajusta sola), menú PRINCIPAL con clave (INICIO · Centro de avisos · Revisión semanal), avisos de reembolso semanal y mensual — admin SW v200
 **Pedido (owner):** "dejá arriba Principal con clave: INICIO y este Centro; lo que se deja de usar, último"; "avisos de reembolso SIEMPRE a los que
 tienen disponible, sea diario, semanal o mensual"; "¿lo analizás y lo modificás vos? armá un sistema de medición semanal para reajustar viendo la
