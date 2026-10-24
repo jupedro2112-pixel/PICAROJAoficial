@@ -315,5 +315,5 @@
         load(); clearInterval(_poll); _poll = setInterval(load, 5 * 60 * 1000);
         try { document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); }); } catch (_) {}
     }
-    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, paintCasino, casinoBar, join, terms, termsClose, tcToggle, tgOpen };
+    VIP.sorteos = { init, load, paint: paintCards, /* #988: repinta las tarjetas en un contenedor nuevo */ open, close, closeInline, openMini, closeMini, goMenu, paintCasino, casinoBar, join, terms, termsClose, tcToggle, tgOpen };
 })();

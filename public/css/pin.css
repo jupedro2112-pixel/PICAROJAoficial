@@ -3029,3 +3029,34 @@ html[data-theme="dark"] .srt-tk-list summary { color: var(--srt-lite); }
 html[data-theme="dark"] .toast { box-shadow: none !important; }
 .in-app-notification-banner { top: calc(6px + var(--sat, env(safe-area-inset-top, 0px))) !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 .header.header-toolbar.tb-circles, .support-bar, .support-bar.chat-topbar, .casino-topbar, #casinoTopBar { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+/* ===== #988 (owner, captura 2026-10-24): DENTRO de la plataforma, arriba el bloque del menú (saldo · sorteos · nivel/racha · cargá · servicios) y
+   abajo la plataforma entera con sus fotos, Slots/Inicio/Deportes y sus juegos; el overlay scrollea y la barra del casino queda fija arriba.
+   Sin primera carga (body.nodep) el cartel rojo grande ocupa el LUGAR del saldo; con carga, CARGÁ AQUÍ rectangular a mitad de tamaño que
+   despliega la Carga rápida ahí mismo (.casino-load.ch-inline). Lo flotante (burbuja, panel, franjas de gesto, barra de instalar) pasa a fixed
+   porque el overlay ahora tiene scroll. ===== */
+#casinoOverlay { overflow-y: auto !important; overflow-x: hidden !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+#casinoTopBar { position: sticky !important; top: 0; z-index: 9; }
+#casinoSupportBubble, #casinoLoadPanel.casino-load, .casino-ig, .swipe-edge { position: fixed !important; }
+.casino-home { flex: 0 0 auto; background: var(--p-bg); color: var(--p-text); font-family: var(--p-font); padding: 4px 0 10px; border-bottom: 1px solid var(--p-border); }
+.casino-home .play-bal { margin: 6px 12px 0; }
+.casino-home .fit-link { margin: 4px 12px 2px; }
+.casino-home .srt-cards { margin: 6px 12px 0; }
+.casino-home .status-row { margin: 6px 12px 0; }
+.casino-home .status-row .vip-mini, .casino-home .status-row .fire-mini { display: inline-flex !important; }
+.casino-home .bv-sec-t { margin: 10px 12px 2px !important; text-align: center; }
+.casino-home .bv-quick { margin: 0 12px !important; }
+.ch-cta-big { display: none; }
+body.nodep .ch-cta-big { display: flex !important; position: static !important; transform: none !important; flex-direction: column; align-items: center; gap: 3px; width: calc(100% - 24px); margin: 6px 12px 0 !important; padding: 13px 16px !important; border-radius: 16px !important; animation: none !important; box-shadow: 0 6px 18px rgba(210, 58, 78, .28) !important; }
+body.nodep .ch-cta-big .ev-cta-b { font: 900 18px var(--p-font) !important; letter-spacing: .4px !important; text-align: center; }
+body.nodep .ch-cta-big .ev-cta-t { font: 700 10.5px var(--p-font) !important; opacity: .92; text-align: center; }
+body.nodep .casino-home .ch-bal { display: none; }
+.ch-load { display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); margin: 6px 12px 0; padding: 8px 12px; border: 0; border-radius: 12px; background: var(--p-red); color: #fff; font-family: var(--p-font); text-align: left; cursor: pointer; box-shadow: 0 4px 12px rgba(210, 58, 78, .22); }
+.ch-load > b { font: 900 14px var(--p-font); white-space: nowrap; flex: 0 0 auto; }
+.ch-load > small { flex: 1 1 auto; min-width: 0; font: 700 10.5px var(--p-font); opacity: .92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-load > small b { font: 900 10.5px var(--p-font); color: #fff; }
+.ch-load > i { font-style: normal; font-size: 13px; flex: 0 0 auto; transition: transform .15s; }
+.ch-load[aria-expanded="true"] > i { transform: rotate(180deg); }
+body.nodep .ch-load { display: none; }
+.casino-load.ch-inline { position: static !important; width: auto !important; right: auto !important; bottom: auto !important; margin: 6px 12px 0; box-shadow: none !important; border-radius: 14px !important; }
+.casino-load.ch-inline[hidden] { display: none !important; }

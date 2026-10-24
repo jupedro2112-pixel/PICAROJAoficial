@@ -8,6 +8,26 @@
 
 ## Sesión 2026-10-24
 
+### 988. 🎰 Dentro de la plataforma: arriba el bloque del menú (saldo · sorteos · nivel/racha · cargá · servicios) y abajo la plataforma entera — SW v650
+**Pedido (owner, captura):** "cuando entrás a la plataforma que parezca que seguís en el menú completo, pero que abajo cambie: Slots/Inicio/Deportes y,
+después de las fotos, el orden de juegos como está en la plataforma. Esto [captura del bloque: saldo, sorteos, nivel/racha, cartel rojo, servicios] es el inicio
+de la página completa con la página. En la primera carga, el cartel rojo de APRETÁ AQUÍ donde está el saldo, encimado y ajustado; cuando carga, que se vaya y
+quede uno más normal a mitad de tamaño: el botón Cargá aquí de PICA ROJA como el resto; cerrado, rectangular; expandido, tipo carga rápida".
+**Hecho (home.js `_casinoHomeEnsure`, pin.css #988):**
+- Bloque `#casinoHome` debajo de la barra del casino (`renderCasinoTabs` lo crea una vez y lo repinta en cada apertura): saldo (`.js-play-bal`, se actualiza
+  con el resto), "Ajustar la pantalla", las dos mitades del sorteo (`data-srt-cards`; `VIP.sorteos.paint` nuevo), nivel VIP + racha (COPIAS sin ids de
+  `#vipMiniBtn` / `#fireMiniBtn`, sincronizadas cada 5 s en el mismo intervalo de `_fireMiniSync`), CARGÁ AQUÍ y "Todo lo que ofrecemos" con los 4 servicios
+  (copiados del básico: Misiones · Reembolsos · Referidos · Ruleta; abren sus modales por encima del casino).
+- El overlay del casino ahora SCROLLEA (`overflow-y:auto`), la barra es sticky y el iframe mide una pantalla menos la barra (`_casinoFrameFit`, también al
+  rotar): al bajar, la plataforma queda sola con sus fotos, Slots/Inicio/Deportes y sus juegos tal cual los muestra 1girox (eso no se toca: es su página).
+  Lo flotante (burbuja CARGA RÁPIDA, panel flotante, franjas del gesto de volver, barra de instalar) pasó a `position:fixed` para no scrollear con el bloque.
+- **Sin primera carga** (`body.nodep`): el cartel rojo grande "X% VIGENTE · APRETÁ AQUÍ · carga mínima" ocupa el LUGAR del saldo (el saldo se esconde).
+  **Con carga:** vuelve el saldo y debajo queda "CARGÁ AQUÍ · Carga mínima $2.000" rectangular a mitad de altura (`.ch-load`; si hay promo viva dice
+  "X% VIGENTE · CARGÁ AQUÍ"). Los dos despliegan la **Carga rápida ahí mismo** (`#chLoadPanel`, `toggleCasinoLoad(force, true)`: alias/CBU/titular,
+  Adjuntar comprobante, Retirar, Soporte) y la ✕ o el mismo botón la pliegan (`VIP.home.casinoHomeLoad`).
+- #937 (abrir el flotante de Carga rápida al iniciar en Girox directo) queda reemplazado: la carga está a la vista arriba. La burbuja de abajo sigue.
+- Pruebas: `node --check`, `scripts/test-sorteos-front.js` y una simulación del bloque + desplegable (sin undefined, tags balanceados, ids sin duplicar).
+
 ### 987. Carteles de arriba (toast y aviso en la app) en la línea del menú superior, sin borroso — SW v649
 **Pedido (owner):** "en iPhone 17 Pro Max, cuando salta un texto, lo tapa la parte superior: dejalo en la línea del menú superior y sin borroso arriba".
 - `.toast` (base.css: top 20px/right 20px) y `.in-app-notification-banner` (inline: top 16px) ignoraban la isla/barra de estado. Ahora `top = 6px +
