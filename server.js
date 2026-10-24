@@ -644,7 +644,10 @@ const app = express();
 // Express sees the real client IP and HTTPS status from X-Forwarded-* headers.
 // Without this, req.ip returns the internal LB address and Socket.IO/CORS may
 // behave incorrectly when accessed through a custom domain like vipcargas.com.
-app.set('trust proxy', 1);
+// #959: ver src/utils/trustedProxy.js — se confía en Cloudflare + redes privadas (ELB/nginx) ⇒ req.ip es la IP REAL del cliente.
+// En entornos de prueba sin Cloudflare (Render) se mantiene el salto único de antes.
+if (process.env.RENDER === 'true' || process.env.TRUST_PROXY_HOPS) app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 1);
+else app.set('trust proxy', (ip) => require('./src/utils/trustedProxy').isTrustedHop(ip));
 
 // ============================================
 // CORS ORIGIN RESOLVER (centralizado)

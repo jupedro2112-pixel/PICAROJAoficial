@@ -2556,7 +2556,7 @@
         const pct = _bonusLivePct(on); const label = pct > 0 ? '🎁 ' + pct + '% VIGENTE · APRETÁ AQUÍ' : '⚡ CARGÁ AQUÍ';
         const sub = (on ? '⚠️ Aviso importante: carga mínima ' : 'Carga mínima ') + '<b class="md-amt">' + md + '</b> · se acredita sola';
         try { const b = document.querySelector('#evCtaTop .ev-cta-b'), t = document.querySelector('#evCtaTop .ev-cta-t'), cta = _el('evCtaTop'); if (b && t) { b.textContent = label; t.innerHTML = sub; if (cta) cta.classList.toggle('ev-cta-live', pct > 0); } } catch (_) {}
-        try { const bb = document.querySelector('#bvLoadBtn > span > b'), bt = document.querySelector('#bvLoadBtn .bv-min'), bl = _el('bvLoadBtn'); if (bb && bt) { bb.textContent = pct > 0 ? pct + '% VIGENTE · APRETÁ AQUÍ' : 'CARGÁ AQUÍ'; bt.innerHTML = sub; if (bl) bl.classList.toggle('ev-cta-live', pct > 0); } } catch (_) {}
+        try { const bb = document.querySelector('#bvLoadBtn > span > b'), bt = document.querySelector('#bvLoadBtn .bv-min'), bl = _el('bvLoadBtn'); if (bb && bt) { bb.textContent = pct > 0 ? pct + '% VIGENTE · APRETÁ AQUÍ' : 'CARGÁ AQUÍ'; bt.innerHTML = 'Carga mínima <b class="md-amt">' + md + '</b>'; if (bl) bl.classList.toggle('ev-cta-live', pct > 0); } } catch (_) {} // #960: en el básico, subtítulo corto (se iba de cuadro)
         // #776 (BUG GRAVE, usuario real "al presionar Carga rápida se cuelga absolutamente todo"): acá se llamaba toggleCasinoLoad(true)
         // SIEMPRE; ese panel llama _fdNotesPaint → firstGuidePaint → _paintFirstLoad → toggleCasinoLoad… en bucle infinito por microtareas
         // (la promesa de la promo ya estaba resuelta) y la pestaña quedaba congelada. Ahora el panel abierto se repinta SÓLO si el estado

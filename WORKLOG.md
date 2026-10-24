@@ -8,6 +8,16 @@
 
 ## Sesión 2026-10-24
 
+### 959. 🌐 IP real del cliente detrás de Cloudflare (`trust proxy` por rangos) — src/utils/trustedProxy.js
+**Pedido (owner):** confirmó que todo el tráfico entra por Cloudflare ("listo, ya está"). Express confía sólo en los saltos de Cloudflare (rangos v4/v6
+publicados) y en redes privadas/locales (ELB, nginx): el primer salto ajeno es la IP real ⇒ límites por IP, `registrationIp` y radar con la IP del
+cliente, no la del nodo de Cloudflare. Quien pegue directo al balanceador no puede inventar X-Forwarded-For. En Render (sin Cloudflare) o con
+`TRUST_PROXY_HOPS` se mantiene el número de saltos de antes. Probado con 16 casos. Si Cloudflare publica rangos nuevos, se agregan ahí.
+
+### 960. ▭ Básico: el botón CARGAR no se sale del cuadro — SW v638
+**Pedido (owner, captura):** "en el básico se va de cuadro, acomodalo". Título en dos líneas (15 px, 14 px con bono vigente) y subtítulo corto
+"Carga mínima $2.000".
+
 ### 956. 🛡️ Revisión de seguridad a fondo (3 auditorías en paralelo) y correcciones — admin SW v196
 **Pedido (owner):** "revisá seguridad al extremo y todo lo necesario para cuidar la página". Base ya sólida (headers CSP/HSTS/nosniff, mongo-sanitize,
 xss-clean, rate limits, HMAC del webhook hgcash, OTP con bcrypt, cookie httpOnly/Strict, sockets con tokenVersion, sin secretos en el repo).
