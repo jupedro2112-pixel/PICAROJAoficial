@@ -1417,6 +1417,8 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
   deja los puntajes como estaban. Sólo anotados pueden ganar; el ranking público muestra a todos con nombre tapado (`mask`), el propio completo.
 - **Requisitos para anotarse** (`_sorteoChecksOf`): app instalada (token FCM standalone), notificaciones (token), Telegram (declarado), una carga real.
   Toggles en `config.requirements`. Un requisito nuevo va ahí y en `_sorteoMissing` + checklist del front.
+- **Fotos de premios (#967):** `SorteoImage` (buffer en la base) + `POST /api/admin/sorteos/prize-image` (base64, ≤600 KB) y `GET /api/sorteos/img/:id`;
+  el `img` de un premio puede ser emoji, ruta `/images/...`, URL https o `/api/sorteos/img/<id>`.
 - **Front (#928/#933):** tocar una mitad DESPLIEGA el sorteo ahí mismo (`openInline`, panel `.srt-inline` con ✕, Bases adentro); el recuadro de la barra
   del casino abre una HOJA RESUMIDA (`openMini`: contador, 3 premios, 2 líneas, "Ver más en el menú" ⇒ `goMenu` cierra el casino y despliega en el
   menú). La pantalla completa `#srtModal` queda de respaldo.

@@ -17611,7 +17611,9 @@ function _srtRender() {
     const tabs = '<div class="at-tabs" style="margin-bottom:.6rem">' + ['mensual', 'gran'].map((k) => '<button class="' + (_srtTab === k ? 'on' : '') + '" onclick="srtTab(\'' + k + '\')">' + escapeHtml(c[k].emoji + ' ' + c[k].title) + '</button>').join('') + '</div>';
     const k = _srtTab, s = c[k], x = d[k] || { period: {}, counts: {}, anotados: [], ranking: [] };
     if (k !== 'mensual' && _srtSub === 'extra') _srtSub = 'ranking'; // #930: el Gran Sorteo no tiene premio extra
-    const prz = (i) => '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:.4rem;margin-bottom:.3rem"><input class="form-input" id="srtP' + i + 'img" value="' + escapeHtml(s.prizes[i].img) + '" title="Emoji o foto: ruta /images/... o URL https://" placeholder="emoji o URL de la foto"><input class="form-input" id="srtP' + i + 'name" value="' + escapeHtml(s.prizes[i].name) + '" placeholder="' + (i + 1) + '° premio"><input class="form-input" id="srtP' + i + 'value" value="' + escapeHtml(s.prizes[i].value || '') + '" placeholder="valor / detalle"></div>';
+    // #967: + "📎 Adjuntar foto" (sube el archivo a la base y deja la URL en el campo); el campo acepta emoji o URL
+    const prz = (i) => { const img = String(s.prizes[i].img || ''); const isPic = /^(\/|https?:\/\/)/.test(img);
+        return '<div style="display:grid;grid-template-columns:44px 1.2fr 1fr 1fr auto;gap:.4rem;margin-bottom:.3rem;align-items:center"><span style="width:44px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--p-border,#333);border-radius:8px;overflow:hidden;font-size:22px;background:#fff">' + (isPic ? '<img src="' + escapeHtml(img) + '" alt="" style="width:100%;height:100%;object-fit:cover">' : escapeHtml(img || '🎁')) + '</span><input class="form-input" id="srtP' + i + 'img" value="' + escapeHtml(img) + '" title="Emoji o foto: ruta /images/... o URL https://" placeholder="emoji o URL de la foto"><input class="form-input" id="srtP' + i + 'name" value="' + escapeHtml(s.prizes[i].name) + '" placeholder="' + (i + 1) + '° premio"><input class="form-input" id="srtP' + i + 'value" value="' + escapeHtml(s.prizes[i].value || '') + '" placeholder="valor / detalle"><label class="btn btn-secondary btn-small" style="white-space:nowrap;cursor:pointer" title="Subir una foto desde tu computadora (JPG/PNG/WEBP, hasta 600 KB)">📎 Adjuntar foto<input type="file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="sorteosPrizeUpload(\'' + k + '\',' + (i + 1) + ',this)"></label></div>'; };
     const cfg = '<details class="card" style="margin-bottom:1rem"><summary style="cursor:pointer;font-weight:800">⚙️ Configuración del ' + escapeHtml(s.title) + ' <small style="color:#888;font-weight:600">· ' + (st[x.period.status] || '') + ' · período ' + escapeHtml(x.period.key || '') + '</small></summary><div style="margin-top:.7rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.6rem">' +
         '<label>Activo <input type="checkbox" id="srtEn" ' + (s.enabled ? 'checked' : '') + '></label>' +
         '<label>Título <input class="form-input" id="srtTitle" value="' + escapeHtml(s.title) + '"></label><label>Emoji <input class="form-input" id="srtEmoji" value="' + escapeHtml(s.emoji) + '"></label>' +
@@ -17656,6 +17658,17 @@ function sorteosSaveForm(k) {
     else { s.start = v('srtStart'); s.end = v('srtEnd'); s.dayDepositPts = nn('srtDayPts'); s.dayDepositMin = nn('srtDayMin'); s.missionWeekPct = nn('srtMisPct'); }
     const patch = {}; patch[k] = s; sorteosSave(patch);
 }
+// #967: adjuntar foto de un premio desde el panel (se guarda en la base y se sirve por /api/sorteos/img/:id)
+function sorteosPrizeUpload(k, pos, input) {
+    const f = input && input.files && input.files[0]; if (!f) return;
+    if (f.size > 600 * 1024) { showToast('La foto pesa ' + Math.round(f.size / 1024) + ' KB: achicala a menos de 600 KB', 'error'); input.value = ''; return; }
+    const rd = new FileReader();
+    rd.onload = async function () {
+        try { const r = await authFetch('/api/admin/sorteos/prize-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: k, pos: pos, dataUrl: rd.result }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('📎 Foto del premio ' + pos + ' subida', 'success'); loadSorteos(); }
+        catch (e) { showToast(e.message, 'error'); }
+    };
+    rd.readAsDataURL(f);
+}
 async function sorteosRecalc() {
     showToast('↻ Recalculando con los stats de 1girox…', 'info');
     try { const r = await authFetch('/api/admin/sorteos/recalc', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('✅ Puntos recalculados', 'success'); loadSorteos(); }
@@ -17666,7 +17679,7 @@ async function sorteosDraw(periodKey, redo, early) {
     try { const r = await authFetch('/api/admin/sorteos/mensual/draw-extra', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ periodKey, redo: !!redo, early: !!early }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('🎲 ' + (j.draw.winners || []).length + ' ganadores sorteados · semilla ' + j.draw.seed.slice(0, 8) + '…', 'success'); _srtSub = 'extra'; loadSorteos(); }
     catch (e) { showToast(e.message, 'error'); }
 }
-window.loadSorteos = loadSorteos; window.srtTab = srtTab; window.srtSub = srtSub; window.sorteosSave = sorteosSave; window.sorteosSaveForm = sorteosSaveForm; window.sorteosRecalc = sorteosRecalc; window.sorteosDraw = sorteosDraw;
+window.loadSorteos = loadSorteos; window.srtTab = srtTab; window.srtSub = srtSub; window.sorteosSave = sorteosSave; window.sorteosSaveForm = sorteosSaveForm; window.sorteosRecalc = sorteosRecalc; window.sorteosDraw = sorteosDraw; window.sorteosPrizeUpload = sorteosPrizeUpload; // #967
 
 // ===== #886 bono para clientes nuevos (día 5/15/30) =====
 async function loadNewbieOffers() {

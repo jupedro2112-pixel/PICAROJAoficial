@@ -8,6 +8,13 @@
 
 ## Sesión 2026-10-24
 
+### 967. 📎 Panel → Sorteos: adjuntar la foto de cada premio desde la computadora — admin SW v197
+**Pedido (owner):** "dejá en Sorteos para subir las fotos de forma manual, externa, desde el panel, si después lo quiero hacer: adjuntar".
+- Botón "📎 Adjuntar foto" por premio (JPG/PNG/WEBP, hasta 600 KB): `POST /api/admin/sorteos/prize-image` guarda la imagen en la base
+  (`SorteoImage`, no en disco: AWS tiene varias instancias) y deja `/api/sorteos/img/<id>` como `img` del premio en `Config['sorteos']`;
+  `GET /api/sorteos/img/:id` la sirve con caché de un día. Subir otra borra la anterior. Vista previa al lado del campo; escribir un emoji en el campo
+  vuelve al dibujo. Sólo el admin general (la lista de #956 ya bloquea a los agentes).
+
 ### 966. ↩️ Premios: vuelven los dibujos (las fotos de #963 no gustaron) · se borran esas fotos
 **Pedido (owner):** "las fotos están mal, poné las que estaban, estaban bien, y borramos estas". Defaults de los 6 premios otra vez con emoji (📱 🛍️ 🎰 /
 🚗 🏝️ 💵); se eliminan iphone/regalo/fichas/caribe/usd.jpg. Queda sólo la foto del 208 (CC BY) por si se quiere pegar en el panel. El soporte de

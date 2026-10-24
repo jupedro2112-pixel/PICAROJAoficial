@@ -26291,6 +26291,35 @@ app.put('/api/admin/sorteos', authMiddleware, adminMiddleware, async (req, res) 
     res.json({ success: true, config: merged });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
+// #967 (owner): "dejá en Sorteos para subir las fotos de forma manual desde el panel (adjuntar)". Foto por premio en la base (SorteoImage),
+// servida por /api/sorteos/img/:id; el premio queda con esa URL en Config['sorteos'] (se puede volver al emoji escribiéndolo en el campo).
+const SorteoImage = require('./src/models/SorteoImage');
+app.get('/api/sorteos/img/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || ''); if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) return res.status(404).end();
+    const im = await SorteoImage.findOne({ id }).lean(); if (!im || !im.data) return res.status(404).end();
+    res.setHeader('Content-Type', im.mime); res.setHeader('Cache-Control', 'public, max-age=86400, immutable'); res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(Buffer.from(im.data.buffer ? im.data.buffer : im.data));
+  } catch (e) { res.status(500).end(); }
+});
+app.post('/api/admin/sorteos/prize-image', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const key = String((req.body && req.body.key) || ''); const pos = Number(req.body && req.body.pos);
+    if (!SORTEO_KEYS.includes(key) || !(pos >= 1 && pos <= 3)) return res.status(400).json({ error: 'Premio inválido' });
+    const m = String((req.body && req.body.dataUrl) || '').match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) return res.status(400).json({ error: 'Mandá una foto JPG, PNG o WEBP.' });
+    const buf = Buffer.from(m[2], 'base64'); if (!buf.length || buf.length > 600 * 1024) return res.status(400).json({ error: 'La foto tiene que pesar hasta 600 KB (achicala antes de subirla).' });
+    const id = uuidv4();
+    await SorteoImage.create({ id, key, pos, mime: m[1], data: buf, size: buf.length, uploadedBy: req.user.username });
+    const cfg = await _sorteosCfg(); const prev = String((cfg[key].prizes[pos - 1] || {}).img || '');
+    cfg[key].prizes[pos - 1] = Object.assign({}, cfg[key].prizes[pos - 1], { img: '/api/sorteos/img/' + id });
+    await Config.set('sorteos', cfg, req.user.username);
+    const pm = prev.match(/^\/api\/sorteos\/img\/([A-Za-z0-9-]+)$/); if (pm && pm[1] !== id) SorteoImage.deleteOne({ id: pm[1] }).catch(() => {}); // la anterior subida ya no se usa
+    logger.info(`[sorteos] ${req.user.username} subió la foto del premio ${key}#${pos} (${Math.round(buf.length / 1024)} KB)`);
+    res.json({ success: true, url: '/api/sorteos/img/' + id });
+  } catch (e) { logger.error('[sorteos] prize-image: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.post('/api/admin/sorteos/recalc', authMiddleware, adminMiddleware, async (req, res) => {
   try { if (_sorteoRunning) return res.status(409).json({ error: 'Ya se está recalculando: esperá un minuto.' }); await _sorteoTick({ force: true }); res.json({ success: true, diag: _sorteoDiag }); }
   catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
