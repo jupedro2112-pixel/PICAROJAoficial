@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 911. 📖 Historias: borrar las vigentes y publicar las 5 de hoy YA (al deployar + botón del panel) — admin SW v185
+**Pedido (owner):** "las historias borralas y publicá las del día a ver". Sin acceso a la base desde acá ⇒ `_storyWipeForRepublish`: apaga
+todas las historias vigentes (manuales y automáticas; las personales `nb-*`/`audienceUserId` no se tocan), borra las automáticas de hoy y
+ayer, y `_storyAutoTick({ force: true })` publica las 5 de hoy al instante (la hora de publicación pasa a "ahora"; sin push de bono si se
+adelanta). Corre UNA vez al deployar (`Config['mig911StoriesRepublish']`) y a demanda con "🔄 Borrar y publicar las de hoy" en el panel
+(`POST /api/admin/stories-autopilot/republish-today`, devuelve publicadas / apagadas / salteadas). ⚠️ Render comparte la base (#779): si
+Render deploya primero, el one-shot corre ahí (publica con foto con URL absoluta a Render; producción se las toma al deployar, #850).
+
 ### 910. 💬 Soporte: "Cómo funciona todo" en un RECUADRO encima de todo (legible, con scroll y cerrar) — SW v605
 **Pedido (owner):** "el ver más y ver menos no se puede leer el texto; necesito que aparezca arriba y que se pueda leer, abrí un recuadro
 como para ver y bajar y se pueda cerrar". Reemplaza el plegable de #907: en la tarjeta queda un BOTÓN y abre `#spFaqModal` (fijo,

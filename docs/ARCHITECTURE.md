@@ -1413,3 +1413,5 @@ Slots `0..4` = 10:00 · 13:00 · 16:00 · 19:00 · 21:30 (servicio; lunes el slo
 plata ni sueldos). Foto: `storyImage` (SVG, `GET /api/stories/:id/auto.svg?v=STORY_IMG_VER`); si la foto falla la historia sale sin foto.
 **Diagnóstico:** cada pasada escribe `Config['storyAutoDiag']` (última pasada, publicadas, salteadas con motivo, error) que el panel muestra
 ("🛠 Motor…"). Cada historia se publica en su propio try/catch: un error no frena a las demás. Kill switch: `STORIES_AUTOPILOT_DISABLED=1`.
+**Republicar (#911):** `_storyWipeForRepublish` + `_storyAutoTick({ force: true })` (one-shot `mig911StoriesRepublish` al deployar y
+`POST /api/admin/stories-autopilot/republish-today`): apaga las vigentes (no las personales), borra `sa-<hoy|ayer>-*` y publica las de hoy ya.

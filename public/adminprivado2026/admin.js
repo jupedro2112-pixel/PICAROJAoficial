@@ -16109,7 +16109,8 @@ async function loadStoriesAuto() {
         h += '<div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;padding:.4rem .5rem;border:1px solid var(--p-border,rgba(255,255,255,.1));border-radius:10px;margin-bottom:.5rem">' +
             '<span>⚽ Partidos del día: <b style="color:' + (j.matchesOn ? '#22c55e' : '#f87171') + '">' + (j.matchesOn ? 'ENCENDIDOS (salen a las 00:05)' : 'apagados') + '</b></span>' +
             '<button type="button" class="btn btn-secondary btn-sm" onclick="storiesAutoMatches(' + (j.matchesOn ? 'false' : 'true') + ')">' + (j.matchesOn ? '⏸ Apagar partidos' : '▶ Encender partidos') + '</button>' +
-            '<span style="color:#888;font-size:.74rem">Apagados, salen sólo las 5 historias de servicio (explican la app). Nunca se repiten con las del día anterior.</span></div>';
+            '<span style="color:#888;font-size:.74rem">Apagados, salen sólo las 5 historias de servicio (explican la app). Nunca se repiten con las del día anterior.</span>' +
+            '<button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="storiesAutoRepublish()" title="Apaga las historias vigentes y publica las 5 de hoy ahora mismo">🔄 Borrar y publicar las de hoy</button></div>';
         const dg = j.diag || null;
         if (j.disabled) h += '<div style="color:#f87171;font-size:.78rem;margin-bottom:.4rem">⛔ El motor está APAGADO por STORIES_AUTOPILOT_DISABLED=1 en el servidor.</div>';
         if (dg && dg.lastTickAt) {
@@ -16159,7 +16160,17 @@ async function storiesAutoMatches(on) {
         showToast(on ? 'Partidos encendidos' : 'Partidos apagados', 'success'); loadStoriesAuto();
     } catch (e) { showToast('Error de conexión', 'error'); }
 }
-window.loadStoriesAuto = loadStoriesAuto; window.storiesAutoRemove = storiesAutoRemove; window.storiesAutoMatches = storiesAutoMatches;
+// #911: borrar las vigentes y publicar las 5 de hoy ya (sin esperar a cada horario)
+async function storiesAutoRepublish() {
+    if (!confirm('¿Borrar las historias que están publicadas y publicar las 5 de hoy AHORA?\n\nLas manuales vigentes se apagan; las automáticas de hoy y ayer se borran y se republican con el plan de hoy (sin esperar a cada horario). Las personales de bienvenida no se tocan.')) return;
+    try {
+        const r = await authFetch('/api/admin/stories-autopilot/republish-today', { method: 'POST', body: '{}' }); const j = await r.json();
+        if (!r.ok || !j.success) { showToast(j.error || 'No se pudo', 'error'); return; }
+        showToast('✅ ' + j.published + ' historias publicadas · ' + j.off + ' apagadas' + ((j.skipped || []).length ? ' · ' + j.skipped.length + ' salteadas' : '') + (j.error ? ' · error: ' + j.error : ''), j.published ? 'success' : 'error');
+        loadStoriesAuto();
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+window.loadStoriesAuto = loadStoriesAuto; window.storiesAutoRemove = storiesAutoRemove; window.storiesAutoMatches = storiesAutoMatches; window.storiesAutoRepublish = storiesAutoRepublish;
 // ═══ #817: AUTOPILOTO de retención — config + plan del año (este mes → diciembre del año que viene) ═══
 let _apData = null;
 async function loadCronAutopilot() {

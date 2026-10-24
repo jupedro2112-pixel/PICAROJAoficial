@@ -25727,19 +25727,42 @@ async function _storyResetOnce() {
     logger.info(`[historias-auto] #845 reset: ${off.modifiedCount || off.nModified || 0} manuales apagadas, ${del.deletedCount || 0} automáticas borradas ⇒ se republican con el estilo nuevo`);
   } catch (e) { logger.warn('[historias-auto] #845 reset: ' + e.message); }
 }
+// #911 (owner 2026-10-24: "las historias borralas y publicá las del día a ver"): apaga TODAS las historias vigentes (manuales y
+// automáticas; las personales #886 no se tocan), borra las automáticas de hoy y de ayer y deja que la pasada publique las 5 de hoy YA
+// (`force`: sin esperar a cada horario; la hora de publicación pasa a ser "ahora"). Corre UNA vez al deployar (marca en Config) y cuando
+// el admin toca "🔄 Borrar y publicar las de hoy" en el panel.
+async function _storyWipeForRepublish(who) {
+  const today = _schedArtKey(new Date()); const yesterday = _schedArtKey(new Date(new Date(today + 'T12:00:00-03:00').getTime() - 86400000));
+  const off = await Story.updateMany({ isActive: true, audienceUserId: null, autoKey: { $not: /^nb-/ } }, { $set: { isActive: false } });
+  const del = await Story.deleteMany({ autoKey: { $regex: '^sa-(' + today + '|' + yesterday + ')-' } });
+  const n1 = off.modifiedCount || off.nModified || 0, n2 = del.deletedCount || 0;
+  logger.info(`[historias-auto] #911 ${who}: ${n1} historias apagadas, ${n2} automáticas borradas ⇒ se publican las de hoy ahora`);
+  return { off: n1, del: n2 };
+}
+async function _storyReset911Once() {
+  try {
+    if (await getConfig('mig911StoriesRepublish', null)) return false;
+    await Config.set('mig911StoriesRepublish', new Date().toISOString(), 'mig#911'); // primero la marca: multi-instancia, una sola corre
+    await _storyWipeForRepublish('deploy');
+    return true;
+  } catch (e) { logger.warn('[historias-auto] #911 reset: ' + e.message); return false; }
+}
 let _storyAutoRunning = false;
-async function _storyAutoTick() {
+async function _storyAutoTick(opts) {
   if (process.env.STORIES_AUTOPILOT_DISABLED === '1' || _storyAutoRunning) return;
   _storyAutoRunning = true;
+  let force = !!(opts && opts.force);
   try {
     await _storyResetOnce(); // #845
+    if (await _storyReset911Once()) force = true; // #911
     const now = new Date(); const today = _schedArtKey(now);
     _storyDiag.lastTickAt = now.toISOString(); _storyDiag.lastError = null; _storyDiag.skipped = [];
     const plan = await _storyAutoPlan(today);
     await _storyAutoBackfillImages(today, plan);
     for (const it of plan) try { // #909: una historia que falle (foto, red) no frena a las demás del día
-      const at = new Date(`${today}T${it.time}:00-03:00`);
-      if (at > now) continue;
+      const early = new Date(`${today}T${it.time}:00-03:00`) > now; // #911: con force sale igual, "ahora"
+      if (early && !force) continue;
+      const at = early ? now : new Date(`${today}T${it.time}:00-03:00`);
       const autoKey = `sa-${today}-${it.slot}`;
       if (await Story.exists({ autoKey })) continue;
       // #834: el partido ya salió hoy en otro horario (antes iban antes del partido) ⇒ no se repite.
@@ -25761,8 +25784,8 @@ async function _storyAutoTick() {
       } catch (e) { if (e && e.code === 11000) continue; throw e; }
       logger.info(`[historias-auto] ${today} ${it.time} ${it.kind}: ${it.title}`);
       _storyDiag.lastPublished = [{ at: now.toISOString(), day: today, time: it.time, kind: it.kind, title: it.title }].concat(_storyDiag.lastPublished || []).slice(0, 12);
-      // Push a todos sólo si se publica a tiempo (no al recuperar un horario viejo tras un reinicio).
-      if (it.notifyAll && now - at < 30 * 60 * 1000) {
+      // Push a todos sólo si se publica a tiempo (no al recuperar un horario viejo tras un reinicio, ni adelantada por #911).
+      if (it.notifyAll && !early && now - at < 30 * 60 * 1000) {
         const pTitle = bonusPct > 0 ? `🎁 +${bonusPct}% extra en tu próxima carga` : String(it.title || '📣 Novedad en PICA ROJA');
         const pBody = bonusPct > 0 ? `Sólo por ${bonusHours} h: abrí la historia y tocá "Reclamar ahora".` : String(it.text || '').slice(0, 120);
         setTimeout(() => {
@@ -25890,6 +25913,19 @@ app.get('/api/admin/stories-autopilot', authMiddleware, adminMiddleware, async (
     const publishedToday = await Story.countDocuments({ autoKey: new RegExp('^sa-' + today + '-'), isActive: true, autoKind: { $ne: 'borrada' } });
     res.json({ success: true, today, days, bonusStories, matchesOn, diag, publishedToday, disabled: process.env.STORIES_AUTOPILOT_DISABLED === '1', sources: { matches: 'ESPN (scoreboard público)', slots: '1girox (catálogo público, más jugados)' } });
   } catch (e) { logger.warn('[historias-auto] panel: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #911: borrar las historias vigentes y publicar las 5 de hoy ahora mismo (sólo admin).
+app.post('/api/admin/stories-autopilot/republish-today', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (!_storiesAdminOnly(req, res)) return;
+    for (let i = 0; i < 40 && _storyAutoRunning; i++) await new Promise((r) => setTimeout(r, 250)); // si hay una pasada en curso, esperarla
+    if (_storyAutoRunning) return res.status(503).json({ error: 'El motor está publicando en este momento. Probá en un minuto.' });
+    const w = await _storyWipeForRepublish(req.user.username || 'admin');
+    await _storyAutoTick({ force: true });
+    const today = _schedArtKey(new Date());
+    const published = await Story.countDocuments({ autoKey: new RegExp('^sa-' + today + '-'), isActive: true, autoKind: { $ne: 'borrada' } });
+    res.json({ success: true, off: w.off, del: w.del, published, skipped: _storyDiag.skipped || [], error: _storyDiag.lastError || null });
+  } catch (e) { logger.warn('[historias-auto] republicar: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
 // #909: llave de los PARTIDOS del día en las historias automáticas (sólo admin).
 app.post('/api/admin/stories-autopilot/matches', authMiddleware, adminMiddleware, async (req, res) => {
