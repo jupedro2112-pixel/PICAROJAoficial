@@ -25,10 +25,15 @@ const VALUE_TIERS = [
   { key: 'grande', max: Infinity, chips: 10000 }
 ];
 const MAX_DAYS = 180;      // después de esto no se insiste más
+const TRUST_DEPOSITS = 5;  // #976 (owner): el registro abierto entra a TODA la estrategia (fichas de regalo incluidas) después de 5 cargas reales
+const UNTRUSTED_PCT = 50;  // antes de eso, los pasos de FICHAS se convierten en +50 % en la próxima carga (tiene que poner plata para cobrarlo)
 const TOLERANCE = 2;       // si el motor no corrió justo ese día, el paso sale hasta 2 días después
 
 // gift: { type:'none' } | { type:'percent', pct, hours } | { type:'fixed', mult, hours }  (mult × fichas del tramo de valor)
 const STEPS = [
+  // #976: bienvenida tardía del registro abierto: al llegar a las 5 cargas entra a toda la estrategia con un bono fuerte (una sola vez).
+  { id: 'trust-5', segment: 'confianza', day: 0, capped: false, name: 'Ya sos de la casa · 5 cargas', gift: { type: 'percent', pct: 50, hours: 48 },
+    title: '🎉 Ya sos de la casa: +{pct}%', text: 'Llevás 5 cargas con nosotros y eso se premia: tu próxima carga lleva +{pct}% automático (con el tope de bonos), válido {h} horas. Desde ahora te llegan todos los regalos de Pica Roja 🔴' },
   // nuevo (desde el registro)
   { id: 'new-1', segment: 'nuevo', day: 1, capped: true, name: 'Bienvenida día 1', gift: { type: 'none', hours: 24 },
     title: '👋 ¡Bienvenido a Pica Roja!', text: 'Tu cuenta ya está lista. Cargás por transferencia y las fichas entran solas en segundos; retirás cuando quieras a tu CBU. Si tenés cualquier duda, el Soporte está adentro de la app, de verdad te contestamos. ¡Te esperamos! 🔴' },
@@ -96,8 +101,10 @@ function pickStep(state, now, tuning) {
   const ep = c.segment === 'nuevo' ? 'reg' : dayKey(state.lastDepositAt);
   const fits = (st, days) => days >= st.day && days <= st.day + TOLERANCE;
   const cands = [];
+  const trusted = !state.noWelcome || (Number(state.deposits) || 0) >= TRUST_DEPOSITS; // #976
   for (const st of STEPS) {
     if (st.needsWelcome && state.noWelcome) continue; // #975: registro abierto sin regalos ⇒ no prometer bono de bienvenida
+    if (st.id === 'trust-5') { if (state.noWelcome && trusted && !sent.has('trust-5@reg')) cands.push({ st, key: 'trust-5@reg', prio: 4 }); continue; }
     if (st.segment === 'nuevo' && c.segment === 'nuevo' && fits(st, c.days)) cands.push({ st, key: st.id + '@reg', prio: 2 });
     else if (st.segment === 'sinapp' && !state.hasApp && fits(st, c.regDays)) cands.push({ st, key: st.id + '@reg', prio: 1 });
     else if (st.segment === c.segment && ['enfriando', 'inactivo', 'perdido', 'lejano'].includes(st.segment) && fits(st, c.days)) cands.push({ st, key: st.id + '@' + ep, prio: 3 });
@@ -105,7 +112,8 @@ function pickStep(state, now, tuning) {
   const ok = cands.filter((x) => !sent.has(x.key)).sort((a, b) => b.prio - a.prio || b.st.day - a.st.day);
   if (!ok.length) return null;
   const tier = valueTier(state.avgDeposit);
-  const g = ok[0].st.gift;
+  let g = ok[0].st.gift;
+  if (!trusted && g.type === 'fixed') g = { type: 'percent', pct: UNTRUSTED_PCT, hours: g.hours }; // #976: sin fichas gratis hasta las 5 cargas
   const tn = tuning || {}; const pm = Number(tn.pctMult) > 0 ? Number(tn.pctMult) : 1, cm = Number(tn.chipsMult) > 0 ? Number(tn.chipsMult) : 1;
   const amount = g.type === 'percent' ? Math.max(5, Math.min(200, Math.round(g.pct * pm / 5) * 5)) : g.type === 'fixed' ? Math.max(500, Math.round(tier.chips * (g.mult || 1) * cm / 500) * 500) : 0;
   return { step: ok[0].st, key: ok[0].key, segment: c.segment, days: c.days, tier: tier.key, giftType: g.type, amount, hours: g.hours || 24 };
@@ -132,6 +140,6 @@ function batchBody(pick, usernames, ctx) {
   return b;
 }
 
-const SEGMENT_LABELS = { nuevo: '🆕 Nuevos sin carga', activo: '🟢 Activos (0–6 d)', enfriando: '🟡 Enfriando (7–13 d)', inactivo: '🟠 Inactivos (14–29 d)', perdido: '🔴 Perdidos (30–89 d)', lejano: '⚫ Lejanos (90–180 d)', olvidado: '⚪ Más de 180 d (sin avisos)' };
+const SEGMENT_LABELS = { nuevo: '🆕 Nuevos sin carga', confianza: '🤝 Registro abierto que llegó a 5 cargas', activo: '🟢 Activos (0–6 d)', enfriando: '🟡 Enfriando (7–13 d)', inactivo: '🟠 Inactivos (14–29 d)', perdido: '🔴 Perdidos (30–89 d)', lejano: '⚫ Lejanos (90–180 d)', olvidado: '⚪ Más de 180 d (sin avisos)' };
 
-module.exports = { STEPS, VALUE_TIERS, MAX_DAYS, TOLERANCE, SEGMENT_LABELS, valueTier, classify, pickStep, render, batchBody, dayKey };
+module.exports = { STEPS, VALUE_TIERS, MAX_DAYS, TOLERANCE, TRUST_DEPOSITS, UNTRUSTED_PCT, SEGMENT_LABELS, valueTier, classify, pickStep, render, batchBody, dayKey };

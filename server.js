@@ -2951,7 +2951,7 @@ async function _bonusMultiplierFor(adapter) {
 }
 // #882: rollover de la CARGA cuando lleva bono. Config['depositRolloverX'] (default 3; 0 = sin rollover en la carga). Si la plataforma sólo
 // acepta ciertos multiplicadores, el permitido más cercano hacia arriba (o el mayor), como el del bono.
-async function getDepositRolloverX() { try { const v = Number(await getConfig('depositRolloverX', 3)); return Number.isFinite(v) && v >= 0 ? Math.min(50, Math.round(v)) : 3; } catch (_) { return 3; } }
+async function getDepositRolloverX() { try { const v = Number(await getConfig('depositRolloverX', 1)); /* #976 (owner): ×1 (antes ×3) */ return Number.isFinite(v) && v >= 0 ? Math.min(50, Math.round(v)) : 3; } catch (_) { return 3; } }
 async function _depositRolloverXFor(adapter) {
   if (adapter && !(adapter.id === 'girox' || adapter === girox)) return 0;
   const cv = await getDepositRolloverX(); if (!(cv > 0)) return 0;
@@ -12903,6 +12903,18 @@ async function initializeData() {
   // después se cambia en Configuración → Registro de clientes.
   // #968 (owner): partidos del día en las historias automáticas ENCENDIDOS, y las campañas futuras del autopiloto de oct/nov se recrean con el
   // refuerzo (el autopiloto las vuelve a programar solo a los 5 min del arranque; sólo las 'scheduled' con fecha futura, nada enviado).
+  // #976 (owner 2026-10-24): rollover de la CARGA ×1 (antes ×3; el bono sigue ×5), retiro mínimo $5.000 (antes $10.000), textos guardados que decían
+  // "×3" y una historia de 48 h para avisar a todos (sin push: el anillo la muestra; el deploy puede caer a cualquier hora).
+  try { if (!(await getConfig('mig976Rollover1', null))) {
+    await Config.set('depositRolloverX', 1, 'mig#976'); await Config.set('withdrawMinArs', 5000, 'mig#976');
+    let fixed = 0; try { const cmds = await Command.find({ response: /×\s?3/ }).select('name response').lean(); for (const c of cmds) { if (!/carga|cargas|rollover/i.test(c.response)) continue; await Command.updateOne({ name: c.name }, { $set: { response: c.response.replace(/×\s?3/g, '×1').replace(/3 veces/g, '1 vez') } }); fixed++; } } catch (_) {}
+    try {
+      const id = uuidv4(), now = new Date(), img = await _storyAutoImgSpec({ img: { style: 'premium', accent: '#e60023', kicker: 'Novedad', icon: 'retiro', h1: 'Tus cargas, sin vueltas', h2: 'rollover ×1', bullets: [['✓', 'Cargás y jugás', 'Apostás tu carga UNA vez y ya podés retirar'], ['★', 'Los bonos siguen ×5', 'Regalos con el rollover de siempre'], ['$', 'Retiro mínimo $5.000', 'Directo a tu CBU, en minutos']], cta: 'Cargar ahora', note: 'Vale para todas las cargas desde hoy' } }).catch(() => null);
+      await Story.create({ id, title: '🔓 Novedad: tus cargas sin vueltas', text: 'Desde hoy cada carga se juega UNA sola vez (rollover ×1, antes ×3) y ya podés retirar. Los bonos y regalos siguen ×5. Y el retiro mínimo bajó a $5.000, directo a tu CBU en minutos 🔴', mediaType: img ? 'image' : 'none', mediaUrl: img ? _storyImgUrl(id) : '', autoImg: img || null, autoImgVer: img ? STORY_IMG_VER : null, bgColor: img ? '#ffffff' : '#be123c', linkUrl: 'app:cargar', linkLabel: 'Cargar ahora ›', durationSec: 8, hours: 48, publishedAt: now, expiresAt: new Date(now.getTime() + 48 * 3600000), isActive: true, autoKey: 'mig976-rollover1', autoKind: 'servicio', createdBy: 'automático' });
+    } catch (e) { if (!(e && e.code === 11000)) logger.warn('[mig976] historia: ' + e.message); }
+    await Config.set('mig976Rollover1', new Date().toISOString(), 'startup-migration');
+    logger.info('[mig976] rollover de la carga ×1, retiro mínimo $5.000, ' + fixed + ' texto(s) corregidos, historia publicada');
+  } } catch (e) { logger.warn('[mig976] ' + e.message); }
   // #975 (owner 2026-10-24): "habilitar de vuelta el registro en la página, sin ningún beneficio" ⇒ modo 'quick' (nombre + celular verificado por SMS,
   // quickEntrySms queda como esté) y regalos de bienvenida sólo para publicidad y referidos (organicWelcomeGifts=false). El tilde del panel sigue mandando después.
   try { if (!(await getConfig('mig975OpenReg', null))) { await Config.set('registrationMode', 'quick', 'mig#975'); await Config.set('organicWelcomeGifts', false, 'mig#975'); await Config.set('mig975OpenReg', new Date().toISOString(), 'startup-migration'); logger.info('[mig975] registro abierto (entrada rápida) sin regalos de bienvenida para el orgánico'); } } catch (e) { logger.warn('[mig975] ' + e.message); }
@@ -14278,7 +14290,7 @@ async function _isFirstRealDeposit(user) {
 // Es un AVISO al cliente: no bloquea acreditaciones (una transferencia menor igual se acredita).
 const MIN_DEPOSIT_ARS_DEFAULT = 2000; // #897 (owner): carga mínima $2.000 en toda la página
 // #379 (owner 2026-10-18): RETIRO MÍNIMO (antes $4.999 fijo). Config['withdrawMinArs'], editable en COMANDOS → Bonos automáticos.
-const WITHDRAW_MIN_ARS_DEFAULT = 10000;
+const WITHDRAW_MIN_ARS_DEFAULT = 5000; // #976 (owner 2026-10-24): antes $10.000
 // #385: textos de los botones "Adjuntar comprobante aquí" / "Retirar premio" (editables en COMANDOS).
 // #442 (owner 2026-10-18): BANCO CON FALLAS (retiros). Config['bankOutage'] = { active, mode:'manual'|'auto', since, reason }.
 // Manual: tilde en Configuración → "Banco con fallas". Automático: 2 pagos hgcash fallidos seguidos la ACTIVAN; el primer pago
@@ -21932,7 +21944,7 @@ async function _secondDepositTick() {
     let n = 0;
     for (const c of cands) {
       if (!c._id) continue;
-      const user = await User.findOneAndUpdate({ id: c._id, role: 'user', fraudFlags: { $size: 0 }, $or: [{ 'secondDepositOffer.status': { $exists: false } }, { 'secondDepositOffer.status': 'none' }] }, { $set: { secondDepositOffer: { status: 'offered', pct: sd.pct, offeredAt: now, expiresAt: new Date(now.getTime() + sd.validHours * 3600000), usedAt: null } } }, { new: true });
+      const user = await User.findOneAndUpdate({ id: c._id, role: 'user', fraudFlags: { $size: 0 }, noWelcomeGifts: { $ne: true } /* #976 */, $or: [{ 'secondDepositOffer.status': { $exists: false } }, { 'secondDepositOffer.status': 'none' }] }, { $set: { secondDepositOffer: { status: 'offered', pct: sd.pct, offeredAt: now, expiresAt: new Date(now.getTime() + sd.validHours * 3600000), usedAt: null } } }, { new: true });
       if (!user) continue;
       const vars = { username: user.username, pct: sd.pct, hours: sd.validHours };
       const text = await renderSystemCommand('/sys_second_deposit_offer', '🎁 {username}, tu PRÓXIMA carga tiene un {pct}% EXTRA de regalo. Vale por {hours} horas: cargá ahora y se acredita solo.', vars);
@@ -22149,7 +22161,7 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
     const u = await User.findOne({ id: String(req.params.userId) }).select('id username fcmToken fcmTokens fcmTokenContext').lean();
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
-    const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), carga: String(await getDepositRolloverX().catch(() => 3)), rollover: String(await _giftRolloverX().catch(() => 5)) };
+    const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), carga: String(await getDepositRolloverX().catch(() => 1)), rollover: String(await _giftRolloverX().catch(() => 5)) };
     try { const _fd = await getFirstDepositBonusPct(), _cap = await getFirstDepositCapArs(), _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
     if (q.dynamic === 'sorteo') {
       // #944: resumen de los dos sorteos con los números de la config (fechas, premios, puntos, SORTEO EXTRA, requisitos, cobro).
@@ -26272,7 +26284,7 @@ async function _newbieOffersTick() {
     const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (hourArt < cfg.hour || hourArt >= 23) return;
     if (!(await _cronClaim('newbie', 8 * 60000))) return; // #964: una instancia por pasada
     const today = _schedArtKey(now); const t0 = new Date(today + 'T00:00:00-03:00').getTime();
-    const rx = await _giftRolloverX().catch(() => 5), dx = await getDepositRolloverX().catch(() => 3);
+    const rx = await _giftRolloverX().catch(() => 5), dx = await getDepositRolloverX().catch(() => 1);
     for (const n of cfg.days) {
       const start = new Date(t0 - n * 86400000), end = new Date(start.getTime() + 86400000);
       const users = await User.find({ role: 'user', createdAt: { $gte: start, $lt: end }, noWelcomeGifts: { $ne: true } }).select('id username fraudFlags notifPrefs').limit(2000).lean(); // #975

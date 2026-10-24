@@ -62,7 +62,7 @@ VIP.withdraw = (function () {
     // #379: retiro mínimo configurable (llega en /api/platforms.withdrawMinArs; 10.000 si todavía no respondió).
     function _withdrawMin() {
         try { const d = VIP.home && VIP.home.platformsData; const n = Number(d && d.withdrawMinArs); if (Number.isFinite(n) && n > 0) return n; } catch (_) {}
-        return 10000;
+        return 5000; // #976: retiro mínimo $5.000 (antes $10.000)
     }
     // #442: BANCO CON FALLAS → alerta en el modal y botón deshabilitado (el server igual rechaza con 503 BANK_OUTAGE).
     let _bankOutage = false;

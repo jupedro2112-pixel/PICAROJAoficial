@@ -8,6 +8,19 @@
 
 ## Sesión 2026-10-24
 
+### 976. 🔓 Rollover de la carga ×1 (bono sigue ×5), retiro mínimo $5.000, aviso a todos, y el registro abierto entra a TODA la estrategia a las 5 cargas — SW v645
+**Pedido (owner):** "modificamos rollover ×1 en las cargas y modificalo en el aviso de todos los clientes; rollover ×5 en bono; retiro mínimo baja a
+$5.000 con la carga de $2.000"; "la configuración [sin regalos] para los clientes nuevos sin cargas; si pasan a ser clientes que depositan, que entren a
+toda la estrategia automáticamente después de 5 cargas mínimas".
+- `getDepositRolloverX` default 1 y migración `mig976Rollover1`: `depositRolloverX=1`, `withdrawMinArs=5000` (`WITHDRAW_MIN_ARS_DEFAULT` 5000), corrige
+  los comandos guardados que decían "×3"/"3 veces" en textos de cargas, y publica la historia "🔓 Novedad: tus cargas sin vueltas" (48 h, sin push).
+  Textos de la PWA: `.rx-dep` (dinámico, default ×1), Info "apostar su monto ×1 … ya podés retirar", retiro mínimo `.wd-min`/`#bvMinWd` $5.000,
+  fallback de withdraw.js 5000. `_depositWithBonus` ya elegía el multiplicador permitido ≤ configurado (#903): con 1 va directo.
+- **Registro abierto → estrategia completa a las 5 cargas** (`retentionJourney`: `TRUST_DEPOSITS=5`, `UNTRUSTED_PCT=50`): mientras `noWelcome` y
+  < 5 cargas reales, los pasos de FICHAS del recorrido salen como +50 % en la próxima carga (tiene que poner plata) y no hay oferta de 2ª carga
+  (`noWelcomeGifts: { $ne: true }` en el cron #504). Al llegar a 5 cargas: paso único `trust-5` ("🎉 Ya sos de la casa: +50 %", 48 h, una vez,
+  segmento "confianza" en el Centro) y desde ahí fichas, 2ª carga y todo lo demás como cualquier cliente. Los de publicidad/referido no cambian.
+
 ### 975. 🚪 Registro abierto de nuevo, SIN regalos de bienvenida para quien entra sin invitación — admin SW v202
 **Pedido (owner):** "habilitar de vuelta el registro en la página sin ningún beneficio, para que no llegue gente a querer estafar; sí promocionar
 instalar la app para recibir notificaciones, el reembolso y el servicio, pero no regalos".

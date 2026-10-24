@@ -122,7 +122,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **#659 (owner 2026-10-20): TODOS los regalos van con el ROLLOVER GLOBAL (`Config['bonusRolloverX']`, ×5; panel → Estrategia →
   rollover): bonos de carga, fueguito, ruleta, misiones, código de bienvenida, extra por instalar, REEMBOLSOS (los tres períodos y el
   acumulativo), bono de nivel VIP y rakeback. ÚNICA excepción: comisiones de REFERIDOS, retirables sin apostar (multiplier 0).
-  **#882/#883:** TODA carga real (hgcash y manual) va con rollover propio ×`Config['depositRolloverX']` (3) en `_depositWithBonus`; el bono ×5.
+  **#882/#883 → #976:** TODA carga real (hgcash y manual) va con rollover propio ×`Config['depositRolloverX']` (**1** desde 2026-10-24, antes 3) en
+  `_depositWithBonus`; el bono ×5. Retiro mínimo `Config['withdrawMinArs']` $5.000 (#976). Registro abierto (`noWelcomeGifts`): sin fichas gratis ni 2ª
+  carga hasta 5 cargas reales (`retentionJourney.TRUST_DEPOSITS`); a la 5ª, paso `trust-5` y entra a toda la estrategia.
   Devoluciones de retiro rechazado: libres (no pasan por ahí). Un flujo nuevo de carga real tiene que usar `_depositWithBonus`.
   El texto de abajo describe el estado anterior (regalo directo ×0) y sigue valiendo sólo para referidos.
 - **Regalos = BONO 0 "regalo directo" (2026-09-07, v1.10+):** reembolsos, ruleta,
