@@ -8,6 +8,13 @@
 
 ## Sesión 2026-10-24
 
+### 944. 💬 Soporte: botón "🏆 Explicación del sorteo" (resumen armado con la config) + botón en el chat que abre el sorteo — SW v631
+**Pedido (owner):** "agregá un botón en Soporte: explicación del sorteo, y resumí el sorteo explicando".
+- Respuesta rápida `sorteo` (`dynamic:'sorteo'`, editable como `/sys_sq_sorteo` con variables {mensual} {gran} {pts} {ptsper} {requisitos} {extra} {pago}): una
+  línea por sorteo (estado/fechas + 3 premios), cómo suman los puntos, requisitos para anotarse (dos sorteos separados), SORTEO EXTRA y cuándo se
+  cobra. Botón del mensaje "🏆 Ver el sorteo y anotarme" (target `sorteo` ⇒ chat.js abre `VIP.sorteos.open('mensual')`). Como todas las rápidas,
+  cierra la charla al enviarla.
+
 ### 943. 🧷 Dos sorteos separados: inscripción con el nombre de cada uno · Bases minimizadas abajo de todo (Maximizar / Minimizar) — SW v630
 **Pedido (owner, captura):** "en el Gran Sorteo aparece el detalle de ambos en los 2, necesito que separes, son 2 sorteos separados; y las Bases dejalas abajo
 de todo minimizadas, para maximizar y leer y después minimizar de nuevo".

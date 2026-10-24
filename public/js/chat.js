@@ -99,6 +99,7 @@ VIP.chat = (function () {
             const act = t === 'receipt' ? "VIP.autoload.sendReceipt()" /* #905: comprobante no válido ⇒ adjuntarlo de nuevo */ : t === 'withdraw' ? "VIP.withdraw.openWithdrawModal()"
                 : t === 'refund' ? "VIP.home.svcRefund()"
                 : t === 'terms' ? "VIP.home.openTerms()"
+                : t === 'sorteo' ? "VIP.sorteos.open('mensual')" /* #944: explicación del sorteo ⇒ abre la ventana del sorteo */
                 : "VIP.home.setHomeMode('full')";
             const label = escapeHtml(String(md.label || (t === 'withdraw' ? '💸 Ir a Retirar premio' : '⚡ Ir a Carga automática')));
             if (t === 'terms') return `<button type="button" class="chat-terms-mini" onclick="${act}">📄 Bases y condiciones</button>`; // #878: chico, no molesta

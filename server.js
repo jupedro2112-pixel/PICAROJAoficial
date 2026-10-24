@@ -13232,7 +13232,7 @@ async function initializeData() {
       type: 'message',
       response: SUPPORT_TOPIC_REEMBOLSO_DEFAULT
     },
-    ...SUPPORT_QUICK_REPLIES.map((q) => ({ name: '/sys_sq_' + q.key, description: 'Soporte · respuesta rápida "' + q.label + '" (botón del panel; al enviarla se cierra la charla). Variables: {min}, {retiro_min}, {carga}, {rollover}' + (q.dynamic || q.key === 'rollover_libre' ? ', {saldo}, {retirable}, {bloqueado}, {bloqueado_bono}, {detalle} (una línea por objetivo: carga / bono), {falta} — números reales del cliente leídos de 1girox al enviarla' : '') + '.', type: 'message', response: q.text })), // #905 · #912
+    ...SUPPORT_QUICK_REPLIES.map((q) => ({ name: '/sys_sq_' + q.key, description: 'Soporte · respuesta rápida "' + q.label + '" (botón del panel; al enviarla se cierra la charla). Variables: {min}, {retiro_min}, {carga}, {rollover}' + (q.dynamic === 'sorteo' ? ', {mensual}, {gran} (una línea por sorteo con fechas y premios), {pts}, {ptsper}, {requisitos}, {extra} (SORTEO EXTRA), {pago} — de la config de Sorteos del panel' : (q.dynamic || q.key === 'rollover_libre' ? ', {saldo}, {retirable}, {bloqueado}, {bloqueado_bono}, {detalle} (una línea por objetivo: carga / bono), {falta} — números reales del cliente leídos de 1girox al enviarla' : '')) + '.', type: 'message', response: q.text })), // #905 · #912
     {
       name: '/sys_support_topic_bono',
       description: 'Soporte: respuesta automática cuando el tema es EL BONO (explica el rollover ×{rollover}: qué es, apostar no es cargar, cómo se desbloquea para retirar). Variables: {rollover}, {min}, {retiro_min}. Vacío = no se manda.',
@@ -21859,6 +21859,9 @@ const SUPPORT_QUICK_REPLIES = [
   // (wagering.requirements) y se completan {saldo} {retirable} {bloqueado} {bloqueado_bono} {detalle} {falta} con SUS números.
   { key: 'rollover_mio', dynamic: true, label: '🔒 No cumple rollover y quiere retirar', btn: { target: 'withdraw', label: '💸 Retirar premio' },
     text: '🔒 Todavía no podés retirar todo porque te falta completar el ROLLOVER (lo que tenés que APOSTAR antes de retirar; no es plata que ponés ni que perdés). Tus números de hoy:\n💰 Saldo: {saldo} · Podés retirar hoy: {retirable} · Bloqueado: {bloqueado}{bloqueado_bono}\n{detalle}\n👉 Te falta apostar {falta} en total para liberarlo. Cuenta cada apuesta que hacés, ganes o pierdas (no lo que cargás). Cuando llegues, retirás desde "Retirar premio".' },
+  // #944 (owner): "agregá un botón en Soporte: explicación del sorteo, y resumí el sorteo explicando". Dinámico: los números salen de Config['sorteos'].
+  { key: 'sorteo', dynamic: 'sorteo', label: '🏆 Explicación del sorteo', btn: { target: 'sorteo', label: '🏆 Ver el sorteo y anotarme' },
+    text: '🏆 Te explico los SORTEOS de PICA ROJA en corto:\n\n{mensual}\n\n{gran}\n\n🧮 Cómo sumás puntos: cada {ptsper} apostados con plata real = {pts} puntos (los bonos no suman). Se actualiza cada 20 minutos y ves tu puesto en vivo, con los demás nombres tapados.\n\n📝 Para participar tenés que anotarte en el sorteo desde la app ({requisitos}). Son dos sorteos separados: te anotás en cada uno.\n\n{extra}💵 Los premios se cobran {pago}, al titular de la cuenta con su DNI.\n\n👉 Tocá el botón de abajo para ver los premios, el ranking y anotarte. ¡Suerte! 🍀' },
   { key: 'rollover_libre', hidden: true, label: '✅ Sin rollover pendiente (lo manda solo el botón de arriba cuando no hay nada bloqueado)',
     text: '✅ Hoy no tenés rollover pendiente: tu saldo es {saldo} y podés retirar {retirable} desde "Retirar premio" (mínimo {retiro_min}, a un CBU a tu nombre).' },
   { key: 'carga', label: '💳 Cómo cargar', text: '💳 Para cargar: transferí (mínimo {min}) al CBU que figura en la app y mandá el comprobante entero. Se acredita sola en minutos, con tu bono.', btn: { target: 'full', label: '⚡ Ir a cargar' } },
@@ -21871,7 +21874,7 @@ const SUPPORT_QUICK_REPLIES = [
   { key: 'sms', label: '📱 No llega el SMS', text: '📱 Escribí tu número todo junto: código de área sin 0 y número sin 15 (ej.: 1155551234). Si no llega en 1 minuto, tocá "Reenviar código".' }
 ];
 // #905 (owner): "que se puedan agregar respuestas y guardar": las PROPIAS viven en Config['supportQuickCustom'] (para todo el equipo).
-const _SQ_BTNS = { withdraw: '💸 Retirar premio', full: '⚡ Ir a cargar', receipt: '📎 Cargá el comprobante aquí', refund: '📉 Ver mi reembolso' };
+const _SQ_BTNS = { withdraw: '💸 Retirar premio', full: '⚡ Ir a cargar', receipt: '📎 Cargá el comprobante aquí', refund: '📉 Ver mi reembolso', sorteo: '🏆 Ver el sorteo y anotarme' }; // #944: + sorteo
 async function _sqCustom() { try { const v = await getConfig('supportQuickCustom', null); return Array.isArray(v) ? v.filter((x) => x && x.key && x.label && x.text) : []; } catch (_) { return []; } }
 async function _sqAll() { return SUPPORT_QUICK_REPLIES.map((q) => Object.assign({ builtin: true }, q)).concat((await _sqCustom()).map((q) => Object.assign({ builtin: false }, q, q.btnTarget && _SQ_BTNS[q.btnTarget] ? { btn: { target: q.btnTarget, label: _SQ_BTNS[q.btnTarget] } } : {}))); }
 app.get('/api/admin/support/quick-replies', authMiddleware, async (req, res) => {
@@ -21910,7 +21913,16 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), carga: String(await getDepositRolloverX().catch(() => 3)), rollover: String(await _giftRolloverX().catch(() => 5)) };
-    if (q.dynamic) {
+    if (q.dynamic === 'sorteo') {
+      // #944: resumen de los dos sorteos con los números de la config (fechas, premios, puntos, SORTEO EXTRA, requisitos, cobro).
+      const cfg = await _sorteosCfg(); const now = new Date(); const R = sorteosRules;
+      const one = (s) => { const p = R.periodOf(s, now); const pr = (s.prizes || []).map((x) => x.pos + '° ' + x.name + (x.value ? ' (' + x.value + ')' : '')).join(' · ');
+        const cuando = p.status === 'soon' ? 'Empieza el ' + R.fmtDay(p.start) : (p.status === 'live' ? 'En curso hasta el ' + R.fmtDay(p.end) : 'Cerrado'); return s.emoji + ' ' + s.title.toUpperCase() + ': ' + cuando + '. Ganan los 3 anotados con más puntos. Premios: ' + pr + '.'; };
+      const m = cfg.mensual, g = cfg.gran; const e = m.extra; const pm = R.periodOf(m, now);
+      const req = cfg.requirements || {}; const reqs = [req.app && 'app instalada', req.notif && 'notificaciones activadas', req.telegram && 'unido a nuestro Telegram', req.deposit && 'al menos una carga'].filter(Boolean).join(', ') || 'es gratis';
+      Object.assign(vars, { mensual: m.enabled ? one(m) : '', gran: g.enabled ? one(g) : '', pts: String(m.pts), ptsper: money(m.ptsPer), requisitos: reqs, pago: R.payWindow(pm.end).texto.replace(/ de d{4}$/, '') + ' (dentro de los primeros 10 días del mes siguiente al cierre)',
+        extra: m.enabled && e && e.enabled ? '🎁 ' + (e.title || 'SORTEO EXTRA') + ': ' + e.winners + ' premios de ' + money(e.amount) + ' al azar entre ' + R.extraWho(e) + '. Se sortea el día 1 con semilla publicada.\n\n' : '' });
+    } else if (q.dynamic) {
       // #912: números REALES del cliente desde 1girox (lo mismo que ve en "Retirar premio"). Si la plataforma no responde, no se manda nada.
       let bal = null; try { bal = await girox.getUserBalance(u.username); } catch (e) { bal = { success: false, error: e.message }; }
       if (!bal || !bal.success) return res.status(503).json({ error: 'No pude leer el saldo de 1girox ahora (' + ((bal && bal.error) || 'sin respuesta') + '). Probá de nuevo en un momento.' });
@@ -21923,7 +21935,8 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
       if (!(sum.locked > 0) && !(sum.remainingToBet > 0)) q = (await _sqAll()).find((x) => x.key === 'rollover_libre') || q; // nada bloqueado ⇒ el texto "sin rollover"
       await _emitAdminOnlyChatNote(u.id, u.username, `🎯 Rollover leído de 1girox para la respuesta: saldo ${vars.saldo}, retirable ${vars.retirable}, bloqueado ${vars.bloqueado}, falta apostar ${vars.falta}.`).catch(() => {});
     }
-    const text = q.builtin ? await renderSystemCommand('/sys_sq_' + q.key, q.text, vars) : String(q.text).replace(/\{(min|retiro_min|carga|rollover)\}/g, (m0, k) => vars[k]);
+    let text = q.builtin ? await renderSystemCommand('/sys_sq_' + q.key, q.text, vars) : String(q.text).replace(/\{(min|retiro_min|carga|rollover)\}/g, (m0, k) => vars[k]);
+    if (q.dynamic === 'sorteo') text = String(text || '').replace(/\{(mensual|gran|pts|ptsper|requisitos|pago|extra)\}/g, (m0, k) => vars[k] == null ? '' : vars[k]).replace(/\n{3,}/g, '\n\n').trim(); // #944: por si el texto editado no pasó por renderSystemCommand
     if (!text) return res.status(400).json({ error: 'Esa respuesta está vacía en COMANDOS' });
     const now = new Date();
     await User.updateOne({ id: u.id }, { $set: { supportSessionSince: now } });
