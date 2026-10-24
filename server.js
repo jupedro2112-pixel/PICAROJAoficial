@@ -12858,6 +12858,9 @@ async function initializeData() {
   // #872 (owner 2026-10-23): "sacá el registro desde el inicio, que sea sólo con invitación" ⇒ registrationMode 'invite' (#748): desde la app
   // sólo se registra quien trae link de referido real o de una campaña ACTIVA (las landings de pauta siguen creando cuentas). Una sola vez;
   // después se cambia en Configuración → Registro de clientes.
+  // #968 (owner): partidos del día en las historias automáticas ENCENDIDOS, y las campañas futuras del autopiloto de oct/nov se recrean con el
+  // refuerzo (el autopiloto las vuelve a programar solo a los 5 min del arranque; sólo las 'scheduled' con fecha futura, nada enviado).
+  try { if (!(await getConfig('mig968GiftBoost', null))) { await Config.set('storyAutoMatches', true, 'mig#968'); const r = await ScheduledCampaign.deleteMany({ autoKey: { $regex: '^ap-2026-(10|11)-' }, status: 'scheduled', runAt: { $gt: new Date() } }); await Config.set('mig968GiftBoost', new Date().toISOString(), 'mig#968'); console.log('✅ #968: partidos en historias ON · ' + (r.deletedCount || 0) + ' campañas futuras del autopiloto se reprograman con el refuerzo'); } } catch (e) { console.warn('[startup-migration] #968:', e.message); }
   // #954 (owner 2026-10-24): "dejá fino el cierre a partir de hoy, ya que está el botón de pago de otro banco": los cierres valen desde hoy.
   try { if (!(await getConfig('mig954CloseSince', null))) { const cur = String((await getConfig('closeSince', null)) || ''); if (!cur || cur < '2026-10-24') await Config.set('closeSince', '2026-10-24', 'mig#954'); await Config.set('mig954CloseSince', new Date().toISOString(), 'mig#954'); console.log('✅ #954: cierres desde 2026-10-24'); } } catch (e) { console.warn('[startup-migration] #954:', e.message); }
   // #955 (owner): "la ruleta diaria: un tiro con cargas de $5.000" (los textos de la app leen el valor: se actualizan solos).
@@ -25835,6 +25838,10 @@ app.post('/api/admin/stories', authMiddleware, adminMiddleware, async (req, res)
 const storyAuto = require('./src/services/storyAutopilot');
 const storyImage = require('./src/services/storyImage'); // #834 fotos de las historias automáticas
 const STORY_AUTO_BONUS = { pct: 50, hours: 3 };
+// #968 (owner 2026-10-24): "dale un bombazo más fuerte de regalos en octubre y noviembre para retener más". Hasta el 30/11 la historia con bono
+// (+50% por 3 h, con push a todos) sale DOS veces por semana (miércoles y sábado) en vez de una.
+const GIFT_BOOST_UNTIL = '2026-11-30';
+function _giftBoostOn() { return _schedArtKey(new Date()) <= GIFT_BOOST_UNTIL; }
 async function _storyAutoCtx(dayKey) {
   const dow = new Date(dayKey + 'T12:00:00Z').getUTCDay();
   let favorite = null;
@@ -25849,7 +25856,7 @@ async function _storyAutoCtx(dayKey) {
   }
   let firstPct = 0; try { firstPct = await getFirstDepositBonusPct(); } catch (_) {}
   let rolloverX = 5; try { rolloverX = await _giftRolloverX(); } catch (_) {}
-  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, rolloverX };
+  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: _giftBoostOn() ? [3, 6] : [3], rolloverX }; // #968
 }
 // #909 (owner 2026-10-23: "no vamos a publicar aún los partidos de fútbol, quiero ir primero con publicaciones explicando la app"):
 // los PARTIDOS del día salen sólo con la llave `Config['storyAutoMatches']` encendida (panel → Historias automáticas → ⚽ Partidos).
@@ -28531,8 +28538,11 @@ const arCalendar = require('./src/utils/arCalendar');
 const AUTOPILOT_DEFAULT = { enabled: false, time: '20:00', hours: 4, cap: 8, parts: 3, gapMin: 30, appOnly: true };
 // #821 (owner 2026-10-22): "que no sea ni editable ni que se lance: que automáticamente empiece a correr la estrategia" ⇒ SIEMPRE
 // encendido y con la configuración fija de abajo (sin panel para cambiarla). Sólo se apaga con la env AUTOPILOT_DISABLED=1 (emergencia).
+// #968: refuerzo de octubre-noviembre: 4 avisos más por cliente al mes, bonos válidos 2 h más y +10 puntos en los días comunes.
+const AUTOPILOT_BOOST = { until: '2026-11', capPlus: 4, hoursPlus: 2, pctPlus: 10 };
+const _apBoost = (month) => String(month || _schedArtKey(new Date()).slice(0, 7)) <= AUTOPILOT_BOOST.until;
 async function getAutopilotConfig() {
-  const r = { enabled: process.env.AUTOPILOT_DISABLED !== '1' };
+  const r = { enabled: process.env.AUTOPILOT_DISABLED !== '1', cap: AUTOPILOT_DEFAULT.cap + (_apBoost() ? AUTOPILOT_BOOST.capPlus : 0), hours: AUTOPILOT_DEFAULT.hours + (_apBoost() ? AUTOPILOT_BOOST.hoursPlus : 0) };
   const num = (v, d, lo, hi) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
   return {
     enabled: r.enabled === true,
@@ -28593,7 +28603,7 @@ function _autopilotMonthItems(month, cfg) {
         (pct) => ['💎 Subí de nivel VIP: +' + pct + '%', 'Cada carga te acerca al próximo nivel VIP y sus beneficios. Hoy +' + pct + '% EXTRA en tu carga por {h} horas.'],
         (pct) => ['🤝 Jugá con tus amigos: +' + pct + '%', 'Invitá a tus amigos con tu link y ganá por lo que juegan. Hoy tenés +' + pct + '% EXTRA en tu carga por {h} horas.']
       ];
-      const tb = (pct, reason, extra) => { const t = TH[(d * 3 + mo) % TH.length](pct); return { reason, payload: bono(pct, t[0], t[1], extra || aud) }; };
+      const tb = (pct0, reason, extra) => { const pct = Math.min(100, pct0 + (_apBoost(month) ? AUTOPILOT_BOOST.pctPlus : 0)); const t = TH[(d * 3 + mo) % TH.length](pct); return { reason, payload: bono(pct, t[0], t[1], extra || aud) }; }; // #968: +10 en el refuerzo
       if (sp) it = { reason: sp.name, payload: bono(sp.pct || 20, sp.title, sp.message, aud) };
       else if (d <= 4) it = { reason: 'Inicio de mes', payload: bono(30, '🎉 Mes nuevo en Pica Roja: +30%', 'Arrancamos el mes con todo: carga automática en segundos, retiros rápidos y soporte en la app. Cargá en las próximas {h} horas y te sumamos +30% EXTRA.', aud) };
       else if (d === 5) it = tb(20, 'Día 5 (más chico)');

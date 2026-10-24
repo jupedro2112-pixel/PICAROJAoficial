@@ -8,6 +8,20 @@
 
 ## Sesión 2026-10-24
 
+### 968. 🎁 Refuerzo de regalos octubre-noviembre + partidos en las historias + todo automático
+**Pedido (owner):** "no te olvides lo de las historias: quiero la automatización con los partidos y demás; las notificaciones, todo corriendo automático y
+llegándole a la gente para incentivar; dale un bombazo más fuerte de regalos este mes de octubre y noviembre así retenemos más".
+- **Partidos:** `Config['storyAutoMatches'] = true` (one-shot `mig968GiftBoost`): las historias de los partidos del día (ESPN, con cuotas) salen a
+  las 00:05 junto con las 5 de servicio.
+- **Historias con bono:** hasta el 30/11 (`GIFT_BOOST_UNTIL`) la historia "Bono de la semana +50% por 3 h" (con push a todos y botón Reclamar)
+  sale miércoles Y sábado (`ctx.bonusDays`), antes sólo miércoles. Verificado: 4 en 14 días.
+- **Autopiloto de notificaciones (#817):** sigue fijo y automático (una campaña por día, 20:00, sólo app con notificaciones). Refuerzo hasta
+  noviembre (`AUTOPILOT_BOOST`): tope 12 avisos por cliente al mes (antes 8), bonos válidos 6 h (antes 4) y +10 puntos en los días comunes
+  (viernes 60 %, sábado 40 %, domingo y promo del día 30 %); los días especiales (inicio/mitad/cierre de mes, feriados, "te extrañamos") no cambian.
+  Las campañas futuras de oct/nov ya programadas se borran una vez y el autopiloto las vuelve a crear con el refuerzo a los 5 min del arranque.
+- Las ofertas de bienvenida por días (#886: 50 % día 5/15/30), misiones, segunda carga, ruleta diaria ($5.000) y reembolso diario 10 % siguen
+  como estaban. Para extender o cortar el refuerzo: cambiar `GIFT_BOOST_UNTIL` / `AUTOPILOT_BOOST.until` (hoy 30/11).
+
 ### 967. 📎 Panel → Sorteos: adjuntar la foto de cada premio desde la computadora — admin SW v197
 **Pedido (owner):** "dejá en Sorteos para subir las fotos de forma manual, externa, desde el panel, si después lo quiero hacer: adjuntar".
 - Botón "📎 Adjuntar foto" por premio (JPG/PNG/WEBP, hasta 600 KB): `POST /api/admin/sorteos/prize-image` guarda la imagen en la base

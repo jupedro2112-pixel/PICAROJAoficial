@@ -199,7 +199,7 @@ function planDay(dayKey, matches, ctx) {
       img: { style: 'page', accent: '#e60023', kicker: 'El slot de la semana', photos: [f.image || ''], h1: f.name, h2: 'el más jugado', bullets: [['★', f.name, f.provider || 'El favorito de la comunidad'], ['✓', `El más jugado${f.weekPlays ? ' de la semana' : ''}`, 'En Pica Roja'], ['$', 'Entrá directo', 'Un toque y estás jugando']], cta: 'Jugar ahora' } };
   }
   // 3) Miércoles: historia con BONO semanal (con notificación a todos).
-  if (ctx.dow === 3 && ctx.weeklyBonus && ctx.weeklyBonus.pct > 0) {
+  if ((ctx.bonusDays || [3]).includes(ctx.dow) && ctx.weeklyBonus && ctx.weeklyBonus.pct > 0) { // #968: días del bono (miércoles; + sábado en el refuerzo)
     const b = ctx.weeklyBonus, i = freeSlot(3);
     if (i >= 0) out[i] = { kind: 'bono', title: `🎁 Bono de la semana: +${b.pct}%`, text: `Sólo por ${b.hours} horas: tocá "Reclamar ahora" y tu próxima carga lleva +${b.pct}% EXTRA automático (con el tope de bonos). ¡Gracias por elegir Pica Roja!`,
       link: '', label: '', bg: '#be123c', bonusPct: b.pct, bonusHours: b.hours, notifyAll: true,
