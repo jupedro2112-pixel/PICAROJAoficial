@@ -93,4 +93,6 @@ const bankMovementSchema = new mongoose.Schema({
 // Búsqueda de candidatos para matchear con un comprobante.
 bankMovementSchema.index({ direction: 1, matchStatus: 1, amount: 1, createdAt: -1 });
 
+bankMovementSchema.index({ matchedUserId: 1, createdAt: -1 }); // #957: cargas manuales / radar
+bankMovementSchema.index({ externalId: 1 }, { sparse: true }); // #957: respaldo hgcash cada minuto
 module.exports = mongoose.models['BankMovement'] || mongoose.model('BankMovement', bankMovementSchema);

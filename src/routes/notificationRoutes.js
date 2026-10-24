@@ -163,6 +163,7 @@ async function requireAdmin(req, res, next) {
       _dlog('[NOTIF-ADMIN] requireAdmin — user not found or inactive for userId:', decoded.userId);
       return res.status(401).json({ error: 'Usuario desactivado o no encontrado' });
     }
+    if ((decoded.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) return res.status(401).json({ error: 'Sesión invalidada. Iniciá sesión nuevamente.' }); // #956: paridad con authMiddleware
     // 🔒 PARIDAD CON authMiddleware (fix 2026-08-06): antes acá NO se
     // chequeaba `tokenVersion` ni `isBlocked`, y el rol se leía del JWT y no de
     // la DB. Resultado: a un agente degradado o bloqueado se le cerraba TODO el

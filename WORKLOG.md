@@ -8,6 +8,46 @@
 
 ## Sesión 2026-10-24
 
+### 956. 🛡️ Revisión de seguridad a fondo (3 auditorías en paralelo) y correcciones — admin SW v196
+**Pedido (owner):** "revisá seguridad al extremo y todo lo necesario para cuidar la página". Base ya sólida (headers CSP/HSTS/nosniff, mongo-sanitize,
+xss-clean, rate limits, HMAC del webhook hgcash, OTP con bcrypt, cookie httpOnly/Strict, sockets con tokenVersion, sin secretos en el repo).
+Lo corregido:
+- **Clave compartida (crítico):** todas las cuentas de landing / entrada rápida nacían con "asd123" y sin cambio obligatorio ⇒ probando usuarios se
+  entraba a cuentas ajenas. Ahora cada alta recibe una clave aleatoria de 8 caracteres (se muestra en la landing y la app la guarda igual que antes;
+  `LANDING_DEFAULT_PASSWORD` sólo para pruebas) y quien entre con "asd123" queda con `mustChangePassword` (la app abre el cambio de clave).
+- **Permisos del staff (alto):** `adminMiddleware` acepta a todo el staff y 62 rutas mutadoras no chequeaban el rol. Nueva lista
+  `STAFF_DENY_MUTATIONS`: depositor/withdrawer/comunidad no pueden POST/PUT/DELETE en ruleta, historias, bonos/estrategias, notificaciones,
+  config, comandos, sorteos, webhooks, cierres, credenciales, publicistas, fraude, ni editar/borrar clientes, login sin clave, reset de clave, bloquear.
+  Siguen pudiendo cargas, comprobantes, pagos, soporte, links de acceso, notas, devoluciones hgcash. Probado con 19 casos.
+- **Sesiones del staff:** token de 8 h (antes 30 d) y `admin-logout` sube `tokenVersion` (revoca). Tokens con `purpose`/`type` (reset) ya no
+  valen como sesión. `notificationRoutes.requireAdmin` y `middlewares/auth.js` comparan tokenVersion siempre.
+- **Fuerza bruta:** bloqueo por cuenta en el login (10 fallos ⇒ 15 min, además del límite por IP); claves de Datos/INICIO: 6 fallos ⇒ 15 min por
+  cuenta de staff. `generalLimiter` compartido entre instancias (Redis).
+- **Visitantes:** el mensaje del soporte sin cuenta validaba el token DESPUÉS de escribir ⇒ ahora antes. **Webhooks salientes:** la URL destino no
+  puede ser host privado / metadata ni llevar credenciales (SSRF desde el panel). Links de acceso de agente vencen a las 48 h. `phone` siempre string.
+  Dos `escapeHtml` que faltaban en el panel (usuarios, referidos).
+- Pendiente (no se tocó por riesgo): `trust proxy` detrás de Cloudflare (los límites por IP ven la IP del edge: conviene `trust proxy 2` o usar
+  `CF-Connecting-IP`), CSP con `unsafe-inline` (cientos de onclick), body JSON de 10 MB global, `pendingAccessCode` sin vencimiento.
+
+### 957. ⚡ Velocidad: índices, cache de Config, menos llamadas a 1girox, consultas acotadas
+**Pedido (owner):** "revisá la velocidad y mejorala si se puede sin romper".
+- `getConfig` con cache de 5 s por proceso (se vacía en cada `Config.set`/`setConfig`): el home de cada cliente hacía ~20 lecturas a Atlas.
+- Índices nuevos: BankMovement {matchedUserId, createdAt} y {externalId}, Transaction {createdAt}, PendingPayout {status, paidAt}, Comprobante
+  {reviewStatus, createdAt}, Message {channel, timestamp} (se crean solos al arrancar).
+- `/api/balance/live`: la app lo pedía cada 90 s (una llamada real a 1girox por cliente) ⇒ cada 5 min y sólo con la pestaña visible.
+- `/api/conversations` (panel, cada 3 min por agente) agregaba TODA la colección Message ⇒ `` últimos 3 días (índice).
+- INICIO: el `distinct` de cargadores de toda la historia se cachea 10 min. Sorteos: el motor corre cada 60 min (antes 20) y una sola instancia por
+  pasada (lock `sorteoticklock` en Config); el botón del panel lo fuerza igual.
+- Quedan para después (seguros pero más trabajo): precomprimir el bundle, cache de 30 s en claims-feed / recent-winners, lock multi-instancia en
+  `_closeTick` y `_newbieOffersTick`, purgar CSS (pin.css 341 KB), borrar banners sin uso (2,6 MB en el repo).
+
+### 958. 🎨 "CARGÁ AQUÍ" grande (o "X% VIGENTE · APRETÁ AQUÍ" si hay bono) · plataformas más chicas — SW v637
+**Pedido (owner, capturas):** "poné CARGÁ AQUÍ en grande; si tiene bono vigente que diga 100% VIGENTE APRETÁ AQUÍ llamativo, si no CARGÁ AQUÍ;
+achicá la letra de las tarjetas para que entren Ganamos, Jugaygana y PICA ROJA; en el básico el cuadrado más chico, los 4 en una fila".
+- `_paintFirstLoad`: botón grande del completo (`#evCtaTop`) y CARGAR del básico: "🎁 100% VIGENTE · APRETÁ AQUÍ" (rojo con pulso, clase
+  `ev-cta-live`) si hay % vigente (primera carga `.fd-pct` o promo `.promo-live`), si no "⚡ CARGÁ AQUÍ"; debajo la carga mínima.
+- Tarjetas de plataforma del completo: nombre 9,5 px, etiquetas 7,5 px, logo 26 px. Chips del básico: 4 columnas, 22 px de logo, letra 9,5 px.
+
 ### 954. 🔒 Auditoría: comprobantes duplicados y retiros · cierres válidos desde hoy
 **Pedido (owner):** "revisá bien que no entren comprobantes duplicados y que no retiren plata gente que no puede; dejá fino el cierre a partir de hoy
 ya que está el botón de pago de otro banco".

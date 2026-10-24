@@ -9537,7 +9537,7 @@ async function loadAdminUserReferrals(userId) {
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.08);">
                     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center;">
                         <div style="color:#888;font-size:10px;margin-bottom:4px;">USUARIO</div>
-                        <div style="color:#fff;font-weight:bold;">${u.username}</div>
+                        <div style="color:#fff;font-weight:bold;">${escapeHtml(u.username)}</div>
                     </div>
                     <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;text-align:center;">
                         <div style="color:#888;font-size:10px;margin-bottom:4px;">CÓDIGO</div>
@@ -9683,7 +9683,7 @@ async function loadAdminReferralRelationships() {
                 <tbody>
                 ${rels.map(r => `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
                     <td style="padding:5px 4px;">
-                        <span style="color:#d4af37;font-weight:bold;">${r.referrer?.username || '—'}</span>
+                        <span style="color:#d4af37;font-weight:bold;">${escapeHtml(r.referrer?.username || '—')}</span>
                         ${r.referrer?.id ? `<button onclick="loadAdminUserReferrals('${r.referrer.id}')" style="background:rgba(212,175,55,0.1);border:1px solid #d4af37;color:#d4af37;padding:2px 6px;border-radius:4px;cursor:pointer;font-size:10px;margin-left:4px;">Detalle</button>` : ''}
                     </td>
                     <td style="padding:5px 4px;color:#d4af37;letter-spacing:1px;font-size:12px;">${r.codeUsed || '—'}</td>

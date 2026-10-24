@@ -169,9 +169,13 @@ async function disconnectDB() {
 // ============================================
 
 // Obtener configuración por clave
+const CONFIG_CACHE_MS = 5000; // #957
 async function getConfig(key, defaultValue = null) {
   try {
+    const cache = Config._cache; const hit = cache && cache.get(key);
+    if (hit && Date.now() < hit.exp) return hit.found ? hit.value : defaultValue;
     const config = await Config.findOne({ key });
+    if (cache) { cache.set(key, { found: !!config, value: config ? config.value : null, exp: Date.now() + CONFIG_CACHE_MS }); if (cache.size > 2000) cache.clear(); }
     return config ? config.value : defaultValue;
   } catch (error) {
     console.error(`Error obteniendo config ${key}:`, error);
@@ -182,6 +186,7 @@ async function getConfig(key, defaultValue = null) {
 // Guardar configuración
 async function setConfig(key, value) {
   try {
+    try { Config._cache && Config._cache.clear(); } catch (_) {} // #957
     await Config.findOneAndUpdate(
       { key },
       { key, value, updatedAt: new Date() },

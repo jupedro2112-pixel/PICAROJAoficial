@@ -152,6 +152,7 @@ const generalLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  store: makeRateStore('general'), // #956: compartido entre instancias (antes N×300/min)
   // Cada admin logueado tiene su PROPIO cupo, keyeado por su cookie de sesión
   // (admin_api_session). Así varios agentes detrás de la misma IP (oficina/NAT)
   // NO comparten el límite y no se 429-ean entre ellos. Los clientes de la PWA
@@ -4000,6 +4001,7 @@ const authMiddleware = async (req, res, next) => {
   
   try {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (decoded && (decoded.purpose || (decoded.type && decoded.type !== 'access'))) return res.status(401).json({ error: 'Token inválido' }); // #956: un token de reset/propósito no es sesión
 
     // Buscar usuario por 'id' primero, luego por '_id' como fallback.
     // Solo los campos que este middleware usa (corre en CADA request; hidratar
@@ -4096,9 +4098,21 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+// #956 (seguridad): adminMiddleware deja pasar a TODO el staff (admin, depositor, withdrawer, comunidad) y muchas rutas confiaban en un
+// chequeo interno que no siempre estaba. Acá va la lista de prefijos que SÓLO el admin general puede MUTAR (POST/PUT/PATCH/DELETE):
+// acreditar fichas, historias y notificaciones masivas, bonos y estrategias, configuración, claves, clientes (editar/borrar/login sin clave).
+// Los agentes siguen pudiendo lo suyo: cargas (deposit, deposit-reviews), pagos (payouts), soporte/chats, lecturas (GET).
+const STAFF_DENY_MUTATIONS = [
+  /^\/api\/admin\/(roulette|stories|stories-autopilot|bonus-strategy|send-notification|notification-rules|notif-batches|notif-templates|cronograma|encuesta|inactividad|community-code|promo-bonus|strategy|strategy-plans|vip-levels|fire|refund-tiers|refund-config|platforms|campaigns|publisher-admins|webhooks|cierres|config|commands|sorteos|newbie-offers|fraud|datos-ia|datos|inicio-pin|datos-pin|bank|hgcash\/(config|credentials|fanout)|girox|gastos|expenses|menus|registration|install-gift|missions|referral|referrals|users\/[^/]+\/(login-without-password|role|reset-password|block|unblock|fraud|force-logout|reset-test|change-influencer))/i,
+  /^\/api\/users\/[^/]+$/i // PUT/DELETE /api/users/:id (editar saldo / borrar cliente)
+];
 const adminMiddleware = (req, res, next) => {
   if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'withdrawer' && req.user.role !== 'comunidad') {
     return res.status(403).json({ error: 'Acceso denegado. Solo administradores.' });
+  }
+  if (req.user.role !== 'admin' && req.method !== 'GET' && req.method !== 'HEAD') {
+    const p = String(req.originalUrl || req.url || '').split('?')[0];
+    if (STAFF_DENY_MUTATIONS.some((re) => re.test(p))) { logger.warn(`[authz] ${req.user.username} (${req.user.role}) intentó ${req.method} ${p}`); return res.status(403).json({ error: 'Solo el administrador general puede hacer esto.' }); }
   }
   next();
 };
@@ -4979,7 +4993,10 @@ async function _landingSignupHandler(req, res) {
     // 🪦 Antes: PIN de 6 dígitos al azar.
     // Se le MUESTRA al cliente en la landing (se devuelve en la respuesta) para
     // que pueda volver a entrar desde cualquier dispositivo, además del link.
-    const password = String(process.env.LANDING_DEFAULT_PASSWORD || 'asd123');
+    // #956 (seguridad): antes TODAS las cuentas nacían con la misma clave pública ("asd123") ⇒ probando usuarios se entraba a cuentas ajenas.
+    // Ahora cada cuenta recibe una clave aleatoria de 8 letras/números (sin caracteres confusos); se le muestra en la landing y la app la guarda
+    // en el teléfono como siempre. LANDING_DEFAULT_PASSWORD (env) sigue valiendo sólo para entornos de prueba.
+    const password = process.env.LANDING_DEFAULT_PASSWORD ? String(process.env.LANDING_DEFAULT_PASSWORD) : Array.from(crypto.randomBytes(8)).map((b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
 
     // #311 (owner): sin la Partner API conectada en este entorno no se puede crear la cuenta → se avisa con un
     // código y la landing sigue el recorrido en MODO PRUEBA (simula el paso 2, sin crear nada).
@@ -5292,6 +5309,11 @@ app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async 
 });
 
 // Login
+// #956 (seguridad): bloqueo POR CUENTA en el login: 10 fallos en 15 min ⇒ 15 min sin poder probar (por instancia; el límite por IP sigue).
+const _loginFails = new Map();
+function _loginKey(u, p) { return String(u || p || '').trim().toLowerCase().slice(0, 64); }
+function _loginLocked(k) { const e = k && _loginFails.get(k); if (!e) return false; if (Date.now() > e.until) { _loginFails.delete(k); return false; } return e.n >= 10; }
+function _loginFail(k) { if (!k) return; const e = _loginFails.get(k) || { n: 0, until: 0 }; e.n++; e.until = Date.now() + 15 * 60000; _loginFails.set(k, e); if (_loginFails.size > 5000) _loginFails.clear(); }
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { username, phone, password, temporaryCode, fbc, fbp, landingUrl } = req.body;
@@ -5299,6 +5321,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     if ((!username && !phone) || (!password && !temporaryCode)) {
       return res.status(400).json({ error: 'Usuario o teléfono, y contraseña (o código temporal) requeridos' });
     }
+    const _lk = _loginKey(username, phone);
+    if (_loginLocked(_lk)) return res.status(429).json({ error: 'Demasiados intentos para esta cuenta. Esperá 15 minutos o recuperá tu clave.' });
     
     // No registrar el teléfono completo en logs (dato personal): se enmascara.
     logger.debug(`Login attempt for: ${username || (phone ? '***' + String(phone).slice(-4) : 'desconocido')}`);
@@ -5309,7 +5333,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     if (phone && !username) {
       // Phone-based login
-      const normalizedPhone = phone.trim();
+      const normalizedPhone = String(phone || '').trim(); /* #956 */
       try {
         user = await User.findOne({ phone: normalizedPhone, phoneVerified: true });
       } catch (dbErr) {
@@ -5375,7 +5399,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
         }
         if (!gxAuth.valid) {
           logger.info(`[login] credenciales inválidas contra 1girox para ${username} (no se crea la cuenta local)`);
-          return res.status(401).json({ error: 'Credenciales inválidas' });
+          { _loginFail(_lk); return res.status(401).json({ error: 'Credenciales inválidas' }); }
         }
 
         logger.debug('User found in 1girox and credentials validated, creating locally...');
@@ -5416,10 +5440,10 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
         logger.info(`User ${username} auto-created from 1girox`);
       } else {
-        return res.status(401).json({ error: 'Credenciales inválidas' });
+        { _loginFail(_lk); return res.status(401).json({ error: 'Credenciales inválidas' }); }
       }
     } else if (!user) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      { _loginFail(_lk); return res.status(401).json({ error: 'Credenciales inválidas' }); }
     }
     
     // Convertir a objeto plano para acceder a los campos correctamente
@@ -5438,7 +5462,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     }
     
     if (!userObj.isActive) {
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      { _loginFail(_lk); return res.status(401).json({ error: 'Credenciales inválidas' }); }
     }
 
     // Reject login for blocked users before doing any further work.
@@ -5512,7 +5536,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     
     if (!isValidPassword) {
       logger.debug(`Wrong password for ${loginIdentifier}`);
-      return res.status(401).json({ error: 'Credenciales inválidas' });
+      { _loginFail(_lk); return res.status(401).json({ error: 'Credenciales inválidas' }); }
     }
     
     logger.info(`Login successful for ${loginIdentifier}`);
@@ -5525,10 +5549,12 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     //    y están logueando justamente con "asd123": limpiamos el flag para que no
     //    queden trabados. NO afecta los resets manuales de admin, porque ésos
     //    setean una contraseña nueva distinta de "asd123".
-    if (user.mustChangePassword === true && (isAdminRole(user.role) || isDefaultPassword)) {
+    if (user.mustChangePassword === true && isAdminRole(user.role)) {
       user.mustChangePassword = false;
-      logger.info(`[login] Auto-limpieza de mustChangePassword para ${user.username} (${isAdminRole(user.role) ? 'admin' : 'default-password'})`);
+      logger.info(`[login] Auto-limpieza de mustChangePassword para ${user.username} (admin)`);
     }
+    // #956 (seguridad): quien todavía entra con la clave pública "asd123" tiene que cambiarla (la app abre el cambio de clave al entrar).
+    if (isDefaultPassword && !isAdminRole(user.role) && user.mustChangePassword !== true) { user.mustChangePassword = true; logger.info(`[login] ${user.username} entró con la clave por defecto ⇒ cambio obligatorio`); }
 
     // Atribución last-touch: si el visitante vuelve por un anuncio nuevo, el
     // front manda fbc/fbp/landingUrl en el body. Actualizamos el User para
@@ -5544,11 +5570,11 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     await user.save();
     
-    // Token con expiración de 30 días para persistencia de sesión
+    // Token con expiración de 30 días para persistencia de sesión (clientes). #956: el STAFF dura 8 h, igual que su cookie.
     const token = jwt.sign(
       { userId: userId, username: userObj.username, role: userObj.role, tokenVersion: userObj.tokenVersion ?? 0 },
       JWT_SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: isAdminRole(userObj.role) ? '8h' : '30d' }
     );
     
     // SINCRONIZACIÓN DIFERIDA DE LA CONTRASEÑA CON LA PLATAFORMA.
@@ -5721,7 +5747,9 @@ app.post('/api/auth/logout', async (req, res) => {
 
 // Admin logout — clears both admin httpOnly cookies.
 // No authentication required: clearing a cookie is harmless.
-app.post('/api/auth/admin-logout', (req, res) => {
+app.post('/api/auth/admin-logout', async (req, res) => {
+  // #956: además de borrar las cookies, se revoca la sesión (tokenVersion) para que un Bearer guardado deje de servir.
+  try { const sess = getAdminApiSessionCookie(req); if (sess) { const d = jwt.verify(sess, JWT_SECRET, { algorithms: ['HS256'] }); if (d && d.userId) await User.updateOne({ id: d.userId }, { $inc: { tokenVersion: 1 } }); } } catch (_) {}
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   res.setHeader('Set-Cookie', [
     `admin_session=; HttpOnly; SameSite=Strict; Max-Age=0; Path=/adminprivado2026${secure}`,
@@ -6130,7 +6158,7 @@ app.post('/api/auth/change-password/send-otp', authMiddleware, sensitiveLimiter,
       return res.status(400).json({ error: 'Número de teléfono requerido' });
     }
 
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = String(phone || '').trim(); /* #956 */
     if (!validateInternationalPhone(normalizedPhone)) {
       return res.status(400).json({
         error: 'Número de teléfono inválido. Usá formato internacional con código de país (ej: +5491155551234)'
@@ -6726,7 +6754,7 @@ app.post('/api/auth/send-register-otp', sensitiveLimiter, smsIpLimiter, async (r
       return res.status(400).json({ error: 'Número de teléfono requerido' });
     }
 
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = String(phone || '').trim(); /* #956 */
     if (!validateInternationalPhone(normalizedPhone)) {
       return res.status(400).json({ error: 'Número de teléfono inválido. Usa formato internacional con código de país (ej: +5491155551234)' });
     }
@@ -6780,7 +6808,7 @@ app.post('/api/auth/login-otp-request', authLimiter, smsIpLimiter, async (req, r
     if (!phone || typeof phone !== 'string') {
       return res.status(400).json({ error: 'Número de teléfono requerido' });
     }
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = String(phone || '').trim(); /* #956 */
     if (!validateInternationalPhone(normalizedPhone)) {
       return res.status(400).json({ error: 'Número de teléfono inválido' });
     }
@@ -6817,7 +6845,7 @@ app.post('/api/auth/login-otp-verify', authLimiter, async (req, res) => {
     if (!phone || !code) {
       return res.status(400).json({ error: 'Teléfono y código requeridos' });
     }
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = String(phone || '').trim(); /* #956 */
 
     const otpResult = await verifyOTP(normalizedPhone, code, 'login');
     if (!otpResult.valid) {
@@ -6891,7 +6919,7 @@ app.post('/api/auth/request-password-reset', sensitiveLimiter, smsIpLimiter, asy
     const { phone } = req.body;
 
     if (phone && typeof phone === 'string') {
-      const normalizedPhone = phone.trim();
+      const normalizedPhone = String(phone || '').trim(); /* #956 */
       if (validateInternationalPhone(normalizedPhone)) {
         const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true, role: 'user' }).lean(); // #413: nunca staff
         if (user) {
@@ -6920,7 +6948,7 @@ app.post('/api/auth/verify-reset-otp', sensitiveLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Teléfono y código requeridos' });
     }
 
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = String(phone || '').trim(); /* #956 */
     if (!validateInternationalPhone(normalizedPhone)) {
       return res.status(400).json({ error: 'Número de teléfono inválido' });
     }
@@ -7042,7 +7070,7 @@ app.post('/api/auth/verify-phone/send-otp', authMiddleware, sensitiveLimiter, sm
     if (!phone || typeof phone !== 'string') {
       return res.status(400).json({ error: 'Número de teléfono requerido' });
     }
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = String(phone || '').trim(); /* #956 */
     if (!validateInternationalPhone(normalizedPhone)) {
       return res.status(400).json({ error: 'Número de teléfono inválido. Usá formato internacional (ej: +5491155551234)' });
     }
@@ -7094,7 +7122,7 @@ app.post('/api/auth/verify-phone/confirm', authMiddleware, sensitiveLimiter, asy
     if (!phone || !otpCode) {
       return res.status(400).json({ error: 'Teléfono y código requeridos' });
     }
-    const normalizedPhone = phone.trim();
+    const normalizedPhone = String(phone || '').trim(); /* #956 */
     if (!validateInternationalPhone(normalizedPhone)) {
       return res.status(400).json({ error: 'Número de teléfono inválido' });
     }
@@ -7215,12 +7243,18 @@ function buildBulkSmsQuery(filters, onlyVerified = false) {
 // Preview: devuelve la lista de destinatarios con validación de números SIN enviar SMS
 // #743 (owner): la MISMA clave de Datos IA protege Datos, Datos 2.0, Ingresos diarios y Usuarios con app (header x-datos-pin, como #590/#665).
 // Va ANTES de esas rutas (Express evalúa en orden). Sin clave configurada no se exige.
+// #956 (seguridad): las claves de Datos / INICIO son cortas: 6 intentos fallidos ⇒ 15 min bloqueado para esa cuenta de staff.
+const _pinFails = new Map();
+function _pinCheck(req, ok) { const k = (req.user && req.user.userId) || req.ip; const e = _pinFails.get(k) || { n: 0, until: 0 }; if (Date.now() > e.until) { e.n = 0; } if (ok) { _pinFails.delete(k); return true; } e.n++; e.until = Date.now() + 15 * 60000; _pinFails.set(k, e); return false; }
+function _pinLocked(req) { const k = (req.user && req.user.userId) || req.ip; const e = _pinFails.get(k); return !!(e && e.n >= 6 && Date.now() <= e.until); }
 function _datosPinGate(req, res, next) {
   Promise.resolve().then(async () => {
     if (req.user && req.user.role === 'publisher_admin') return next(); // #745: las cuentas de publicista usan su propio lockdown
     const h = await _datosPinHash(); if (!h) return next();
     const pin = String(req.get('x-datos-pin') || '');
-    if (pin && _sha(pin) === h) return next();
+    if (pin && _pinLocked(req)) return res.status(429).json({ error: 'Demasiados intentos con la clave. Esperá 15 minutos.', code: 'PIN_LOCKED' });
+    if (pin && _sha(pin) === h) { _pinCheck(req, true); return next(); }
+    if (pin) _pinCheck(req, false);
     return res.status(423).json({ error: 'Esta sección está protegida con clave.', code: 'PIN_REQUIRED' });
   }).catch(() => res.status(500).json({ error: 'Error del servidor' }));
 }
@@ -8361,6 +8395,7 @@ app.get('/api/conversations', authMiddleware, adminMiddleware, async (req, res) 
     // último mensaje y cuenta los no leídos. Evita traer TODA la colección de
     // mensajes y usuarios a Node y el loop O(mensajes × usuarios) anterior.
     const rows = await Message.aggregate([
+      { $match: { timestamp: { $gte: new Date(Date.now() - 3 * 86400000) } } }, // #957: acota por índice (antes barría toda la colección)
       { $sort: { timestamp: -1 } },
       { $addFields: {
         convUserId: {
@@ -20128,6 +20163,8 @@ app.post('/api/admin/webhooks', authMiddleware, adminMiddleware, async (req, res
     if (!cur && list.length >= OUTBOUND_WEBHOOKS_MAX) return res.status(400).json({ error: `Máximo ${OUTBOUND_WEBHOOKS_MAX} destinos` });
     const next = _normalizeOutboundDest(b, cur);
     if (!/^https:\/\/[^\s]+$/i.test(next.url)) return res.status(400).json({ error: 'La URL tiene que empezar con https://' });
+    // #956 (seguridad): nada de hosts privados / metadata / credenciales en la URL (SSRF desde el panel): mismas reglas que el fan-out de hgcash.
+    try { const p = new URL(next.url); const host = p.hostname.toLowerCase(); if (p.username || p.password) throw new Error('La URL no puede llevar usuario ni contraseña.'); if (host === 'localhost' || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(host) || host.startsWith('[') || !host.includes('.')) throw new Error('Tiene que ser el dominio público del sistema que recibe.'); } catch (e) { return res.status(400).json({ error: e.message || 'URL inválida' }); }
     if (!next.name) return res.status(400).json({ error: 'Poné un nombre (ej: el publicista o el sistema que recibe)' });
     if (!next.secretEnc) return res.status(400).json({ error: 'Falta el secreto: con él el receptor comprueba que el aviso es tuyo' });
     if (next.scope === 'publishers' && !next.publishers.length) return res.status(400).json({ error: 'Elegí al menos un publicista, o marcá TODOS' });
@@ -20802,12 +20839,15 @@ app.post('/api/public/support/:id/message', sensitiveLimiter, async (req, res) =
     if (!token) return res.status(401).json({ error: 'Falta el token' });
     if (!content) return res.status(400).json({ error: 'Escribí un mensaje.' });
     const msg = { id: uuidv4(), from: 'guest', content, at: new Date() };
+    // #956 (seguridad): el token se valida ANTES de escribir (antes el $push iba primero y con el id se podían meter mensajes sin token).
+    const t0 = await GuestThread.findOne({ id: String(req.params.id) }).select('id token').lean();
+    if (!t0 || !safeCompare(t0.token, token)) return res.status(404).json({ error: 'Conversación no encontrada' });
     const t = await GuestThread.findOneAndUpdate(
-      { id: String(req.params.id) },
+      { id: t0.id },
       { $push: { messages: msg }, $inc: { unreadAdmin: 1 }, $set: { lastFrom: 'guest', lastAt: new Date(), status: 'open' } },
       { new: true }
     ).lean();
-    if (!t || !safeCompare(t.token, token)) return res.status(404).json({ error: 'Conversación no encontrada' });
+    if (!t) return res.status(404).json({ error: 'Conversación no encontrada' });
     try { notifyAdmins('guest_support', { threadId: t.id, name: t.name, phone: t.phone, preview: content.slice(0, 80) }); } catch (_) {}
     res.json({ success: true, message: msg });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -20950,10 +20990,15 @@ app.post('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, r
 app.use('/api/admin/inicio', authMiddleware, adminMiddleware, async (req, res, next) => {
   try {
     const h = await _inicioPinHash(); if (!h) return res.status(428).json({ error: 'Creá la clave de INICIO.', code: 'PIN_SETUP' });
-    const pin = String(req.get('x-inicio-pin') || ''); if (pin && _sha(pin) === h) return next();
+    const pin = String(req.get('x-inicio-pin') || '');
+    if (pin && _pinLocked(req)) return res.status(429).json({ error: 'Demasiados intentos con la clave. Esperá 15 minutos.', code: 'PIN_LOCKED' }); // #956
+    if (pin && _sha(pin) === h) { _pinCheck(req, true); return next(); }
+    if (pin) _pinCheck(req, false);
     return res.status(423).json({ error: 'INICIO está protegido con clave.', code: 'PIN_REQUIRED' });
   } catch (_) { return res.status(500).json({ error: 'Error del servidor' }); }
 });
+let _inicioDepCache = { at: 0, v: null }; // #957: distinct sobre TODAS las cargas de la historia, cada request ⇒ 10 min de cache
+async function _inicioDepositors(REAL) { if (_inicioDepCache.v && Date.now() - _inicioDepCache.at < 10 * 60000) return _inicioDepCache.v; const v = await Transaction.distinct('userId', REAL); _inicioDepCache = { at: Date.now(), v }; return v; }
 app.get('/api/admin/inicio/stats', async (req, res) => {
   try {
     const PendingPayout = require('./src/models/PendingPayout');
@@ -20971,7 +21016,7 @@ app.get('/api/admin/inicio/stats', async (req, res) => {
       Transaction.aggregate([{ $match: Object.assign({ timestamp: { $gte: start, $lt: end } }, REAL) }, { $group: { _id: '$userId', total: { $sum: '$amount' }, n: { $sum: 1 } } }]),
       PendingPayout.aggregate([{ $match: { createdAt: { $gte: start, $lt: end } } }, { $group: { _id: '$status', n: { $sum: 1 }, total: { $sum: '$amount' } } }]),
       User.countDocuments({ role: 'user' }),
-      Transaction.distinct('userId', REAL), // #913: todos los que cargaron alguna vez (base de la aceptación de la app)
+      _inicioDepositors(REAL), // #913: todos los que cargaron alguna vez (base de la aceptación de la app) · #957: cache 10 min
       Transaction.distinct('userId', Object.assign({ timestamp: { $gte: new Date(start.getTime() - 86400000), $lt: start } }, REAL)), // cargaron el día anterior
       AppSession.distinct('userId', { dateKey: prevDay }) // entraron el día anterior
     ]);
@@ -22175,7 +22220,7 @@ app.post('/api/auth/access-link', authLimiter, async (req, res) => {
     // #831: los links de alta por LANDING y de instalación dejan 30 min de gracia (mismo link vuelve a entrar); los del agente siguen de un solo uso.
     const _graceSet = { accessLinkGraceHash: hash, accessLinkGraceUntil: new Date(Date.now() + ACCESS_LINK_GRACE_MS) };
     let user = await User.findOneAndUpdate(
-      { accessLinkHash: hash, role: 'user', isActive: { $ne: false }, isBlocked: { $ne: true } },
+      { accessLinkHash: hash, role: 'user', isActive: { $ne: false }, isBlocked: { $ne: true }, $or: [{ accessLinkCreatedAt: null }, { accessLinkCreatedAt: { $gte: new Date(Date.now() - 48 * 3600 * 1000) } }] }, // #956: 48 h
       { $set: { accessLinkHash: null, lastLogin: new Date() } },
       { new: false } // #673: con el doc ANTERIOR se lee accessLinkPurpose (el hash ya quedó borrado atómicamente igual)
     ).select('id username role tokenVersion acquisitionSource mustChangePassword accessLinkPurpose').lean();
@@ -26067,8 +26112,20 @@ async function _sorteoTickOne(cfg, key, now) {
   for (let i = 0; i < ops.length; i += 500) await SorteoScore.bulkWrite(ops.slice(i, i + 500), { ordered: false });
   return { candidates: cands.length, scored: ops.length, ms: Date.now() - t0, period: p.periodKey, status: p.status };
 }
+// #957: una sola instancia corre la pasada (lock de 15 min en Config); las demás saltean. Con force (panel) corre igual.
+async function _sorteoClaim() {
+  try {
+    const now = Date.now(); const until = new Date(now + 15 * 60000);
+    const r = await Config.findOneAndUpdate({ key: 'sorteoticklock', $or: [{ 'value.until': { $lt: now } }, { 'value.until': null }] }, { $set: { value: { until: now, at: new Date().toISOString() }, updatedAt: new Date() } }, { new: true });
+    if (r) { await Config.updateOne({ key: 'sorteoticklock' }, { $set: { value: { until: until.getTime(), at: new Date().toISOString() } } }); return true; }
+    if (!(await Config.exists({ key: 'sorteoticklock' }))) { await Config.set('sorteoticklock', { until: until.getTime(), at: new Date().toISOString() }, 'system'); return true; }
+    return false;
+  } catch (_) { return true; }
+}
 async function _sorteoTick(opts) {
-  if (_sorteoRunning) return; _sorteoRunning = true;
+  if (_sorteoRunning) return;
+  if (!(opts && opts.force) && !(await _sorteoClaim())) return;
+  _sorteoRunning = true;
   try {
     const cfg = await _sorteosCfg(); const now = new Date(); _sorteoDiag.lastTickAt = now;
     if (!cfg.enabled && !(opts && opts.force)) return;
@@ -26080,7 +26137,7 @@ async function _sorteoTick(opts) {
   } catch (e) { _sorteoDiag.lastError = e.message; logger.warn('[sorteos] tick: ' + e.message); }
   finally { _sorteoRunning = false; await _sorteoDiagSave(); }
 }
-setTimeout(() => { _sorteoTick().catch(() => {}); setInterval(() => { _sorteoTick().catch(() => {}); }, 20 * 60 * 1000); }, 3 * 60 * 1000);
+setTimeout(() => { _sorteoTick().catch(() => {}); setInterval(() => { _sorteoTick().catch(() => {}); }, 60 * 60 * 1000); }, 3 * 60 * 1000); // #957: cada hora
 const _sorteoSort = { points: -1, wagered: -1, firstDepositAt: 1 };
 async function _sorteoRankOf(key, periodKey, sc) { if (!sc) return null; const better = await SorteoScore.countDocuments({ key, periodKey, $or: [{ points: { $gt: sc.points } }, { points: sc.points, wagered: { $gt: sc.wagered } }] }); return better + 1; }
 async function _sorteoWinners(key, periodKey) { return SorteoScore.find({ key, periodKey, eligible: true, points: { $gt: 0 } }).sort(_sorteoSort).limit(3).lean(); }

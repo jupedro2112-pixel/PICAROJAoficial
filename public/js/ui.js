@@ -337,7 +337,7 @@ VIP.ui = (function () {
         // El saldo igual se actualiza al instante por socket (`balance_updated`)
         // en cargas/retiros/bonos, y al cerrar el casino (syncBalance). El poll
         // solo cubre cambios por juego mientras el cliente mira la PWA sin jugar.
-        VIP.state.balanceCheckInterval = setInterval(syncBalance, 90000);
+        VIP.state.balanceCheckInterval = setInterval(() => { if (!document.hidden) syncBalance(); }, 300000); // #957: 5 min y sólo con la pestaña visible (cada poll es una llamada real a 1girox)
     }
 
     function stopBalancePolling() {

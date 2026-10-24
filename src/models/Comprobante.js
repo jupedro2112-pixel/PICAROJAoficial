@@ -91,4 +91,5 @@ const comprobanteSchema = new mongoose.Schema({
 // Búsqueda de duplicados: por huella, sólo entre los que son comprobantes reales.
 comprobanteSchema.index({ dedupeKey: 1, isComprobante: 1 });
 
+comprobanteSchema.index({ reviewStatus: 1, createdAt: 1 }); // #957: cola de Cargas pendientes
 module.exports = mongoose.models['Comprobante'] || mongoose.model('Comprobante', comprobanteSchema);

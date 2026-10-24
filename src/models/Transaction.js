@@ -175,4 +175,5 @@ transactionSchema.statics.getTodayTotals = async function() {
   return totals;
 };
 
+transactionSchema.index({ createdAt: -1 }); // #957: publicistas por período
 module.exports = mongoose.models['Transaction'] || mongoose.model('Transaction', transactionSchema);

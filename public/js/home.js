@@ -2541,10 +2541,22 @@
     }
     // #766 (owner): "en todos los Cargá ahora de las 3 secciones, un botón PRIMERA CARGA bien llamativo, que se agrande y achique, y que
     // diga cuánto es el mínimo de carga como aviso importante" — sólo hasta que haga la primera carga (body.nodep).
+    // #958 (owner): "poné CARGÁ AQUÍ en grande; si tiene bono vigente (por publicidad o lo que sea) que diga 100% VIGENTE · APRETÁ AQUÍ, llamativo;
+    // si no, CARGÁ AQUÍ". El % sale de lo que ya pinta la app: primera carga (.fd-pct) para quien nunca cargó, o la promo activa (.promo-live).
+    function _bonusLivePct(on) {
+        try {
+            if (on) { const f = document.querySelector('.fd-pct'); const n = f && parseInt(String(f.textContent || '').replace(/\D/g, ''), 10); if (n > 0) return n; }
+            const els = Array.from(document.querySelectorAll('.promo-live')).filter((e) => !e.hidden && e.offsetParent !== null && /\d+\s*%/.test(e.textContent || ''));
+            if (els.length) { const m = String(els[0].textContent).match(/(\d+)\s*%/); if (m) return parseInt(m[1], 10); }
+        } catch (_) {}
+        return 0;
+    }
     function _paintFirstLoad(on) {
         const md = '$' + (Number(_platforms && _platforms.minDepositArs) || 2000).toLocaleString('es-AR');
-        try { const b = document.querySelector('#evCtaTop .ev-cta-b'), t = document.querySelector('#evCtaTop .ev-cta-t'); if (b && t) { if (on) { if (!b.dataset.o) { b.dataset.o = b.innerHTML; t.dataset.o = t.innerHTML; } b.textContent = '⚡ PRIMERA CARGA'; t.innerHTML = '⚠️ Aviso importante: carga mínima <b class="md-amt">' + md + '</b>'; } else if (b.dataset.o) { b.innerHTML = b.dataset.o; t.innerHTML = t.dataset.o; delete b.dataset.o; delete t.dataset.o; } } } catch (_) {}
-        try { const bb = document.querySelector('#bvLoadBtn > span > b'), bt = document.querySelector('#bvLoadBtn .bv-min'); if (bb && bt) { if (on) { if (!bb.dataset.o) { bb.dataset.o = bb.innerHTML; bt.dataset.o = bt.innerHTML; } bb.textContent = 'PRIMERA CARGA'; bt.innerHTML = '⚠️ Aviso importante: carga mínima <b class="md-amt">' + md + '</b>'; } else if (bb.dataset.o) { bb.innerHTML = bb.dataset.o; bt.innerHTML = bt.dataset.o; delete bb.dataset.o; delete bt.dataset.o; } } } catch (_) {}
+        const pct = _bonusLivePct(on); const label = pct > 0 ? '🎁 ' + pct + '% VIGENTE · APRETÁ AQUÍ' : '⚡ CARGÁ AQUÍ';
+        const sub = (on ? '⚠️ Aviso importante: carga mínima ' : 'Carga mínima ') + '<b class="md-amt">' + md + '</b> · se acredita sola';
+        try { const b = document.querySelector('#evCtaTop .ev-cta-b'), t = document.querySelector('#evCtaTop .ev-cta-t'), cta = _el('evCtaTop'); if (b && t) { b.textContent = label; t.innerHTML = sub; if (cta) cta.classList.toggle('ev-cta-live', pct > 0); } } catch (_) {}
+        try { const bb = document.querySelector('#bvLoadBtn > span > b'), bt = document.querySelector('#bvLoadBtn .bv-min'), bl = _el('bvLoadBtn'); if (bb && bt) { bb.textContent = pct > 0 ? pct + '% VIGENTE · APRETÁ AQUÍ' : 'CARGÁ AQUÍ'; bt.innerHTML = sub; if (bl) bl.classList.toggle('ev-cta-live', pct > 0); } } catch (_) {}
         // #776 (BUG GRAVE, usuario real "al presionar Carga rápida se cuelga absolutamente todo"): acá se llamaba toggleCasinoLoad(true)
         // SIEMPRE; ese panel llama _fdNotesPaint → firstGuidePaint → _paintFirstLoad → toggleCasinoLoad… en bucle infinito por microtareas
         // (la promesa de la promo ya estaba resuelta) y la pestaña quedaba congelada. Ahora el panel abierto se repinta SÓLO si el estado

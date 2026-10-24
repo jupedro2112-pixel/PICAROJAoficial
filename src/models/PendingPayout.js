@@ -92,4 +92,5 @@ const pendingPayoutSchema = new mongoose.Schema({
 
 pendingPayoutSchema.index({ userId: 1, status: 1, createdAt: -1 });
 
+pendingPayoutSchema.index({ status: 1, paidAt: -1 }); // #957: cierres
 module.exports = mongoose.models['PendingPayout'] || mongoose.model('PendingPayout', pendingPayoutSchema);

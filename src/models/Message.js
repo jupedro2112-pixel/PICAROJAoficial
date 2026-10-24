@@ -201,4 +201,5 @@ messageSchema.methods.edit = async function(newContent) {
   return this;
 };
 
+messageSchema.index({ channel: 1, timestamp: -1 }); // #957: conversaciones de Soporte
 module.exports = mongoose.models['Message'] || mongoose.model('Message', messageSchema);

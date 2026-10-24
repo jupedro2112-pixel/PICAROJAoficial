@@ -2932,3 +2932,20 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 .sp-faq-box { max-height: calc(100dvh - 28px - 72px - var(--sat, env(safe-area-inset-top, 0px)) - var(--sab, env(safe-area-inset-bottom, 0px))) !important; }
 .sp-faq-scroll ul { font-size: 15px !important; line-height: 1.5 !important; } .sp-faq-scroll li { margin-bottom: 10px; }
 .sp-faq-ok { flex: 0 0 auto; }
+
+/* #958: CARGÁ AQUÍ / X% VIGENTE · APRETÁ AQUÍ (llamativo) */
+@keyframes srtLive { 0%, 100% { box-shadow: 0 0 0 0 rgba(230, 0, 35, .45); } 50% { box-shadow: 0 0 0 10px rgba(230, 0, 35, 0); } }
+.ev-cta-live { animation: srtLive 1.6s ease-in-out infinite; }
+.ev-cta.ev-cta-top.ev-cta-live { background: linear-gradient(135deg, #e60023, #b8001c) !important; }
+.ev-cta.ev-cta-top.ev-cta-live .ev-cta-b { font-size: 20px !important; letter-spacing: 1px !important; }
+/* #958: tarjetas de plataforma del completo: letra más chica para que entren Ganamos, Jugaygana y PICA ROJA */
+.plat-play-name { font-size: 9.5px !important; letter-spacing: .2px !important; }
+.plat-play-btn .plat-reco, .plat-play-btn .plat-soon-badge { font-size: 7.5px !important; padding: 1px 6px !important; letter-spacing: .5px !important; }
+.plat-play-btn .plat-logo { width: 26px !important; height: 26px !important; }
+.plat-play-sub { font-size: 8px !important; }
+/* #958: chips del básico: cuadrados más chicos, los 4 en una fila */
+.bv-plats { grid-template-columns: repeat(4, 1fr) !important; gap: 4px !important; }
+.bv-chip { padding: 5px 2px !important; gap: 2px !important; border-radius: 10px !important; min-width: 0; }
+.bv-chip img { width: 22px !important; height: 22px !important; }
+.bv-chip b { font-size: 9.5px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.bv-chip small { font-size: 7.5px !important; letter-spacing: .3px !important; }

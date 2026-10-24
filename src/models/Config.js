@@ -37,7 +37,11 @@ configSchema.statics.get = async function(key, defaultValue = null) {
 };
 
 // Método estático para establecer configuración
+// #957 (velocidad): cache de lectura de 5 s por proceso (getConfig se llama ~170 veces en server.js, varias por cada carga del home).
+// Cualquier escritura (set / setConfig) la vacía entera; entre instancias el desfase máximo es de 5 s, lo mismo que los Commands (15 s).
+configSchema.statics._cache = new Map();
 configSchema.statics.set = async function(key, value, updatedBy = null) {
+  try { this._cache.clear(); } catch (_) {}
   const config = await this.findOneAndUpdate(
     { key: key.toLowerCase() },
     { 
