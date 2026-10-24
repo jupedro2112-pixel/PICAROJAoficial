@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 962. ▭ Orden del básico: sorteos debajo de la barra, Nivel/Racha, saldo, CARGAR/RETIRAR — SW v640
+**Pedido (owner, capturas):** "en el básico los sorteos abajo de la barra superior, arriba de Nivel; CARGAR/RETIRAR abajo del saldo; el resto todo ok".
+Todo con `order` en la columna flex de `#basicView` (pisa el order:999 de #947): sorteos (-4) · status-row (-3) · saldo + ajustar pantalla (-2) ·
+carga mínima, guía, CARGAR, panel, RETIRAR, panel (-1) · lo demás en su orden.
+
 ### 961. 🎰 Plataformas del completo con el mismo tamaño que en el básico — SW v639
 **Pedido (owner, capturas):** "respetar el del menú básico, poner el mismo tamaño para que quede igual en el completo y entre bien el texto".
 `#platformsButtons` en grilla de 4, tarjetas de 70 px con logo 22 px, nombre 9,5 px sin mayúsculas (entra entero), PRONTO / RECOMENDADO abajo, sin

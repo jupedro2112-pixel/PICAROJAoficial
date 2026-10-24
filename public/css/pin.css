@@ -2965,3 +2965,9 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 .plat-play-sub { display: none !important; }
 .plat-play-btn .plat-reco, .plat-play-btn .plat-soon-badge { position: static !important; margin: 1px 0 0 !important; font-size: 7px !important; padding: 1px 5px !important; letter-spacing: .4px !important; line-height: 1.3 !important; }
 .plat-play-btn .plat-check { position: absolute !important; top: 3px !important; right: 3px !important; width: 13px !important; height: 13px !important; font-size: 9px !important; line-height: 13px !important; border-radius: 50% !important; }
+
+/* #962 (owner, capturas): orden del BÁSICO — sorteos debajo de la barra superior, después Nivel/Racha, después el saldo y enseguida CARGAR / RETIRAR */
+#basicView .srt-cards { order: -4 !important; margin: 2px 0 4px !important; }
+#basicView .status-row { order: -3 !important; }
+#basicView .play-bal, #basicView .fit-link { order: -2 !important; }
+#basicView .min-strip.ms-basic, #basicView #firstGuideBasic, #basicView #bvLoadBtn, #basicView #bvLoadPanel, #basicView .bv-btn.bv-wd, #basicView #bvWdPanel { order: -1 !important; }
