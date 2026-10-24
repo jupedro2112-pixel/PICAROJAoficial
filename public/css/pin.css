@@ -2663,19 +2663,22 @@ body.sp-sent .sp-intro:not(.sp-open) .sp-faq-btn { width: auto; margin: 0; paddi
 .sp-faq-scroll li b { color: var(--p-text); }
 .sp-faq-ok { margin: 0 16px 16px; border: 0; border-radius: 999px; padding: 12px; background: var(--p-red); color: #fff; font: 800 15px var(--p-font); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 
-/* ===== #915 SORTEOS con ranking en vivo (verde, pedido del owner) ===== */
-:root { --srt-g: #1f6b45; --srt-g2: #2f7d57; --srt-g3: #49a06f; --srt-soft: #ebf4ef; --srt-line: #c9ddd1; --srt-ink: #fff; }
-html[data-theme="dark"] { --srt-g: #1b5c3c; --srt-g2: #2a7050; --srt-g3: #3f9265; --srt-soft: #102319; --srt-line: #1f3a2b; }
-.srt-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 12px 10px; }
+/* ===== #915 SORTEOS con ranking en vivo (tokens --srt-*; #918: violeta como Ganamos) ===== */
+/* #918 (owner): "un color diferente, un violeta como el de Ganamos" → mismos tonos que --p-purple / --p-purple-2 */
+:root { --srt-g: #6d28d9; --srt-g2: #8b5cf6; --srt-g3: #a78bfa; --srt-soft: #f3eefe; --srt-line: #ddd2f7; --srt-ink: #fff; --srt-sh: rgba(109, 40, 217, .28); }
+html[data-theme="dark"] { --srt-g: #5b21b6; --srt-g2: #7c3aed; --srt-g3: #a78bfa; --srt-soft: #1b1230; --srt-line: #2e2250; --srt-sh: rgba(124, 58, 237, .35); }
+/* #918 (owner): "los recuadros del sorteo dejalos separados, en dos, no juntos" → uno debajo del otro, cada uno con su recuadro */
+.srt-cards { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 8px 12px 12px; }
 #basicView .srt-cards, #easyView .srt-cards { margin-left: 0; margin-right: 0; }
-.srt-card, .srt-cross { display: flex; align-items: center; gap: 9px; text-align: left; padding: 10px 11px; border: 0; border-radius: 14px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: var(--srt-ink); font-family: var(--p-font); cursor: pointer; box-shadow: 0 4px 14px rgba(31, 107, 69, .28); }
-.srt-card-img { font-size: 30px; line-height: 1; flex: 0 0 auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
+.srt-card, .srt-cross { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border: 0; border-radius: 16px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: var(--srt-ink); font-family: var(--p-font); cursor: pointer; box-shadow: 0 4px 14px var(--srt-sh); }
+.srt-card { width: 100%; } .srt-card::after { content: '›'; margin-left: auto; font-size: 22px; font-weight: 900; opacity: .85; }
+.srt-card-img { font-size: 36px; line-height: 1; flex: 0 0 auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
 .srt-card-t { display: flex; flex-direction: column; min-width: 0; }
-.srt-card-t b { font-size: 13.5px; font-weight: 900; line-height: 1.15; }
-.srt-card-t i { font-style: normal; font-size: 12px; font-weight: 700; opacity: .95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.srt-card-t small { font-size: 11px; font-weight: 700; opacity: .85; margin-top: 2px; }
+.srt-card-t b { font-size: 15px; font-weight: 900; line-height: 1.15; }
+.srt-card-t i { font-style: normal; font-size: 13px; font-weight: 700; opacity: .95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srt-card-t small { font-size: 11.5px; font-weight: 700; opacity: .85; margin-top: 2px; }
 .srt-banner { margin: 2px 12px 8px; } body:not(.home-play) #srtBannerPlay { display: none; }
-.srt-ban { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 0; border-radius: 14px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: var(--srt-ink); font-family: var(--p-font); cursor: pointer; text-align: left; box-shadow: 0 4px 14px rgba(31, 107, 69, .28); }
+.srt-ban { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 0; border-radius: 14px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: var(--srt-ink); font-family: var(--p-font); cursor: pointer; text-align: left; box-shadow: 0 4px 14px var(--srt-sh); }
 .srt-ban-img { font-size: 26px; line-height: 1; }
 .srt-ban-t { display: flex; flex-direction: column; flex: 1; min-width: 0; } .srt-ban-t b { font-size: 13.5px; font-weight: 900; } .srt-ban-t small { font-size: 11.5px; font-weight: 700; opacity: .9; }
 .srt-ban em { font-style: normal; font-size: 12px; font-weight: 900; opacity: .95; }
@@ -2723,7 +2726,7 @@ html.srt-lock, html.srt-lock body { overflow: hidden; }
 .srt-req { list-style: none; margin: 10px 0; padding: 0; } .srt-req li { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; padding: 5px 0; line-height: 1.35; } .srt-req li i { font-style: normal; flex: 0 0 auto; } .srt-req li.ok { color: var(--srt-g); font-weight: 800; }
 .srt-req label { display: inline; } .srt-req input { vertical-align: middle; margin-right: 4px; accent-color: var(--srt-g2); }
 .srt-link { border: 0; background: none; color: var(--srt-g2); font: 900 12.5px var(--p-font); padding: 0 2px; cursor: pointer; text-decoration: underline; }
-.srt-btn { width: 100%; border: 0; border-radius: 14px; padding: 13px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: #fff; font: 900 15px var(--p-font); cursor: pointer; box-shadow: 0 6px 18px rgba(31, 107, 69, .3); }
+.srt-btn { width: 100%; border: 0; border-radius: 14px; padding: 13px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: #fff; font: 900 15px var(--p-font); cursor: pointer; box-shadow: 0 6px 18px var(--srt-sh); }
 .srt-cross { width: 100%; margin-bottom: 10px; } .srt-cross em { margin-left: auto; font-style: normal; font-weight: 900; font-size: 12.5px; }
 .srt-terms-btn { width: 100%; border: 1px solid var(--srt-line); border-radius: 14px; padding: 12px; background: var(--p-card); color: var(--p-text); font: 900 14px var(--p-font); cursor: pointer; text-align: left; }
 /* bases: capa encima, ✕ arriba a la izquierda */
@@ -2734,12 +2737,14 @@ html.srt-lock, html.srt-lock body { overflow: hidden; }
 .srt-terms-body h2 { margin: 0 0 10px; font-size: 17px; font-weight: 900; }
 .srt-tc { margin: 0; padding-left: 18px; } .srt-tc li { font-size: 13.5px; line-height: 1.45; margin-bottom: 9px; } .srt-tc li b { color: var(--srt-g); }
 
-/* #917: pill "Sorteo mensual · NOVEDAD" en el medio de la barra del casino (mismo tamaño que el PICA ROJA que reemplaza; verde) */
-.casino-brand.casino-srt { pointer-events: auto !important; border: 0; background: none; padding: 0 2px; cursor: pointer; font-family: var(--p-font); }
-.casino-brand.casino-srt .cb-box { border-color: var(--srt-g3) !important; background: var(--srt-soft) !important; }
-.casino-brand.casino-srt .cb-ico { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1; flex: 0 0 auto; }
-.casino-brand.casino-srt b { color: var(--srt-g) !important; }
-.casino-brand.casino-srt small { color: var(--srt-g2) !important; display: block !important; }
-.casino-topbar .casino-brand.casino-srt .cb-ico { width: 22px; height: 22px; font-size: 16px; }
-@media (max-width: 360px) { .casino-brand.casino-srt .cb-txt { display: flex !important; } .casino-brand.casino-srt .cb-box { border-radius: 999px !important; padding: 3px 7px 3px 3px !important; } .casino-brand.casino-srt small { display: none !important; } }
+/* #917/#918: RECUADRO RECTANGULAR centrado "🏆 Sorteo mensual · NOVEDAD" en el medio de la barra del casino (reemplaza al PICA ROJA; violeta).
+   Owner #918: "adentro de Girox se ve mal: armá un recuadro rectangular ahí centrado". */
+.casino-brand.casino-srt { pointer-events: auto !important; border: 0; background: none; padding: 0 4px; cursor: pointer; font-family: var(--p-font); display: flex !important; justify-content: center !important; overflow: visible !important; }
+.casino-topbar .casino-brand.casino-srt .cb-box, .casino-brand.casino-srt .cb-box { display: inline-flex; flex-direction: row; align-items: center; justify-content: center; gap: 7px !important; min-width: 0; max-width: 100%; padding: 4px 12px !important; border-radius: 9px !important; border: 1.5px solid var(--srt-g2) !important; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)) !important; box-shadow: 0 3px 10px var(--srt-sh); overflow: hidden; }
+.casino-topbar .casino-brand.casino-srt .cb-ico, .casino-brand.casino-srt .cb-ico { width: auto !important; height: auto !important; display: inline-flex; align-items: center; font-size: 16px; line-height: 1; flex: 0 0 auto; }
+.casino-brand.casino-srt .cb-txt { display: flex !important; flex-direction: column; align-items: flex-start; line-height: 1.05; min-width: 0; }
+.casino-topbar .casino-brand.casino-srt b, .casino-brand.casino-srt b { color: #fff !important; font-size: 11px !important; letter-spacing: .4px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.casino-topbar .casino-brand.casino-srt small, .casino-brand.casino-srt small { color: #fff !important; opacity: .9; font-size: 7.5px !important; letter-spacing: 1px !important; display: block !important; white-space: nowrap; }
+@media (max-width: 420px) { .casino-brand.casino-srt small { display: block !important; } }
+@media (max-width: 360px) { .casino-brand.casino-srt .cb-txt { display: flex !important; } .casino-brand.casino-srt .cb-box { border-radius: 9px !important; padding: 3px 8px !important; } .casino-brand.casino-srt b { font-size: 10px !important; } }
 body.casino-open .srt-modal { z-index: 100002 !important; }

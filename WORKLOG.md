@@ -8,6 +8,20 @@
 
 ## Sesión 2026-10-24
 
+### 918. 🟣 Sorteos en VIOLETA, tarjetas separadas, Bases con paso a paso y cobro del 1 al 10, recuadro rectangular en Girox — SW v608
+**Pedido (owner):** "los recuadros del sorteo dejalos separados, en dos, no juntos; los términos y condiciones adentro de cada uno, cómo funciona
+todo perfecto y cómo se cobra, el día y demás: dentro del mes de diciembre se paga el premio dentro de los primeros 10 días; un color
+diferente, un violeta como el de Ganamos" + "adentro de Girox se ve mal: armá un recuadro rectangular ahí centrado".
+- Tokens `--srt-*` pasan a violeta (`#6d28d9 / #8b5cf6 / #a78bfa`, los de `--p-purple`), con sombra `--srt-sh` y versión dark. Afecta tarjetas,
+  banner, pantalla, podio, botón Anotarme y el recuadro de la barra del casino.
+- Tarjetas (`.srt-cards`): una debajo de la otra, ancho completo, 10 px de separación, imagen más grande y flecha ›.
+- Bases (`sorteosRules.terms`, por sorteo): "Cómo funciona, paso a paso" (anotarse → jugar → ver puesto → cierre → publicación → cobro),
+  fechas del período, puntos, premios, premio extra, **"Cómo y cuándo se cobra"** = `payWindow(end)`: "del 1 al 10 de <mes siguiente>" (noviembre
+  ⇒ del 1 al 10 de diciembre de 2026; Gran Sorteo ⇒ del 1 al 10 de febrero de 2027), titular con DNI, CBU a su nombre, premios físicos
+  coordinados o su valor, 10 días hábiles para responder; requisitos, participantes, transparencia, empate, reglas generales (+18).
+- Barra del casino (#917): el pill pasa a RECUADRO RECTANGULAR centrado (bordes 9 px, fondo violeta, texto blanco "🏆 Sorteo mensual / NOVEDAD"),
+  siempre con el texto visible, también en pantallas de 360 px.
+
 ### 917. 🎰 Girox directo: el pill del medio de la barra pasa de "PICA ROJA · OFICIAL" a "🏆 Sorteo mensual · NOVEDAD" (abre el sorteo) — SW v607
 **Pedido (owner, captura):** "acá adentro de Girox poné Sorteo mensual (NOVEDAD) con ese tamaño, sacá PICA ROJA y que se pueda expandir desde
 ahí adentro para ver la novedad".
