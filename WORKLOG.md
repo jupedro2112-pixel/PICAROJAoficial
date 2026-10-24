@@ -8,6 +8,15 @@
 
 ## Sesión 2026-10-24
 
+### 914. 📣 Publicistas → Ver detalle: período con FECHA Y HORA — admin SW v187
+**Pedido (owner):** "en publicista, cuando voy a ver detalle, que se pueda seleccionar fecha… y hora".
+- Modal "📊 Ver detalle" de una pauta: barra "📅 Período (fecha y hora, Argentina)" con Desde / Hasta (`datetime-local`), botón Ver y atajos
+  Hoy · Ayer · 7 días · 30 días · Todo. Vacío = desde el inicio (como antes). Se manda ISO con `-03:00`; al abrir otra pauta se resetea.
+- `GET /api/admin/campaigns/:code/stats?from=&to=` (`_campaignRangeParse` + `_campaignStatsRange`): clics, registros, FTD (primera carga de la vida
+  DENTRO del período), clientes que cargaron, cargas, total cargado, retiros y neto del período, sólo de los usuarios de esa pauta. La comisión
+  informativa se calcula sobre lo del período. `GET …/users?from=&to=` devuelve sólo los registrados en el período (lista del modal).
+- Sin período la ruta responde exactamente como antes (`computeCampaignStats`), así el link público `/r/<token>` (#805/#835) no cambia.
+
 ### 913. 🏠 INICIO: aceptación sobre CARGADORES, Ayer, veces que cargaron, volvieron del día anterior · 🏦 pagos por banco externo = INGRESO del cierre — admin SW v186
 **Pedido (owner):** "la aceptación de la app de INICIO hacela con usuarios que cargaron, no que se registraron; tema cierres: si hay pagos de
 forma externa tomalos como un ingreso en el cierre porque en el panel van a estar las fichas y la plata también, manejalo para que el próximo

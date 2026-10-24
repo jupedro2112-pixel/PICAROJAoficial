@@ -631,6 +631,10 @@ VIPCARGAS con su JWT, y el cliente nunca más necesita conocer su clave del casi
   filtrar y muestra a qué publicista pertenece cada usuario. La gestión del admin
   (POST/PUT `/api/admin/publisher-admins`) acepta `campaignCodes` (lista) o el legacy
   `campaignCode`.
+- **Detalle de una pauta con período (#914):** `GET /api/admin/campaigns/:code/stats?from=&to=` y `…/users?from=&to=` aceptan
+  fecha Y hora (ISO; el panel manda hora argentina con `-03:00`). Con período: `_campaignStatsRange` (clics, registros, FTD = primera carga de
+  la vida dentro del período, cargas, retiros, neto del período); sin período: `computeCampaignStats` (desde el inicio, lo que usa el link
+  público `/r/<token>`). El modal "📊 Ver detalle" tiene Desde/Hasta + Hoy/Ayer/7 d/30 d/Todo.
 - **Landing de pauta (#224):** `GET /l/:code` (y `/landing/:code`) sirve `public/landing/index.html`
   con el código inyectado; `POST /api/landing/signup` crea el usuario en Girox Y en toda plataforma
   habilitada con API (`User.platforms`), devuelve usuario/clave/access link (sin `ir=casino`);

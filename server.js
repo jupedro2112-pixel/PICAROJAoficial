@@ -16783,15 +16783,47 @@ app.delete('/api/admin/campaigns/:code/permanent', authMiddleware, adminMiddlewa
 });
 
 // Stats detalladas de una campaña + comisión calculada.
+// #914 (owner): "en publicista, cuando voy a ver detalle, que se pueda seleccionar fecha y hora". Período [start, end) con fecha Y hora:
+// clics, registros, primeras cargas (FTD), cargas / clientes que cargaron / total cargado y retiros DENTRO del período, de los usuarios de
+// esa pauta. Sin período, el detalle sigue siendo "desde el inicio" (computeCampaignStats).
+function _campaignRangeParse(q) {
+  const p = (v) => { if (!v) return null; const d = new Date(String(v)); return isNaN(d) ? null : d; };
+  const start = p(q.from), end = p(q.to); if (!start && !end) return null;
+  const s = start || new Date(0), e = end || new Date(Date.now() + 60000);
+  return e > s ? { start: s, end: e } : null;
+}
+async function _campaignStatsRange(code, start, end) {
+  const normalizedCode = String(code).toUpperCase().trim();
+  const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code'];
+  const [clicks, users] = await Promise.all([
+    CampaignClick.countDocuments({ campaignCode: normalizedCode, clickedAt: { $gte: start, $lt: end } }),
+    User.find({ acquisitionCampaign: normalizedCode }).select('id username createdAt').lean()
+  ]);
+  const names = users.map((u) => u.username);
+  const registrations = users.filter((u) => u.createdAt && new Date(u.createdAt) >= start && new Date(u.createdAt) < end).length;
+  const base = { clicks, registrations, ftd: 0, depositors: 0, deposits: 0, totalRevenue: 0, totalWithdrawals: 0, netRevenue: 0, crClickToRegister: clicks > 0 ? registrations / clicks : null, crRegisterToFtd: null };
+  if (!names.length) return base;
+  const realDep = { type: 'deposit', username: { $in: names }, $or: [{ 'metadata.source': { $exists: false } }, { 'metadata.source': { $nin: GIFT_SOURCES } }] };
+  const [deps, firsts, wds] = await Promise.all([
+    Transaction.aggregate([{ $match: Object.assign({ createdAt: { $gte: start, $lt: end } }, realDep) }, { $group: { _id: '$username', total: { $sum: '$amount' }, count: { $sum: 1 } } }]),
+    Transaction.aggregate([{ $match: realDep }, { $group: { _id: '$username', first: { $min: '$createdAt' } } }, { $match: { first: { $gte: start, $lt: end } } }]),
+    Transaction.aggregate([{ $match: { type: 'withdrawal', username: { $in: names }, createdAt: { $gte: start, $lt: end } } }, { $group: { _id: null, total: { $sum: '$amount' } } }])
+  ]);
+  base.ftd = firsts.length; base.depositors = deps.length; base.deposits = deps.reduce((s, x) => s + x.count, 0);
+  base.totalRevenue = Math.round(deps.reduce((s, x) => s + (x.total || 0), 0)); base.totalWithdrawals = Math.round((wds[0] && wds[0].total) || 0);
+  base.netRevenue = base.totalRevenue - base.totalWithdrawals; base.crRegisterToFtd = registrations > 0 ? base.ftd / registrations : null;
+  return base;
+}
 app.get('/api/admin/campaigns/:code/stats', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const normalizedCode = String(req.params.code).toUpperCase().trim();
     const campaign = await Campaign.findOne({ code: normalizedCode }).lean();
     if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' });
 
-    const stats = await computeCampaignStats(normalizedCode);
+    const range = _campaignRangeParse(req.query || {}); // #914: fecha y hora
+    const stats = range ? await _campaignStatsRange(normalizedCode, range.start, range.end) : await computeCampaignStats(normalizedCode);
     const commission = calcCommission(campaign, stats);
-    res.json({ campaign, stats, commission });
+    res.json({ campaign, stats, commission, period: range ? { from: range.start.toISOString(), to: range.end.toISOString() } : null });
   } catch (err) {
     logger.error(`[admin/campaigns/:code/stats] ${err.message}`);
     res.status(500).json({ error: 'Error del servidor' });
@@ -16951,7 +16983,8 @@ app.get('/api/admin/campaigns/:code/users', authMiddleware, adminMiddleware, asy
   try {
     const normalizedCode = String(req.params.code).toUpperCase().trim();
     const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
-    const users = await User.find({ acquisitionCampaign: normalizedCode })
+    const range = _campaignRangeParse(req.query || {}); // #914: sólo los registrados en el período (fecha y hora)
+    const users = await User.find(Object.assign({ acquisitionCampaign: normalizedCode }, range ? { createdAt: { $gte: range.start, $lt: range.end } } : {}))
       .select('id username email phone phoneVerified phoneVerificationPending balance createdAt acquiredAt')
       .sort({ acquiredAt: -1 })
       .limit(limit)

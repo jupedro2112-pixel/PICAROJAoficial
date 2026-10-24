@@ -11163,20 +11163,49 @@ async function reactivateCampaign(code) {
 
 let _campaignStatsCurrentCode = null;
 
+// #914 (owner): "en publicista, cuando voy a ver detalle, que se pueda seleccionar fecha y hora". Período con fecha y hora (hora argentina);
+// vacío = desde el inicio. Se manda como ISO con -03:00 y el server filtra clics, registros, cargas y retiros del período.
+let _campaignStatsRange = { from: '', to: '' };
+function _csIso(v) { return v ? new Date(v + ':00-03:00').toISOString() : ''; }
+function _csLocal(d) { const x = new Date(d.getTime() - 3 * 3600000); return x.toISOString().slice(0, 16); } // Date → 'YYYY-MM-DDTHH:mm' en ART
+function campaignStatsApply() { const f = (document.getElementById('csFrom') || {}).value || '', t = (document.getElementById('csTo') || {}).value || ''; if (f && t && t <= f) { showToast('"Hasta" tiene que ser después de "Desde"', 'error'); return; } _campaignStatsRange = { from: f, to: t }; viewCampaignStats(_campaignStatsCurrentCode); }
+function campaignStatsQuick(k) {
+    const now = new Date(); const art = new Date(now.getTime() - 3 * 3600000); const day0 = new Date(Date.UTC(art.getUTCFullYear(), art.getUTCMonth(), art.getUTCDate()) + 3 * 3600000); // 00:00 ART de hoy
+    let from = '', to = '';
+    if (k === 'hoy') from = _csLocal(day0);
+    else if (k === 'ayer') { from = _csLocal(new Date(day0.getTime() - 86400000)); to = _csLocal(day0); }
+    else if (k === '7d') from = _csLocal(new Date(day0.getTime() - 6 * 86400000));
+    else if (k === '30d') from = _csLocal(new Date(day0.getTime() - 29 * 86400000));
+    _campaignStatsRange = { from, to }; viewCampaignStats(_campaignStatsCurrentCode);
+}
+function _campaignStatsBar() {
+    const r = _campaignStatsRange; const on = !!(r.from || r.to);
+    const b = (k, t) => '<button class="btn-secondary btn-small" onclick="campaignStatsQuick(\'' + k + '\')">' + t + '</button>';
+    return '<div style="background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.2);border-radius:8px;padding:10px 12px;margin-bottom:12px;">' +
+        '<div style="font-size:11px;color:#aaa;margin-bottom:6px;">📅 Período (fecha y hora, Argentina) · vacío = desde el inicio</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+        '<label style="font-size:12px;color:#ccc;">Desde <input type="datetime-local" id="csFrom" class="form-input" style="width:auto" value="' + escapeHtml(r.from) + '"></label>' +
+        '<label style="font-size:12px;color:#ccc;">Hasta <input type="datetime-local" id="csTo" class="form-input" style="width:auto" value="' + escapeHtml(r.to) + '"></label>' +
+        '<button class="btn-primary btn-small" onclick="campaignStatsApply()">Ver</button>' + b('hoy', 'Hoy') + b('ayer', 'Ayer') + b('7d', '7 días') + b('30d', '30 días') + b('todo', 'Todo') + '</div>' +
+        (on ? '<div style="font-size:12px;color:#d4af37;margin-top:6px;">Mostrando: ' + (r.from ? 'desde ' + escapeHtml(r.from.replace('T', ' ')) : 'desde el inicio') + (r.to ? ' hasta ' + escapeHtml(r.to.replace('T', ' ')) : ' hasta ahora') + '</div>' : '') + '</div>';
+}
 async function viewCampaignStats(code) {
+    if (_campaignStatsCurrentCode !== code) _campaignStatsRange = { from: '', to: '' }; // otra pauta ⇒ desde el inicio
     _campaignStatsCurrentCode = code;
     document.getElementById('campaignStatsTitle').textContent = code;
     document.getElementById('campaignStatsSubtitle').textContent = '';
-    document.getElementById('campaignStatsContent').innerHTML = 'Cargando…';
+    document.getElementById('campaignStatsContent').innerHTML = _campaignStatsBar() + 'Cargando…';
     showModal('campaignStatsModal');
     document.getElementById('campaignStatsModal').style.display = 'flex';
 
     try {
-        const response = await fetch(`${API_URL}/api/admin/campaigns/${encodeURIComponent(code)}/stats`, {
+        const qs = (_campaignStatsRange.from || _campaignStatsRange.to) ? '?from=' + encodeURIComponent(_csIso(_campaignStatsRange.from)) + '&to=' + encodeURIComponent(_csIso(_campaignStatsRange.to)) : '';
+        const response = await fetch(`${API_URL}/api/admin/campaigns/${encodeURIComponent(code)}/stats${qs}`, {
             headers: { 'Authorization': `Bearer ${currentToken}` }
         });
         if (!response.ok) throw new Error('Failed to load stats');
-        const { campaign, stats, commission } = await response.json();
+        const { campaign, stats, commission, period } = await response.json();
+        const perLbl = period ? 'en el período' : 'desde el inicio';
 
         document.getElementById('campaignStatsTitle').textContent = `${campaign.publisher} — ${campaign.name}`;
         document.getElementById('campaignStatsSubtitle').textContent = `Código: ${campaign.code} · ${campaign.isActive ? '🟢 Activa' : '🔴 Inactiva'}`;
@@ -11189,7 +11218,7 @@ async function viewCampaignStats(code) {
                 ? `${formatARS(campaign.commissionValue)} × ${stats.ftd} FTD = ${formatARS(commission)}`
                 : `${campaign.commissionValue}% × ${formatARS(stats.netRevenue)} = ${formatARS(commission)}`);
 
-        document.getElementById('campaignStatsContent').innerHTML = `
+        document.getElementById('campaignStatsContent').innerHTML = _campaignStatsBar() + `
             <div style="background:rgba(0,0,0,0.4);border:1px solid rgba(212,175,55,0.2);border-radius:8px;padding:12px;margin-bottom:12px;">
                 <div style="font-size:11px;color:#aaa;margin-bottom:4px;">Link para el publicista</div>
                 <code style="display:block;background:#0d0d1a;padding:8px;border-radius:6px;color:#00ff88;font-size:12px;word-break:break-all;">${escapeHtml(buildCampaignLink(campaign.code))}</code>
@@ -11203,7 +11232,7 @@ async function viewCampaignStats(code) {
             </div>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
                 <div style="background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;">
-                    <div style="font-size:11px;color:#aaa;">Clics</div>
+                    <div style="font-size:11px;color:#aaa;">Clics (${perLbl})</div>
                     <div style="font-size:24px;color:#d4af37;font-weight:bold;">${stats.clicks}</div>
                 </div>
                 <div style="background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;">
@@ -11212,9 +11241,9 @@ async function viewCampaignStats(code) {
                     <div style="font-size:10px;color:#888;">CR: ${crClickReg}</div>
                 </div>
                 <div style="background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;">
-                    <div style="font-size:11px;color:#aaa;">FTD</div>
+                    <div style="font-size:11px;color:#aaa;">FTD (primeras cargas)</div>
                     <div style="font-size:24px;color:#00ff88;font-weight:bold;">${stats.ftd}</div>
-                    <div style="font-size:10px;color:#888;">CR: ${crRegFtd}</div>
+                    <div style="font-size:10px;color:#888;">CR: ${crRegFtd}${period ? ' · ' + (stats.depositors || 0) + ' cargaron · ' + (stats.deposits || 0) + ' cargas' : ''}</div>
                 </div>
                 <div style="background:rgba(0,0,0,0.4);padding:12px;border-radius:8px;">
                     <div style="font-size:11px;color:#aaa;">Revenue (depósitos)</div>
@@ -11239,8 +11268,8 @@ async function viewCampaignStats(code) {
             </div>
         `;
 
-        // Cargar la lista de usuarios registrados por esta pauta (best-effort).
-        loadCampaignUsers(code);
+        // Cargar la lista de usuarios registrados por esta pauta (best-effort). #914: con período, sólo los registrados en él.
+        loadCampaignUsers(code, qs);
     } catch (err) {
         document.getElementById('campaignStatsContent').innerHTML = `<span style="color:#ff6666;">Error: ${escapeHtml(err.message)}</span>`;
     }
@@ -11250,11 +11279,11 @@ async function viewCampaignStats(code) {
 // que se registraron por una campaña. Es best-effort: si falla, no rompe el
 // resto del modal. Verifica _campaignStatsCurrentCode para no pisar el
 // contenido si el admin abrió otra campaña mientras cargaba.
-async function loadCampaignUsers(code) {
+async function loadCampaignUsers(code, qs) {
     const container = document.getElementById('campaignStatsUsers');
     if (!container) return;
     try {
-        const response = await fetch(`${API_URL}/api/admin/campaigns/${encodeURIComponent(code)}/users?limit=500`, {
+        const response = await fetch(`${API_URL}/api/admin/campaigns/${encodeURIComponent(code)}/users?limit=500${qs ? '&' + qs.slice(1) : ''}`, {
             headers: { 'Authorization': `Bearer ${currentToken}` }
         });
         if (!response.ok) throw new Error('No se pudo cargar la lista de usuarios');
@@ -11265,7 +11294,7 @@ async function loadCampaignUsers(code) {
         if (!cont) return;
 
         if (!users || users.length === 0) {
-            cont.innerHTML = `<div style="font-size:12px;color:#888;border-top:1px solid rgba(212,175,55,0.2);padding-top:10px;">Todavía no hay usuarios registrados por esta pauta.</div>`;
+            cont.innerHTML = `<div style="font-size:12px;color:#888;border-top:1px solid rgba(212,175,55,0.2);padding-top:10px;">${qs ? 'Nadie se registró por esta pauta en el período elegido.' : 'Todavía no hay usuarios registrados por esta pauta.'}</div>`;
             return;
         }
 
@@ -11289,7 +11318,7 @@ async function loadCampaignUsers(code) {
         cont.innerHTML = `
             <div style="border-top:1px solid rgba(212,175,55,0.2);padding-top:12px;">
                 <div style="font-size:13px;color:#d4af37;font-weight:bold;margin-bottom:8px;">
-                    👥 Usuarios registrados por esta pauta (${users.length})
+                    👥 Usuarios registrados por esta pauta${qs ? ' en el período' : ''} (${users.length})
                 </div>
                 <div style="max-height:260px;overflow-y:auto;background:rgba(0,0,0,0.4);border-radius:8px;">
                     <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -11333,7 +11362,7 @@ window.reactivateCampaign = reactivateCampaign;
 window.copyCampaignLink = copyCampaignLink;
 window.submitCampaignForm = submitCampaignForm;
 window.closeCampaignFormModal = closeCampaignFormModal;
-window.viewCampaignStats = viewCampaignStats;
+window.viewCampaignStats = viewCampaignStats; window.campaignStatsApply = campaignStatsApply; window.campaignStatsQuick = campaignStatsQuick; // #914
 window.closeCampaignStatsModal = closeCampaignStatsModal;
 window.editCampaignFromStats = editCampaignFromStats;
 
