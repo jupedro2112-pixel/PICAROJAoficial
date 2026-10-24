@@ -47,16 +47,7 @@
             box.hidden = false; box.classList.toggle('one', ordered.length === 1); box.innerHTML = pair();
             if (_inline && _inline.previousElementSibling === box) { const idx = ['gran', 'mensual'].indexOf(_inlineKey); const btns = box.querySelectorAll('.srt-ban'); if (btns[idx]) btns[idx].classList.add('on'); }
         });
-        // #917: pill del medio de la barra del casino (Girox directo): título del sorteo vigente + subtítulo vivo.
-        try {
-            const s0 = list.find((x) => x.status === 'live') || list[0]; const btn = _el('casinoSrtBtn');
-            if (btn) {
-                btn.hidden = !s0;
-                if (s0) { const ti = btn.querySelector('[data-srt-brand-title]'), su = btn.querySelector('[data-srt-brand-sub]'), ic = btn.querySelector('[data-srt-brand-ico]'); const p1 = (s0.prizes || [])[0] || {};
-                    if (ti) ti.textContent = s0.title; if (ic) { const v = p1.img || s0.emoji || '🏆'; if (isPic(v)) { ic.classList.add('pic'); ic.innerHTML = '<img src="' + esc(v) + '" alt="">'; } else { ic.classList.remove('pic'); ic.textContent = v; } }
-                    if (su) su.textContent = s0.status === 'live' ? (s0.me && s0.me.joined && s0.me.points > 0 ? 'PUESTO #' + num(s0.me.rank) : 'EN VIVO · NOVEDAD') : (s0.status === 'soon' ? 'NOVEDAD · ' + cdShort(s0.startsInMs).toUpperCase() : 'CERRADO'); }
-            }
-        } catch (_) {}
+        paintCasino(); // #917/#935: barra del casino
         // #922 (owner): el banner de Girox directo dividido en DOS: a la izquierda el Gran Sorteo (auto), a la derecha el mensual (iPhone).
         document.querySelectorAll('[data-srt-banner]').forEach((box) => {
             if (!ordered.length) { box.hidden = true; box.innerHTML = ''; return; }
@@ -192,6 +183,31 @@
             toast('🏆 ¡Listo! Ya estás anotado. Tus apuestas suman puntos.', 'success'); await load();
         } catch (_) { toast('Sin conexión. Probá de nuevo.', 'error'); }
     }
+    // #935 (owner, captura de la gemela): dentro del casino, con el sorteo ABIERTO hay un banner debajo de la barra ("🏆 Sorteo mensual ·
+    // Empieza en… · Ver más ▾" y un – para cerrarlo) y en el medio de la barra queda PICA ROJA; CERRADO, queda la píldora "Sorteo mensual" en el
+    // medio y tocarla vuelve a abrir el banner. El estado se recuerda en el teléfono (vip_srt_casino_bar).
+    function _casinoBarOpen() { try { return localStorage.getItem('vip_srt_casino_bar') !== 'closed'; } catch (_) { return true; } }
+    function casinoBar(open) { try { localStorage.setItem('vip_srt_casino_bar', open ? 'open' : 'closed'); } catch (_) {} paintCasino(); }
+    function paintCasino() {
+        const list = (_data && _data.enabled && _data.sorteos) || [];
+        const s0 = list.find((x) => x.status === 'live') || list[0];
+        const btn = _el('casinoSrtBtn'), brand = _el('casinoBrand'), bar = _el('casinoSrtBar');
+        if (!btn && !bar) return;
+        const openBar = !!s0 && _casinoBarOpen();
+        if (brand) brand.hidden = !!s0 && !openBar;
+        if (btn) {
+            btn.hidden = !s0 || openBar;
+            if (s0) { const ti = btn.querySelector('[data-srt-brand-title]'), su = btn.querySelector('[data-srt-brand-sub]'), ic = btn.querySelector('[data-srt-brand-ico]'); const p1 = (s0.prizes || [])[0] || {};
+                if (ti) ti.textContent = s0.title; if (ic) { const v = p1.img || s0.emoji || '🏆'; if (isPic(v)) { ic.classList.add('pic'); ic.innerHTML = '<img src="' + esc(v) + '" alt="">'; } else { ic.classList.remove('pic'); ic.textContent = v; } }
+                if (su) su.textContent = s0.status === 'live' ? (s0.me && s0.me.joined && s0.me.points > 0 ? 'PUESTO #' + num(s0.me.rank) : 'EN VIVO · NOVEDAD') : (s0.status === 'soon' ? 'NOVEDAD · ' + cdShort(s0.startsInMs).toUpperCase() : 'CERRADO'); }
+        }
+        if (bar) {
+            bar.hidden = !openBar;
+            if (openBar) { const p1 = (s0.prizes || [])[0] || {};
+                bar.innerHTML = '<button type="button" class="csb-main" onclick="VIP.sorteos.openMini(\'' + s0.key + '\')">' + pic(p1.img || s0.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s0.title) + '</b><small>' + esc(cardSub(s0)) + '</small></span><em>Ver más ▾</em></button><button type="button" class="csb-x" onclick="VIP.sorteos.casinoBar(false)" title="Cerrar: queda arriba, en el medio" aria-label="Cerrar">–</button>';
+            } else bar.innerHTML = '';
+        }
+    }
     // #933 (owner): "que ese menú en Girox abra una ventana ahí adentro, no en el menú: una explicación resumida y, si quiere ver más, que vaya al
     // menú; sólo el contador y lo que se sortea". Hoja chica sobre el casino: contador vivo, los 3 premios con imagen, 2 líneas y "Ver más".
     function openMini(key) {
@@ -243,5 +259,5 @@
         load(); clearInterval(_poll); _poll = setInterval(load, 5 * 60 * 1000);
         try { document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); }); } catch (_) {}
     }
-    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, join, terms, termsClose, tgOpen };
+    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, paintCasino, casinoBar, join, terms, termsClose, tgOpen };
 })();

@@ -2861,3 +2861,13 @@ body.casino-open .srt-modal { z-index: 100002 !important; }
 html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 #infoMsg.im-grid { gap: 8px !important; }
 #infoMsg .im-card:not(.open) .im-more { font: 800 12px var(--p-font) !important; color: var(--p-red) !important; }
+
+/* #935: banner del sorteo DEBAJO de la barra del casino (abierto) · píldora en el medio (cerrado) */
+.casino-srt-bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px 7px; background: var(--p-card); border-bottom: 1px solid var(--p-border); }
+.casino-srt-bar[hidden] { display: none !important; }
+.casino-srt-bar .csb-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 7px 12px; border: 1.5px solid var(--srt-g3); border-radius: 13px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: #fff; font-family: var(--p-font); cursor: pointer; text-align: left; box-shadow: 0 3px 10px var(--srt-sh); }
+.casino-srt-bar .csb-main .srt-ban-img { font-size: 26px; } .casino-srt-bar .csb-main .srt-ban-img.pic { width: 46px; height: 34px; }
+.casino-srt-bar .csb-main .srt-ban-t b { font-size: 13px; } .casino-srt-bar .csb-main .srt-ban-t small { font-size: 11px; }
+.casino-srt-bar .csb-main em { margin-left: auto; font-style: normal; font-size: 12.5px; font-weight: 900; color: var(--srt-lite); white-space: nowrap; }
+.casino-srt-bar .csb-x { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--srt-line); background: var(--srt-soft); color: var(--srt-g); font: 900 18px/26px var(--p-font); cursor: pointer; }
+.casino-brand[hidden], .casino-brand.casino-srt[hidden] { display: none !important; }

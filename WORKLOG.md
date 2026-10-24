@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 935. 🎰 Casino: banner del sorteo DEBAJO de la barra; al cerrarlo queda la píldora "Sorteo mensual" en el medio (donde está PICA ROJA) — SW v622
+**Pedido (owner, captura de la gemela):** "si se cierra, que quede en el medio donde está el PICA ROJA y la pica, que diga Sorteo mensual y se ponga ahí
+arriba; si lo abren, que aparezca abajo".
+- Barra del casino: vuelve `#casinoBrand` (PICA ROJA) al medio y `#casinoSrtBtn` (píldora) queda oculta mientras el banner está abierto. Debajo de
+  la fila, `#casinoSrtBar` (`.casino-srt-bar`): "🏆 Sorteo mensual · estado · Ver más ▾" (abre la hoja resumida #933) + botón "–" que lo cierra.
+  Cerrado ⇒ banner oculto, PICA ROJA oculto y la píldora en el medio; tocarla lo reabre. Estado en `localStorage vip_srt_casino_bar`.
+  `paintCasino()` se llama al armar la barra y en cada carga de datos.
+
 ### 934. 🧩 Panel del sorteo sin recorte en el básico · Info sólo título + ícono con recuadro marcado · auto como dibujo — SW v621
 **Pedidos (owner, capturas):** "esto quiero que se vea desde adentro de cada uno" (el panel desplegado salía cortado), "que se vea sólo los títulos y los
 íconos de cada título; poné mejor recuadro, se pierde mucho", "el auto ponelo como versión igual que el teléfono".
