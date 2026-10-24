@@ -8,6 +8,15 @@
 
 ## Sesión 2026-10-24
 
+### 978. Historia SEMANAL con bono fuerte (+100 % por 3 h, miércoles 12:30, push a todos) y menú: lo que no está en uso, al final — admin SW v203
+**Pedido (owner):** "tirá una historia semanal de notificación de bono, uno fuerte, para que lo puedan reclamar directo y los lleve a cargar; después
+limpiá todo lo que no va y bajalo al final en la fila del admin; dejame arriba todo lo que está en uso".
+- `STORY_AUTO_BONUS = { pct: 100, hours: 3 }` y `bonusDays = [3]` siempre (miércoles; se saca el sábado del refuerzo): una sola historia con bono por
+  semana, con push a todos a las 12:30, "Reclamar ahora" deja `User.storyBonus` y abre Girox directo con la Carga rápida (#742). El autopiloto no manda
+  campaña ese día (#971). El % pasa por el tope global de bonos y el rollover ×5 como siempre.
+- Menú del panel: Datos 2.0 e Ingresos diarios pasan al grupo final "No se usa (reemplazado)" (los cubren INICIO, Cierres y la Revisión semanal). Arriba
+  queda sólo lo que se usa: Principal, Manejo, Automático, Configuración, Atención, App, Administrativo, Publicidad.
+
 ### 977. Registro abierto: a las 5 cargas NO hay regalo especial
 **Pedido (owner):** "no le corresponde la bienvenida, le corresponde las notificaciones de los clientes, etc." ⇒ se quita el paso `trust-5` de #976. Al
 llegar a 5 cargas reales el cliente del registro abierto simplemente pasa a recibir lo mismo que cualquier otro (fichas del recorrido, campañas, etc.).

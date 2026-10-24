@@ -26003,7 +26003,7 @@ app.post('/api/admin/stories', authMiddleware, adminMiddleware, async (req, res)
 // encendido como la estrategia de notificaciones (frena sólo con STORIES_AUTOPILOT_DISABLED=1). `Story.autoKey` único ⇒ multi-instancia.
 const storyAuto = require('./src/services/storyAutopilot');
 const storyImage = require('./src/services/storyImage'); // #834 fotos de las historias automáticas
-const STORY_AUTO_BONUS = { pct: 50, hours: 3 };
+const STORY_AUTO_BONUS = { pct: 100, hours: 3 }; // #978 (owner): "una historia semanal de bono, uno fuerte, que lo reclamen directo y los lleve a cargar"
 // #968 (owner 2026-10-24): "dale un bombazo más fuerte de regalos en octubre y noviembre para retener más". Hasta el 30/11 la historia con bono
 // (+50% por 3 h, con push a todos) sale DOS veces por semana (miércoles y sábado) en vez de una.
 const GIFT_BOOST_UNTIL = '2026-11-30';
@@ -26022,7 +26022,7 @@ async function _storyAutoCtx(dayKey) {
   }
   let firstPct = 0; try { firstPct = await getFirstDepositBonusPct(); } catch (_) {}
   let rolloverX = 5; try { rolloverX = await _giftRolloverX(); } catch (_) {}
-  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: _giftBoostOn() ? [3, 6] : [3], rolloverX }; // #968
+  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: [3], rolloverX }; // #968 · #978: SEMANAL (miércoles), fuerte
 }
 // #909 (owner 2026-10-23: "no vamos a publicar aún los partidos de fútbol, quiero ir primero con publicaciones explicando la app"):
 // los PARTIDOS del día salen sólo con la llave `Config['storyAutoMatches']` encendida (panel → Historias automáticas → ⚽ Partidos).
@@ -26440,7 +26440,7 @@ app.get('/api/admin/inicio/notif-center', authMiddleware, adminMiddleware, async
     res.json({ success: true, config: nc, cap: ap.cap, autopilot: { enabled: ap.enabled, time: ap.time, hours: ap.hours, parts: ap.parts },
       steps: retentionJourney.STEPS.map((s) => ({ id: s.id, segment: s.segment, day: s.day, name: s.name, capped: s.capped, gift: s.gift, title: s.title, text: s.text })),
       tiers: retentionJourney.VALUE_TIERS, segmentLabels: retentionJourney.SEGMENT_LABELS, preview: _journeyPreview.v, journeyLast, refundLast, newbie,
-      storyBonusDays: _giftBoostOn() ? [3, 6] : [3], optOut: Object.fromEntries(optOut.map((o) => [o._id, o.n])) });
+      storyBonusDays: [3], optOut: Object.fromEntries(optOut.map((o) => [o._id, o.n])) });
   } catch (e) { logger.error('[notif-center] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.put('/api/admin/inicio/notif-center', authMiddleware, adminMiddleware, async (req, res) => {
@@ -29024,7 +29024,7 @@ const _AP_DOW = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes'
 // Lista de días del mes 'YYYY-MM' con lo que sale cada uno (no toca la base).
 // #971: los días en que sale la HISTORIA CON BONO (push a todos al mediodía) el autopiloto no manda campaña: un solo aviso ese día.
 function _autopilotMonthItems(month, cfg) {
-  const storyDows = String(month) <= GIFT_BOOST_UNTIL.slice(0, 7) ? [3, 6] : [3];
+  const storyDows = [3]; // #978: la historia con bono es semanal (miércoles)
   return _autopilotMonthItemsRaw(month, cfg).filter((i) => i.kind === 'todos' || !storyDows.includes(new Date(i.dayKey + 'T12:00:00Z').getUTCDay()));
 }
 function _autopilotMonthItemsRaw(month, cfg) {

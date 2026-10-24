@@ -327,7 +327,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   público con nombres tapados; sólo ANOTADOS ganan; requisitos en `Config['sorteos'].requirements`. Premios del extra se acreditan a mano. Panel → App → Sorteos.
 - **HISTORIAS PERSONALES (#886):** `Story.audienceUserId` = sólo la ve ese cliente (bono de bienvenida día 5/15/30, `_newbieOffersTick`,
   `Config['newbieOffers']`). Toda consulta NUEVA de historias para clientes o públicas tiene que filtrar `audienceUserId: null` (o el propio id).
-- **HISTORIAS CON BONO (#742, 2026-10-21):** una historia puede llevar `bonusPct` por `bonusHours` (+ push a todos). El cliente que toca
+- **HISTORIAS CON BONO (#742, 2026-10-21):** una historia puede llevar `bonusPct` por `bonusHours` (+ push a todos). **#978:** la automática es SEMANAL (miércoles 12:30, +100 % por 3 h, `STORY_AUTO_BONUS`, `bonusDays=[3]`); ese día el autopiloto no manda campaña. El cliente que toca
   "Reclamar ahora" queda con `User.storyBonus` (pct, expiresAt) y `claimStoryBonusPercent` lo consume PRIMERO en `resolveAutoBonus` en su
   próxima carga. Un bono nuevo que deba aplicarse a la carga va a esa cadena (no a `creditUserBalance`); el cliente que no reclamó no ve nada.
 - **LINK DE RESULTADOS DEL PUBLICISTA (#805):** `Campaign.statsToken` ⇒ `/r/<token>` muestra números agregados de esa campaña sin login
