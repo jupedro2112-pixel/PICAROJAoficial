@@ -472,6 +472,9 @@ const userSchema = new mongoose.Schema({
   // 'manual'  = lo creó un publisher_admin desde el panel.
   // El default es 'organic' por compatibilidad con usuarios pre-existentes y
   // con el flujo de registro público que no toca este campo.
+  // #975 (owner 2026-10-24): REGISTRO ABIERTO SIN REGALOS. true = se registró desde la página sin link de publicidad ni referido ⇒ sin bono de
+  // 1ª carga, sin extra por instalar, sin código de bienvenida, sin 2ª carga, sin ofertas de bienvenida. Sí reembolsos, ruleta, lotes, misiones.
+  noWelcomeGifts: { type: Boolean, default: false, index: true },
   acquisitionSource: {
     type: String,
     // 'landing' = alta por la landing puente externa (POST /api/landing/signup).

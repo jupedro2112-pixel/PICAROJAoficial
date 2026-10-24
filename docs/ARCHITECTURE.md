@@ -1525,3 +1525,12 @@ cambiar los umbrales sin correr `scripts/test-weekly-review.js`. El informe en t
 - **Anti-multicuenta de bienvenida:** `_welcomeAbuseOf(user)` busca otra cuenta con el mismo teléfono (últimos 10 dígitos), mismo `deviceIds` o mismo
   token FCM. Si hay, `resolveAutoBonus` bloquea todos los bonos de bienvenida en la primera carga (nota interna al agente) y `maybeOfferInstallGift` no
   ofrece el extra. No bloquea la cuenta ni toca ruleta/lotes/reembolsos. Sólo se evalúa cuando es la primera carga real (`_isFirstRealDeposit`).
+
+
+## Registro abierto sin regalos (#975, 2026-10-24)
+
+`User.noWelcomeGifts` se fija al crear la cuenta: landing / entrada rápida ⇒ `(!campaña || campaña === 'INGRESO') && !referido`; alta clásica ⇒
+`!attributedCampaign && !isValidReferral`; en ambos casos salvo `Config['organicWelcomeGifts'] === true`. Dónde se respeta: `_welcomeAbuseOf` (motivo
+⇒ `blockWelcome` en `resolveAutoBonus` y nada de extra en `maybeOfferInstallGift`), `_newbieOffersTick` (query), `retentionJourney` (pasos
+`needsWelcome` con `state.noWelcome`), `/api/first-deposit-promo` (`noGifts:true`, texto `/sys_first_deposit_nogift`). Reembolsos, ruleta, lotes,
+misiones, sorteos, VIP y referidos no miran el flag. Un regalo de bienvenida nuevo tiene que chequearlo.

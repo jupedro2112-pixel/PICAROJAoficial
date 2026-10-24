@@ -26,6 +26,10 @@ p = j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [] }, now)
 assert.strictEqual(j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [{ k: 'new-1@reg' }] }, now), null, '#972: sin pasos de instalar la app');
 assert.strictEqual(j.pickStep(Object.assign({}, base, { createdAt: ago(9), hasApp: false }), now), null, '#972: con cargas y sin app, nada');
 assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7), flagged: true }), now), null, 'marcado por el radar: nada');
+// #975: registro abierto sin regalos ⇒ no salen los pasos que prometen bono (new-3 / new-21), sí los demás
+assert.strictEqual(j.pickStep({ createdAt: ago(3), deposits: 0, hasApp: true, sent: [{ k: 'new-1@reg' }], noWelcome: true }, now), null, 'new-3 promete bono: no sale');
+assert.strictEqual(j.pickStep({ createdAt: ago(10), deposits: 0, hasApp: true, sent: [], noWelcome: true }, now).step.id, 'new-10');
+assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7), noWelcome: true }), now).step.id, 'cool-7', 'la recuperación sí');
 // #973: ajuste de la revisión semanal
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7) }), now, { pctMult: 1.2, chipsMult: 1.5 }); assert.strictEqual(p.amount, 35, '30 % ×1,2 = 36 → 35 (múltiplo de 5)');
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), avgDeposit: 30000 }), now, { pctMult: 1, chipsMult: 1.5 }); assert.strictEqual(p.amount, 7500, '5.000 ×1,5');

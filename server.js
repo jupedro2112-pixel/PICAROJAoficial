@@ -1787,7 +1787,8 @@ function installGiftLabel(cfg) { return cfg.fixedArs > 0 ? '$' + Math.round(cfg.
 // Devuelve el motivo (texto) o null. Mira teléfono normalizado (10 dígitos), ID del celular (deviceIds) y tokens de push compartidos.
 async function _welcomeAbuseOf(userIn) {
   try {
-    const u = await User.findOne({ id: userIn.id }).select('id username phone deviceIds fcmToken fcmTokens').lean(); if (!u) return null;
+    const u = await User.findOne({ id: userIn.id }).select('id username phone deviceIds fcmToken fcmTokens noWelcomeGifts').lean(); if (!u) return null;
+    if (u.noWelcomeGifts === true) return 'se registró desde la página sin invitación (registro abierto sin regalos de bienvenida)'; // #975
     const or = []; const tel = String(u.phone || '').replace(/\D/g, '').slice(-10);
     if (Array.isArray(u.deviceIds) && u.deviceIds.length) or.push({ deviceIds: { $in: u.deviceIds } });
     const toks = [].concat(u.fcmToken ? [u.fcmToken] : [], (u.fcmTokens || []).map((t) => t && t.token).filter(Boolean));
@@ -4659,6 +4660,7 @@ app.post('/api/auth/register', authLimiter, registerIpLimiter, async (req, res) 
       referralStatus: isValidReferral ? 'referred' : 'none',
       // Atribución de campaña (si vino por link de pauta y eligió flujo OTP)
       acquisitionCampaign: attributedCampaign,
+      noWelcomeGifts: !attributedCampaign && !isValidReferral && !(await _organicGiftsAllowed()), // #975
       acquisitionUtm: attributedCampaign ? {
         source: utm && utm.source ? String(utm.source).slice(0, 100) : null,
         medium: utm && utm.medium ? String(utm.medium).slice(0, 100) : null,
@@ -5137,6 +5139,7 @@ async function _landingSignupHandler(req, res) {
       referralStatus: _referrer ? 'referred' : 'none',
       acquisitionCampaign: normalizedCode,
       acquisitionSource: 'landing',
+      noWelcomeGifts: (!normalizedCode || normalizedCode === 'INGRESO') && !_referrer && !(await _organicGiftsAllowed()), // #975
       acquisitionUtm: {
         source: utm && utm.source ? String(utm.source).slice(0, 100) : null,
         medium: utm && utm.medium ? String(utm.medium).slice(0, 100) : null,
@@ -5220,6 +5223,9 @@ async function getRegistrationMode() {
   try { const v = await getConfig('registrationMode', 'quick'); return v === 'sms' ? 'sms' : (v === 'invite' ? 'invite' : 'quick'); } catch (_) { return 'quick'; }
 }
 const REGISTER_INVITE_DEFAULT = '🔒 El registro es sólo con invitación, por seguridad. Pedile el link a quien te recomendó o entrá por nuestra publicidad oficial. Si ya sos cliente, iniciá sesión con tu usuario y clave.';
+// #975: ¿el registro abierto (sin publicidad ni referido) lleva regalos de bienvenida? Default NO (owner: "sin ningún beneficio para que no
+// llegue gente a querer estafar; sí promocionar instalar la app para recibir notificaciones, el reembolso y el servicio, pero no regalos").
+async function _organicGiftsAllowed() { try { return (await getConfig('organicWelcomeGifts', false)) === true; } catch (_) { return false; } }
 async function _inviteOnlyBlocks(referralCode, campaignCode) {
   try {
     if ((await getRegistrationMode()) !== 'invite') return null;
@@ -5331,7 +5337,7 @@ app.post('/api/admin/public-base-url', authMiddleware, adminMiddleware, async (r
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.get('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
-  res.json({ success: true, mode: await getRegistrationMode(), entryLogin: (await getConfig('entryLogin', false)) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, canEdit: req.user.role === 'admin' }); // #538/#541
+  res.json({ success: true, mode: await getRegistrationMode(), organicGifts: await _organicGiftsAllowed(), entryLogin: (await getConfig('entryLogin', false)) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, canEdit: req.user.role === 'admin' }); // #538/#541
 });
 app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -5342,6 +5348,7 @@ app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async 
     let entryLogin = (await getConfig('entryLogin', false)) === true;
     if (req.body && typeof req.body.entryLogin === 'boolean') { entryLogin = req.body.entryLogin; await Config.set('entryLogin', entryLogin, req.user.username); } // #553: sólo si viene
     if (req.body && typeof req.body.quickEntrySms === 'boolean') await Config.set('quickEntrySms', req.body.quickEntrySms, req.user.username); // #541
+    if (req.body && typeof req.body.organicGifts === 'boolean') await Config.set('organicWelcomeGifts', req.body.organicGifts, req.user.username); // #975
     logger.info(`[registration-mode] ${mode} · pantalla de ingreso: ${entryLogin ? 'INICIAR SESIÓN' : 'registro'} por ${req.user.username}`);
     res.json({ success: true, mode, entryLogin });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -12896,6 +12903,9 @@ async function initializeData() {
   // después se cambia en Configuración → Registro de clientes.
   // #968 (owner): partidos del día en las historias automáticas ENCENDIDOS, y las campañas futuras del autopiloto de oct/nov se recrean con el
   // refuerzo (el autopiloto las vuelve a programar solo a los 5 min del arranque; sólo las 'scheduled' con fecha futura, nada enviado).
+  // #975 (owner 2026-10-24): "habilitar de vuelta el registro en la página, sin ningún beneficio" ⇒ modo 'quick' (nombre + celular verificado por SMS,
+  // quickEntrySms queda como esté) y regalos de bienvenida sólo para publicidad y referidos (organicWelcomeGifts=false). El tilde del panel sigue mandando después.
+  try { if (!(await getConfig('mig975OpenReg', null))) { await Config.set('registrationMode', 'quick', 'mig#975'); await Config.set('organicWelcomeGifts', false, 'mig#975'); await Config.set('mig975OpenReg', new Date().toISOString(), 'startup-migration'); logger.info('[mig975] registro abierto (entrada rápida) sin regalos de bienvenida para el orgánico'); } } catch (e) { logger.warn('[mig975] ' + e.message); }
   // #974: textos del extra por instalar y del cartel de primera carga: de "% EXTRA" a monto fijo y tope (sólo si siguen con el texto viejo).
   try { if (!(await getConfig('mig974WelcomeCaps', null))) {
     const r1 = await Command.updateOne({ name: '/sys_install_gift_offer', response: /\{pct\}%/ }, { $set: { response: "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo." } });
@@ -13235,6 +13245,13 @@ async function initializeData() {
       description: 'Push automática (una vez por día, 11 h) a quien PERDIÓ ayer y no reclamó el reembolso diario. Variable: {pct} (% diario). Al tocarla la app abre Reembolso. Vacío = no se manda.',
       type: 'message',
       response: '🔁 Ayer no fue tu día, pero te devolvemos el {pct}% 💸 Tocá acá y reclamá tu reembolso de ayer: se acredita al toque.'
+    },
+    {
+      // #975: lo que ve al entrar quien se registró desde la página sin invitación (sin regalos): app + reembolso.
+      name: '/sys_first_deposit_nogift',
+      description: 'Registro abierto SIN regalos (#975): texto del cartel de bienvenida para quien se registró desde la página sin link ni referido. Variable: {daily} (% del reembolso diario).',
+      type: 'message',
+      response: '📲 Instalá la app y activá las notificaciones: te avisamos tu reembolso diario del {daily}% sobre lo que pierdas y tus premios al instante.'
     },
     {
       // #973: avisos del reembolso SEMANAL (lunes y jueves) y MENSUAL (día 1 y 8) a quien perdió en el período y no reclamó.
@@ -15103,11 +15120,19 @@ app.post('/api/install-bonus/claim', authMiddleware, async (req, res) => {
 // X = Config['firstDepositBonusPct']; Y = X + % extra por instalar (Config['installGift'], si está activo). Texto editable: /sys_first_deposit_popup.
 // #839 (owner): 100% automático en la 1ª carga y DESPUÉS +50% EXTRA instalando la app y activando las notificaciones (no "150% con la app").
 const FIRST_DEPOSIT_POPUP_OLD = 'Tu primera carga viene con {pct}% de regalo. Si la hacés desde la app instalada, {pctApp}%.';
+const FIRST_DEPOSIT_NOGIFT_DEFAULT = '📲 Instalá la app y activá las notificaciones: te avisamos tu reembolso diario del {daily}% sobre lo que pierdas y tus premios al instante.'; // #975
 const FIRST_DEPOSIT_POPUP_DEFAULT = "Tu primera carga lleva {pct}% de regalo automático (hasta ${tope}). Después, instalando la app y activando las notificaciones, te regalamos ${extraMonto} EXTRA en fichas."; // #974: {tope} y {extraMonto}
 app.get('/api/first-deposit-promo', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.userId;
     const n = await Transaction.countDocuments({ userId, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } });
+    const _u = await User.findOne({ id: userId }).select('noWelcomeGifts').lean(); // #975
+    if (_u && _u.noWelcomeGifts === true) {
+      const dailyPct = await getDailyRefundPct().catch(() => 0);
+      const text = await renderSystemCommand('/sys_first_deposit_nogift', FIRST_DEPOSIT_NOGIFT_DEFAULT, { daily: dailyPct });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ show: false, noGifts: true, noDeposits: n === 0, depositsCount: n, pct: 0, pctApp: 0, extra: 0, extraMonto: 0, installGiftEnabled: false, text });
+    }
     const pct = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig();
     const fixed = ig && ig.enabled && ig.fixedArs > 0 ? Math.round(ig.fixedArs) : 0; // #974 extra fijo
     const extra = ig && ig.enabled && !fixed ? (Number(ig.pct) || 0) : 0; const pctApp = pct + extra;
@@ -26250,7 +26275,7 @@ async function _newbieOffersTick() {
     const rx = await _giftRolloverX().catch(() => 5), dx = await getDepositRolloverX().catch(() => 3);
     for (const n of cfg.days) {
       const start = new Date(t0 - n * 86400000), end = new Date(start.getTime() + 86400000);
-      const users = await User.find({ role: 'user', createdAt: { $gte: start, $lt: end } }).select('id username fraudFlags notifPrefs').limit(2000).lean();
+      const users = await User.find({ role: 'user', createdAt: { $gte: start, $lt: end }, noWelcomeGifts: { $ne: true } }).select('id username fraudFlags notifPrefs').limit(2000).lean(); // #975
       const dayCounts = await _notifDayCounts(users.map((x) => x.id), now).catch(() => new Map()); // #971: 1 aviso por día por cliente
       for (const u of users) {
         if (_isFlagged(u)) continue;
@@ -26300,7 +26325,7 @@ async function _journeyScan(now) {
   await getJourneyTuning();
   const since90 = new Date(now.getTime() - 90 * 86400000);
   const [users, agg] = await Promise.all([
-    User.find({ role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, createdAt: { $lte: new Date(now.getTime() - 86400000) } }).select('id username createdAt fraudFlags fcmToken fcmTokens fcmTokenContext journey notifPrefs').lean(),
+    User.find({ role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, createdAt: { $lte: new Date(now.getTime() - 86400000) } }).select('id username createdAt fraudFlags fcmToken fcmTokens fcmTokenContext journey notifPrefs noWelcomeGifts').lean(),
     Transaction.aggregate([{ $match: SCHED_ADAPTER.realDepositMatch() }, { $group: { _id: '$userId', n: { $sum: 1 }, last: { $max: '$timestamp' }, total: { $sum: '$amount' },
       n90: { $sum: { $cond: [{ $gte: ['$timestamp', since90] }, 1, 0] } }, total90: { $sum: { $cond: [{ $gte: ['$timestamp', since90] }, '$amount', 0] } } } }])
   ]);
@@ -26309,7 +26334,7 @@ async function _journeyScan(now) {
   for (const u of users) {
     const d = dep.get(u.id);
     const st = { createdAt: u.createdAt, deposits: d ? d.n : 0, lastDepositAt: d ? d.last : null, avgDeposit: d ? (d.n90 ? d.total90 / d.n90 : d.total / d.n) : 0,
-      hasApp: _notifChannelOf(u) === 'app', flagged: _isFlagged(u), sent: (u.journey && u.journey.sent) || [] };
+      hasApp: _notifChannelOf(u) === 'app', flagged: _isFlagged(u), sent: (u.journey && u.journey.sent) || [], noWelcome: u.noWelcomeGifts === true };
     const c = retentionJourney.classify(st, now); segments[c.segment] = (segments[c.segment] || 0) + 1;
     if (u.notifPrefs && u.notifPrefs.level === 'none') continue; // pidió no recibir avisos
     const p = retentionJourney.pickStep(st, now, _tuningCache); if (!p) continue;

@@ -6056,16 +6056,18 @@ async function loadRegistrationMode() {
         const ichk = document.getElementById('regInviteChk'); if (ichk) { ichk.checked = j.mode === 'invite'; ichk.disabled = !j.canEdit; } // #748
         const lchk = document.getElementById('regLoginChk'); if (lchk) { lchk.checked = j.entryLogin === true; lchk.disabled = !j.canEdit; } // #538
         const schk = document.getElementById('regQuickSmsChk'); if (schk) { schk.checked = j.quickEntrySms !== false; schk.disabled = !j.canEdit; } // #541
+        const ochk = document.getElementById('regOrganicGiftsChk'); if (ochk) { ochk.checked = j.organicGifts === true; ochk.disabled = !j.canEdit; } // #975
         if (btn) btn.style.display = j.canEdit ? '' : 'none';
-        if (st) st.textContent = (j.mode === 'invite' ? 'Ahora: 🔒 SÓLO CON INVITACIÓN (landing + referidos; login abierto)' : (j.mode === 'quick' ? 'Ahora: ENTRADA RÁPIDA (sólo nombre, sin SMS)' : 'Ahora: registro con SMS')) + (j.entryLogin ? ' · pantalla de ingreso: INICIAR SESIÓN' : '');
+        if (st) st.textContent = (j.mode === 'invite' ? 'Ahora: 🔒 SÓLO CON INVITACIÓN (landing + referidos; login abierto)' : (j.mode === 'quick' ? 'Ahora: ENTRADA RÁPIDA (nombre' + (j.quickEntrySms !== false ? ' + celular verificado' : ', sin SMS') + ')' : 'Ahora: registro con SMS')) + (j.organicGifts ? ' · registro abierto CON regalos' : ' · registro abierto SIN regalos de bienvenida') + (j.entryLogin ? ' · pantalla de ingreso: INICIAR SESIÓN' : '');
     } catch (_) {}
 }
 async function saveRegistrationMode() {
     const chk = document.getElementById('regSmsChk'); const ichk = document.getElementById('regInviteChk'); const mode = (ichk && ichk.checked) ? 'invite' : (chk && !chk.checked ? 'quick' : 'sms'); // #748
     const lchk = document.getElementById('regLoginChk'); const entryLogin = !!(lchk && lchk.checked); // #538
     const schk = document.getElementById('regQuickSmsChk'); const quickEntrySms = !!(schk && schk.checked); // #541
+    const ochk = document.getElementById('regOrganicGiftsChk'); const organicGifts = !!(ochk && ochk.checked); // #975
     try {
-        const r = await authFetch('/api/admin/registration-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, entryLogin, quickEntrySms }) });
+        const r = await authFetch('/api/admin/registration-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, entryLogin, quickEntrySms, organicGifts }) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
         showToast(mode === 'invite' ? '🔒 Registro SÓLO CON INVITACIÓN activado (landing y referidos)' : (mode === 'quick' ? 'Registro DESACTIVADO: la app pide sólo el nombre y entra directo' : 'Registro con SMS activado'), 'success');
         loadRegistrationMode();

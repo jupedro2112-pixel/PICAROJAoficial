@@ -8,6 +8,17 @@
 
 ## Sesión 2026-10-24
 
+### 975. 🚪 Registro abierto de nuevo, SIN regalos de bienvenida para quien entra sin invitación — admin SW v202
+**Pedido (owner):** "habilitar de vuelta el registro en la página sin ningún beneficio, para que no llegue gente a querer estafar; sí promocionar
+instalar la app para recibir notificaciones, el reembolso y el servicio, pero no regalos".
+- `User.noWelcomeGifts` (true al nacer si no vino por link de publicidad activo ni por referido, salvo `Config['organicWelcomeGifts']=true`): sin bono
+  de 1ª carga, extra por instalar, código de bienvenida ni 2ª carga (`_welcomeAbuseOf` lo devuelve como motivo ⇒ `resolveAutoBonus` y
+  `maybeOfferInstallGift` lo respetan en manual y hgcash), sin ofertas de bienvenida (historias personales) y sin los pasos del recorrido que prometen
+  bono (`needsWelcome`). Sí: reembolsos, ruleta, lotes, misiones, sorteos, VIP, referidos. El cartel de primera carga les muestra
+  `/sys_first_deposit_nogift` (app + reembolso) en vez del bono.
+- Migración `mig975OpenReg`: `registrationMode='quick'` (nombre + celular verificado por SMS, `quickEntrySms` como estaba) y `organicWelcomeGifts=false`.
+  Panel → Configuración → Registro: tilde "Regalos de bienvenida también para el registro abierto" (default apagado) y el estado lo dice.
+
 ### 974. 🛡️ Bono de bienvenida con TOPE ($15.000), extra por instalar como MONTO FIJO ($5.000) y sin bienvenida para teléfono/celular repetido (manual y hgcash) — SW v644 · admin SW v201
 **Pedido (owner):** "¿el 100% y el 50% es mucho?" → revisado: la primera carga era 100% SIN tope (#812: $500.000 de carga = $500.000 de regalo) y el
 extra por instalar 50% hasta $10.000. "Armalo todo como vos digas, y que funcione así también en las cargas automáticas; cambiá todas las infos y

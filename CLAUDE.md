@@ -286,6 +286,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   **#442:** `Config['bankOutage']` (banco con fallas): si está activa A MANO, `POST /api/withdrawal/request` responde 503 `BANK_OUTAGE`
   (#814: la alerta automática ya no frena solicitudes; se dispara con 3 fallas seguidas).
   Un flujo nuevo de pago por banco debe llamar `_bankPayoutFailed()` / `_bankPayoutOk()` para que la detección automática siga.
+  **#975 (2026-10-24): registro ABIERTO sin regalos.** `User.noWelcomeGifts=true` para quien se registra sin link de publicidad ni referido (salvo
+  `Config['organicWelcomeGifts']`): `_welcomeAbuseOf` lo devuelve como motivo ⇒ ningún bono de bienvenida (manual y hgcash), ni ofertas de bienvenida,
+  ni pasos del recorrido con `needsWelcome`. Un regalo de bienvenida NUEVO tiene que respetar ese flag. Modo actual: 'quick' + celular por SMS.
   **#421/#748:** `Config['registrationMode']` ('sms' | 'quick' | 'invite', Configuración → Registro de clientes). `'invite'` = SÓLO CON
   INVITACIÓN: `_inviteOnlyBlocks()` rechaza registros sin `referralCode` real ni `campaignCode` activo (texto `/sys_register_invite`); el
   login sigue abierto. Un flujo nuevo de alta tiene que pasar por ese chequeo. En 'quick' la pantalla

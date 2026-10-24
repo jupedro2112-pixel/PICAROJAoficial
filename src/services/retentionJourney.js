@@ -32,11 +32,11 @@ const STEPS = [
   // nuevo (desde el registro)
   { id: 'new-1', segment: 'nuevo', day: 1, capped: true, name: 'Bienvenida día 1', gift: { type: 'none', hours: 24 },
     title: '👋 ¡Bienvenido a Pica Roja!', text: 'Tu cuenta ya está lista. Cargás por transferencia y las fichas entran solas en segundos; retirás cuando quieras a tu CBU. Si tenés cualquier duda, el Soporte está adentro de la app, de verdad te contestamos. ¡Te esperamos! 🔴' },
-  { id: 'new-3', segment: 'nuevo', day: 3, capped: true, name: 'Primera carga con bono', gift: { type: 'none', hours: 24 },
+  { id: 'new-3', segment: 'nuevo', day: 3, capped: true, needsWelcome: true, name: 'Primera carga con bono', gift: { type: 'none', hours: 24 },
     title: '🎁 Tu primera carga lleva +{first}%', text: 'Todavía no hiciste tu primera carga: cuando la hagas, te sumamos +{first}% automático (con el tope de bonos). Desde ${min} ya estás jugando. Entrá a la app, tocá Cargar y listo 🚀' },
   { id: 'new-10', segment: 'nuevo', day: 10, capped: true, name: 'Recordatorio día 10', gift: { type: 'none', hours: 24 },
     title: '🔴 Pica Roja te está esperando', text: 'Reembolso diario del {daily}% sobre lo que pierdas, misiones semanales, niveles VIP, sorteos con ranking en vivo y referidos que pagan todos los meses. Todo eso te espera desde tu primera carga. ¿Arrancamos hoy? 😉' },
-  { id: 'new-21', segment: 'nuevo', day: 21, capped: true, name: 'Último aviso de bienvenida', gift: { type: 'none', hours: 24 },
+  { id: 'new-21', segment: 'nuevo', day: 21, capped: true, needsWelcome: true, name: 'Último aviso de bienvenida', gift: { type: 'none', hours: 24 },
     title: '💬 ¿Te quedó alguna duda?', text: 'Vimos que todavía no cargaste. Si algo no te cerró o tuviste un problema, escribinos por Soporte y lo resolvemos en el momento. Tu bono de primera carga (+{first}%) sigue guardado para vos 🎁' },
   // (#972, owner: "lo de instalar a los 2 o 9 días no sirve: muchos ya pierden el contacto si no tienen la app; tiene que ser EN EL
   //  MOMENTO" ⇒ no hay pasos de instalar la app acá: eso lo hace la propia app al entrar — activar avisos + 50 % EXTRA por instalar en la
@@ -97,6 +97,7 @@ function pickStep(state, now, tuning) {
   const fits = (st, days) => days >= st.day && days <= st.day + TOLERANCE;
   const cands = [];
   for (const st of STEPS) {
+    if (st.needsWelcome && state.noWelcome) continue; // #975: registro abierto sin regalos ⇒ no prometer bono de bienvenida
     if (st.segment === 'nuevo' && c.segment === 'nuevo' && fits(st, c.days)) cands.push({ st, key: st.id + '@reg', prio: 2 });
     else if (st.segment === 'sinapp' && !state.hasApp && fits(st, c.regDays)) cands.push({ st, key: st.id + '@reg', prio: 1 });
     else if (st.segment === c.segment && ['enfriando', 'inactivo', 'perdido', 'lejano'].includes(st.segment) && fits(st, c.days)) cands.push({ st, key: st.id + '@' + ep, prio: 3 });
