@@ -1,0 +1,41 @@
+// Prueba del módulo de la app con un DOM mínimo simulado: renderiza tarjetas, panel desplegado, pantalla, Bases y registro.
+const fs = require('fs'); const vm = require('vm');
+function El(tag, id) { this.tagName = tag; this.id = id || ''; this.children = []; this.attrs = {}; this.hidden = false; this.className = ''; this._html = ''; this.textContent = ''; this.style = {}; this.previousElementSibling = null; this.classList = { _s: new Set(), add: (c) => this.classList._s.add(c), remove: (c) => this.classList._s.delete(c), toggle: (c, f) => { if (f === undefined) f = !this.classList._s.has(c); f ? this.classList._s.add(c) : this.classList._s.delete(c); return f; }, contains: (c) => this.classList._s.has(c) }; }
+El.prototype.querySelector = function () { return null; }; El.prototype.querySelectorAll = function () { return []; };
+El.prototype.getAttribute = function (k) { return this.attrs[k]; }; El.prototype.setAttribute = function (k, v) { this.attrs[k] = v; };
+El.prototype.insertAdjacentElement = function (where, el) { el.previousElementSibling = this; inserted.push(el); return el; }; El.prototype.remove = function () {};
+El.prototype.scrollIntoView = function () {}; El.prototype.addEventListener = function () {}; El.prototype.closest = function (sel) { return this._host || null; };
+Object.defineProperty(El.prototype, 'innerHTML', { get() { return this._html; }, set(v) { this._html = String(v); if (/undefined|NaN|\[object Object\]/.test(this._html)) throw new Error('HTML con undefined/NaN en #' + this.id + ': ' + this._html.match(/.{0,60}(undefined|NaN|\[object Object\]).{0,40}/)[0]); } });
+const inserted = []; const ids = {}; const mk = (id) => (ids[id] = ids[id] || new El('div', id));
+const cardsBox = new El('div', 'cards'); const bannerBox = new El('div', 'banner');
+const document = { getElementById: (id) => (id === 'srtInlineBody' ? (inserted[inserted.length - 1] && mkInline()) : mk(id)), querySelectorAll: (sel) => sel.includes('data-srt-cards') ? [cardsBox] : (sel.includes('data-srt-banner') ? [bannerBox] : []), createElement: (t) => new El(t), addEventListener() {}, removeEventListener() {}, documentElement: new El('html'), hidden: false };
+function mkInline() { const p = inserted[inserted.length - 1]; if (!p._body) p._body = new El('div', 'srtInlineBody'); return p._body; }
+let fetchCalls = [];
+const sample = { enabled: true, now: new Date().toISOString(), requirements: { app: true, notif: true, telegram: true, deposit: true }, telegramUrl: 'https://t.me/x', sorteos: [
+  { key: 'mensual', title: 'Sorteo mensual', emoji: '🏆', status: 'live', periodKey: '2026-11', start: '2026-11-01T03:00:00Z', end: '2026-12-01T02:59:59Z', publishAt: '2026-12-01T15:00:00Z', startsInMs: 0, endsInMs: 86400000 * 5, prizes: [{ pos: 1, img: '📱', name: 'iPhone 18 Pro Max', value: '' }, { pos: 2, img: '🛍️', name: 'Orden de compra', value: '$1.000.000' }, { pos: 3, img: '🎰', name: '$500.000 para jugar', value: '' }], extra: { enabled: true, per: 100, winners: 10, amount: 10000, minDeposits: 2 }, rules: { pts: 100, ptsPer: 100000, dayDepositMin: 0, dayDepositPts: 0, missionWeekPct: 0 }, counts: { anotados: 12, participantes: 40, extraWinners: 0 }, me: { joined: false, joinedAt: null, checks: { app: true, notif: false, telegram: false, deposit: true }, missing: ['notif', 'telegram'], canJoin: false, points: 350, rank: 7, wagered: 350000, eligible: false, breakdown: null }, top: [{ rank: 1, name: 'ju••••22', points: 9000, me: false, joined: true }, { rank: 7, name: 'lalodj', points: 350, me: true, joined: false }], winners: null, draw: null, terms: [{ t: 'Cómo funciona', d: 'texto' }] },
+  { key: 'gran', title: 'Gran Sorteo', emoji: '🚗', status: 'soon', periodKey: '2026-11-01_2027-01-31', start: '2026-11-01T03:00:00Z', end: '2027-02-01T02:59:59Z', publishAt: '2027-02-01T15:00:00Z', startsInMs: 86400000 * 7 + 3600000 * 22, endsInMs: 0, prizes: [{ pos: 1, img: '/images/sorteos/peugeot-208.jpg', name: 'Peugeot 208 0 km', value: 'Valorado en $30.000.000' }, { pos: 2, img: '🏝️', name: 'Viaje al Caribe para 2', value: 'Todo incluido · 5 días' }, { pos: 3, img: '💵', name: 'USD 2.000', value: 'En efectivo' }], extra: null, rules: { pts: 100, ptsPer: 100000, dayDepositMin: 10000, dayDepositPts: 10, missionWeekPct: 10 }, counts: { anotados: 3, participantes: 0, extraWinners: 0 }, me: { joined: true, joinedAt: '2026-10-24T10:00:00Z', checks: { app: true, notif: true, telegram: true, deposit: true }, missing: [], canJoin: false, points: 0, rank: null, wagered: 0, eligible: false, breakdown: null }, top: [], winners: null, draw: null, terms: [{ t: 'Fechas', d: 'texto' }] }
+] };
+const ctx = { window: {}, document, console, setInterval: () => 1, clearInterval() {}, setTimeout: (f) => { try { f(); } catch (e) { throw e; } }, Date, Math, Number, String, JSON, Object, Array, RegExp, encodeURIComponent, alert: (m) => console.log('ALERT', m),
+  fetch: async (url, opts) => { fetchCalls.push(url + ' ' + ((opts && opts.method) || 'GET')); return { ok: true, json: async () => url.endsWith('/join') ? { success: true } : sample }; } };
+ctx.window = ctx; ctx.VIP = { state: { currentToken: 'tok' }, config: { API_URL: 'http://x' }, ui: { showToast: (m) => console.log('TOAST', m) }, home: {}, notifications: {} };
+vm.createContext(ctx); vm.runInContext(fs.readFileSync('public/js/sorteos.js', 'utf8'), ctx);
+(async () => {
+  const S = ctx.VIP.sorteos; await S.load();
+  const must = (h, ...needles) => needles.forEach((n) => { if (!h.includes(n)) throw new Error('falta "' + n + '"'); });
+  must(cardsBox.innerHTML, 'Gran Sorteo', 'Sorteo mensual', 'Registrado ✅', 'Ver más', 'peugeot-208.jpg'); must(bannerBox.innerHTML, 'srt-ban');
+  if (cardsBox.innerHTML.indexOf('Gran Sorteo') > cardsBox.innerHTML.indexOf('Sorteo mensual')) throw new Error('orden: el Gran Sorteo va primero');
+  console.log('✔ tarjetas/banner OK (' + cardsBox.innerHTML.length + ' chars)');
+  // panel desplegado del mensual (anotarse pendiente, ranking vivo)
+  cardsBox._host = cardsBox; S.open('mensual', { target: cardsBox });
+  const body = mkInline().innerHTML; must(body, 'EN VIVO', 'Anotate para participar', 'Lo que se sortea este mes', 'Premio extra', 'Cómo sumás puntos', 'Ranking', 'Tu puesto', '#7', 'lalodj', 'Bases y condiciones'); if (body.includes('srt-cross')) throw new Error('tarjeta cruzada presente'); console.log('✔ panel mensual OK');
+  const head = inserted[inserted.length - 1].innerHTML; if (head.includes('Sorteo mensual')) throw new Error('título repetido en la cabecera'); must(head, '✕ Cerrar', 'En vivo'); console.log('✔ cabecera fina OK');
+  // bases adentro + volver
+  S.terms('mensual'); must(mkInline().innerHTML, 'Bases y condiciones', 'Volver al sorteo', 'Cómo funciona'); S.termsClose(); must(mkInline().innerHTML, 'Ranking'); console.log('✔ Bases inline OK');
+  // panel del gran (registrado, próximamente, foto)
+  S.open('gran', { target: cardsBox }); const g = mkInline().innerHTML; must(g, 'Empieza en', 'Registrado', 'peugeot-208.jpg', 'has-pic', '+10 pts', '+10%'); if (g.includes('Anotate para participar')) throw new Error('bloque de anotarse visible estando registrado'); console.log('✔ panel Gran Sorteo OK');
+  // pantalla completa (desde el casino)
+  S.open('mensual'); must(mk('srtBody').innerHTML, 'Ranking'); must(mk('srtTitle').textContent, 'Sorteo mensual'); S.terms('mensual'); if (mk('srtTerms').hidden !== false) throw new Error('capa de Bases no abrió'); S.termsClose(); S.close(); console.log('✔ pantalla completa OK');
+  // join
+  ids['srtTg_mensual'] = Object.assign(new El('input'), { checked: true }); await S.join('mensual'); if (!fetchCalls.some((c) => c.includes('/api/sorteos/mensual/join POST'))) throw new Error('join no llamó al server'); console.log('✔ join OK');
+  console.log('TODO OK · fetch:', fetchCalls.length);
+})().catch((e) => { console.error('❌', e.message); process.exit(1); });

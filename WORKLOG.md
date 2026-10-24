@@ -8,6 +8,20 @@
 
 ## Sesión 2026-10-24
 
+### 930. ✅ Revisión de todo lo del día: pruebas simuladas de sorteos (server + app + panel) y de #916 · 2 fixes — SW v619 · admin SW v190
+**Pedido (owner):** "revisá que esté funcionando, que esté bien todo". Sin node_modules no se puede levantar el server ni Mongo: se probó con
+modelos/1girox/DOM simulados (`scripts/test-sorteos-server.js`, `scripts/test-sorteos-front.js`; correr con `node scripts/...`).
+- **Server (#915):** tick con 2 jugadores (puntos 900 = 1.200.000 × 0,75 / 1.000; Gran +días +misiones), `GET /api/sorteos` (puesto, máscara de
+  nombres, bases), join (400 sin Telegram, ok con Telegram, 400 sin app), admin GET, PUT (valida y mezcla), premio extra (400 sin cupo, sortea con
+  semilla, llega a la app), batch de stats caído ⇒ puntajes intactos + error en diag. **Fix:** `normalize` siempre deja 3 premios (un PUT con
+  menos premios borraba los otros).
+- **App:** tarjetas/banner (orden Gran | mensual, foto, "Registrado"), panel desplegado del mensual y del Gran, cabecera sin título, Bases adentro
+  con volver, pantalla completa, join. **Ajuste:** antes del inicio la mitad dice "Registrado ✅ · empieza en …" si ya se anotó.
+- **Panel:** carga, pestañas y sub-pestañas con datos del server simulado. **Fix:** pasar a Gran Sorteo estando en "Premio extra" rompía
+  (no tiene extra) ⇒ vuelve a Participando.
+- **#916:** mensaje con {min}=30, nota interna, socket, ChatStatus cerrado 'auto'; `supportAutoCloseHours=0` sigue apagándolo.
+- Sintaxis OK en los 12 archivos tocados. Pendiente real: deploy en AWS y probar con 1girox de verdad (stats batch) el primer tick.
+
 ### 929. ✂️ Panel desplegado sin el título repetido · al registrarse el bloque se va y dice "Registrado" — SW v618
 **Pedido (owner):** "sacá de adentro del sorteo del auto el sorteo del auto; si completan el registro que se vaya y diga registrado".
 - Cabecera del panel `.srt-inline-head.slim`: sólo estado (En vivo / Próximamente) y "✕ Cerrar"; el título ya lo dice la mitad tocada.

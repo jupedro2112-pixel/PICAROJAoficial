@@ -1,0 +1,51 @@
+// Ejecuta el bloque #915 de server.js con modelos y 1girox simulados: motor (tick), GET /api/sorteos, join, admin GET/PUT, recalc, sorteo extra.
+const fs = require('fs'); const vm = require('vm'); const path = require('path');
+const src = fs.readFileSync('server.js', 'utf8');
+const a = src.indexOf('// ===== #915 (owner 2026-10-24): SORTEOS CON RANKING EN VIVO'); const endMark = "app.post('/api/admin/sorteos/mensual/draw-extra'"; const b0 = src.indexOf(endMark, a); const b = src.indexOf("\n});\n", b0) + 5;
+if (a < 0 || b0 < 0) throw new Error('bloque no encontrado'); const block = src.slice(a, b);
+// --- mocks
+function q(data) { const o = { select: () => o, sort: () => o, limit: () => o, lean: () => o, catch: () => o, then: (res, rej) => Promise.resolve(typeof data === 'function' ? data() : data).then(res, rej) }; return o; }
+const store = { entries: [], scores: [], config: {}, draws: null };
+const users = [{ id: 'u1', username: 'lalodj', fcmToken: 't', fcmTokenContext: 'standalone', fcmTokens: [] }, { id: 'u2', username: 'juanperez22', fcmToken: null, fcmTokens: [] }];
+const Transaction = { aggregate: async (pipe) => { const m = JSON.stringify(pipe); if (m.includes('$dateToString')) return [{ _id: 'u1', days: 3 }]; return [{ _id: 'u1', n: 4, total: 150000, first: new Date('2026-11-02T12:00:00Z'), username: 'lalodj' }, { _id: 'u2', n: 1, total: 20000, first: new Date('2026-11-05T12:00:00Z'), username: 'juanperez22' }]; }, findOne: (f) => q(f.userId === 'u2' ? null : { _id: 'x' }) };
+const User = { findOne: (f) => q(users.find((u) => u.id === f.id) || null) };
+const MissionClaim = { aggregate: async () => [{ _id: 'u1', w: ['2026-11-02', '2026-11-09'] }] };
+const SorteoEntry = { find: (f) => q(store.entries.filter((e) => (!f.key || e.key === f.key) && (!f.userId || e.userId === f.userId))), countDocuments: async (f) => store.entries.filter((e) => e.key === f.key).length, findOneAndUpdate: (f, u) => { let e = store.entries.find((x) => x.userId === f.userId && x.key === f.key); if (!e) { e = Object.assign({ userId: f.userId, key: f.key }, u.$setOnInsert); store.entries.push(e); } Object.assign(e, u.$set); return q(e); } };
+const match = (s, f) => Object.keys(f).every((k) => { const v = f[k]; if (k === '$or') return v.some((o) => match(s, o)); if (v && typeof v === 'object' && !(v instanceof Date)) { if ('$gt' in v) return s[k] > v.$gt; if ('$gte' in v) return s[k] >= v.$gte; if ('$in' in v) return v.$in.includes(s[k]); return true; } return s[k] === v; });
+const SorteoScore = { find: (f) => q(() => store.scores.filter((s) => match(s, f)).sort((x, y) => y.points - x.points)), findOne: (f) => q(() => store.scores.find((s) => match(s, f)) || null), countDocuments: async (f) => store.scores.filter((s) => match(s, f)).length,
+  bulkWrite: async (ops) => { for (const op of ops) { const u = op.updateOne; let s = store.scores.find((x) => match(x, u.filter)); if (!s) { s = Object.assign({}, u.filter); store.scores.push(s); } Object.assign(s, u.update.$set); } return { ok: 1 }; }, updateMany: async () => ({ modifiedCount: 1 }) };
+const girox = { getPlayersStatsBatch: async (names) => ({ success: true, players: Object.fromEntries(names.map((n) => [n, { wagered: n === 'lalodj' ? 1200000 : 50000, bonusGranted: n === 'lalodj' ? 50000 : 0 }])) }) };
+const routes = {}; const app = { get: (p, ...h) => { routes['GET ' + p] = h[h.length - 1]; }, post: (p, ...h) => { routes['POST ' + p] = h[h.length - 1]; }, put: (p, ...h) => { routes['PUT ' + p] = h[h.length - 1]; } };
+const ctx = { require: (p) => { if (p.endsWith('SorteoEntry')) return SorteoEntry; if (p.endsWith('SorteoScore')) return SorteoScore; if (p.endsWith('services/sorteos')) return require(path.resolve('src/services/sorteos.js')); throw new Error('require ' + p); },
+  app, authMiddleware: 1, adminMiddleware: 1, getConfig: async (k, d) => (k in store.config ? store.config[k] : d), Config: { set: async (k, v) => { store.config[k] = v; } }, logger: { info() {}, warn: (m) => console.log('WARN', m), error: (m) => console.log('ERR', m) },
+  Transaction, User, MissionClaim, girox, uuidv4: () => 'id-' + Math.random().toString(16).slice(2), crypto: require('crypto'), setTimeout: () => 0, setInterval: () => 0, console, Date, Math, Object, Array, Number, String, JSON, Promise, Map, Set, RegExp, Error };
+vm.createContext(ctx); vm.runInContext(block, ctx);
+const call = async (key, req) => { const h = routes[key]; if (!h) throw new Error('ruta ' + key); let out = null, status = 200; const res = { json: (j) => { out = j; return res; }, status: (s) => { status = s; return res; }, set: () => res }; await h(Object.assign({ user: { userId: 'u1', username: 'lalodj', role: 'admin' }, body: {}, params: {}, query: {}, get: () => '' }, req || {}), res); return { status, out }; };
+(async () => {
+  const RealDate = Date; const fixed = new RealDate('2026-11-15T15:00:00Z'); ctx.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [fixed])); } static now() { return fixed.getTime(); } };
+  // motor
+  await call('POST /api/admin/sorteos/recalc'); const diag = store.config.sorteoDiag; if (!diag || diag.lastError) throw new Error('tick: ' + JSON.stringify(diag)); if (!(store.scores.length >= 2)) throw new Error('sin puntajes'); const lalo = store.scores.find((s) => s.userId === 'u1' && s.key === 'mensual');
+  console.log('✔ tick:', JSON.stringify(diag.runs), '· lalodj mensual pts', lalo.points, 'share', lalo.realShare, '· gran', store.scores.find((s) => s.userId === 'u1' && s.key === 'gran').points);
+  if (lalo.points !== 900) throw new Error('puntos esperados 900 (1.200.000 × 0,75 / 1.000): ' + lalo.points);
+  // GET app (u1 sin anotar)
+  let r = await call('GET /api/sorteos'); if (r.status !== 200) throw new Error('GET ' + r.status + ' ' + JSON.stringify(r.out)); const m = r.out.sorteos.find((s) => s.key === 'mensual');
+  if (m.me.joined || m.me.rank !== 1 || m.me.points !== 900) throw new Error('me: ' + JSON.stringify(m.me)); if (!m.top[0].me || m.top[1].name === 'juanperez22') throw new Error('top/máscara: ' + JSON.stringify(m.top)); if (!m.terms.length) throw new Error('sin bases');
+  console.log('✔ GET /api/sorteos:', m.status, 'rank', m.me.rank, 'top', m.top.map((t) => t.name + ':' + t.points).join(' '), '· missing', m.me.missing.join(','));
+  // join sin telegram → 400 ; con telegram → ok ; u2 sin app → 400
+  r = await call('POST /api/sorteos/:key/join', { params: { key: 'mensual' }, body: { telegram: false } }); if (r.status !== 400) throw new Error('join debía fallar por telegram');
+  r = await call('POST /api/sorteos/:key/join', { params: { key: 'mensual' }, body: { telegram: true } }); if (!r.out.success) throw new Error('join: ' + JSON.stringify(r.out));
+  r = await call('POST /api/sorteos/:key/join', { params: { key: 'mensual' }, body: { telegram: true }, user: { userId: 'u2', username: 'juanperez22' } }); if (r.status !== 400 || !/app/.test(r.out.error)) throw new Error('join u2: ' + JSON.stringify(r.out));
+  r = await call('GET /api/sorteos'); if (!r.out.sorteos[0].me.joined) throw new Error('no quedó anotado'); console.log('✔ join: 400 sin Telegram · ok con Telegram · 400 sin app (u2) · counts', JSON.stringify(r.out.sorteos[0].counts));
+  // admin
+  r = await call('GET /api/admin/sorteos'); if (!r.out.sorteos.mensual.anotados.length || r.out.sorteos.mensual.ranking[0].username !== 'lalodj') throw new Error('admin GET: ' + JSON.stringify(r.out.sorteos.mensual.counts)); console.log('✔ admin GET: anotados', r.out.sorteos.mensual.anotados.length, 'ranking', r.out.sorteos.mensual.ranking.length, 'gran', r.out.sorteos.gran.counts);
+  r = await call('PUT /api/admin/sorteos', { body: { config: { mensual: { startMonth: 'mal' } } } }); if (r.status !== 400) throw new Error('PUT debía validar startMonth');
+  r = await call('PUT /api/admin/sorteos', { body: { config: { mensual: { prizes: [{ name: 'Moto 0 km', img: '🏍️' }], extra: { per: 50 } }, requirements: { telegram: false } } } }); if (!r.out.success || r.out.config.mensual.prizes[0].name !== 'Moto 0 km' || r.out.config.mensual.extra.per !== 50 || r.out.config.mensual.extra.winners !== 10 || r.out.config.requirements.telegram !== false || r.out.config.mensual.prizes.length !== 3) throw new Error('PUT merge: ' + JSON.stringify(r.out.config.mensual));
+  console.log('✔ admin PUT: valida y mezcla (premio, extra.per, requisito) sin perder el resto');
+  // sorteo extra: con 2 anotados elegibles no llega a 100 → 400 ; forzar per=1
+  await call('POST /api/admin/sorteos/recalc'); r = await call('POST /api/admin/sorteos/mensual/draw-extra'); if (r.status !== 400) throw new Error('draw debía decir que no hay 50 clientes: ' + JSON.stringify(r.out));
+  store.config.sorteos.mensual.extra.per = 1; store.config.sorteos.mensual.extra.winners = 1; r = await call('POST /api/admin/sorteos/mensual/draw-extra'); if (!r.out.success || r.out.draw.winners.length !== 1 || !r.out.draw.seed) throw new Error('draw: ' + JSON.stringify(r.out));
+  r = await call('GET /api/sorteos'); if (!r.out.sorteos[0].draw || r.out.sorteos[0].draw.winners.length !== 1) throw new Error('draw no llega a la app'); console.log('✔ premio extra: 400 sin cupo · sortea con semilla · la app lo muestra');
+  // batch que falla ⇒ no toca puntajes
+  const before = JSON.stringify(store.scores); girox.getPlayersStatsBatch = async () => ({ success: false, error: 'rate limit' }); await call('POST /api/admin/sorteos/recalc'); if (JSON.stringify(store.scores) !== before || !store.config.sorteoDiag.lastError) throw new Error('fallo del batch tocó puntajes'); console.log('✔ batch caído: puntajes intactos, error en diag');
+  console.log('SERVER OK');
+})().catch((e) => { console.error('❌', e.stack || e.message); process.exit(1); });

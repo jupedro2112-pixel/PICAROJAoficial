@@ -47,7 +47,8 @@ function normalize(saved) {
   for (const k of ['mensual', 'gran']) {
     out[k] = Object.assign({}, d[k], s[k] || {}); out[k].key = k;
     if (!Array.isArray(out[k].prizes) || !out[k].prizes.length) out[k].prizes = d[k].prizes;
-    out[k].prizes = out[k].prizes.slice(0, 3).map((p, i) => Object.assign({ pos: i + 1, img: d[k].prizes[i] ? d[k].prizes[i].img : '🎁', name: '', value: '' }, p || {}, { pos: i + 1 }));
+    // siempre 3 premios: lo que falte se completa con el default de esa posición (un PUT parcial no borra premios)
+    out[k].prizes = [0, 1, 2].map((i) => Object.assign({}, d[k].prizes[i] || { pos: i + 1, img: '🎁', name: '', value: '' }, out[k].prizes[i] || {}, { pos: i + 1 }));
     if (k === 'mensual') out[k].extra = Object.assign({}, d.mensual.extra, (s.mensual && s.mensual.extra) || {});
     out[k].pts = Math.max(1, Number(out[k].pts) || d[k].pts); out[k].ptsPer = Math.max(1000, Number(out[k].ptsPer) || d[k].ptsPer);
   }

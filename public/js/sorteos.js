@@ -32,7 +32,7 @@
     }
     // ---- Tarjetas (básico / intermedio) y banner (Girox directo)
     function cardSub(s) {
-        if (s.status === 'soon') return 'Empieza en ' + cdShort(s.startsInMs);
+        if (s.status === 'soon') return (s.me && s.me.joined ? 'Registrado ✅ · empieza en ' : 'Empieza en ') + cdShort(s.startsInMs);
         if (s.status === 'closed') return s.winners && s.winners.length ? 'Cerrado · ver ganadores' : 'Cerrado · ganadores el ' + fday(s.publishAt);
         if (s.me && s.me.joined) return s.me.points > 0 ? 'Registrado · puesto #' + s.me.rank : 'Registrado ✅';
         return 'Anotate para sumar';
