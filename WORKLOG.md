@@ -8,6 +8,19 @@
 
 ## Sesión 2026-10-24
 
+### 979. ⏰ Bonos a las 19 h, pasada de seguridad y archivo de cambios para encargados y soporte — admin SW v204
+**Pedido (owner):** "afinemos la seguridad y que esté todo ok; necesito un archivo para avisar las modificaciones del servicio a los encargados y
+soporte (la estrategia no hace falta, es automática): para saber qué responder si la gente se queja"; "el mejor horario para activar un bono en
+Argentina es a las 19 h".
+- **19 h:** historia semanal con bono (`BONUS_TIME` 19:00), campaña del autopiloto (`AUTOPILOT_DEFAULT.time` 19:00; migración `mig979Hora19` rearma
+  las futuras) y el recorrido corre a las 17–19 h (antes 12–16) para quedar justo antes del bono y conservar la prioridad del 1 por día.
+- **Seguridad (revisión de lo nuevo de hoy):** todas las rutas nuevas piden sesión; las del Centro y la Revisión van bajo `/api/admin/inicio/*` (clave
+  de INICIO, gate registrado antes) y sus mutaciones están en `STAFF_DENY_MUTATIONS`; la entrada rápida mantiene `authLimiter` + `landingIpLimiter` y el OTP
+  tiene máximo de intentos; el teléfono en `_welcomeAbuseOf` va normalizado a dígitos (sin regex del cliente). Ajuste menor: `POST /api/stories/:id/click`
+  cuenta un toque por cliente (`Story.clickedBy`, select:false).
+- **Archivo para el equipo:** `docs/soporte/CAMBIOS-SERVICIO-2026-10-24.md` y `.html` (imprimible): tabla antes/ahora, "si el cliente dice… respondé…" y
+  notas del panel para encargados. Sin estrategia ni claves.
+
 ### 978. Historia SEMANAL con bono fuerte (+100 % por 3 h, miércoles 12:30, push a todos) y menú: lo que no está en uso, al final — admin SW v203
 **Pedido (owner):** "tirá una historia semanal de notificación de bono, uno fuerte, para que lo puedan reclamar directo y los lleve a cargar; después
 limpiá todo lo que no va y bajalo al final en la fila del admin; dejame arriba todo lo que está en uso".

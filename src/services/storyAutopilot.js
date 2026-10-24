@@ -154,7 +154,7 @@ const ALTS = {
 // #931 (owner 2026-10-24): "que se publiquen en el cambio de día: se borran y se publican de vuelta a las 00 hs". Las 5 salen juntas apenas
 // cambia el día (un minuto de diferencia para que el orden del anillo sea estable); duran 24 h y el motor apaga las del día anterior.
 const SLOTS = ['00:05', '00:06', '00:07', '00:08', '00:09'];
-const BONUS_TIME = '12:30'; // #971: la historia con bono (única con push a todos) se publica y avisa al mediodía
+const BONUS_TIME = '19:00'; // #971 → #979 (owner): "el mejor horario para activar un bono en Argentina es a las 19 h"
 const MATCH_TIME = '00:05'; // #834: los partidos salen apenas cambia el día
 
 /** Slot (juego) favorito: el más jugado de 1girox (catálogo público ordenado por popularidad). La Partner API no da netwin por juego,

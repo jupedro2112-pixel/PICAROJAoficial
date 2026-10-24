@@ -12903,6 +12903,8 @@ async function initializeData() {
   // después se cambia en Configuración → Registro de clientes.
   // #968 (owner): partidos del día en las historias automáticas ENCENDIDOS, y las campañas futuras del autopiloto de oct/nov se recrean con el
   // refuerzo (el autopiloto las vuelve a programar solo a los 5 min del arranque; sólo las 'scheduled' con fecha futura, nada enviado).
+  // #979 (owner): bonos a las 19 h ⇒ las campañas futuras del autopiloto (programadas a las 20:00) se borran y el tick las rearma a las 19:00.
+  try { if (!(await getConfig('mig979Hora19', null))) { const r = await _autopilotClearFuture(); await Config.set('mig979Hora19', new Date().toISOString(), 'startup-migration'); logger.info('[mig979] autopiloto a las 19 h: ' + r + ' campañas futuras rearmadas'); } } catch (e) { logger.warn('[mig979] ' + e.message); }
   // #976 (owner 2026-10-24): rollover de la CARGA ×1 (antes ×3; el bono sigue ×5), retiro mínimo $5.000 (antes $10.000), textos guardados que decían
   // "×3" y una historia de 48 h para avisar a todos (sin push: el anillo la muestra; el deploy puede caer a cualquier hora).
   try { if (!(await getConfig('mig976Rollover1', null))) {
@@ -25714,7 +25716,7 @@ app.post('/api/stories/:id/view', authMiddleware, async (req, res) => {
 // #971: interacción en las historias — toque en el botón y reacción (una por cliente, atómica por reactedBy).
 const STORY_REACTIONS = ['fire', 'heart', 'laugh', 'like'];
 app.post('/api/stories/:id/click', authMiddleware, async (req, res) => {
-  try { await Story.updateOne({ id: String(req.params.id) }, { $inc: { clicks: 1 } }); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); }
+  try { await Story.updateOne({ id: String(req.params.id), clickedBy: { $ne: String(req.user.userId) } }, { $inc: { clicks: 1 }, $addToSet: { clickedBy: String(req.user.userId) } }); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } // #979: un toque por cliente
 });
 app.post('/api/stories/:id/react', authMiddleware, async (req, res) => {
   try {
@@ -26359,7 +26361,7 @@ async function _journeyTick(force) {
   if (_journeyRunning || process.env.JOURNEY_DISABLED === '1') return null; _journeyRunning = true;
   try {
     const nc = await getNotifCenterConfig(); if (!nc.journey) return null;
-    const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (!force && (hourArt < 12 || hourArt >= 16)) return null; // mediodía: antes que el autopiloto (20 h)
+    const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (!force && (hourArt < 17 || hourArt >= 19)) return null; // #979: 17–19 h, justo antes del bono de las 19 (autopiloto / historia)
     const today = _schedArtKey(now); const last = await getConfig('journeyLast', null); if (!force && last && last.day === today) return null;
     if (!(await _cronClaim('journey', 15 * 60000))) return null; // una instancia por pasada
     const [firstPct, dailyPct, minDep, rolloverX, apCfg] = await Promise.all([getConfig('firstDepositBonusPct', 50), getDailyRefundPct(), getMinDepositArs().catch(() => 5000), _giftRolloverX().catch(() => 5), getAutopilotConfig()]);
@@ -29001,7 +29003,7 @@ app.post('/api/admin/cronograma-plans', authMiddleware, adminMiddleware, async (
 // por `hours` horas con el tope global de bonos y el rollover global. La audiencia se resuelve al salir cada tanda ⇒ los clientes
 // nuevos entran solos. Los textos nunca nombran la ruleta (guard isRouletteText).
 const arCalendar = require('./src/utils/arCalendar');
-const AUTOPILOT_DEFAULT = { enabled: false, time: '20:00', hours: 4, cap: 8, parts: 3, gapMin: 30, appOnly: true };
+const AUTOPILOT_DEFAULT = { enabled: false, time: '19:00', hours: 4, cap: 8, parts: 3, gapMin: 30, appOnly: true }; // #979 (owner): bonos a las 19 h
 // #821 (owner 2026-10-22): "que no sea ni editable ni que se lance: que automáticamente empiece a correr la estrategia" ⇒ SIEMPRE
 // encendido y con la configuración fija de abajo (sin panel para cambiarla). Sólo se apaga con la env AUTOPILOT_DISABLED=1 (emergencia).
 // #968: refuerzo de octubre-noviembre: 4 avisos más por cliente al mes, bonos válidos 2 h más y +10 puntos en los días comunes.

@@ -16269,11 +16269,11 @@ async function loadNotifCenter(refresh) {
         const fixed = (label, on, hint) => '<div style="padding:.4rem .55rem;border:1px solid var(--p-line,#334);border-radius:8px"><b>' + label + '</b> ' + (on ? '🟢' : '⚪') + '<br><small style="color:#9ab">' + hint + '</small></div>';
         const jl = j.journeyLast, rl = j.refundLast, nb = j.newbie || {}, ap = j.autopilot || {};
         const sources = [
-            tog('journey', '🧭 Recorrido por cliente', c.journey, 'Nuevos sin carga, enfriando (7–13 d), inactivos (14–29 d), perdidos (30–89 d), lejanos (90–180 d). Un paso por día, regalos crecientes. ' + (jl ? 'Último: ' + jl.day + ' · ' + (jl.steps || []).reduce((a, s) => a + (s.sent || 0), 0) + ' avisos en ' + (jl.steps || []).length + ' pasos.' : 'Todavía no corrió (sale al mediodía).')),
+            tog('journey', '🧭 Recorrido por cliente', c.journey, 'Nuevos sin carga, enfriando (7–13 d), inactivos (14–29 d), perdidos (30–89 d), lejanos (90–180 d). Un paso por día, regalos crecientes. ' + (jl ? 'Último: ' + jl.day + ' · ' + (jl.steps || []).reduce((a, s) => a + (s.sent || 0), 0) + ' avisos en ' + (jl.steps || []).length + ' pasos.' : 'Todavía no corrió (sale a las 17 h, antes del bono de las 19).')),
             fixed('🤖 Campaña masiva del día (autopiloto)', ap.enabled, (ap.parts || 3) + ' lotes desde las ' + (ap.time || '20:00') + ' · bono ' + (ap.hours || 4) + ' h · fija, sólo se apaga con AUTOPILOT_DISABLED=1'),
             tog('refundReminder', '🔁 Aviso del reembolso diario', c.refundReminder, 'A quien perdió ayer y no lo reclamó, a las 11 h; al tocar abre Reembolso. ' + (rl ? 'Último: ' + rl.day + ' · ' + num(rl.sent) + ' enviados.' : 'Todavía no corrió.')),
             fixed('🎁 Ofertas de bienvenida (historia personal + push)', nb.enabled, 'Días ' + (nb.days || []).join(', ') + ' desde el registro · +' + (nb.pct || 0) + '% por ' + (nb.hours || 0) + ' h · respeta el 1 por día. Se edita en Historias automáticas.'),
-            fixed('📣 Historia con bono (push a todos)', true, 'Los ' + (j.storyBonusDays || []).map((d) => DOW[d]).join(' y ') + ' a las 12:30 · ese día el autopiloto NO manda campaña (un solo aviso).'),
+            fixed('📣 Historia con bono (push a todos)', true, 'Los ' + (j.storyBonusDays || []).map((d) => DOW[d]).join(' y ') + ' a las 19:00 · ese día el autopiloto NO manda campaña (un solo aviso).'),
             tog('winnersStory', '🏆 Historia "pagos de la semana"', c.winnersStory, 'Lunes al mediodía, sin push: cuántos retiros pagamos y el más grande (nombre tapado). Confianza con datos reales.'),
             tog('legacyRules', '🗂️ Reglas viejas (B3–B6, seguimientos)', c.legacyRules, 'APAGADAS: las reemplaza el recorrido. Encenderlas duplica avisos.')
         ];
