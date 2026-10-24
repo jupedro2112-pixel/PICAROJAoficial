@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 942. 📅 Gran Sorteo (auto) desde el 1 de diciembre · los 10 × $10.000 son "SORTEO EXTRA", al azar — SW v629
+**Pedido (owner):** "el sorteo del auto, en el contador tomalo como que empieza el 1 de diciembre; los 10 sorteos al azar de 100.000 serían como extra".
+- Default `gran.start` = 2026-12-01 (fin sigue 2027-01-31; editable en el panel). El contador, la franja y las Bases lo toman solos.
+- Default `extra.title` = "SORTEO EXTRA $100.000"; app y Bases dicen "ganadores al azar" y "extra, aparte de los premios del ranking".
+
 ### 941. 🪟 El sorteo abre en VENTANA: ✕ fija arriba, tocar afuera cierra, deslizar hacia abajo cierra — SW v628
 **Pedido (owner, captura):** "abrilo tipo ventana y que la cruz arriba quede fija para cerrar; apretando afuera de la ventana que se pueda salir; después
 deslizar para abajo también".
