@@ -8,6 +8,17 @@
 
 ## Sesión 2026-10-24
 
+### 912. 🔒 Soporte: botón "No cumple rollover y quiere retirar" con los números REALES del cliente
+**Pedido (owner):** "un botón de rollover para la gente que no entiende cuánto tiene que apostar para completar el rollover, del bono y del
+saldo cargado; para la gente de soporte, que se le envíe eso y detalle todo" · "ponele al botón: no cumple rollover y quiere retirar".
+- Respuesta rápida DINÁMICA `rollover_mio` (`SUPPORT_QUICK_REPLIES`, `dynamic:true`): al tocarla, el server lee el saldo del cliente en
+  1girox (`girox.getUserBalance` → `_rolloverSummary`, lo mismo que ve en "Retirar premio") y arma: saldo · retirable hoy · bloqueado (y
+  cuánto es bono) · una línea por objetivo ("• Carga ×3: tenés que apostar $T · ya apostaste $P (pct%) · te faltan $R" / "• Bono ×5: …") ·
+  total que falta apostar · botón "💸 Retirar premio". Manda y cierra la charla como las demás. Si 1girox no responde ⇒ 503 y no se manda nada.
+- Si no tiene nada bloqueado sale el texto `rollover_libre` ("✅ Hoy no tenés rollover pendiente: podés retirar $X"), oculto del panel.
+- Textos editables en COMANDOS: `/sys_sq_rollover_mio` y `/sys_sq_rollover_libre` (variables `{saldo} {retirable} {bloqueado}
+  {bloqueado_bono} {detalle} {falta}` + las de siempre). Nota interna en el chat con lo leído de 1girox (auditoría).
+
 ### 911. 📖 Historias: borrar las vigentes y publicar las 5 de hoy YA (al deployar + botón del panel) — admin SW v185
 **Pedido (owner):** "las historias borralas y publicá las del día a ver". Sin acceso a la base desde acá ⇒ `_storyWipeForRepublish`: apaga
 todas las historias vigentes (manuales y automáticas; las personales `nb-*`/`audienceUserId` no se tocan), borra las automáticas de hoy y

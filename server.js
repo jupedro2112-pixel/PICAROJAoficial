@@ -13225,7 +13225,7 @@ async function initializeData() {
       type: 'message',
       response: SUPPORT_TOPIC_REEMBOLSO_DEFAULT
     },
-    ...SUPPORT_QUICK_REPLIES.map((q) => ({ name: '/sys_sq_' + q.key, description: 'Soporte · respuesta rápida "' + q.label + '" (botón del panel; al enviarla se cierra la charla). Variables: {min}, {retiro_min}, {carga}, {rollover}.', type: 'message', response: q.text })), // #905
+    ...SUPPORT_QUICK_REPLIES.map((q) => ({ name: '/sys_sq_' + q.key, description: 'Soporte · respuesta rápida "' + q.label + '" (botón del panel; al enviarla se cierra la charla). Variables: {min}, {retiro_min}, {carga}, {rollover}' + (q.dynamic || q.key === 'rollover_libre' ? ', {saldo}, {retirable}, {bloqueado}, {bloqueado_bono}, {detalle} (una línea por objetivo: carga / bono), {falta} — números reales del cliente leídos de 1girox al enviarla' : '') + '.', type: 'message', response: q.text })), // #905 · #912
     {
       name: '/sys_support_topic_bono',
       description: 'Soporte: respuesta automática cuando el tema es EL BONO (explica el rollover ×{rollover}: qué es, apostar no es cargar, cómo se desbloquea para retirar). Variables: {rollover}, {min}, {retiro_min}. Vacío = no se manda.',
@@ -21785,6 +21785,13 @@ app.get('/api/admin/support/agent', authMiddleware, async (req, res) => {
 const SUPPORT_QUICK_REPLIES = [
   { key: 'comprobante', label: '📎 Comprobante no válido', text: '📎 Tu comprobante no es válido o no se pudo leer. Sacá la captura de nuevo con TODOS los datos completos y bien visibles en la foto (titular, CUIT, monto, fecha y hora y N° de operación), sin recortar, y adjuntala tocando el botón de abajo: tu carga se genera sola.', btn: { target: 'receipt', label: '📎 Cargá el comprobante aquí' } },
   { key: 'rollover', label: '🎯 Rollover', text: '🎯 Rollover: es lo que tenés que APOSTAR jugando antes de retirar; no es plata que ponés ni que perdés. Carga ×{carga} · bono ×{rollover}. Ej.: cargás $5.000 ⇒ sumás $15.000 en apuestas (cada apuesta cuenta, ganes o pierdas). Si llegás y tu saldo quedó en $10.000, retirás $10.000. En "Retirar premio" ves cuánto te falta.', btn: { target: 'withdraw', label: '💸 Ver Retirar premio' } },
+  // #912 (owner 2026-10-24): "un botón de rollover para la gente que no entiende cuánto tiene que apostar para completar el rollover del
+  // bono y del saldo cargado; que el agente lo mande y detalle todo". DINÁMICA: al enviarla se lee el saldo del cliente en 1girox
+  // (wagering.requirements) y se completan {saldo} {retirable} {bloqueado} {bloqueado_bono} {detalle} {falta} con SUS números.
+  { key: 'rollover_mio', dynamic: true, label: '🔒 No cumple rollover y quiere retirar', btn: { target: 'withdraw', label: '💸 Retirar premio' },
+    text: '🔒 Todavía no podés retirar todo porque te falta completar el ROLLOVER (lo que tenés que APOSTAR antes de retirar; no es plata que ponés ni que perdés). Tus números de hoy:\n💰 Saldo: {saldo} · Podés retirar hoy: {retirable} · Bloqueado: {bloqueado}{bloqueado_bono}\n{detalle}\n👉 Te falta apostar {falta} en total para liberarlo. Cuenta cada apuesta que hacés, ganes o pierdas (no lo que cargás). Cuando llegues, retirás desde "Retirar premio".' },
+  { key: 'rollover_libre', hidden: true, label: '✅ Sin rollover pendiente (lo manda solo el botón de arriba cuando no hay nada bloqueado)',
+    text: '✅ Hoy no tenés rollover pendiente: tu saldo es {saldo} y podés retirar {retirable} desde "Retirar premio" (mínimo {retiro_min}, a un CBU a tu nombre).' },
   { key: 'carga', label: '💳 Cómo cargar', text: '💳 Para cargar: transferí (mínimo {min}) al CBU que figura en la app y mandá el comprobante entero. Se acredita sola en minutos, con tu bono.', btn: { target: 'full', label: '⚡ Ir a cargar' } },
   { key: 'minimo', label: '⚠️ Carga menor al mínimo', text: '⚠️ La carga mínima es {min}. Con menos no se acredita sola: la devolvemos a tu cuenta de origen o se completa con otra transferencia.' },
   { key: 'retiro', label: '💸 Cómo retirar', text: '💸 Para retirar: entrá a "Retirar premio" (mínimo {retiro_min}, a un CBU a tu nombre). Ahí ves cuánto podés retirar hoy y el pago sale solo a tu cuenta.', btn: { target: 'withdraw', label: '💸 Retirar premio' } },
@@ -21800,7 +21807,7 @@ async function _sqCustom() { try { const v = await getConfig('supportQuickCustom
 async function _sqAll() { return SUPPORT_QUICK_REPLIES.map((q) => Object.assign({ builtin: true }, q)).concat((await _sqCustom()).map((q) => Object.assign({ builtin: false }, q, q.btnTarget && _SQ_BTNS[q.btnTarget] ? { btn: { target: q.btnTarget, label: _SQ_BTNS[q.btnTarget] } } : {}))); }
 app.get('/api/admin/support/quick-replies', authMiddleware, async (req, res) => {
   if (!SUPPORT_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
-  res.json({ items: (await _sqAll()).map((q) => ({ key: q.key, label: q.label, builtin: q.builtin, preview: String(q.text || '').slice(0, 160) })), buttons: _SQ_BTNS });
+  res.json({ items: (await _sqAll()).filter((q) => !q.hidden).map((q) => ({ key: q.key, label: q.label, builtin: q.builtin, dynamic: !!q.dynamic, preview: String(q.text || '').slice(0, 160) })), buttons: _SQ_BTNS });
 });
 app.post('/api/admin/support/quick-replies', authMiddleware, async (req, res) => {
   try {
@@ -21828,12 +21835,25 @@ app.delete('/api/admin/support/quick-replies/:key', authMiddleware, async (req, 
 app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) => {
   try {
     if (!SUPPORT_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
-    const q = (await _sqAll()).find((x) => x.key === String((req.body && req.body.key) || ''));
+    let q = (await _sqAll()).find((x) => x.key === String((req.body && req.body.key) || '') && !x.hidden);
     if (!q) return res.status(400).json({ error: 'Respuesta desconocida' });
     const u = await User.findOne({ id: String(req.params.userId) }).select('id username fcmToken fcmTokens fcmTokenContext').lean();
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), carga: String(await getDepositRolloverX().catch(() => 3)), rollover: String(await _giftRolloverX().catch(() => 5)) };
+    if (q.dynamic) {
+      // #912: números REALES del cliente desde 1girox (lo mismo que ve en "Retirar premio"). Si la plataforma no responde, no se manda nada.
+      let bal = null; try { bal = await girox.getUserBalance(u.username); } catch (e) { bal = { success: false, error: e.message }; }
+      if (!bal || !bal.success) return res.status(503).json({ error: 'No pude leer el saldo de 1girox ahora (' + ((bal && bal.error) || 'sin respuesta') + '). Probá de nuevo en un momento.' });
+      const sum = _rolloverSummary(bal);
+      const kindName = { deposit: 'Carga', bonus: 'Bono' };
+      const lines = sum.items.map((it) => { const x = it.multiplier != null && it.multiplier > 0 ? it.multiplier : (it.kind === 'bonus' ? vars.rollover : vars.carga);
+        return `• ${kindName[it.kind] || 'Objetivo'} ×${x}: tenés que apostar ${money(it.target)} · ya apostaste ${money(it.progress)}${it.pct != null ? ' (' + Math.round(it.pct) + '%)' : ''} · te faltan ${money(it.remaining)}`; });
+      Object.assign(vars, { saldo: money(sum.balance), retirable: money(sum.available), bloqueado: money(sum.locked), bloqueado_bono: sum.bonusLocked > 0 ? ` (de bono: ${money(sum.bonusLocked)})` : '',
+        detalle: lines.length ? lines.join('\n') : '• Hoy no figura ningún objetivo de apuesta pendiente.', falta: money(sum.remainingToBet) });
+      if (!(sum.locked > 0) && !(sum.remainingToBet > 0)) q = (await _sqAll()).find((x) => x.key === 'rollover_libre') || q; // nada bloqueado ⇒ el texto "sin rollover"
+      await _emitAdminOnlyChatNote(u.id, u.username, `🎯 Rollover leído de 1girox para la respuesta: saldo ${vars.saldo}, retirable ${vars.retirable}, bloqueado ${vars.bloqueado}, falta apostar ${vars.falta}.`).catch(() => {});
+    }
     const text = q.builtin ? await renderSystemCommand('/sys_sq_' + q.key, q.text, vars) : String(q.text).replace(/\{(min|retiro_min|carga|rollover)\}/g, (m0, k) => vars[k]);
     if (!text) return res.status(400).json({ error: 'Esa respuesta está vacía en COMANDOS' });
     const now = new Date();
