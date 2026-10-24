@@ -205,7 +205,7 @@
         if (bar) {
             bar.hidden = !openBar;
             if (openBar) { const p1 = (s0.prizes || [])[0] || {};
-                bar.innerHTML = '<button type="button" class="csb-main" onclick="VIP.sorteos.openMini(\'' + s0.key + '\')">' + pic(p1.img || s0.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s0.title) + '</b><small>' + esc(cardSub(s0)) + '</small></span><em>Ver más ▾</em></button><button type="button" class="csb-x" onclick="VIP.sorteos.casinoBar(false)" title="Cerrar: queda arriba, en el medio" aria-label="Cerrar">–</button>';
+                bar.innerHTML = '<button type="button" class="csb-main" onclick="VIP.sorteos.openMini(\'' + s0.key + '\')">' + pic(p1.img || s0.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s0.title) + '</b><small>' + esc(cardSub(s0)) + '</small></span><em>Anotate, es gratis ›</em></button><button type="button" class="csb-x" onclick="VIP.sorteos.casinoBar(false)" title="Cerrar: queda arriba, en el medio" aria-label="Cerrar">–</button>';
             } else bar.innerHTML = '';
         }
     }
@@ -215,14 +215,22 @@
         key = key || 'mensual'; closeMini();
         const s = get(key); const m = document.createElement('div'); m.className = 'srt-mini'; m.id = 'srtMini'; m.setAttribute('role', 'dialog');
         m.addEventListener('click', (e) => { if (e.target === m) closeMini(); });
+        // #938 (owner): "detallá un poco más de AMBOS sorteos pero resumido, sin que tape tanto; que estén los increíbles premios; el detalle en otro
+        // lado; y el Ver más es 'Anotate, es gratis'".
         const inner = () => {
-            const s2 = get(key); if (!s2) return '<div class="srt-mini-box"><div class="srt-note">' + (_data ? 'Este sorteo no está disponible.' : 'Cargando…') + '</div></div>';
-            const until = untilOf(s2); const c = cd(until - Date.now()); const box = (k, v, t) => '<div class="srt-cd-b"><b data-k="' + k + '">' + String(v).padStart(2, '0') + '</b><small>' + t + '</small></div>';
-            const cdHtml = s2.status === 'closed' ? '<div class="srt-strip"><span>🔒 Cerrado · ganadores el ' + esc(fday(s2.publishAt)) + '</span></div>' : '<div class="srt-mini-cdl">' + (s2.status === 'soon' ? 'EMPIEZA EN' : '<em class="srt-live">● EN VIVO</em> · TERMINA EN') + '</div><div class="srt-cd" data-cd="' + until + '">' + box('d', c.d, 'DÍAS') + box('h', c.h, 'HS') + box('m', c.m, 'MIN') + box('s', c.s, 'SEG') + '</div>';
-            const prizes = '<div class="srt-mini-prizes">' + (s2.prizes || []).map((p) => '<div class="srt-mini-p">' + pic(p.img, 'srt-mini-img', p.name) + '<i>' + p.pos + '°</i><b>' + esc(p.name) + '</b></div>').join('') + '</div>';
-            const expl = s2.status === 'live' ? 'Cada ' + money(s2.rules.ptsPer) + ' apostados = ' + num(s2.rules.pts) + ' puntos. Los 3 anotados con más puntos al cierre se llevan los premios.' : 'Cuando empiece, cada ' + money(s2.rules.ptsPer) + ' apostados suman ' + num(s2.rules.pts) + ' puntos. Anotate en el menú para participar.';
-            const me = s2.me || {}; const mine = me.joined ? (me.points > 0 ? '✅ Registrado · puesto #' + num(me.rank) + ' · ' + num(me.points) + ' pts' : '✅ Registrado') : '📝 Todavía no estás anotado';
-            return '<div class="srt-mini-box"><div class="srt-mini-head"><b>' + esc(s2.emoji + ' ' + s2.title) + '</b><button type="button" class="srt-x" onclick="VIP.sorteos.closeMini()" aria-label="Cerrar">✕</button></div>' + cdHtml + prizes + '<p class="srt-mini-txt">' + esc(expl) + '</p><div class="srt-mini-me">' + mine + '</div><button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + key + '\')">Ver más en el menú ›</button></div>';
+            const list2 = (_data && _data.enabled && _data.sorteos) || [];
+            const ordered = ['gran', 'mensual'].map((k) => list2.find((x) => x.key === k)).filter(Boolean);
+            if (!ordered.length) return '<div class="srt-mini-box"><div class="srt-note">' + (_data ? 'Por ahora no hay sorteos activos.' : 'Cargando…') + '</div></div>';
+            const one = (s2) => {
+                const until = untilOf(s2);
+                const when = s2.status === 'closed' ? '🔒 Cerrado' : (s2.status === 'soon' ? '⏳ Empieza en <b data-cd-short="' + until + '">' + esc(cdShort(s2.startsInMs)) + '</b>' : '<em class="srt-live">● EN VIVO</em> · termina en <b data-cd-short="' + until + '">' + esc(cdShort(s2.endsInMs)) + '</b>');
+                const me = s2.me || {}; const mine = me.joined ? (me.points > 0 ? ' · ✅ puesto #' + num(me.rank) : ' · ✅ anotado') : '';
+                return '<div class="srt-mini-s"><div class="srt-mini-sh"><b>' + esc(s2.emoji + ' ' + s2.title) + '</b><small>' + when + mine + '</small></div>' +
+                    '<div class="srt-mini-prizes">' + (s2.prizes || []).map((p) => '<div class="srt-mini-p">' + pic(p.img, 'srt-mini-img', p.name) + '<b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>').join('') + '</div>' +
+                    '<p class="srt-mini-txt">' + (s2.key === 'gran' ? 'Del ' + esc(fday(s2.start)) + ' al ' + esc(fday(s2.end)) + ' · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.rules.dayDepositPts ? ' · +' + num(s2.rules.dayDepositPts) + ' por día que cargás' : '') : 'Todos los meses · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.extra && s2.extra.enabled ? ' · premio extra: ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' cada ' + num(s2.extra.per) + ' anotados' : '')) + '. Ganan los 3 anotados con más puntos.</p></div>';
+            };
+            return '<div class="srt-mini-box"><div class="srt-mini-head"><b>🏆 ¡Increíbles premios!</b><button type="button" class="srt-x" onclick="VIP.sorteos.closeMini()" aria-label="Cerrar">✕</button></div>' + ordered.map(one).join('') +
+                '<button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + ordered[0].key + '\')">Anotate, es gratis ›</button><p class="srt-mini-foot">El detalle completo y las Bases están en el menú.</p></div>';
         };
         m.innerHTML = inner(); document.body.appendChild(m); m._paint = () => { m.innerHTML = inner(); };
         clearInterval(_tick); _tick = setInterval(tickCd, 1000);

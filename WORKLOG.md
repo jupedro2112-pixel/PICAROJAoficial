@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 938. 🎰 Hoja del casino: AMBOS sorteos resumidos con sus premios, más chica, botón "Anotate, es gratis ›" — SW v625
+**Pedido (owner):** "ahí detallá un poco más de ambos sorteos pero resumido, sin que tape tanto; que estén los increíbles premios; el detalle en otro
+lado; y el Ver más es Anotate, es gratis".
+- `openMini`: cabecera "🏆 ¡Increíbles premios!", un bloque por sorteo (Gran Sorteo y mensual): título + estado vivo (empieza/termina en, anotado/puesto),
+  los 3 premios con imagen y valor, una línea con fechas/puntos/extra. Botón "Anotate, es gratis ›" ⇒ `goMenu` (cierra el casino y despliega en el
+  menú) y pie "El detalle completo y las Bases están en el menú". Hoja más angosta (380 px) con scroll propio. El banner de abajo de la barra también
+  dice "Anotate, es gratis ›".
+
 ### 937. 🎰 Girox directo al iniciar: sorteo resumido SIN abrir (píldora) + Carga rápida ABIERTA · app instalada ⇒ Girox siempre — SW v624
 **Pedido (owner):** "el sorteo desde Girox, cuando iniciás, que aparezca resumido sin abrir, y la Carga rápida abierta para cargar, siempre así; cuando la
 gente instala la app dejar Girox predeterminada siempre".

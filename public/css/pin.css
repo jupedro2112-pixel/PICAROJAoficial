@@ -2876,3 +2876,14 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 .srt-tc-sec { background: var(--srt-soft); border-color: var(--srt-line); }
 .srt-tc-sec h3 { font-size: 14.5px; }
 .srt-tc-sec .srt-tc { padding-left: 16px; } .srt-tc-sec .srt-tc li { font-size: 12.5px; margin-bottom: 7px; }
+
+/* #938: hoja del casino más chica, con los DOS sorteos resumidos y sus premios */
+.srt-mini { padding-top: calc(56px + var(--sat, env(safe-area-inset-top, 0px))); }
+.srt-mini-box { max-width: 380px; max-height: calc(100dvh - 90px - var(--sat, env(safe-area-inset-top, 0px))); overflow-y: auto; padding: 8px 10px 10px; }
+.srt-mini-head { margin-bottom: 4px; } .srt-mini-head b { font-size: 14px; }
+.srt-mini-s { border: 1px solid var(--srt-line); border-radius: 12px; padding: 7px 8px 6px; margin-bottom: 7px; background: var(--p-card); }
+.srt-mini-sh { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; flex-wrap: wrap; } .srt-mini-sh b { font-size: 13px; font-weight: 900; } .srt-mini-sh small { font-size: 10.5px; font-weight: 800; color: var(--srt-g2); } .srt-mini-sh small b { color: var(--srt-g); }
+.srt-mini-s .srt-mini-prizes { margin: 6px 0 4px; gap: 5px; } .srt-mini-s .srt-mini-p { padding: 6px 3px; } .srt-mini-s .srt-mini-img { font-size: 26px; } .srt-mini-s .srt-mini-img.pic { height: 44px; }
+.srt-mini-s .srt-mini-p b { font-size: 10px; } .srt-mini-s .srt-mini-p small { font-size: 8.5px; color: var(--p-muted); font-weight: 700; line-height: 1.1; }
+.srt-mini-s .srt-mini-txt { margin: 2px 0 0; font-size: 11px; line-height: 1.3; color: var(--p-muted); }
+.srt-mini-foot { margin: 6px 0 0; text-align: center; font-size: 10.5px; color: var(--p-muted); font-weight: 700; }
