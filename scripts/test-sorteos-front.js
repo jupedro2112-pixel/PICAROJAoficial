@@ -27,8 +27,8 @@ vm.createContext(ctx); vm.runInContext(fs.readFileSync('public/js/sorteos.js', '
   console.log('✔ tarjetas/banner OK (' + cardsBox.innerHTML.length + ' chars)');
   // panel desplegado del mensual (anotarse pendiente, ranking vivo)
   cardsBox._host = cardsBox; S.open('mensual', { target: cardsBox });
-  const body = mkInline().innerHTML; must(body, 'EN VIVO', 'Anotate para participar', 'Lo que se sortea este mes', 'Premio extra', 'Cómo sumás puntos', 'Ranking', 'Tu puesto', '#7', 'lalodj', 'Bases y condiciones'); if (body.includes('srt-cross')) throw new Error('tarjeta cruzada presente'); console.log('✔ panel mensual OK');
-  const head = inserted[inserted.length - 1].innerHTML; if (head.includes('Sorteo mensual')) throw new Error('título repetido en la cabecera'); must(head, '✕ Cerrar', 'En vivo'); console.log('✔ cabecera fina OK');
+  const body = mkInline().innerHTML; must(body, 'EN VIVO', 'Anotate para participar', 'Lo que se sortea este mes', 'SORTEO', 'Cómo sumás puntos', 'Ranking', 'Tu puesto', '#7', 'lalodj', 'Bases y condiciones'); if (body.includes('srt-cross')) throw new Error('tarjeta cruzada presente'); console.log('✔ panel mensual OK');
+  const head = inserted[inserted.length - 1].innerHTML; if (head.includes('Sorteo mensual') || head.includes('Próximamente') || head.includes('En vivo')) throw new Error('fila de arriba presente'); must(head, '✕ Cerrar'); console.log('✔ sin fila arriba, ✕ flotante OK');
   // bases adentro + volver
   S.terms('mensual'); must(mkInline().innerHTML, 'Bases y condiciones', 'Volver al sorteo', 'Cómo funciona'); S.termsClose(); must(mkInline().innerHTML, 'Ranking'); console.log('✔ Bases inline OK');
   // panel del gran (registrado, próximamente, foto)

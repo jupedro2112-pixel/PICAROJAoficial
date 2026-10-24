@@ -23,7 +23,9 @@ function defaults() {
         { pos: 2, img: '🛍️', name: 'Orden de compra', value: '$1.000.000' },
         { pos: 3, img: '🎰', name: '$500.000 para jugar', value: '' }
       ],
-      extra: { enabled: true, per: 100, winners: 10, amount: 10000, minDeposits: 2 },
+      // #939 (owner): "el sorteo de $100.000: para TODOS los que cargan, requisito mínimo 10 cargas en el mes; se sortea el día 1 en el admin de forma
+      // transparente; en la app se llama SORTEO". per = 0 ⇒ cantidad FIJA de ganadores (10 × $10.000); per > 0 ⇒ N ganadores por cada `per` que cumplen.
+      extra: { enabled: true, title: 'SORTEO $100.000', per: 0, winners: 10, amount: 10000, minDeposits: 10, requireJoin: false },
       publishHour: 12
     },
     gran: {
@@ -100,7 +102,9 @@ function computePoints(s, x) {
 }
 
 // Cuántos ganadores del premio extra hay para N clientes que cumplen (10 por cada 100: 250 ⇒ 20).
-function extraWinners(extra, n) { if (!extra || !extra.enabled) return 0; const per = Math.max(1, Number(extra.per) || 100); return Math.floor(n / per) * (Number(extra.winners) || 0); }
+function extraWinners(extra, n) { if (!extra || !extra.enabled) return 0; const per = Number(extra.per) || 0; const w = Number(extra.winners) || 0; if (per <= 0) return n > 0 ? w : 0; return Math.floor(n / per) * w; }
+// Texto corto de quiénes entran al SORTEO (app, panel y bases comparten la frase).
+function extraWho(extra) { return 'todos los clientes con al menos ' + (Number(extra.minDeposits) || 1) + ' cargas reales en el mes' + (extra.requireJoin ? ', anotados en el sorteo mensual' : ', estén o no anotados y sin importar el ranking'); }
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 // Mes siguiente al cierre (nombre + año): el premio se cobra del 1 al 10 de ese mes (#918, owner: "dentro del mes de diciembre se paga el
@@ -124,7 +128,8 @@ function terms(cfg, which, now) {
   if (which === 'gran') out.push({ t: 'Puntos del Gran Sorteo', d: g.pts + ' puntos cada ' + money(g.ptsPer) + ' apostados con plata real (los bonos no suman: se toma la parte de lo apostado proporcional a tus cargas reales del período) + ' + g.dayDepositPts + ' puntos por cada día con cargas reales que sumen ' + money(g.dayDepositMin) + ' o más + ' + g.missionWeekPct + '% de tus puntos por cada semana (lunes a domingo) en la que completás una misión semanal (se calcula sobre el promedio semanal de tus puntos).' });
   else out.push({ t: 'Puntos', d: 'Cada ' + money(m.ptsPer) + ' apostados con plata real = ' + m.pts + ' puntos (' + (m.pts / (m.ptsPer / 1000)).toLocaleString('es-AR') + ' punto por cada $1.000). Los bonos no suman: se toma la parte de lo apostado proporcional a tus cargas reales del mes (ej.: cargaste $100.000 y recibiste $50.000 de bono ⇒ cuenta 2/3 de lo apostado). Se mide con las estadísticas de la plataforma (casino y deportes).' });
   out.push({ t: 'Premios', d: premios + ' Ganan los 3 anotados con más puntos al cierre. Cada premio puede cobrarse en efectivo por el valor publicado.' });
-  if (which !== 'gran' && m.extra && m.extra.enabled) out.push({ t: 'Premio extra', d: 'Además del ranking, todos los anotados con al menos ' + m.extra.minDeposits + ' cargas reales en el mes participan de ' + money(m.extra.amount) + ' × ' + m.extra.winners + ' ganadores por cada ' + m.extra.per + ' clientes que cumplan (ej.: ' + (m.extra.per * 2.5) + ' clientes ⇒ ' + (m.extra.winners * 2) + ' ganadores), sin importar el puesto. Se sortea el día del cierre con un método verificable (se publica la semilla del sorteo); los ganadores salen con el nombre tapado y cobran ' + pay.texto + ', igual que los premios del ranking.' });
+  if (which !== 'gran' && m.extra && m.extra.enabled) { const e = m.extra; const cuantos = (Number(e.per) || 0) > 0 ? e.winners + ' premios de ' + money(e.amount) + ' por cada ' + e.per + ' clientes que cumplan' : e.winners + ' premios de ' + money(e.amount) + ' (' + money(e.amount * e.winners) + ' en total)';
+    out.push({ t: e.title || 'SORTEO', d: 'Aparte del ranking, ' + extraWho(e) + ' participan del sorteo de ' + cuantos + '. Cada cliente que cumple entra una sola vez. Se sortea el día 1 del mes siguiente, a las 12 h, desde nuestro panel y de forma verificable: se publica la semilla y los ganadores salen de un sorteo determinista (SHA-256 sobre la lista de participantes ordenada); los ganadores se publican con el nombre tapado y cobran ' + pay.texto + ', igual que los premios del ranking.' }); }
   out.push({ t: 'Cómo y cuándo se cobra', d: 'Los premios se pagan ' + pay.texto + ' (dentro de los primeros 10 días del mes siguiente al cierre). Nuestro Soporte de entrega de premios te escribe por el chat de la app y por Telegram para coordinar. Para cobrar tenés que ser el titular de la cuenta y acreditarlo con tu DNI; la plata se transfiere a un CBU/alias a tu nombre (nunca a terceros) y los premios físicos se coordinan con vos (entrega o su valor en efectivo). Si un ganador no responde en 10 días hábiles o no acredita la identidad, el premio pasa al siguiente del ranking.' });
   out.push({ t: 'Requisitos para anotarse', d: 'Tenés que tener ' + reqs + '. Te anotás una sola vez y quedás anotado para todo el sorteo. El ranking muestra a todos los clientes que cargaron y jugaron en el período (con el nombre tapado), pero los premios son sólo para los anotados: si el primero del ranking no está anotado, el premio pasa al siguiente anotado.' });
   out.push({ t: 'Quiénes participan', d: 'Clientes registrados en la app de PICA ROJA con al menos una carga real en el período. Una persona = una cuenta; las cuentas duplicadas, con jugadas irregulares o marcadas por el radar de estafas quedan afuera.' });
@@ -134,4 +139,4 @@ function terms(cfg, which, now) {
   return out;
 }
 
-module.exports = { defaults, normalize, periodOf, mask, computePoints, extraWinners, terms, payWindow, artDay, monthOf, fmtDay, money, DAY };
+module.exports = { defaults, normalize, periodOf, mask, computePoints, extraWinners, extraWho, terms, payWindow, artDay, monthOf, fmtDay, money, DAY };

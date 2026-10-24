@@ -8,6 +8,26 @@
 
 ## Sesión 2026-10-24
 
+### 939. 🎁 SORTEO $100.000: para TODOS los que cargan (mínimo 10 cargas en el mes), 10 × $10.000 fijos, sorteo transparente el día 1 desde el panel — SW v626 · admin SW v192
+**Pedido (owner):** "el sorteo de 100.000: cambiamos términos y todo detalle, que sea para todos los que cargan, requisito mínimo 10 cargas en el mes; armá
+bien todo el admin para sortear eso el día 1 de forma transparente; y poné en la app SORTEO".
+- Reglas (`extra`): `{ title:'SORTEO $100.000', per:0 (cantidad FIJA), winners:10, amount:10000, minDeposits:10, requireJoin:false }`. `extraWinners`: con per 0
+  ⇒ `winners` si hay al menos un participante; `extraWho` = frase común. Entran TODOS los clientes con ≥10 cargas reales en el mes, anotados o no, sin
+  importar el ranking (`_sorteoExtraFilter`; `requireJoin` lo restringe a anotados si se quiere). Bases reescritas (día 1 a las 12 h, semilla, SHA-256).
+- Server: `draw-extra` sortea el mes CERRADO (periodKey anterior); el mes en curso sólo con `early:true`; guarda `minDeposits`, `method`, `early`.
+  `GET /api/admin/sorteos` → `extra` { who, current, prev }: participantes (usuario, cargas, total, anotado) del mes en curso y del cerrado + su sorteo.
+  `GET /api/sorteos` → `counts.extraElegibles`.
+- Panel → pestaña "🎁 SORTEO $100.000": reglas, KPIs mes cerrado / mes en curso, botón **Sortear el mes cerrado AAAA-MM** (y repetir), botón de adelantar
+  con aviso, caja del sorteo (fecha, quién, semilla, método explicado, ganadores) y tablas de participantes. Config: nombre, ganadores, monto, mín.
+  cargas, "por cada N" (0 = fijo), sólo anotados.
+- App: recuadro "🎁 SORTEO $100.000: 10 ganadores de $10.000 · Para TODOS los que cargan: con 10 cargas o más en el mes entrás… Ya cumplen N"; hoja del
+  casino y Bases con el mismo texto. Tests actualizados (nadie llega a 10 ⇒ 400; mes en curso sin early ⇒ 400; sortea entre todos los que cargan).
+
+### 940. 📂 Panel desplegado del sorteo: sin la fila "Próximamente", ✕ flotante y todo el contenido visible — SW v627
+**Pedido (owner, captura):** "que se abra; el Próximamente de abajo no" (seguía viéndose sólo la franja de inicio).
+- Se quita la fila de arriba; la ✕ Cerrar flota sobre la franja. `.srt-inline { overflow: visible; height/max-height: auto }`: ningún contenedor
+  puede recortarlo (overflow:hidden era lo que lo dejaba encogerse dentro de la columna con scroll del básico).
+
 ### 938. 🎰 Hoja del casino: AMBOS sorteos resumidos con sus premios, más chica, botón "Anotate, es gratis ›" — SW v625
 **Pedido (owner):** "ahí detallá un poco más de ambos sorteos pero resumido, sin que tape tanto; que estén los increíbles premios; el detalle en otro
 lado; y el Ver más es Anotate, es gratis".

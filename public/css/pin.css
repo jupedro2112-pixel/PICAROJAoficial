@@ -2887,3 +2887,10 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 .srt-mini-s .srt-mini-p b { font-size: 10px; } .srt-mini-s .srt-mini-p small { font-size: 8.5px; color: var(--p-muted); font-weight: 700; line-height: 1.1; }
 .srt-mini-s .srt-mini-txt { margin: 2px 0 0; font-size: 11px; line-height: 1.3; color: var(--p-muted); }
 .srt-mini-foot { margin: 6px 0 0; text-align: center; font-size: 10.5px; color: var(--p-muted); font-weight: 700; }
+
+/* #940: panel desplegado sin la fila "Próximamente"; ✕ flotante; SIEMPRE con todo el contenido visible (nada de altura/overflow que lo recorte) */
+.srt-inline { position: relative; overflow: visible !important; height: auto !important; max-height: none !important; }
+.srt-inline > .srt-inline-x-float { position: absolute; top: 8px; right: 8px; z-index: 2; background: var(--srt-g); border-color: var(--srt-g); padding: 5px 10px; font-size: 11.5px; }
+.srt-inline-body { padding-top: 10px; }
+.srt-inline-body > .srt-strip:first-child { padding-right: 96px; }
+.srt-inline-body > .srt-strip:first-child, .srt-inline-body > *:last-child { border-radius: 14px; }
