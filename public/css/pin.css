@@ -3019,3 +3019,6 @@ html[data-theme="dark"] .srt-tk-list summary { color: var(--srt-lite); }
 .srt-draw.mine { border-color: #ffd166; box-shadow: 0 0 0 3px rgba(255, 209, 102, .35); }
 .srt-draw > b { font-size: 13px; } .srt-draw-w { font-size: 13px; } .srt-draw-w i { color: #b45309; font-weight: 900; font-style: normal; }
 .srt-draw small { font-size: 10.5px; color: var(--p-muted); word-break: break-all; } .srt-draw code { font-size: 10px; }
+
+/* #983: tope del bono de 1ª carga, siempre a la vista */
+.fd-note .fd-cap { font-size: 11px; font-weight: 700; color: var(--p-muted); margin-left: 2px; }

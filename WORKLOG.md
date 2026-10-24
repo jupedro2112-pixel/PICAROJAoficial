@@ -8,6 +8,12 @@
 
 ## Sesión 2026-10-24
 
+### 983. Tope del bono de 1ª carga a la vista en todos lados; crear la clave de INICIO también fija la de Datos — SW v648
+**Pedido (owner):** "¿aclaraste en algún lado el tope del bono del 100 %? no lo veo por ningún lado" · "¿cuál es la clave de Sorteos y Revisión semanal?".
+- "hasta $15.000" (valor vivo de `firstDepositCapArs`) en: notas de primera carga del básico/completo (`.fd-cap`), cartel de bienvenida, landing de pauta
+  (`welcome.capArs`), historia automática de bienvenida (`{tope}`) y pasos del recorrido (`{tope}`). La FAQ de Soporte y el texto del cartel ya lo tenían.
+- Clave: al crear la de INICIO desde el panel, si no hay clave de Datos se guarda la misma ⇒ una sola clave para Principal y Datos, se cree desde donde se cree.
+
 ### 982. 🔑 Una sola clave para todo lo protegido y agentes con 5 secciones — admin SW v206
 **Pedido (owner):** "¿cuál es la clave de todo? pongamos [clave] a todo; los agentes de cargas y pagos sólo Soporte, Comprobantes a verificar, Pagos
 a confirmar, Cargas automáticas y Chat completo; el resto libre pero lo que pide clave con la misma".

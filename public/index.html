@@ -1332,7 +1332,7 @@
                         <li><b>Adjuntá la foto del comprobante</b> con el botón de abajo. <b>Con todos los datos visibles</b> (titular, CUIT, fecha y hora, monto y N° de operación): si no se ven, la carga se rechaza.</li>
                         <li><b>Listo:</b> la carga entra sola en tu plataforma en minutos. Si tenés un bono pendiente, se suma solo.</li>
                     </ol>
-                    <p class="fd-note" id="fdNoteBasic" hidden><span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">100%</span> automático</b></span><span class="fd-app">📲 Después, <b>+<span class="fd-pct-app">$5.000</span> EXTRA</b> instalando la app y activando las notificaciones</span></p><!-- #839 -->
+                    <p class="fd-note" id="fdNoteBasic" hidden><span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">100%</span> automático</b><small class="fd-cap"> · hasta $15.000</small></span><span class="fd-app">📲 Después, <b>+<span class="fd-pct-app">$5.000</span> EXTRA</b> instalando la app y activando las notificaciones</span></p><!-- #839 -->
                     <button type="button" class="bv-action" onclick="VIP.autoload.sendReceipt()">📎 Adjuntar comprobante<span class="sb-tag-slot"></span><small class="min-tag">Carga mínima <span class="md-amt">$2.000</span></small></button><!-- #706: etiqueta hasta la 5ª carga · #742: bono de historia -->
                 </div>
                 <button type="button" class="bv-btn bv-wd" onclick="VIP.home.basicToggle('wd')" aria-expanded="false"><i class="li li-w"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M3 10h18M7 15h4"/></svg></i><span><b>RETIRAR</b><small class="bv-min">Retiro mínimo <b class="wd-amt">$10.000</b> · a tu CBU</small></span><em class="bv-chev">▾</em></button><!-- #757 -->
@@ -1601,7 +1601,7 @@
             <!-- #238 (owner): "enviar comprobante en la línea de retirar premio; retirar en rojo; 'Cargar aquí
                  (adjuntar comprobante)' con el signo de adjuntar". -->
             <div class="home-actions-row">
-                <p class="fd-note" id="fdNoteFull" hidden><span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">100%</span> automático</b></span><span class="fd-app">📲 Después, <b>+<span class="fd-pct-app">$5.000</span> EXTRA</b> instalando la app y activando las notificaciones</span></p><!-- #626 · #839 -->
+                <p class="fd-note" id="fdNoteFull" hidden><span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">100%</span> automático</b><small class="fd-cap"> · hasta $15.000</small></span><span class="fd-app">📲 Después, <b>+<span class="fd-pct-app">$5.000</span> EXTRA</b> instalando la app y activando las notificaciones</span></p><!-- #626 · #839 -->
                 <button type="button" class="load-row-btn" id="loadHereBtn" onclick="VIP.autoload.sendReceipt()" title="Adjuntar el comprobante de tu transferencia">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.4 11.1 12.3 20.2a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 0 1-2.6-2.6l8.5-8.5"/></svg>
                     <span class="lr-text"><b>Comprobante aquí</b><small id="loadHereMin">carga mínima $2.000 · se acredita solo</small></span>
@@ -1711,7 +1711,7 @@
                     <img src="/icons/icon-192x192.png" class="fd-logo" alt="PICA ROJA" width="64" height="64">
                     <div class="fd-brand">PICA ROJA</div>
                     <div class="fd-kicker">BONO DE PRIMERA CARGA</div>
-                    <div class="fd-big"><b id="fdPct">100%</b><small>automático en tu primera carga</small></div>
+                    <div class="fd-big"><b id="fdPct">100%</b><small>automático en tu primera carga<span class="fd-cap"> · hasta $15.000</span></small></div>
                     <div class="fd-app" id="fdApp"><i>📲</i><span>Después, <b id="fdPctApp">+$5.000 EXTRA</b> instalando la app y activando las notificaciones</span></div><!-- #839 -->
                     <p class="fd-txt" id="fdTxt"></p>
                     <button type="button" class="btn btn-primary fd-btn" onclick="VIP.home.fdGo()">Cargar ahora ›</button>
@@ -2653,7 +2653,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v647</div>
+                    <div class="pf-build" id="appBuildTag">app v648</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2682,7 +2682,7 @@
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v647</div> <!-- #790: espejo de #appBuildTag -->
+                <div class="pf-build pf-build-min" id="pfBuildMini">app v648</div> <!-- #790: espejo de #appBuildTag -->
                 <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
                 <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>

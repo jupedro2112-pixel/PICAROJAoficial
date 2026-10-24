@@ -1249,7 +1249,7 @@ app.get('/api/landing/info', async (req, res) => {
     let referralPct = null; try { referralPct = require('./src/utils/referralRate').getConfiguredPct(); } catch (_) {} // #424
     // #530: % de bienvenida REAL para el banner de la pantalla de ingreso (nada hardcodeado): primera carga + extra por instalar la app.
     let welcome = null;
-    try { const fd = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig(); welcome = { pct: fd, withApp: fd + (ig && ig.enabled ? ig.pct : 0) }; } catch (_) {}
+    try { const fd = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig(); welcome = { pct: fd, capArs: await getFirstDepositCapArs(), extraFixedArs: ig && ig.enabled ? ig.fixedArs : 0, withApp: fd + (ig && ig.enabled && !(ig.fixedArs > 0) ? ig.pct : 0) }; } catch (_) {} // #983: tope
     let services = []; try { services = await _landingServices(); } catch (_) {} // #555
     res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -21125,6 +21125,7 @@ app.post('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, r
     if (!/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
     const h = await _inicioPinHash(); if (h && _sha(cur) !== h) return res.status(403).json({ error: 'La clave actual no coincide.' });
     await Config.set('inicioPinHash', _sha(pin), req.user.username); _inicioPinCache = { at: 0, hash: undefined };
+    try { if (!(await getConfig('datosIaPinHash', null))) { await Config.set('datosIaPinHash', _sha(pin), req.user.username); _datosPinCache = { at: 0, hash: null }; } } catch (_) {} // #983: una sola clave para todo
     logger.info(`[inicio] clave ${h ? 'cambiada' : 'creada'} por ${req.user.username}`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -26027,9 +26028,9 @@ async function _storyAutoCtx(dayKey) {
       if (favorite) { const counts = favorite.snapshot; delete favorite.snapshot; await Config.set('storyGamesSnapshot', { dayKey, counts, favorite }, 'historias-auto'); }
     }
   }
-  let firstPct = 0; try { firstPct = await getFirstDepositBonusPct(); } catch (_) {}
+  let firstPct = 0, firstCap = 0; try { firstPct = await getFirstDepositBonusPct(); firstCap = await getFirstDepositCapArs(); } catch (_) {}
   let rolloverX = 5; try { rolloverX = await _giftRolloverX(); } catch (_) {}
-  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: [3], rolloverX }; // #968 · #978: SEMANAL (miércoles), fuerte
+  return { firstPct, firstCap, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: [3], rolloverX }; // #968 · #978: SEMANAL (miércoles), fuerte · #983 tope
 }
 // #909 (owner 2026-10-23: "no vamos a publicar aún los partidos de fútbol, quiero ir primero con publicaciones explicando la app"):
 // los PARTIDOS del día salen sólo con la llave `Config['storyAutoMatches']` encendida (panel → Historias automáticas → ⚽ Partidos).
@@ -26370,7 +26371,7 @@ async function _journeyTick(force) {
     const today = _schedArtKey(now); const last = await getConfig('journeyLast', null); if (!force && last && last.day === today) return null;
     if (!(await _cronClaim('journey', 15 * 60000))) return null; // una instancia por pasada
     const [firstPct, dailyPct, minDep, rolloverX, apCfg] = await Promise.all([getConfig('firstDepositBonusPct', 50), getDailyRefundPct(), getMinDepositArs().catch(() => 5000), _giftRolloverX().catch(() => 5), getAutopilotConfig()]);
-    const vars = { first: Number(firstPct) || 50, daily: dailyPct, min: Math.round(Number(minDep) || 0).toLocaleString('es-AR') };
+    const vars = { first: Number(firstPct) || 50, tope: Math.round(Number(await getFirstDepositCapArs().catch(() => 0)) || 0).toLocaleString('es-AR'), daily: dailyPct, min: Math.round(Number(minDep) || 0).toLocaleString('es-AR') }; // #983: {tope}
     const scan = await _journeyScan(now); const out = { day: today, at: now.toISOString(), total: scan.total, segments: scan.segments, steps: [] };
     const by = { username: 'recorrido', role: 'admin', userId: null };
     for (const g of scan.picks) {

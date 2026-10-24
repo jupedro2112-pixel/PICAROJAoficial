@@ -275,7 +275,7 @@
       // #832 (owner): "100% en la primera carga y un 50% de regalo extra instalando la app, resumido" ⇒ grande el % de la 1ª carga y abajo el extra.
       var w = info.welcome || {}; var pApp = Number(w.withApp) || 0, pNo = Number(w.pct) || 0; var extra = Math.max(0, pApp - pNo);
       if (pNo > 0) $('bonusBig').textContent = pNo + '%';
-      $('bonusSub').textContent = 'EN TU PRIMERA CARGA'; // #537
+      $('bonusSub').textContent = 'EN TU PRIMERA CARGA' + (Number(w.capArs) > 0 ? ' · HASTA $' + Number(w.capArs).toLocaleString('es-AR') : ''); // #537 · #983: con el tope
       var note = extra > 0 ? ('+' + extra + '% EXTRA instalando la app y activando notificaciones') : ''; $('bonusNote').textContent = note; $('bonusNote').style.display = note ? '' : 'none';
       var rf = info.refunds || {}; if (rf.dailyMax) $('sysRefund').textContent = rf.dailyMax + '%';
       var rp = Number(info.referralPct); if (rp > 0) $('sysRef').textContent = rp + '%';

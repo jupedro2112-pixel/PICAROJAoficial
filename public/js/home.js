@@ -335,7 +335,8 @@
     let _fdJ = null;
     // #974: el extra por instalar puede ser un monto fijo ($5.000) o un % → un solo texto para las dos formas.
     const _fdExtraTxt = (j) => { if (!j) return ''; const m = Number(j.extraMonto) || 0; if (m > 0) return '$' + m.toLocaleString('es-AR'); const e = Number(j.extra) || 0; return e > 0 ? e + '%' : ''; };
-    const _FD_NOTE_INNER = (pct, extra) => '<span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">' + pct + '%</span> automático</b></span>' +
+    const _fdCapTxt = (j) => { const c = Number(j && j.capArs) || 0; return c > 0 ? ' · hasta $' + c.toLocaleString('es-AR') : ''; }; // #983: el tope, siempre a la vista
+    const _FD_NOTE_INNER = (pct, extra, capTxt) => '<span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">' + pct + '%</span> automático</b><small class="fd-cap">' + (capTxt || '') + '</small></span>' +
         '<span class="fd-app"' + (extra ? '' : ' hidden') + '>📲 Después, <b>+<span class="fd-pct-app">' + extra + '</span> EXTRA</b> instalando la app y activando las notificaciones</span>';
     function _fdNotesPaint() {
         _fdPromoLoad().then((j) => {
@@ -346,6 +347,7 @@
                 el.hidden = !show; if (!show) return;
                 el.querySelectorAll('.fd-pct').forEach((x) => { x.textContent = j.pct + '%'; });
                 el.querySelectorAll('.fd-pct-app').forEach((x) => { x.textContent = extra; }); // #839: el EXTRA, no la suma · #974 monto o %
+                el.querySelectorAll('.fd-cap').forEach((x) => { x.textContent = _fdCapTxt(j); }); // #983
                 el.querySelectorAll('.fd-app').forEach((x) => { x.hidden = !extra; });
             });
         }).catch(() => {});
@@ -370,7 +372,7 @@
         const extra = _fdExtraTxt(j); // #974
         // #839 (owner): "no es 150% si instalás: es 100% por la primera carga y el 50% EXTRA después de la carga, instalando la app y activando
         // las notificaciones (que exija esos 2 pasos)". Dos líneas claras; nunca la suma.
-        return '<p class="fd-note">' + _FD_NOTE_INNER(j.pct, extra) + '</p>';
+        return '<p class="fd-note">' + _FD_NOTE_INNER(j.pct, extra, _fdCapTxt(j)) + '</p>';
     }
     async function maybeFirstDepositPopup() {
         if (_fdShown) return; try { if (sessionStorage.getItem('vip_fd_seen')) return; } catch (_) {}
@@ -380,7 +382,8 @@
             const j = await _fdPromoLoad();
             if (!j || !j.show) return;
             const p = _el('fdPct'), pa = _el('fdPctApp'), ap = _el('fdApp'), tx = _el('fdTxt');
-            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (_fdExtraTxt(j) || '0%') + ' EXTRA'; // #839 · #974 if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || '';
+            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (_fdExtraTxt(j) || '0%') + ' EXTRA'; // #839 · #974
+            try { document.querySelectorAll('#fdModal .fd-cap').forEach((x) => { x.textContent = _fdCapTxt(j); }); } catch (_) {} // #983 if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || '';
             try { sessionStorage.setItem('vip_fd_seen', '1'); } catch (_) {}
             VIP.ui.showModal('fdModal');
         } catch (_) {}
