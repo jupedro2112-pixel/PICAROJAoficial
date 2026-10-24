@@ -21096,7 +21096,9 @@ app.post('/api/admin/datos-ia-pin', authMiddleware, adminMiddleware, async (req,
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general.' });
     const pin = String((req.body && req.body.pin) || '').trim();
     if (pin && !/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
-    await Config.set('datosIaPinHash', pin ? _sha(pin) : null, req.user.username); _datosPinCache = { at: 0, hash: null }; _inicioPinCache = { at: 0, hash: undefined }; // #982: Principal usa la misma si no tiene propia
+    await Config.set('datosIaPinHash', pin ? _sha(pin) : null, req.user.username); _datosPinCache = { at: 0, hash: null };
+    await Config.set('inicioPinHash', pin ? _sha(pin) : null, req.user.username); _inicioPinCache = { at: 0, hash: undefined }; // #984 (owner): UNA sola clave para todo: la de Datos ES la de Principal
+    try { _pinFails.clear(); } catch (_) {} // y se levanta el bloqueo por intentos fallidos
     logger.info(`[datos-ia] clave ${pin ? 'cargada' : 'quitada'} por ${req.user.username}`);
     res.json({ success: true, enabled: !!pin });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -21123,9 +21125,10 @@ app.post('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, r
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
     const pin = String((req.body && req.body.pin) || '').trim(), cur = String((req.body && req.body.current) || '').trim();
     if (!/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
-    const h = await _inicioPinHash(); if (h && _sha(cur) !== h) return res.status(403).json({ error: 'La clave actual no coincide.' });
+    const h = await _inicioPinHash(); void cur; // #984: el administrador general la puede fijar o cambiar sin la anterior (el login del panel ya lo protege; la clave es para el resto del staff)
     await Config.set('inicioPinHash', _sha(pin), req.user.username); _inicioPinCache = { at: 0, hash: undefined };
-    try { if (!(await getConfig('datosIaPinHash', null))) { await Config.set('datosIaPinHash', _sha(pin), req.user.username); _datosPinCache = { at: 0, hash: null }; } } catch (_) {} // #983: una sola clave para todo
+    await Config.set('datosIaPinHash', _sha(pin), req.user.username); _datosPinCache = { at: 0, hash: null }; // #984: una sola clave para todo
+    try { _pinFails.clear(); } catch (_) {}
     logger.info(`[inicio] clave ${h ? 'cambiada' : 'creada'} por ${req.user.username}`);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }

@@ -8,6 +8,12 @@
 
 ## Sesión 2026-10-24
 
+### 984. Clave única de verdad: guardarla desde Datos o desde INICIO fija las dos, sin pedir la anterior al admin — admin SW v207
+**Pedido (owner):** "no agarra [la clave]". Causa probable: ya había una clave distinta guardada (INICIO o Datos) o el bloqueo por 6 intentos.
+- `POST /api/admin/datos-ia-pin` y `POST /api/admin/inicio-pin` (sólo rol admin) escriben `datosIaPinHash` e `inicioPinHash` con el mismo valor y
+  limpian `_pinFails` (bloqueo por intentos). El admin general no necesita la clave anterior: el login del panel ya lo protege; la clave es para el staff.
+- Panel: al guardar queda activa en la sesión (`datos_pin` + `inicio_pin`); título "Clave de Datos y Principal (una sola)".
+
 ### 983. Tope del bono de 1ª carga a la vista en todos lados; crear la clave de INICIO también fija la de Datos — SW v648
 **Pedido (owner):** "¿aclaraste en algún lado el tope del bono del 100 %? no lo veo por ningún lado" · "¿cuál es la clave de Sorteos y Revisión semanal?".
 - "hasta $15.000" (valor vivo de `firstDepositCapArs`) en: notas de primera carga del básico/completo (`.fd-cap`), cartel de bienvenida, landing de pauta
