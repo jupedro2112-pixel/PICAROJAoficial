@@ -8,6 +8,12 @@
 
 ## Sesión 2026-10-24
 
+### 936. 📜 Bases y condiciones de CADA sorteo escritas abajo del propio sorteo — SW v623
+**Pedido (owner):** "dentro del sorteo del auto que aparezca sólo la info del auto y en el del teléfono la del teléfono, separado, con sus términos y
+condiciones abajo sobre el sorteo".
+- Cada panel/pantalla ya mostraba sólo su sorteo (sin tarjeta cruzada desde #925); ahora el botón "Bases y condiciones ›" se reemplaza por la sección
+  `.srt-tc-sec` con las Bases de ESE sorteo (`terms(cfg, key)`: fechas, puntos, premios, cobro del 1 al 10, requisitos…) escritas al final.
+
 ### 935. 🎰 Casino: banner del sorteo DEBAJO de la barra; al cerrarlo queda la píldora "Sorteo mensual" en el medio (donde está PICA ROJA) — SW v622
 **Pedido (owner, captura de la gemela):** "si se cierra, que quede en el medio donde está el PICA ROJA y la pica, que diga Sorteo mensual y se ponga ahí
 arriba; si lo abren, que aparezca abajo".

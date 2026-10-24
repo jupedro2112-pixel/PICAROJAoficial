@@ -169,7 +169,8 @@
         // 4) cómo sumar puntos
         h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados con plata real</li>' + (s.rules.dayDepositPts ? '<li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li>' : '') + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de la semana si completás tus misiones semanales</li>' : '') + '<li>🚫 Los bonos no suman: cuenta la parte proporcional a tus cargas</li><li>🔄 Se actualiza cada 20 minutos · ganadores el ' + esc(fdh(s.publishAt)) + '</li></ul></div>';
         h += rankingBlock(s);             // 5) ranking
-        h += '<button type="button" class="srt-terms-btn" onclick="VIP.sorteos.terms(\'' + s.key + '\')">📜 Bases y condiciones ›</button>'; // 6) bases
+        // 6) #936 (owner): las Bases de ESTE sorteo escritas abajo, sobre el sorteo (sin botón): las del auto en el del auto, las del teléfono en el del teléfono
+        h += '<div class="srt-sec srt-tc-sec"><h3>📜 Bases y condiciones · ' + esc(s.title) + '</h3><ol class="srt-tc">' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol></div>';
         // #925 (owner): sin la tarjeta del otro sorteo al pie ("sacá adentro del auto, abajo, el del iPhone").
         b.innerHTML = h; try { b.scrollTop = 0; } catch (_) {}
     }
