@@ -1151,6 +1151,7 @@
             <!-- #641 (owner): CARGÁ AHORA grande y centrado, debajo de la barra superior y arriba del nivel VIP (sólo en el Inicio). Antes vivía en el carrusel. -->
             <!-- #689 (owner): la línea nivel VIP + fueguito va ARRIBA de CARGÁ AHORA -->
             <div class="play-bal" id="playBalTop"><span class="pb-k">🎰 Tu saldo para jugar</span><b class="js-play-bal">$0</b><button type="button" class="pb-r" onclick="VIP.ui.syncBalance && VIP.ui.syncBalance()" title="Actualizar saldo" aria-label="Actualizar saldo">↻</button></div><!-- #847 --><button type="button" class="fit-link" onclick="VIP.home.openFitPhone()">📱 Ajustar la pantalla a mi teléfono ›</button><!-- #865 -->
+            <div class="srt-banner" id="srtBannerPlay" data-srt-banner hidden></div><!-- #915: sorteo arriba del Girox directo -->
             <div class="status-row" id="statusRow" hidden>
                 <!-- #627 (owner): en el BÁSICO, el nivel VIP resumido va al lado de "Cambiar menú" (home.js _fireMiniSync lo copia de la tarjeta grande) -->
                 <button type="button" class="vip-mini" id="vipMiniBtn" onclick="VIP.home.openVipLevels()" ><span class="vm-ico">🏆</span><b id="vipMiniLvl">Nivel</b><span class="vm-bar"><i id="vipMiniBar" style="width:0%"></i></span><em id="vipMiniPct"></em></button><!-- #536: minimizado, sin texto largo -->
@@ -1265,6 +1266,7 @@
                     <span class="ez-main-txt"><b>CARGAR AHORA</b><small>Transferís, mandás la foto y se acredita solo<b class="ms-easy"> · mínimo <span class="md-amt">$2.000</span></b></small><span class="promo-live" hidden></span></span>
                     <span class="ez-main-arrow">›</span>
                 </button>
+                <div class="srt-cards" data-srt-cards hidden></div><!-- #915: sorteos abajo de CARGAR AHORA -->
                 <!-- #504: bono de SEGUNDA carga vigente (lo pinta home.js con /api/strategy/me) -->
                 <!-- #510 (owner): orden fijo — Reembolso · Misiones / Referidos · Ruleta. "Ver la plataforma" y "Soporte" salieron del menú fácil
                      (el soporte sigue en la barra de arriba y en la de abajo con la opción 2; la plataforma, en el menú completo). -->
@@ -1296,6 +1298,7 @@
                 <!-- #627 (owner 2026-10-20): UNA sola línea arriba: 👤 nombre · saldo · 🔥 racha. El nivel VIP se fue al lado de "Cambiar menú" (#vipMiniBtn). -->
                 <div class="play-bal" id="playBalBasic"><span class="pb-k">🎰 Tu saldo para jugar</span><b class="js-play-bal">$0</b><button type="button" class="pb-r" onclick="VIP.ui.syncBalance && VIP.ui.syncBalance()" title="Actualizar saldo" aria-label="Actualizar saldo">↻</button></div><!-- #847 --><button type="button" class="fit-link" onclick="VIP.home.openFitPhone()">📱 Ajustar la pantalla a mi teléfono ›</button><!-- #865 -->
                 <div class="bv-top"><span class="bv-user"><i>👤</i><span id="basicHello">—</span></span><b id="basicBalance">$0</b><button type="button" class="bv-fire" id="bvFire" onclick="var b=document.getElementById('fireBtn'); if(b) b.click();" title="Fueguito: tu racha de cargas"><span class="bv-new">Novedad</span>🔥 Fueguito <b><span id="bvFireN">0</span> d</b></button></div>
+                <div class="srt-cards" data-srt-cards hidden></div><!-- #915: sorteos abajo del saldo, arriba de los servicios -->
                 <!-- #642 (owner 2026-10-20): "¿Dónde jugás?" + chips de plataforma ARRIBA de CARGAR -->
                 <!-- #755 (owner): los servicios ARRIBA de todo en el básico -->
                 <div class="bv-sec-t"><b>Todo lo que ofrecemos 100% para vos</b><small>Tocá cada uno para ver más ›</small></div><!-- #751 -->
@@ -1349,6 +1352,15 @@
                     <button type="button" class="bv-sw" onclick="VIP.home.setMenuPref('easy')"><b>☰ Menú intermedio</b><small>Reembolsos, misiones, referidos y ruleta en botones grandes.</small></button>
                     <button type="button" class="bv-sw" onclick="VIP.home.setMenuPref('full')"><b>🧭 Menú completo · detallado</b><small>Todo a la vista: plataformas, fueguito, niveles VIP, carga automática, historias.</small></button>
                     <button type="button" class="bv-sw" onclick="VIP.home.setMenuPref('girox')"><b>🎰 Girox directo</b><small>Entrás a jugar al toque (hoy Girox, la plataforma seleccionada); cargás y retirás desde adentro.</small></button><!-- #670/#672 -->
+                </div>
+            </div>
+            <!-- #915 (owner): SORTEOS con ranking en vivo — pantalla completa por sorteo + Bases en capa aparte (✕ arriba a la izquierda). js/sorteos.js -->
+            <div id="srtModal" class="srt-modal" hidden role="dialog" aria-modal="true" aria-labelledby="srtTitle">
+                <div class="srt-head"><button type="button" class="srt-back" onclick="VIP.sorteos.close()">‹ Volver</button><b id="srtTitle">🏆 Sorteo</b></div>
+                <div class="srt-body" id="srtBody"><div class="srt-note">Cargando…</div></div>
+                <div id="srtTerms" class="srt-terms" hidden role="dialog" aria-modal="true">
+                    <div class="srt-terms-head"><button type="button" class="srt-x" onclick="VIP.sorteos.termsClose()" aria-label="Cerrar">✕</button><b>Bases y condiciones</b></div>
+                    <div class="srt-terms-body" id="srtTermsBody"></div>
                 </div>
             </div>
             <!-- #910 (owner): el resumen de Soporte en un RECUADRO encima de todo, con scroll y botón cerrar -->
@@ -2637,7 +2649,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v605</div>
+                    <div class="pf-build" id="appBuildTag">app v606</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -3066,6 +3078,7 @@
     <script src="/js/ui.js"></script>
     <script src="/js/autoload.js"></script>
     <script src="/js/home.js"></script>
+    <script src="/js/sorteos.js"></script><!-- #915 -->
     <script src="/js/withdraw.js"></script>
     <script src="/js/installbonus.js"></script>
     <script src="/js/notifsurvey.js"></script>

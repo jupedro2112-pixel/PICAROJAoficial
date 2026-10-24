@@ -5001,6 +5001,7 @@ function switchSection(section) {
     if (section === 'cronohist') { loadStoriesAuto(); loadNewbieOffers(); } // #871 · #886
     if (section === 'fraud') loadFraud(); // #873
     if (section === 'inicio') loadInicio(); // #876
+    if (section === 'sorteos') loadSorteos(); // #915
     if (section === 'referrals') loadAdminReferralSummary();
     if (section === 'stories') loadStories(); // #361
     if (section === 'depositReviews') loadDepositReviews(); // #376
@@ -17563,6 +17564,77 @@ function _renderInicio(box, d, notice) {
                 box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b'));
     }
 }
+
+
+// ===== #915 SORTEOS con ranking en vivo (panel) =====
+let _srtData = null, _srtTab = 'mensual', _srtSub = 'ranking';
+async function loadSorteos() {
+    const box = document.getElementById('srtAdmin'); if (!box) return;
+    try {
+        const r = await authFetch('/api/admin/sorteos'); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error');
+        _srtData = j; _srtRender();
+    } catch (e) { box.innerHTML = '<div style="color:#ff8080;">' + escapeHtml(e.message) + '</div>'; }
+}
+function srtTab(k) { _srtTab = k; _srtRender(); } function srtSub(k) { _srtSub = k; _srtRender(); }
+function _srtRender() {
+    const box = document.getElementById('srtAdmin'); if (!box || !_srtData) return;
+    const c = _srtData.config, d = _srtData.sorteos || {}, diag = _srtData.diag || {}; const m = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR'); const n = (x) => Number(x || 0).toLocaleString('es-AR');
+    const f = (dt) => dt ? new Date(dt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    const st = { soon: '⏳ Todavía no empezó', live: '🟢 EN CURSO', closed: '🔴 Cerrado' };
+    const run = (k) => { const x = diag.runs && diag.runs[k]; if (!x) return 'sin corrida'; if (x.error) return '❌ ' + escapeHtml(x.error); if (x.skipped) return '— ' + escapeHtml(x.skipped); return n(x.candidates) + ' jugadores con carga · ' + n(x.scored) + ' puntuados · ' + Math.round((x.ms || 0) / 1000) + ' s'; };
+    const head = '<div class="card" style="margin-bottom:1rem"><div style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center"><label><input type="checkbox" id="srtOn" ' + (c.enabled ? 'checked' : '') + ' onchange="sorteosSave({enabled:this.checked})"> <b>Sorteos visibles en la app</b></label>' +
+        '<span style="color:#888;font-size:.85rem">🛠 Motor: último cálculo ' + f(diag.lastTickAt) + (diag.lastError ? ' · <b style="color:#ff8080">' + escapeHtml(diag.lastError) + '</b>' : ' · sin errores') + '</span></div>' +
+        '<div style="margin-top:.5rem;font-size:.85rem;color:#888">Requisitos para anotarse: ' + ['app', 'notif', 'telegram', 'deposit'].map((k) => '<label style="margin-right:.8rem"><input type="checkbox" ' + (c.requirements[k] ? 'checked' : '') + ' onchange="sorteosSave({requirements:{' + k + ':this.checked}})"> ' + ({ app: 'app instalada', notif: 'notificaciones', telegram: 'Telegram (lo declara el cliente)', deposit: 'una carga real' })[k] + '</label>').join('') + '</div></div>';
+    const tabs = '<div class="at-tabs" style="margin-bottom:.6rem">' + ['mensual', 'gran'].map((k) => '<button class="' + (_srtTab === k ? 'on' : '') + '" onclick="srtTab(\'' + k + '\')">' + escapeHtml(c[k].emoji + ' ' + c[k].title) + '</button>').join('') + '</div>';
+    const k = _srtTab, s = c[k], x = d[k] || { period: {}, counts: {}, anotados: [], ranking: [] };
+    const prz = (i) => '<div style="display:grid;grid-template-columns:50px 1fr 1fr;gap:.4rem;margin-bottom:.3rem"><input class="form-input" id="srtP' + i + 'img" value="' + escapeHtml(s.prizes[i].img) + '" title="emoji"><input class="form-input" id="srtP' + i + 'name" value="' + escapeHtml(s.prizes[i].name) + '" placeholder="' + (i + 1) + '° premio"><input class="form-input" id="srtP' + i + 'value" value="' + escapeHtml(s.prizes[i].value || '') + '" placeholder="valor / detalle"></div>';
+    const cfg = '<details class="card" style="margin-bottom:1rem"><summary style="cursor:pointer;font-weight:800">⚙️ Configuración del ' + escapeHtml(s.title) + ' <small style="color:#888;font-weight:600">· ' + (st[x.period.status] || '') + ' · período ' + escapeHtml(x.period.key || '') + '</small></summary><div style="margin-top:.7rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.6rem">' +
+        '<label>Activo <input type="checkbox" id="srtEn" ' + (s.enabled ? 'checked' : '') + '></label>' +
+        '<label>Título <input class="form-input" id="srtTitle" value="' + escapeHtml(s.title) + '"></label><label>Emoji <input class="form-input" id="srtEmoji" value="' + escapeHtml(s.emoji) + '"></label>' +
+        (k === 'mensual' ? '<label>Mes de inicio (AAAA-MM) <input class="form-input" id="srtStartMonth" value="' + escapeHtml(s.startMonth) + '"></label>' : '<label>Desde (AAAA-MM-DD) <input class="form-input" id="srtStart" value="' + escapeHtml(s.start) + '"></label><label>Hasta <input class="form-input" id="srtEnd" value="' + escapeHtml(s.end) + '"></label>') +
+        '<label>Puntos <input class="form-input" type="number" id="srtPts" value="' + s.pts + '"></label><label>cada $ apostados <input class="form-input" type="number" id="srtPtsPer" value="' + s.ptsPer + '"></label><label>Hora de publicación <input class="form-input" type="number" id="srtPubH" value="' + (s.publishHour || 12) + '"></label>' +
+        (k === 'gran' ? '<label>+pts por día con cargas <input class="form-input" type="number" id="srtDayPts" value="' + s.dayDepositPts + '"></label><label>mínimo del día $ <input class="form-input" type="number" id="srtDayMin" value="' + s.dayDepositMin + '"></label><label>+% por semana con misiones <input class="form-input" type="number" id="srtMisPct" value="' + s.missionWeekPct + '"></label>' : '') +
+        '</div><div style="margin-top:.6rem"><b>Premios</b>' + prz(0) + prz(1) + prz(2) + '</div>' +
+        (k === 'mensual' ? '<div style="margin-top:.6rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.5rem"><label>Premio extra <input type="checkbox" id="srtExOn" ' + (s.extra.enabled ? 'checked' : '') + '></label><label>cada N clientes <input class="form-input" type="number" id="srtExPer" value="' + s.extra.per + '"></label><label>ganadores <input class="form-input" type="number" id="srtExW" value="' + s.extra.winners + '"></label><label>monto $ <input class="form-input" type="number" id="srtExAmt" value="' + s.extra.amount + '"></label><label>mín. cargas en el mes <input class="form-input" type="number" id="srtExMin" value="' + s.extra.minDeposits + '"></label></div>' : '') +
+        '<div style="margin-top:.7rem"><button class="btn btn-primary" onclick="sorteosSaveForm(\'' + k + '\')">💾 Guardar</button></div></details>';
+    const cnt = x.counts || {};
+    const kpis = '<div class="at-kpis">' + _diaKpi('Estado', st[x.period.status] || '—') + _diaKpi('Anotados', n(cnt.anotados)) + _diaKpi('Participando (con puntos)', n(cnt.participantes)) + _diaKpi('Anotados con puntos', n(cnt.anotadosConPuntos)) + (k === 'mensual' ? _diaKpi('Premio extra', n(cnt.extraGanadores) + ' premios · ' + n(cnt.extraElegibles) + ' cumplen') : '') + _diaKpi('Del ' + f(x.period.start).slice(0, 5) + ' al ' + f(x.period.end).slice(0, 5), 'ganadores ' + f(x.period.publishAt)) + '</div><div style="color:#888;font-size:.8rem;margin:.3rem 0 .8rem">🛠 ' + run(k) + '</div>';
+    const subs = '<div class="at-tabs" style="margin-bottom:.6rem"><button class="' + (_srtSub === 'ranking' ? 'on' : '') + '" onclick="srtSub(\'ranking\')">📊 Participando (' + n(x.ranking.length) + ')</button><button class="' + (_srtSub === 'anotados' ? 'on' : '') + '" onclick="srtSub(\'anotados\')">📝 Anotados (' + n(x.anotados.length) + ')</button>' + (k === 'mensual' ? '<button class="' + (_srtSub === 'extra' ? 'on' : '') + '" onclick="srtSub(\'extra\')">🎁 Premio extra</button>' : '') + '</div>';
+    let body = '';
+    if (_srtSub === 'ranking') {
+        body = x.ranking.length ? '<table class="data-table"><thead><tr><th>#</th><th>Usuario</th><th>Puntos</th>' + (k === 'gran' ? '<th>base / días / misiones</th>' : '') + '<th>Apostado</th><th>Plata real</th><th>Cargas</th><th>Anotado</th></tr></thead><tbody>' + x.ranking.map((r) => '<tr' + (r.joined ? '' : ' style="opacity:.6"') + '><td><b>' + r.rank + '</b></td><td>' + escapeHtml(r.username) + '</td><td><b>' + n(r.points) + '</b></td>' + (k === 'gran' ? '<td><small>' + n(r.basePts) + ' / +' + n(r.dayPts) + ' / +' + n(r.missionPts) + '</small></td>' : '') + '<td>' + m(r.wagered) + '</td><td><small>' + Math.round((r.realShare || 0) * 100) + '%</small></td><td>' + n(r.deposits) + ' · ' + m(r.depositTotal) + '</td><td>' + (r.joined ? '✅' : '<span style="color:#f59e0b">no (no puede ganar)</span>') + '</td></tr>').join('') + '</tbody></table>' : '<div style="color:#888;padding:14px;text-align:center">Todavía nadie sumó puntos en este período' + (x.period.status === 'soon' ? ' (empieza el ' + f(x.period.start) + ')' : '') + '.</div>';
+    } else if (_srtSub === 'anotados') {
+        body = x.anotados.length ? '<table class="data-table"><thead><tr><th>Usuario</th><th>Se anotó</th><th>App</th><th>Notif</th><th>Telegram</th><th>Carga</th><th>Puntos (período)</th><th>Cargas (período)</th></tr></thead><tbody>' + x.anotados.map((a) => { const ck = a.checks || {}; const t = (v) => v ? '✅' : '❌'; return '<tr><td>' + escapeHtml(a.username) + '</td><td>' + f(a.joinedAt) + '</td><td>' + t(ck.app) + '</td><td>' + t(ck.notif) + '</td><td>' + t(a.telegram) + '</td><td>' + t(ck.deposit) + '</td><td><b>' + n(a.points) + '</b></td><td>' + n(a.deposits) + ' · ' + m(a.depositTotal) + (a.eligible ? '' : ' <small style="color:#f59e0b">sin carga del período</small>') + '</td></tr>'; }).join('') + '</tbody></table>' : '<div style="color:#888;padding:14px;text-align:center">Todavía nadie se anotó.</div>';
+    } else {
+        const dr = x.draw; const e = s.extra;
+        body = '<div class="card"><p>Por cada <b>' + n(e.per) + '</b> anotados con al menos <b>' + n(e.minDeposits) + '</b> cargas en el mes: <b>' + n(e.winners) + '</b> premios de <b>' + m(e.amount) + '</b>. Hoy cumplen <b>' + n(cnt.extraElegibles) + '</b> ⇒ <b>' + n(cnt.extraGanadores) + '</b> premios en juego.</p>' +
+            (dr ? '<p>✅ Sorteado el ' + f(dr.at) + ' por ' + escapeHtml(dr.by) + ' entre ' + n(dr.candidates) + ' · semilla <code>' + escapeHtml(dr.seed) + '</code></p><table class="data-table"><thead><tr><th>Ganador</th><th>Premio</th></tr></thead><tbody>' + (dr.winners || []).map((w) => '<tr><td>' + escapeHtml(w.username) + '</td><td>' + m(w.amount) + '</td></tr>').join('') + '</tbody></table><p style="color:#888;font-size:.85rem">Los premios se acreditan a mano (regalo con rollover global) y se anuncian en Telegram.</p>' : '<p style="color:#888">Todavía no se sorteó este período. Sortealo el día del cierre: los ganadores aparecen en la app con el nombre tapado y la semilla publicada.</p>') +
+            '<button class="btn btn-primary" onclick="sorteosDraw(' + (dr ? 'true' : 'false') + ')">🎲 ' + (dr ? 'Repetir el sorteo (pisa el anterior)' : 'Sortear el premio extra') + '</button></div>';
+    }
+    box.innerHTML = head + tabs + cfg + kpis + subs + body;
+}
+async function sorteosSave(patch) {
+    try { const r = await authFetch('/api/admin/sorteos', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: patch }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('💾 Guardado', 'success'); loadSorteos(); }
+    catch (e) { showToast(e.message, 'error'); }
+}
+function sorteosSaveForm(k) {
+    const v = (id) => { const el = document.getElementById(id); return el ? el.value : undefined; }; const nn = (id) => Number(v(id)); const ck = (id) => !!(document.getElementById(id) || {}).checked;
+    const s = { enabled: ck('srtEn'), title: v('srtTitle'), emoji: v('srtEmoji'), pts: nn('srtPts'), ptsPer: nn('srtPtsPer'), publishHour: nn('srtPubH'), prizes: [0, 1, 2].map((i) => ({ pos: i + 1, img: v('srtP' + i + 'img'), name: v('srtP' + i + 'name'), value: v('srtP' + i + 'value') })) };
+    if (k === 'mensual') { s.startMonth = v('srtStartMonth'); s.extra = { enabled: ck('srtExOn'), per: nn('srtExPer'), winners: nn('srtExW'), amount: nn('srtExAmt'), minDeposits: nn('srtExMin') }; }
+    else { s.start = v('srtStart'); s.end = v('srtEnd'); s.dayDepositPts = nn('srtDayPts'); s.dayDepositMin = nn('srtDayMin'); s.missionWeekPct = nn('srtMisPct'); }
+    const patch = {}; patch[k] = s; sorteosSave(patch);
+}
+async function sorteosRecalc() {
+    showToast('↻ Recalculando con los stats de 1girox…', 'info');
+    try { const r = await authFetch('/api/admin/sorteos/recalc', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('✅ Puntos recalculados', 'success'); loadSorteos(); }
+    catch (e) { showToast(e.message, 'error'); }
+}
+async function sorteosDraw(redo) {
+    if (!confirm(redo ? '¿Repetir el sorteo del premio extra? Se pisa el resultado anterior.' : '¿Sortear el premio extra de este mes ahora?')) return;
+    try { const r = await authFetch('/api/admin/sorteos/mensual/draw-extra', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ redo: !!redo }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('🎲 ' + (j.draw.winners || []).length + ' ganadores sorteados', 'success'); _srtSub = 'extra'; loadSorteos(); }
+    catch (e) { showToast(e.message, 'error'); }
+}
+window.loadSorteos = loadSorteos; window.srtTab = srtTab; window.srtSub = srtSub; window.sorteosSave = sorteosSave; window.sorteosSaveForm = sorteosSaveForm; window.sorteosRecalc = sorteosRecalc; window.sorteosDraw = sorteosDraw;
 
 // ===== #886 bono para clientes nuevos (día 5/15/30) =====
 async function loadNewbieOffers() {

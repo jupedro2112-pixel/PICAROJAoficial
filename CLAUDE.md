@@ -309,6 +309,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   redacciones alternativas `ALTS` (un tema nuevo va a `THEMES` y a `ALTS`). Cada historia se publica aislada; diagnóstico `Config['storyAutoDiag']`.
 - **COMPROBANTES REPETIDOS (#908):** la cola de Cargas pendientes agrupa reenvíos (`_sameReceipt`) y al resolver una ficha
   `_depositReviewCloseRepeats` cierra los demás como `duplicate`. Un flujo nuevo que confirme/rechace un comprobante pendiente tiene que llamarla.
+- **SORTEOS (#915):** `src/services/sorteos.js` (reglas) + `_sorteoTick` (20 min, stats batch de 1girox) + `SorteoEntry`/`SorteoScore`. Ranking
+  público con nombres tapados; sólo ANOTADOS ganan; requisitos en `Config['sorteos'].requirements`. Premios del extra se acreditan a mano. Panel → App → Sorteos.
 - **HISTORIAS PERSONALES (#886):** `Story.audienceUserId` = sólo la ve ese cliente (bono de bienvenida día 5/15/30, `_newbieOffersTick`,
   `Config['newbieOffers']`). Toda consulta NUEVA de historias para clientes o públicas tiene que filtrar `audienceUserId: null` (o el propio id).
 - **HISTORIAS CON BONO (#742, 2026-10-21):** una historia puede llevar `bonusPct` por `bonusHours` (+ push a todos). El cliente que toca

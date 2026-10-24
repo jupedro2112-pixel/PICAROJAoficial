@@ -25935,6 +25935,211 @@ async function _newbieOffersTick() {
   } catch (e) { logger.warn('[bienvenida] ' + e.message); } finally { _newbieRunning = false; }
 }
 setTimeout(() => { _newbieOffersTick().catch(() => {}); setInterval(() => { _newbieOffersTick().catch(() => {}); }, 10 * 60 * 1000); }, 4 * 60 * 1000);
+// ===== #915 (owner 2026-10-24): SORTEOS CON RANKING EN VIVO (mensual + Gran Sorteo) =====
+// "Armá un ranking viendo todo lo apostado de los jugadores de Girox del general, tapá los nombres y que cada uno, desde la app, se registre
+//  y pueda ver su nombre completo y su puesto; dos sorteos individuales con ranking en vivo cuando empieza tomando las apuestas; la gente
+//  suma puntos directo; bases y condiciones completas; en el admin, sorteo mensual con la gente anotada y la que va participando; para
+//  inscribirse tienen que cumplir los requisitos."
+// Reglas puras en src/services/sorteos.js. Config en Config['sorteos'] (panel → Sorteos). Puntajes en SorteoScore (los recalcula
+// `_sorteoTick` cada 20 min con el batch de stats de 1girox = apostado del período, hasta 100 jugadores por request, tramos ≤85 días por el
+// tope de 92). Entran TODOS los clientes con una carga real en el período; sólo los ANOTADOS (SorteoEntry) pueden ganar.
+const SorteoEntry = require('./src/models/SorteoEntry');
+const SorteoScore = require('./src/models/SorteoScore');
+const sorteosRules = require('./src/services/sorteos');
+const SORTEO_KEYS = ['mensual', 'gran'];
+const SORTEO_REAL_DEP = { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, description: { $not: /PRUEBA/i } };
+async function _sorteosCfg() { return sorteosRules.normalize(await getConfig('sorteos', null)); }
+let _sorteoDiag = { lastTickAt: null, lastError: null, runs: {} }; let _sorteoRunning = false;
+async function _sorteoDiagSave() { try { await Config.set('sorteoDiag', _sorteoDiag, 'system'); } catch (_) {} }
+// Requisitos para anotarse: app instalada (token FCM de la app instalada), notificaciones (algún token), Telegram (lo declara el cliente),
+// al menos una carga real (de la vida).
+function _sorteoChecksOf(user, telegramDeclared, hasDeposit) {
+  const toks = Array.isArray(user.fcmTokens) ? user.fcmTokens : [];
+  const app = user.fcmTokenContext === 'standalone' || toks.some((t) => t && t.context === 'standalone');
+  const notif = !!(user.fcmToken || toks.length);
+  return { app, notif, telegram: !!telegramDeclared, deposit: !!hasDeposit };
+}
+function _sorteoMissing(cfg, checks) { const r = cfg.requirements || {}; return ['app', 'notif', 'telegram', 'deposit'].filter((k) => r[k] && !checks[k]); }
+// Apostado + bono otorgado por jugador en [start, until] (tramos ≤85 días, lotes de 100). Falla ⇒ null (no se tocan los puntajes).
+async function _sorteoStats(usernames, start, until) {
+  const out = {}; const SPAN = 85 * sorteosRules.DAY;
+  for (let t0 = start.getTime(); t0 <= until.getTime(); t0 += SPAN) {
+    const a = new Date(t0), b = new Date(Math.min(t0 + SPAN - 1000, until.getTime()));
+    for (let i = 0; i < usernames.length; i += 100) {
+      const chunk = usernames.slice(i, i + 100);
+      const r = await girox.getPlayersStatsBatch(chunk, a, b, 'sorteo');
+      if (!r.success) throw new Error('stats batch: ' + (r.error || r.code || 'falló'));
+      for (const u of chunk) { const p = r.players[u]; if (!out[u]) out[u] = { wagered: 0, bonusGranted: 0 }; if (p) { out[u].wagered += Number(p.wagered) || 0; out[u].bonusGranted += Number(p.bonusGranted) || 0; } }
+    }
+  }
+  return out;
+}
+async function _sorteoTickOne(cfg, key, now) {
+  const s = cfg[key]; const p = sorteosRules.periodOf(s, now);
+  if (p.status === 'soon') return { skipped: 'todavía no empezó' };
+  if (p.status === 'closed' && now - p.end > 3 * sorteosRules.DAY) return { skipped: 'cerrado' };
+  const t0 = Date.now(); const until = new Date(Math.min(now.getTime(), p.end.getTime()));
+  const range = { timestamp: { $gte: p.start, $lte: until } };
+  const [deps, dayAgg, entries] = await Promise.all([
+    Transaction.aggregate([{ $match: Object.assign({}, SORTEO_REAL_DEP, range) }, { $group: { _id: '$userId', n: { $sum: 1 }, total: { $sum: '$amount' }, first: { $min: '$timestamp' }, username: { $first: '$username' } } }]),
+    key === 'gran' ? Transaction.aggregate([{ $match: Object.assign({}, SORTEO_REAL_DEP, range) }, { $group: { _id: { u: '$userId', d: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: '-03:00' } } }, total: { $sum: '$amount' } } }, { $match: { total: { $gte: Number(s.dayDepositMin) || 0 } } }, { $group: { _id: '$_id.u', days: { $sum: 1 } } }]) : Promise.resolve([]),
+    SorteoEntry.find({ key }).select('userId').lean()
+  ]);
+  const cands = deps.filter((d) => d._id && d.username);
+  if (!cands.length) return { candidates: 0, scored: 0, ms: Date.now() - t0 };
+  const stats = await _sorteoStats(cands.map((d) => d.username), p.start, until);
+  const days = new Map(dayAgg.map((x) => [x._id, x.days])); const joined = new Set(entries.map((e) => e.userId));
+  let missions = new Map(); const weeksElapsed = Math.max(1, Math.ceil((until - p.start) / (7 * sorteosRules.DAY)));
+  if (key === 'gran') { const mw = await MissionClaim.aggregate([{ $match: { userId: { $in: cands.map((d) => d._id) }, weekKey: { $gte: sorteosRules.artDay(p.start) } } }, { $group: { _id: '$userId', w: { $addToSet: '$weekKey' } } }]); missions = new Map(mw.map((x) => [x._id, x.w.length])); }
+  const ops = cands.map((d) => {
+    const st = stats[d.username] || { wagered: 0, bonusGranted: 0 };
+    const pts = sorteosRules.computePoints(s, { wagered: st.wagered, bonusGranted: st.bonusGranted, depositTotal: d.total, depositDays: days.get(d._id) || 0, missionWeeks: missions.get(d._id) || 0, weeksElapsed });
+    const isJ = joined.has(d._id);
+    return { updateOne: { filter: { key, periodKey: p.periodKey, userId: d._id }, update: { $set: { username: d.username, points: pts.points, basePts: pts.basePts, dayPts: pts.dayPts, missionPts: pts.missionPts, realShare: pts.realShare, wagered: Math.round(st.wagered), deposits: d.n, depositTotal: Math.round(d.total), depositDays: days.get(d._id) || 0, missionWeeks: missions.get(d._id) || 0, joined: isJ, eligible: isJ && d.n >= 1, firstDepositAt: d.first, updatedAt: new Date() } }, upsert: true } };
+  });
+  for (let i = 0; i < ops.length; i += 500) await SorteoScore.bulkWrite(ops.slice(i, i + 500), { ordered: false });
+  return { candidates: cands.length, scored: ops.length, ms: Date.now() - t0, period: p.periodKey, status: p.status };
+}
+async function _sorteoTick(opts) {
+  if (_sorteoRunning) return; _sorteoRunning = true;
+  try {
+    const cfg = await _sorteosCfg(); const now = new Date(); _sorteoDiag.lastTickAt = now;
+    if (!cfg.enabled && !(opts && opts.force)) return;
+    for (const key of SORTEO_KEYS) {
+      if (!cfg[key].enabled) { _sorteoDiag.runs[key] = { at: now, skipped: 'apagado' }; continue; }
+      try { _sorteoDiag.runs[key] = Object.assign({ at: now }, await _sorteoTickOne(cfg, key, now)); _sorteoDiag.lastError = null; }
+      catch (e) { _sorteoDiag.runs[key] = { at: now, error: e.message }; _sorteoDiag.lastError = key + ': ' + e.message; logger.warn('[sorteos] ' + key + ': ' + e.message); }
+    }
+  } catch (e) { _sorteoDiag.lastError = e.message; logger.warn('[sorteos] tick: ' + e.message); }
+  finally { _sorteoRunning = false; await _sorteoDiagSave(); }
+}
+setTimeout(() => { _sorteoTick().catch(() => {}); setInterval(() => { _sorteoTick().catch(() => {}); }, 20 * 60 * 1000); }, 3 * 60 * 1000);
+const _sorteoSort = { points: -1, wagered: -1, firstDepositAt: 1 };
+async function _sorteoRankOf(key, periodKey, sc) { if (!sc) return null; const better = await SorteoScore.countDocuments({ key, periodKey, $or: [{ points: { $gt: sc.points } }, { points: sc.points, wagered: { $gt: sc.wagered } }] }); return better + 1; }
+async function _sorteoWinners(key, periodKey) { return SorteoScore.find({ key, periodKey, eligible: true, points: { $gt: 0 } }).sort(_sorteoSort).limit(3).lean(); }
+async function _sorteoTelegramUrl() { try { const c = (await getConfig('communityConfig')) || {}; return c.inviteUrl || c.channelUrl || c.url || (await getConfig('canalInformativoUrl', '')) || ''; } catch (_) { return ''; } }
+// ---- App: estado de los sorteos para el cliente (ranking tapado, mi puesto, requisitos, bases)
+app.get('/api/sorteos', authMiddleware, async (req, res) => {
+  try {
+    const cfg = await _sorteosCfg(); const now = new Date();
+    if (!cfg.enabled) return res.json({ enabled: false, sorteos: [] });
+    const user = await User.findOne({ id: req.user.userId }).select('id username fcmToken fcmTokenContext fcmTokens').lean();
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const hasDep = !!(await Transaction.findOne(Object.assign({ userId: user.id }, SORTEO_REAL_DEP)).select('_id').lean());
+    const entries = await SorteoEntry.find({ userId: user.id }).lean(); const byKey = new Map(entries.map((e) => [e.key, e]));
+    const draws = (await getConfig('sorteoDraws', null)) || {};
+    const out = [];
+    for (const key of SORTEO_KEYS) {
+      const s = cfg[key]; if (!s.enabled) continue;
+      const p = sorteosRules.periodOf(s, now); const ent = byKey.get(key) || null;
+      const checks = _sorteoChecksOf(user, ent ? ent.telegramDeclared : false, hasDep); const missing = _sorteoMissing(cfg, checks);
+      const [anotados, participantes, top, mine] = await Promise.all([
+        SorteoEntry.countDocuments({ key }),
+        SorteoScore.countDocuments({ key, periodKey: p.periodKey, points: { $gt: 0 } }),
+        SorteoScore.find({ key, periodKey: p.periodKey, points: { $gt: 0 } }).sort(_sorteoSort).limit(20).select('userId username points wagered joined').lean(),
+        SorteoScore.findOne({ key, periodKey: p.periodKey, userId: user.id }).lean()
+      ]);
+      const myRank = await _sorteoRankOf(key, p.periodKey, mine && mine.points > 0 ? mine : null);
+      const rows = top.map((r, i) => ({ rank: i + 1, name: r.userId === user.id ? r.username : sorteosRules.mask(r.username), points: r.points, me: r.userId === user.id, joined: !!r.joined }));
+      if (mine && mine.points > 0 && !rows.some((r) => r.me)) rows.push({ rank: myRank, name: mine.username, points: mine.points, me: true, joined: !!mine.joined });
+      let winners = null, drawKey = key + ':' + p.periodKey, draw = null;
+      if (p.status === 'closed' && now >= p.publishAt) { winners = (await _sorteoWinners(key, p.periodKey)).map((w, i) => ({ pos: i + 1, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id })); }
+      if (key === 'mensual' && p.prevKey && now - p.start < 7 * sorteosRules.DAY) { const pw = await _sorteoWinners(key, p.prevKey); if (pw.length) winners = pw.map((w, i) => ({ pos: i + 1, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id, period: p.prevKey })); drawKey = key + ':' + p.prevKey; }
+      if (draws[drawKey]) draw = { at: draws[drawKey].at, seed: draws[drawKey].seed, amount: draws[drawKey].amount, winners: (draws[drawKey].winners || []).map((w) => ({ name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), me: w.userId === user.id })) };
+      out.push({
+        key, title: s.title, emoji: s.emoji, status: p.status, periodKey: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt,
+        startsInMs: Math.max(0, p.start - now), endsInMs: Math.max(0, p.end - now), prizes: s.prizes, extra: key === 'mensual' ? s.extra : null,
+        rules: { pts: s.pts, ptsPer: s.ptsPer, dayDepositMin: s.dayDepositMin || 0, dayDepositPts: s.dayDepositPts || 0, missionWeekPct: s.missionWeekPct || 0 },
+        counts: { anotados, participantes, extraWinners: key === 'mensual' ? sorteosRules.extraWinners(s.extra, await SorteoScore.countDocuments({ key, periodKey: p.periodKey, eligible: true, deposits: { $gte: Number(s.extra.minDeposits) || 1 } })) : 0 },
+        me: { joined: !!ent, joinedAt: ent ? ent.joinedAt : null, checks, missing, canJoin: !ent && !missing.length, points: mine ? mine.points : 0, rank: myRank, wagered: mine ? mine.wagered : 0, eligible: !!(mine && mine.eligible), breakdown: mine ? { basePts: mine.basePts, dayPts: mine.dayPts, missionPts: mine.missionPts, realShare: mine.realShare, deposits: mine.deposits } : null },
+        top: rows, winners, draw, terms: sorteosRules.terms(cfg, key, now)
+      });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({ enabled: true, now: now.toISOString(), requirements: cfg.requirements, telegramUrl: await _sorteoTelegramUrl(), sorteos: out });
+  } catch (e) { logger.error('[sorteos] GET: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/sorteos/:key/join', authMiddleware, async (req, res) => {
+  try {
+    const key = String(req.params.key || ''); if (!SORTEO_KEYS.includes(key)) return res.status(404).json({ error: 'Sorteo inexistente' });
+    const cfg = await _sorteosCfg(); if (!cfg.enabled || !cfg[key].enabled) return res.status(400).json({ error: 'Este sorteo no está activo.' });
+    const user = await User.findOne({ id: req.user.userId }).select('id username fcmToken fcmTokenContext fcmTokens isBlocked').lean();
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (user.isBlocked) return res.status(403).json({ error: 'Tu cuenta no puede participar.' });
+    const hasDep = !!(await Transaction.findOne(Object.assign({ userId: user.id }, SORTEO_REAL_DEP)).select('_id').lean());
+    const telegram = !!(req.body && req.body.telegram === true);
+    const checks = _sorteoChecksOf(user, telegram, hasDep); const missing = _sorteoMissing(cfg, checks);
+    if (missing.length) { const names = { app: 'instalar la app', notif: 'activar las notificaciones', telegram: 'unirte a nuestro Telegram', deposit: 'hacer al menos una carga' }; return res.status(400).json({ error: 'Te falta: ' + missing.map((m) => names[m]).join(', ') + '.', checks, missing }); }
+    const ent = await SorteoEntry.findOneAndUpdate({ userId: user.id, key }, { $setOnInsert: { id: uuidv4(), username: user.username, joinedAt: new Date(), checks, source: 'app' }, $set: { telegramDeclared: telegram } }, { upsert: true, new: true }).lean();
+    const p = sorteosRules.periodOf(cfg[key], new Date());
+    await SorteoScore.updateMany({ key, periodKey: p.periodKey, userId: user.id }, [{ $set: { joined: true, eligible: { $gte: ['$deposits', 1] } } }]).catch(() => {});
+    logger.info(`[sorteos] ${user.username} se anotó en ${key}`);
+    res.json({ success: true, joinedAt: ent.joinedAt });
+  } catch (e) { if (e && e.code === 11000) return res.json({ success: true }); logger.error('[sorteos] join: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+// ---- Panel: config + anotados + ranking (nombres completos) + diagnóstico + sorteo del premio extra
+app.get('/api/admin/sorteos', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const cfg = await _sorteosCfg(); const now = new Date(); const draws = (await getConfig('sorteoDraws', null)) || {};
+    const out = {};
+    for (const key of SORTEO_KEYS) {
+      const s = cfg[key]; const p = sorteosRules.periodOf(s, now);
+      const [entries, ranking, participantes, elig] = await Promise.all([
+        SorteoEntry.find({ key }).sort({ joinedAt: -1 }).limit(1000).lean(),
+        SorteoScore.find({ key, periodKey: p.periodKey, points: { $gt: 0 } }).sort(_sorteoSort).limit(300).lean(),
+        SorteoScore.countDocuments({ key, periodKey: p.periodKey, points: { $gt: 0 } }),
+        key === 'mensual' ? SorteoScore.countDocuments({ key, periodKey: p.periodKey, eligible: true, deposits: { $gte: Number(s.extra.minDeposits) || 1 } }) : Promise.resolve(0)
+      ]);
+      const scByUser = new Map((await SorteoScore.find({ key, periodKey: p.periodKey, userId: { $in: entries.map((e) => e.userId) } }).select('userId points deposits depositTotal wagered eligible').lean()).map((x) => [x.userId, x]));
+      out[key] = {
+        period: { key: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt, status: p.status },
+        counts: { anotados: entries.length, participantes, anotadosConPuntos: ranking.filter((r) => r.joined).length, extraElegibles: elig, extraGanadores: key === 'mensual' ? sorteosRules.extraWinners(s.extra, elig) : 0 },
+        anotados: entries.map((e) => { const sc = scByUser.get(e.userId); return { id: e.id, userId: e.userId, username: e.username, joinedAt: e.joinedAt, checks: e.checks, telegram: !!e.telegramDeclared, points: sc ? sc.points : 0, deposits: sc ? sc.deposits : 0, depositTotal: sc ? sc.depositTotal : 0, wagered: sc ? sc.wagered : 0, eligible: !!(sc && sc.eligible) }; }),
+        ranking: ranking.map((r, i) => ({ rank: i + 1, userId: r.userId, username: r.username, points: r.points, basePts: r.basePts, dayPts: r.dayPts, missionPts: r.missionPts, wagered: r.wagered, realShare: r.realShare, deposits: r.deposits, depositTotal: r.depositTotal, depositDays: r.depositDays, missionWeeks: r.missionWeeks, joined: r.joined, eligible: r.eligible, updatedAt: r.updatedAt })),
+        draw: draws[key + ':' + p.periodKey] || null, prevDraw: p.prevKey ? (draws[key + ':' + p.prevKey] || null) : null
+      };
+    }
+    res.json({ config: cfg, diag: _sorteoDiag, now, sorteos: out });
+  } catch (e) { logger.error('[sorteos] admin GET: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.put('/api/admin/sorteos', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const cur = await _sorteosCfg(); const b = (req.body && req.body.config) || req.body || {};
+    const merged = sorteosRules.normalize(Object.assign({}, cur, b, { requirements: Object.assign({}, cur.requirements, b.requirements || {}), mensual: Object.assign({}, cur.mensual, b.mensual || {}), gran: Object.assign({}, cur.gran, b.gran || {}) }));
+    if (b.mensual && b.mensual.extra) merged.mensual.extra = Object.assign({}, cur.mensual.extra, b.mensual.extra);
+    if (!/^\d{4}-\d{2}$/.test(String(merged.mensual.startMonth || ''))) return res.status(400).json({ error: 'Mes de inicio del mensual: AAAA-MM' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(merged.gran.start || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(merged.gran.end || '')) || merged.gran.end < merged.gran.start) return res.status(400).json({ error: 'Fechas del Gran Sorteo: AAAA-MM-DD, fin después del inicio' });
+    await Config.set('sorteos', merged, req.user.username);
+    logger.info(`[sorteos] config guardada por ${req.user.username}`);
+    res.json({ success: true, config: merged });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/sorteos/recalc', authMiddleware, adminMiddleware, async (req, res) => {
+  try { if (_sorteoRunning) return res.status(409).json({ error: 'Ya se está recalculando: esperá un minuto.' }); await _sorteoTick({ force: true }); res.json({ success: true, diag: _sorteoDiag }); }
+  catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+// Premio extra del mensual: sorteo verificable entre los anotados con >= minDeposits cargas en el mes (semilla publicada).
+app.post('/api/admin/sorteos/mensual/draw-extra', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const cfg = await _sorteosCfg(); const s = cfg.mensual; const periodKey = String((req.body && req.body.periodKey) || sorteosRules.periodOf(s, new Date()).periodKey);
+    const draws = (await getConfig('sorteoDraws', null)) || {}; const dk = 'mensual:' + periodKey;
+    if (draws[dk] && !(req.body && req.body.redo === true)) return res.status(400).json({ error: 'Ese mes ya se sorteó (' + (draws[dk].winners || []).length + ' ganadores). Mandá redo:true para repetirlo.' });
+    const cands = await SorteoScore.find({ key: 'mensual', periodKey, eligible: true, deposits: { $gte: Number(s.extra.minDeposits) || 1 } }).select('userId username').lean();
+    const n = sorteosRules.extraWinners(s.extra, cands.length);
+    if (!n) return res.status(400).json({ error: 'Todavía no hay ' + s.extra.per + ' clientes que cumplan (' + cands.length + ' cumplen): no hay premios extra para sortear.' });
+    const seed = crypto.randomBytes(16).toString('hex'); let h = crypto.createHash('sha256').update(seed).digest();
+    const arr = cands.slice().sort((a, b) => a.userId < b.userId ? -1 : 1);
+    for (let i = arr.length - 1; i > 0; i--) { if (i % 8 === 7) h = crypto.createHash('sha256').update(h).digest(); const j = h.readUInt32BE((i % 8) * 4) % (i + 1); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    const winners = arr.slice(0, n).map((w) => ({ userId: w.userId, username: w.username, amount: Number(s.extra.amount) || 0 }));
+    draws[dk] = { at: new Date().toISOString(), by: req.user.username, seed, candidates: cands.length, amount: Number(s.extra.amount) || 0, winners };
+    await Config.set('sorteoDraws', draws, req.user.username);
+    logger.info(`[sorteos] premio extra ${periodKey}: ${winners.length} ganadores de ${cands.length} (semilla ${seed})`);
+    res.json({ success: true, draw: draws[dk] });
+  } catch (e) { logger.error('[sorteos] draw: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+
 app.get('/api/admin/newbie-offers', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const months = Math.min(12, Math.max(1, parseInt(req.query.months, 10) || 3));

@@ -8,6 +8,34 @@
 
 ## Sesión 2026-10-24
 
+### 915. 🏆 SORTEOS con ranking en vivo: Sorteo mensual + Gran Sorteo, inscripción con requisitos, Bases, panel — SW v606 · admin SW v188
+**Pedido (owner, con capturas de la gemela PICA ROJA):** "armá un ranking viendo todo lo apostado de los jugadores de Girox del general, tapá los
+nombres y que cada uno desde la app se registre y pueda ver su nombre completo y su puesto; ponelo arriba del menú básico abajo del saldo y en el
+ingreso rápido de Girox arriba; colores verdes, más sencillo pero con esas imágenes; Bases y condiciones completas; los dos sorteos individuales
+con ranking en vivo cuando empieza tomando las apuestas, la gente suma puntos directo; las bases en otra pestaña que se cierre con una ✕ arriba a
+la izquierda; en el admin, sorteo mensual con la gente anotada y la que va participando; para inscribirse tienen que cumplir los requisitos".
+- **Reglas** (`src/services/sorteos.js`, puras + test a mano): 100 pts cada $100.000 apostados con plata REAL (`realShare = cargas / (cargas +
+  bono otorgado)` del período, stats de 1girox); Gran Sorteo +10 pts por día con cargas ≥ $10.000 y +10% de los puntos por semana con misiones
+  (proporcional a las semanas transcurridas). Mensual: mes calendario desde `startMonth` (2026-11), publica el 1 a las 12 h; Gran: 2026-11-01 →
+  2027-01-31. Premio extra del mensual: 10 × $10.000 por cada 100 anotados con ≥2 cargas. Nombres tapados `ju••••••22`. Config en
+  `Config['sorteos']` (defaults en el código, editable en el panel). Bases y condiciones generadas con los números de la config.
+- **Motor** (`_sorteoTick`, cada 20 min, a los 3 min del boot): por sorteo activo toma TODOS los clientes con carga real en el período (ranking "del
+  general"), pide el apostado al batch de stats (100 por request, tramos ≤85 días por el tope de 92) y upserta `SorteoScore`; si el batch falla no
+  toca puntajes. `SorteoEntry` = anotados (único por usuario y sorteo); sólo los anotados pueden ganar (`eligible` = anotado + carga del período).
+  Diagnóstico en `Config['sorteoDiag']` (panel: 🛠 Motor).
+- **App** (`js/sorteos.js`, verde `--srt-*`): tarjetas en el BÁSICO (abajo del saldo) y en el INTERMEDIO (abajo de CARGAR AHORA), banner arriba en
+  Girox directo. Pantalla por sorteo: premio extra, cuenta regresiva, ranking en vivo (top 20 + mi puesto; sólo yo veo mi nombre), podio de
+  premios, cómo suman los puntos, inscripción con checklist (app instalada, notificaciones, Telegram declarado con link, una carga real) y
+  botón Anotarme, tarjeta cruzada al otro sorteo, Bases en capa aparte con ✕ arriba a la izquierda. Ganadores del mes anterior los primeros 7
+  días; premio extra sorteado con semilla publicada.
+- **Rutas:** `GET /api/sorteos` · `POST /api/sorteos/:key/join` (400 con lo que falta) · admin `GET/PUT /api/admin/sorteos`,
+  `POST /api/admin/sorteos/recalc`, `POST /api/admin/sorteos/mensual/draw-extra` (sorteo verificable: semilla + shuffle sha256; guarda en
+  `Config['sorteoDraws']`; los premios se acreditan a mano).
+- **Panel → App → 🏆 Sorteos:** llave general + requisitos, pestañas Mensual / Gran, config plegable (fechas, puntos, premios con emoji, premio
+  extra), KPIs (anotados, participando, premio extra en juego), listas Participando (ranking con nombres completos, apostado, % plata real,
+  cargas, anotado o no) y Anotados (con qué cumplía cada uno), pestaña Premio extra con el botón de sortear.
+- Pendiente del lado del owner: las fechas/premios reales de cada mes (hoy están los de la gemela como default) y avisar en Telegram.
+
 ### 914. 📣 Publicistas → Ver detalle: período con FECHA Y HORA — admin SW v187
 **Pedido (owner):** "en publicista, cuando voy a ver detalle, que se pueda seleccionar fecha… y hora".
 - Modal "📊 Ver detalle" de una pauta: barra "📅 Período (fecha y hora, Argentina)" con Desde / Hasta (`datetime-local`), botón Ver y atajos

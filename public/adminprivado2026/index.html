@@ -194,6 +194,10 @@ document.addEventListener('change', function (ev) {
 <span>🎰</span>
 <span>Ruleta diaria</span>
 </a>
+<a href="#" class="nav-item" data-section="sorteos">
+<span>🏆</span>
+<span>Sorteos</span>
+</a>
 <a href="#" class="nav-item" data-section="reviews">
 <span>⭐</span>
 <span>Reseñas</span>
@@ -2775,6 +2779,11 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                 </style>
             </section>
             <!-- #871 (owner): Cronograma de HISTORIAS en su propia sección (antes adentro del de notificaciones) -->
+            <!-- #915 (owner): SORTEOS con ranking en vivo (mensual + Gran Sorteo): config, anotados, participantes, premio extra -->
+            <section id="sorteosSection" class="section">
+                <div class="panel-header"><h2>🏆 Sorteos <small style="font-size:.6em;color:#888;font-weight:700">ranking en vivo · mensual y Gran Sorteo</small></h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary" onclick="sorteosRecalc()">↻ Recalcular puntos ahora</button><button class="btn btn-secondary" onclick="loadSorteos()">🔄</button></div></div>
+                <div id="srtAdmin">Cargando…</div>
+            </section>
             <section id="cronohistSection" class="section">
                 <div class="panel-header"><h2>📖 Cronograma historias <small style="font-size:.6em;color:#f59e0b;font-weight:800">· AUTOMÁTICO (NO TOCAR)</small></h2></div>
                 <!-- #886 (owner): bono de bienvenida por días (historia + push SÓLO al cliente, día 5/15/30 desde que se registró) -->

@@ -1406,6 +1406,20 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
 - **Casino (#695):** `ui.js enterCasino` espera 4×30 s y el error dice el motivo (`_fetchCasinoSession` devuelve `status`/`timedOut`);
   en Render el arranque en frío (~50 s) y los redeploys son la causa típica del "No pudimos abrirte el casino".
 
+## Sorteos con ranking en vivo (#915) — `src/services/sorteos.js` + `_sorteoTick` (server.js) + `public/js/sorteos.js`
+- **Modelos:** `SorteoEntry` (anotado: userId+key único, checks al anotarse, telegramDeclared) · `SorteoScore` (key+periodKey+userId único; points =
+  basePts + dayPts + missionPts, wagered, realShare, deposits, joined, eligible). Config: `Config['sorteos']` (normalizada con defaults),
+  `Config['sorteoDraws']` (premio extra sorteado), `Config['sorteoDiag']`.
+- **Período:** mensual = mes calendario ART desde `startMonth` (`periodOf` → soon/live/closed, publishAt = día 1 siguiente 12 h); gran = `start`..`end`.
+- **Puntos:** `computePoints` — pts por cada ptsPer apostados × realShare (cargas / (cargas + bono otorgado), stats de 1girox); gran suma días con
+  cargas ≥ mínimo y % por semanas con `MissionClaim`. Ranking: points desc, wagered desc, primera carga asc.
+- **Motor:** cada 20 min; candidatos = clientes con carga real en el período (sin PRUEBA); stats por batch (≤100, tramos ≤85 días); un fallo del batch
+  deja los puntajes como estaban. Sólo anotados pueden ganar; el ranking público muestra a todos con nombre tapado (`mask`), el propio completo.
+- **Requisitos para anotarse** (`_sorteoChecksOf`): app instalada (token FCM standalone), notificaciones (token), Telegram (declarado), una carga real.
+  Toggles en `config.requirements`. Un requisito nuevo va ahí y en `_sorteoMissing` + checklist del front.
+- **Front:** contenedores `[data-srt-cards]` (básico e intermedio) y `[data-srt-banner]` (Girox directo, sólo `body.home-play`), pantalla `#srtModal`
+  con capa `#srtTerms` (Bases, ✕ arriba a la izquierda). Verde: tokens `--srt-*` en pin.css (claro + dark).
+
 ## Cierres diarios y arqueo (#500 → #913) — `DailyClose`, `_closeEnsure` / `_closeApply` / `_closeReconcile` (server.js)
 - Uno por día ART (`dateKey` único); `_closeTick` cada 20 min recalcula los últimos 3 días y finaliza solo el día anterior (#744). Números del
   sistema salen de `datosIa.dayTotals` (Transaction); lado banco de la API de hgcash (`_bankDayFromApi`) o de los avisos, y saldos 00:00
