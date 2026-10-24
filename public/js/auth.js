@@ -670,7 +670,7 @@ VIP.auth = (function () {
         // #673 (iPhone): la app instalada arranca con ?menu=<pref>&fixed=1 (del manifest): se replica el menú elegido en Safari.
         try {
             const sp = new URLSearchParams(window.location.search); const mn = sp.get('menu');
-            if (mn && ['full', 'basic', 'easy', 'girox'].includes(mn)) { localStorage.setItem('vip_menu_pref', mn); localStorage.setItem('vip_menu_user', '1'); /* #836: el menú que eligió en Safari */ if (sp.get('fixed') === '1') localStorage.setItem('vip_menu_fixed', '1'); }
+            if (mn && ['full', 'basic', 'easy', 'girox'].includes(mn)) { localStorage.setItem('vip_menu_pref', mn); if (sp.get('picked') === '1') localStorage.setItem('vip_menu_user', '1'); /* #836: el menú que eligió en Safari · #980: sólo si lo eligió él */ if (sp.get('fixed') === '1') localStorage.setItem('vip_menu_fixed', '1'); }
         } catch (e) {}
         if (!token) return false;
         // #673: la app instalada abre SIEMPRE con el mismo ?acceso= (start_url): si ya tiene sesión propia, el token ya se canjeó →

@@ -76,6 +76,10 @@
     // #937 (owner): "cuando la gente instala la app, dejar Girox predeterminada siempre" ⇒ en la app INSTALADA se arranca en Girox directo
     // aunque haya elegido otro menú en el navegador (durante la sesión puede cambiarlo con "Cambiar menú").
     function _isInstalledApp() { try { return document.documentElement.classList.contains('is-app') || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; } catch (_) { return false; } }
+    // #980 (owner): "completo hasta la primera carga, Girox directo después": el flag se guarda al saber que ya cargó (promo de 1ª carga / carga acreditada).
+    const HAS_DEP_KEY = 'vip_has_dep';
+    function _hasDeposit() { try { return localStorage.getItem(HAS_DEP_KEY) === '1'; } catch (_) { return false; } }
+    function _defaultPref() { return (_hasDeposit() || !_menuOn('full')) && _menuOn('girox') ? 'girox' : (_menuOn('full') ? 'full' : 'girox'); }
     function _userPickedMenu() { try { return localStorage.getItem(MENU_USER_KEY) === '1' && !!localStorage.getItem(MENU_PREF_KEY); } catch (_) { return false; } }
     function isMenuFixed() { try { return localStorage.getItem(MENU_FIXED_KEY) === '1'; } catch (_) { return false; } }
     let _homeMode = 'play';
@@ -324,7 +328,8 @@
     // #488: cartel BONO DE PRIMERA CARGA al entrar (quien no cargó nunca), una vez por sesión, después de elegir el menú.
     let _fdShown = false, _fdPromoP = null;
     // #490: la promo de primera carga se consulta una vez por sesión y la usan el cartel y la etiqueta "+X% en tu primera carga" del botón CARGAR AHORA
-    function _fdPromoLoad() { if (_fdPromoP) return _fdPromoP; const tok = VIP.state && VIP.state.currentToken; if (!tok) return Promise.resolve(null); _fdPromoP = fetch(VIP.config.API_URL + '/api/first-deposit-promo', { headers: { Authorization: 'Bearer ' + tok } }).then((r) => r.json()).catch(() => null); return _fdPromoP; }
+    function _fdPromoLoad() { const p = _fdPromoLoad0(); try { p.then((j) => { try { if (j && j.noDeposits === false) localStorage.setItem(HAS_DEP_KEY, '1'); else if (j && j.noDeposits === true) localStorage.removeItem(HAS_DEP_KEY); } catch (_) {} }); } catch (_) {} return p; } // #980
+    function _fdPromoLoad0() { if (_fdPromoP) return _fdPromoP; const tok = VIP.state && VIP.state.currentToken; if (!tok) return Promise.resolve(null); _fdPromoP = fetch(VIP.config.API_URL + '/api/first-deposit-promo', { headers: { Authorization: 'Bearer ' + tok } }).then((r) => r.json()).catch(() => null); return _fdPromoP; }
     // #626 (owner): el aviso de PRIMERA CARGA (+pct% · +pctApp% con la app) va RESUMIDO adentro de cada lugar donde se adjunta el
     // comprobante (básico, inicio completo, carga rápida del casino), sólo mientras no hizo la primera carga. Antes era una franja arriba (#608).
     let _fdJ = null;
@@ -408,12 +413,12 @@
         const only = MENU_ORDER.filter(_menuOn); if (only.length === 1) { setMenuPref(only[0], { quiet: true, auto: true }); return; } // #635: un solo menú activo → directo
         const pref = getMenuPref();
         if (pref === 'easy' && _homeMode !== 'easy') setHomeMode('easy', { persist: false });
-        if (_isInstalledApp() && _menuOn('girox')) { setMenuPref('girox', { quiet: true, auto: true }); return; } // #937: app instalada ⇒ Girox directo siempre
+        if (_isInstalledApp() && _menuOn('girox') && _hasDeposit()) { setMenuPref('girox', { quiet: true, auto: true }); return; } // #937: app instalada ⇒ Girox directo siempre · #980: desde la 1ª carga
         if (isMenuFixed() && pref) { setHomeMode(_modeFor(pref)); _afterPref(pref); return; } // #559: preseleccionado → entra directo · #670
         if (pref && _userPickedMenu()) { setHomeMode(_modeFor(pref)); _afterPref(pref); return; } // #836: el menú que eligió la persona
         // #733 (owner): "el menú seleccionado para todos (landing o común) cuando abran la app sea el de Girox, y después lo pueden cambiar
         // desde Menú; la idea es que todos entren directo a cargar". Sin menú fijo → Girox directo, sin selector (si ese menú está activo).
-        if (_menuOn('girox')) { setMenuPref('girox', { quiet: true, auto: true }); return; }
+        if (_menuOn(_defaultPref())) { setMenuPref(_defaultPref(), { quiet: true, auto: true }); return; } // #980: completo hasta la 1ª carga, Girox después
         setTimeout(openMenuChooser, 350);
     }
     // #559 (owner): "Dejar preseleccionado para el ingreso" al lado de Cambiar menú. Guarda el menú actual como preferencia
@@ -639,7 +644,7 @@
         try { if (localStorage.getItem('vip_nodep') === '1') document.body.classList.add('nodep'); } catch (_) {} // #731
         try { const cl = localStorage.getItem('vip_menu_layout'); if (cl) _setMenuLayout(Number(cl)); } catch (_) {} // #638: menú 1/2 del caché, sin esperar al server
         _applyMenusEnabled(); _applyMenuLayout(); // #635: menús activos (cacheados al instante, refrescados del server)
-        const m = _modeFor(((_userPickedMenu() || isMenuFixed()) && !(_isInstalledApp() && _menuOn('girox'))) || !_menuOn('girox') ? getMenuPref() : 'girox'); // #512 · #836: Girox salvo elección propia · #937: instalada ⇒ Girox siempre
+        const m = _modeFor(((_userPickedMenu() || isMenuFixed()) && !(_isInstalledApp() && _menuOn('girox') && _hasDeposit())) || !_menuOn('girox') ? getMenuPref() : _defaultPref()); // #512 · #836 · #937 · #980: completo hasta la 1ª carga
         try { sessionStorage.removeItem(HOME_MODE_KEY); } catch (_) {}
         _bindEntryFrame();
         setHomeMode(m, { persist: false });
@@ -2284,7 +2289,7 @@
                 c = { u, t: j.token, at: Date.now() }; try { sessionStorage.setItem('vip_install_tok2', JSON.stringify(c)); } catch (_) {}
             }
             const pref = _menuOn('girox') ? 'girox' : getMenuPref(), fixed = isMenuFixed(); // #937: la app instalada arranca en Girox
-            const href = '/manifest.json?a=' + encodeURIComponent(c.t) + '&u=' + encodeURIComponent(u) + (pref ? '&menu=' + pref + (fixed ? '&fixed=1' : '') : '');
+            const href = '/manifest.json?a=' + encodeURIComponent(c.t) + '&u=' + encodeURIComponent(u) + (pref ? '&menu=' + pref + (fixed ? '&fixed=1' : '') + (_userPickedMenu() ? '&picked=1' : '') : ''); // #980
             const l = document.querySelector('link[rel="manifest"]'); if (l && l.getAttribute('href') !== href) l.setAttribute('href', href);
         } catch (_) {}
     }
@@ -2367,6 +2372,7 @@
         } catch (_) {}
     }
     async function onDepositCredited(d) {
+        try { localStorage.setItem(HAS_DEP_KEY, '1'); } catch (_) {} // #980: desde ahora entra a Girox directo
         try { setTimeout(_notifCtaAfterDeposit, 4500); } catch (_) {} // #892        try { setTimeout(function () { if (VIP.reviews && VIP.reviews.maybeOffer) VIP.reviews.maybeOffer('deposit'); }, 7000); } catch (_) {} // #875: después de la carga, si ya es la 5ª+
         try { _fdPromoP = null; _fdNotesPaint(); } catch (_) {} // refresca contador de cargas / guía
         try { setTimeout(storyBonusRefresh, 1500); } catch (_) {} // #742: el bono de la historia se consumió con esta carga

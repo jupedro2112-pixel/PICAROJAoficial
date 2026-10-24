@@ -1354,7 +1354,7 @@ app.get('/manifest.json', (req, res) => {
     if (!_manifestBase) _manifestBase = JSON.parse(require('fs').readFileSync(path.join(__dirname, 'public', 'manifest.json'), 'utf8'));
     const m = Object.assign({}, _manifestBase);
     let a = String(req.query.a || ''), uName = String(req.query.u || '');
-    const menu = String(req.query.menu || ''), fixed = req.query.fixed === '1';
+    const menu = String(req.query.menu || ''), fixed = req.query.fixed === '1', picked = req.query.picked === '1'; // #980
     // #826: si Safari pidió el manifest sin ?a (no tomó el cambio del <link>), el token sale de la cookie vip_inst (Path=/manifest.json).
     if (!a) {
       const ck = (String(req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith('vip_inst=')) || '').slice(9);
@@ -1364,7 +1364,7 @@ app.get('/manifest.json', (req, res) => {
     let su = '/?source=pwa';
     if (/^[A-Za-z0-9_-]{20,64}$/.test(a)) su += '&acceso=' + a;
     if (/^[A-Za-z0-9._-]{3,40}$/.test(uName)) su += '&u=' + encodeURIComponent(uName); // #826: si el acceso automático falla, el usuario ya viene escrito
-    if (['full', 'basic', 'easy', 'girox'].includes(menu)) su += '&menu=' + menu + (fixed ? '&fixed=1' : '');
+    if (['full', 'basic', 'easy', 'girox'].includes(menu)) su += '&menu=' + menu + (fixed ? '&fixed=1' : '') + (picked ? '&picked=1' : '');
     m.start_url = su;
     res.setHeader('Vary', 'Cookie');
     res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');

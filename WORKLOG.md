@@ -8,6 +8,19 @@
 
 ## Sesión 2026-10-24
 
+### 980. Menú COMPLETO hasta la primera carga (Girox directo después), "Pronto" de las plataformas abajo y sin fondo, ventana del sorteo como hoja — SW v646
+**Pedido (owner):** "¿qué recomendás que quede iniciado: el completo o el de Girox?" → "completo hasta la primera carga, Girox directo desde la
+primera carga, salvo elección propia" ("ok perfecto, configuralo así"); "el Pronto de las plataformas bajalo: tapa el nombre; sin fondo, abajo
+centrado del recuadro y que no tape la foto"; "arriba en el teléfono queda un texto que no se llega a ver".
+- `localStorage vip_has_dep` (home.js): se pone en '1' cuando `/api/first-deposit-promo` dice `noDeposits:false` o al acreditarse una carga
+  (`onDepositCredited`); se borra si vuelve `noDeposits:true`. `_defaultPref()` = 'girox' con carga, 'full' sin carga (si ese menú está activo).
+  Aplica en `maybeShowMenuChooser` (incluida la app instalada, #937) y en el modo inicial de `init`. Si la persona eligió un menú a mano se respeta.
+  El manifest de instalación (#673) sólo marca "elegido por la persona" si llega `&picked=1` (antes el default automático quedaba fijo para siempre).
+- "Pronto": en `.bv-chip` y `.plat-play-btn` queda abajo, centrado, sin fondo ni borde, 8 px; el nombre no se corta (ellipsis) y el logo no se tapa.
+- Texto tapado arriba: la ventana del sorteo (`.srt-modal`) en teléfono pasa a ser una hoja desde abajo (`justify-content: flex-end`): su cabecera ya
+  no puede quedar bajo la barra de estado. El resto de las cabeceras ya usan `--sat` (#823) y el cliente puede ajustar el margen desde Perfil (#865).
+  Si el texto tapado está en otra pantalla, falta una captura para ubicarlo.
+
 ### 979. ⏰ Bonos a las 19 h, pasada de seguridad y archivo de cambios para encargados y soporte — admin SW v204
 **Pedido (owner):** "afinemos la seguridad y que esté todo ok; necesito un archivo para avisar las modificaciones del servicio a los encargados y
 soporte (la estrategia no hace falta, es automática): para saber qué responder si la gente se queja"; "el mejor horario para activar un bono en

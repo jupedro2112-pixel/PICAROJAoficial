@@ -2979,3 +2979,13 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 .story-viewer .st-rbtn.on { background: var(--p-red, #e60023); border-color: var(--p-red, #e60023); transform: scale(1.08); }
 .pf-select { appearance: auto; -webkit-appearance: menulist; max-width: 150px; font-size: 12px; padding: 6px 8px; background: var(--p-bg-2, #f3f4f6); color: var(--p-ink, #111); }
 html[data-theme="dark"] .pf-select { background: var(--p-bg-2, #1f2937); color: var(--p-ink, #f3f4f6); }
+
+/* ===== #980 (owner): el "Pronto" de las plataformas, abajo del recuadro, centrado y sin fondo: no tapa el logo ni el nombre ===== */
+.bv-chip { position: relative; overflow: visible; }
+.bv-chip b { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.bv-chip.soon small, .bv-chip.plat-picaroja small, .bv-chip.plat-ganamos small, .bv-chip.plat-jugaygana small { position: static !important; order: 9; margin-top: 1px !important; background: transparent !important; border: 0 !important; padding: 0 !important; line-height: 1 !important; font-size: 8px !important; letter-spacing: .5px; opacity: .9; }
+.plat-play-btn { position: relative; }
+.plat-play-btn .plat-soon-badge { position: absolute !important; left: 50% !important; right: auto !important; top: auto !important; bottom: 4px !important; transform: translateX(-50%); margin: 0 !important; padding: 0 !important; background: transparent !important; border: 0 !important; box-shadow: none !important; font-size: 8px !important; line-height: 1 !important; letter-spacing: .6px; white-space: nowrap; }
+.plat-play-btn.plat-ganamos .plat-soon-badge, .plat-play-btn.plat-jugaygana .plat-soon-badge, .plat-play-btn.plat-picaroja .plat-soon-badge { background: transparent !important; color: rgba(255,255,255,.9) !important; }
+/* #980: la ventana del sorteo es una HOJA que sube desde abajo: nunca queda pegada al borde superior (ni bajo la barra de estado) */
+@media (max-width: 559px) { .srt-modal { justify-content: flex-end !important; } }
