@@ -4,7 +4,54 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-10-22**
+> **Última actualización: 2026-10-24**
+
+## Sesión 2026-10-24
+
+### 909. 📖 Historias automáticas: 5 por día SIN repetir las de ayer · llave de PARTIDOS (apagada) · diagnóstico del motor — admin SW v184
+**Pedidos (owner, por Telegram 2026-10-23 15:17 y chat 2026-10-24):** "vi que mañana tenemos un partido, pero no vamos a publicar aún los
+partidos de fútbol, quiero ir primero con publicaciones explicando la app" · "este partido ni lo publicaron, quiero que revises bien las
+historias automáticas: que publique 5 historias todos los días y que las rote, siempre eran nuevas historias".
+- **Rotación (`storyAutopilot.planDay`):** el cursor de temas avanzaba 3 por día ⇒ 2 de las 5 historias se repetían con el día anterior.
+  Ahora avanza 5 (con 12-13 temas, hoy nunca repite tema con ayer) y cada vuelta del catálogo usa OTRA redacción del tema (`ALTS`, 2
+  alternativas por tema, 13 temas ⇒ 39 textos; título y texto, la foto es la del tema). Simulado 30 días: 0 temas y 0 títulos iguales al
+  día anterior, 3 títulos distintos por tema, sin `{pct}` sin reemplazar.
+- **Partidos del día = LLAVE `Config['storyAutoMatches']`** (default APAGADA, lo que pidió el owner). Panel → Cronograma → Historias
+  automáticas: "⚽ Partidos del día: apagados · ▶ Encender" (`POST /api/admin/stories-autopilot/matches {on}`). Apagada, el plan es sólo
+  de servicio (y la vista previa del panel deja de mostrar partidos "programados" que no van a salir, que era lo que confundía).
+- **Robustez:** cada historia del día se publica en su propio try/catch (`_storyAutoTick`): si la foto de una falla (ESPN / 1girox / red)
+  sale SIN foto antes que no salir, y un error en una ya no frena a las cuatro restantes. Antes, un error en el primer ítem (el partido,
+  que arma la foto bajando escudos) abortaba la pasada entera.
+- **Diagnóstico en el panel (`Config['storyAutoDiag']`, lo escribe cada pasada):** "🛠 Motor: última pasada hace N min · publicadas hoy X ·
+  error · salteadas (y por qué)". Si dice que no hay pasada registrada tras 10 min: el servidor no tiene esta versión o
+  `STORIES_AUTOPILOT_DISABLED=1` (también se muestra).
+**Para el owner:** cuando quiera arrancar con fútbol, tocar "▶ Encender partidos" en el panel: desde el día siguiente a las 00:05.
+
+### 908. 📎 Cargas pendientes: el mismo comprobante mandado N veces = UNA ficha (los otros envíos adentro) y se cierran solos
+**Pedido (owner, Telegram):** "hoy un usuario mandó 4 veces el mismo comprobante y aparecieron 3 fichas en Cargas pendientes; que vaya por una
+ficha y al tocarla se vean las veces que lo envió, o una sola que diga que lo mandó varias veces, o una correcta y las demás repetidas".
+- Por qué pasaba: la detección de duplicados (`imageHash` / `dedupeKey`) sólo agarra la MISMA imagen o la misma lectura de la IA; con capturas
+  distintas del mismo comprobante (o lecturas distintas del N° de operación) cada envío entraba como comprobante nuevo a la cola.
+- `GET /api/admin/deposit-reviews` (pendientes): agrupa con `_sameReceipt(a, b)` = mismo cliente y (misma imagen · misma huella · mismo monto
+  sin un N° de operación que los distinga · ambos sin monto legible). La ficha es el PRIMER envío; los demás van en `repeats[]` con
+  `sentTimes`. Panel: chip "📎 Enviado N veces" + desplegable con cada envío (foto, hora, N°, monto) y botón "➕ Es otra carga distinta"
+  (confirma ESE envío aparte con `keepRepeats:true`, por si son dos transferencias iguales con el número ilegible). El contador del menú
+  cuenta fichas, no envíos. La franja de Soporte dice "📎 lo mandó N veces".
+- **Cierre automático (`_depositReviewCloseRepeats`):** al resolver la ficha —carga automática del banco (`hgcashMatchFromComprobante`),
+  Confirmar o Rechazar— los otros envíos pendientes del mismo comprobante (±24 h) pasan a `rejected` / `reviewResolution:'duplicate'` con nota
+  "Repetido: el mismo comprobante ya se acreditó solo / confirmó / rechazó (id)". Al cliente NO se le manda nada por esos (ya tuvo su respuesta);
+  nota interna en el chat dice cuántos se cerraron. Esto además tapa un riesgo real: antes, el banco acreditaba el primero y los otros 3
+  quedaban pendientes ⇒ escalaban "no entró la transferencia" y un agente podía confirmarlos a mano (doble carga).
+- Probado (lógica aislada, 7 casos): misma imagen ✓, otro usuario ✗, mismo monto con N° distintos ✗, mismo monto y uno sin N° ✓, montos
+  distintos ✗, ambos sin monto ✓, misma huella ✓.
+
+### 907. 💬 Soporte: el resumen "Cómo funciona todo" se pliega (Ver menos), con alto máximo y scroll — SW v604
+**Pedido (owner, capturas):** "no aparece la forma ahí de ver menos, no se puede cerrar; se queda así y no se puede hacer nada, se tilda ahí".
+- Causa: era un `<details>` nativo adentro de la tarjeta compacta de Soporte (en fila al lado del avatar, `sp-sent`). Al abrirse crecía sin
+  límite, empujaba el chat y la caja de texto fuera de la pantalla y no tenía ningún "cerrar" visible.
+- Ahora: título con "ver ▾ / ver menos ▴", lista con alto máximo (38vh, 32vh en pantallas bajas) y scroll propio, botón "▲ Ver menos ·
+  cerrar" al pie (`VIP.home.supportFaqClose`), y al abrir la tarjeta vuelve a columna (`#supportIntro.sp-faq-open`, `ontoggle` →
+  `supportFaqToggled`) para que el resumen tenga el ancho entero y el chat siga a la vista.
 
 ## Sesión 2026-10-22
 

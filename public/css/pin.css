@@ -2655,3 +2655,16 @@ html.sat-fixed.ios-notch #casinoTopBar { padding-top: var(--sat) !important; }
 .sp-faq[open] summary { border-bottom: 1px solid var(--p-border); }
 .sp-faq ul { margin: 0; padding: 8px 12px 10px 26px; display: grid; gap: 6px; font: 500 12.5px/1.4 var(--p-font); color: var(--p-muted); }
 .sp-faq li b { color: var(--p-text); }
+/* #907 (owner: "no aparece la forma de ver menos, no se puede cerrar"): el resumen tiene alto MÁXIMO con scroll propio (nunca tapa
+   el chat ni la caja), flecha ▾/▴ en el título y botón "Ver menos · cerrar" al pie. Abierto, la tarjeta compacta vuelve a columna. */
+.sp-faq summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; -webkit-tap-highlight-color: transparent; }
+.sp-faq summary span { flex: 1 1 auto; min-width: 0; }
+.sp-faq-arrow { flex: 0 0 auto; font-style: normal; font: 700 11px var(--p-font); color: var(--p-muted); }
+.sp-faq-arrow::before { content: 'ver ▾'; }
+.sp-faq[open] .sp-faq-arrow::before { content: 'ver menos ▴'; color: var(--p-red); }
+.sp-faq ul { max-height: 38vh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.sp-faq-less { display: block; width: 100%; border: 0; border-top: 1px solid var(--p-border); border-radius: 0 0 12px 12px; background: var(--p-card); color: var(--p-red); font: 800 12.5px var(--p-font); padding: 9px 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sp-faq-less:active { background: var(--p-surface-2); }
+body.sp-sent .sp-intro.sp-faq-open:not(.sp-open) .sp-body { flex-direction: column; align-items: stretch; }
+.sp-intro.sp-faq-open .sp-faq { width: 100%; }
+@media (max-height: 640px) { .sp-faq ul { max-height: 32vh; } }

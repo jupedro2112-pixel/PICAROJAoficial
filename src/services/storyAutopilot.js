@@ -120,6 +120,37 @@ const THEMES = [
   { key: 'seguro', title: '🔒 Tu cuenta, segura', text: 'Verificación por SMS y retiros sólo a cuentas a tu nombre. Tu plata y tus datos, cuidados.', link: 'app:verificar', label: 'Verificar mi celular ›', bg: '#0c4a6e', img: { style: 'premium', accent: '#0284c7', kicker: 'Tu cuenta, segura', icon: 'seguro', h1: 'Verificá tu', h2: 'teléfono', bullets: [['✓', 'Verificación por SMS', 'Sólo vos confirmás tus retiros'], ['$', 'Retiros a tu nombre', 'Sólo a cuentas tuyas'], ['★', 'Datos cuidados', 'Tu plata y tus datos protegidos']], cta: 'Verificar mi celular' } },
   { key: 'primera', title: '🎁 Bienvenida para los nuevos', text: 'Si es tu primera carga, te sumamos un {pct}% extra automático. Todos los días se suman jugadores nuevos.', link: 'app:cargar', label: 'Hacer mi primera carga ›', bg: '#be123c', img: { style: 'premium', accent: '#e60023', kicker: 'Bienvenida', icon: 'regalo', h1: 'Tu primera carga con', h2: '+{pct}% extra', bullets: [['$', '+{pct}% automático', 'En tu primera carga'], ['★', 'Después, más regalos', 'Instalando la app y activando notificaciones'], ['✓', 'Todos los días', 'Se suman jugadores nuevos']], cta: 'Hacer mi primera carga', note: 'El bono se juega ×{rx} (rollover) para retirarlo' } }
 ];
+// #909 (owner 2026-10-24: "que publique 5 historias todos los días y que las rote, siempre eran nuevas historias"): cada tema tiene
+// OTRAS redacciones; cuando el tema vuelve a tocar (cada ~3 días) sale con la siguiente, así ningún día repite texto con el anterior.
+// Textos de SERVICIO (nunca ruleta ni plata/sueldos). `{pct}` = bono de la primera carga (Config).
+const ALTS = {
+  como: [{ title: '🧭 Pica Roja en 3 pasos', text: 'Transferís y mandás la foto del comprobante, jugás en 1Girox y retirás a tu cuenta. Todo desde la app, sin vueltas.' },
+    { title: '❓ ¿Cómo se juega acá?', text: 'Cargás con una transferencia (la foto del comprobante alcanza), entrás a 1Girox y tus premios vuelven a tu cuenta cuando quieras.' }],
+  carga: [{ title: '🕐 Cargá a cualquier hora', text: 'De día o de madrugada: transferís, mandás la foto y la carga entra sola en minutos. No dependés de nadie.' },
+    { title: '📸 Una foto y listo', text: 'Sacale captura al comprobante y mandala por la app: el sistema la lee y acredita tus fichas automáticamente.' }],
+  retiro: [{ title: '🏦 Tu premio, en tu banco', text: 'Pedí el retiro desde la app y la plata va a tu CBU a tu nombre. Simple, directo y seguro.' },
+    { title: '💸 Retirar es fácil', text: 'Entrá a Retirar premio, elegí el monto y listo: lo ves en tu cuenta bancaria. Sin trámites raros.' }],
+  reembolso: [{ title: '🔁 Parte de lo que jugás, vuelve', text: 'Todos los días podés reclamar tu reembolso desde la app. Entrá a Reembolso y tocá reclamar.' },
+    { title: '🎯 ¿Ya reclamaste tu reembolso?', text: 'Cada día tenés un reembolso esperándote en la app. Se acredita al toque cuando lo reclamás.' }],
+  soporte: [{ title: '💬 Hablá con una persona', text: 'Nuestro equipo te responde desde el chat de Soporte de la app, todos los días. Contanos qué pasó y lo resolvemos.' },
+    { title: '🛟 ¿Tenés una duda? Escribinos', text: 'En Soporte te atiende gente real: cargas, retiros, bonos o lo que necesites.' }],
+  misiones: [{ title: '🏁 Misiones con premio', text: 'Jugando completás misiones semanales y sumás extra automático. Mirá cuáles tenés activas en la app.' },
+    { title: '🎯 Nuevas misiones esta semana', text: 'Entrá a Misiones y fijate qué te falta para el premio de la semana. Se acredita solo al completarla.' }],
+  vip: [{ title: '👑 Subí de nivel', text: 'Cada nivel VIP desbloquea beneficios y un regalo al subir. Cuanto más jugás, más alto llegás.' },
+    { title: '💎 ¿En qué nivel estás?', text: 'Mirá tu nivel VIP en la app y cuánto te falta para el siguiente. Cada escalón trae su regalo.' }],
+  referidos: [{ title: '🔗 Tu link, tu comisión', text: 'Compartí tu link de referidos: por cada amigo que juega ganás una comisión, todos los meses.' },
+    { title: '👥 Traé a tus amigos', text: 'Invitá con tu link y ganá por lo que juegan tus referidos. Lo cobrás directo en tu cuenta.' }],
+  juegos: [{ title: '🎰 Lo que más se juega hoy', text: 'Gates of Olympus, Sweet Bonanza, Sugar Rush y los clásicos de siempre te esperan en 1Girox.' },
+    { title: '🍀 ¿Ya probaste estos?', text: 'Los slots favoritos de la comunidad están a un toque desde la app. Entrá y elegí el tuyo.' }],
+  deportes: [{ title: '🏟️ Apostá en vivo', text: 'Fútbol argentino, Champions, Libertadores y más. Apostá antes y durante el partido desde Deportes.' },
+    { title: '⚽ Tu equipo juega, vos jugás', text: 'Entrá a Deportes en la app y apostá en vivo con cuotas que cambian minuto a minuto.' }],
+  app: [{ title: '📲 Instalá la app', text: 'Con la app instalada entrás en un toque y te llegan los avisos de bonos y novedades. Mirá cómo en Perfil.' },
+    { title: '🔔 No te pierdas nada', text: 'Instalá Pica Roja en el celu: avisos de bonos, acceso directo y todo a mano.' }],
+  seguro: [{ title: '🛡️ Jugá tranquilo', text: 'Celular verificado por SMS y retiros sólo a cuentas a tu nombre. Tu cuenta está protegida.' },
+    { title: '🔒 Seguridad primero', text: 'Verificá tu celular desde Perfil: así tu cuenta y tus retiros quedan protegidos.' }],
+  primera: [{ title: '🎁 Tu primera carga, con extra', text: 'Si todavía no hiciste tu primera carga, llevás un {pct}% extra automático. Empezá hoy.' },
+    { title: '🆕 Para los que recién llegan', text: 'La primera carga trae un {pct}% extra automático. Bienvenido a Pica Roja.' }]
+};
 const SLOTS = ['10:00', '13:00', '16:00', '19:00', '21:30'];
 const MATCH_TIME = '00:05'; // #834: los partidos salen apenas cambia el día
 
@@ -173,13 +204,19 @@ function planDay(dayKey, matches, ctx) {
       img: { style: 'premium', accent: '#e60023', kicker: 'Bono de la semana', icon: 'regalo', h1: `Sólo por ${b.hours} horas`, h2: `+${b.pct}% extra`, bullets: [['✓', 'Tocá "Reclamar ahora"', 'Acá, en esta historia'], ['$', 'Tu próxima carga', `Lleva +${b.pct}% EXTRA automático`], ['★', 'Sin pedirle a nadie', 'Se aplica solo al cargar']], cta: 'Reclamar ahora', note: 'El bono se juega ×{rx} (rollover) para retirarlo' } };
   }
   // 4) El resto, temas de servicio que rotan día a día (sin el genérico de deportes si ese día ya hay partidos).
-  let ti = (dayN * 3) % themes.length;
+  //    #909: el cursor avanza 5 temas por día (antes 3 ⇒ dos de las cinco se repetían con el día anterior): con 12-13 temas, los de hoy
+  //    nunca son los de ayer. Y cada vuelta completa del catálogo (`cycle`) usa OTRA redacción del tema (ALTS), así tampoco se repite el texto.
+  const n = themes.length;
+  let ti = (dayN * SLOTS.length) % n;
+  const cycle = Math.floor((dayN * SLOTS.length) / n);
   for (let i = 0; i < SLOTS.length; i++) {
     if (out[i]) continue;
-    let t = themes[ti % themes.length]; ti++;
-    if (t.key === 'deportes' && ms.length) { t = themes[ti % themes.length]; ti++; }
+    let t = themes[ti % n]; ti++;
+    if (t.key === 'deportes' && ms.length) { t = themes[ti % n]; ti++; }
+    const alts = ALTS[t.key] || []; const v = cycle % (alts.length + 1);
+    const tt = v > 0 && alts[v - 1] ? Object.assign({}, t, alts[v - 1]) : t;
     const im = t.img ? Object.assign({}, t.img, { iconOpts: t.img.badge ? { badge: t.img.badge } : undefined }) : null;
-    out[i] = { kind: 'servicio', theme: t.key, title: t.title, text: t.text.replace('{pct}', String(pct)), link: t.link, label: t.label, bg: t.bg, img: im };
+    out[i] = { kind: 'servicio', theme: t.key, variant: v, title: tt.title, text: tt.text.replace('{pct}', String(pct)), link: t.link, label: t.label, bg: t.bg, img: im };
   }
   // {pct} = bono de la 1ª carga, {rx} = rollover global (Config): nunca fijos en el texto.
   const rx = ctx.rolloverX > 0 ? ctx.rolloverX : 5;
@@ -187,4 +224,4 @@ function planDay(dayKey, matches, ctx) {
   return matchItems.concat(out.map((x, i) => Object.assign({ slot: i, time: SLOTS[i] }, x))).map((x) => (x.img ? Object.assign(x, { img: fill(x.img) }) : x));
 }
 
-module.exports = { topMatches, planDay, favoriteSlot, SLOTS, THEMES, MATCH_TIME };
+module.exports = { topMatches, planDay, favoriteSlot, SLOTS, THEMES, ALTS, MATCH_TIME };

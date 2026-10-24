@@ -2069,6 +2069,40 @@ async function _hgcashRecoveryPass() {
     for (const comp of pend) await hgcashMatchFromComprobante(comp);
   } catch (e) { logger.warn(`[hgcash] recuperación: ${e.message}`); }
 }
+// #908 (owner 2026-10-24): "un usuario mandó 4 veces el mismo comprobante y aparecieron 3 fichas en Cargas pendientes". Dos comprobantes
+// PENDIENTES del mismo cliente son "el mismo envío" si comparten la imagen (imageHash), la huella de datos (dedupeKey) o el monto sin un
+// N° de operación que los distinga (los dos sin número, o el mismo). Al resolver uno (carga automática, confirmación o rechazo) los demás
+// se cierran solos como 'duplicate' sin avisarle al cliente otra vez. Si de verdad son transferencias distintas, el agente usa "Es otra
+// carga distinta" en la ficha (cada envío conserva su id y se confirma aparte).
+function _sameReceiptOr(c) {
+  const or = [];
+  if (c.imageHash) or.push({ imageHash: c.imageHash });
+  if (c.dedupeKey) or.push({ dedupeKey: c.dedupeKey });
+  if (Number(c.amount) > 0) or.push(Object.assign({ amount: c.amount }, c.operationNumber ? { $or: [{ operationNumber: null }, { operationNumber: c.operationNumber }] } : {}));
+  else or.push({ amount: null });
+  return or;
+}
+function _sameReceipt(a, b) {
+  if (!a || !b || String(a.userId) !== String(b.userId)) return false;
+  if (a.imageHash && a.imageHash === b.imageHash) return true;
+  if (a.dedupeKey && a.dedupeKey === b.dedupeKey) return true;
+  const aa = Number(a.amount) || 0, ba = Number(b.amount) || 0;
+  if (!aa && !ba) return true; // los dos sin monto legible: el mismo comprobante borroso mandado otra vez
+  if (!aa || !ba || !_amountsEqual(aa, ba)) return false;
+  return !(a.operationNumber && b.operationNumber && String(a.operationNumber).trim() !== String(b.operationNumber).trim());
+}
+async function _depositReviewCloseRepeats(c, by, how) {
+  try {
+    if (!c || !c.userId) return 0;
+    const t = new Date(c.createdAt || Date.now()).getTime();
+    const r = await Comprobante.updateMany({ userId: c.userId, id: { $ne: c.id }, reviewStatus: 'pending', autoCharged: { $ne: true }, bankMatchStatus: { $nin: ['claiming', 'awaiting_platform'] },
+      createdAt: { $gte: new Date(t - 24 * 3600 * 1000), $lte: new Date(t + 24 * 3600 * 1000) }, $or: _sameReceiptOr(c) },
+      { $set: { reviewStatus: 'rejected', reviewResolution: 'duplicate', reviewedBy: by || 'auto', reviewedAt: new Date(), reviewNote: `Repetido: el mismo comprobante ya se ${how || 'resolvió'} (${c.id})`.slice(0, 200) } });
+    const n = r.modifiedCount || r.nModified || 0;
+    if (n) { logger.info(`[deposit-review] ${n} envío(s) repetido(s) de ${c.username || c.userId} cerrados (${how})`); _emitDepositReviewUpdate(c.userId, { action: 'repeats_closed', id: c.id, count: n }); }
+    return n;
+  } catch (e) { logger.warn(`[deposit-review] cerrar repetidos: ${e.message}`); return 0; }
+}
 // Escala un comprobante pendiente: aviso al cliente + nota interna + panel.
 async function _depositReviewEscalate(c, why) {
   try {
@@ -3149,6 +3183,7 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
     await Comprobante.updateOne({ id: comprobante.id }, { $set: { bankMatchStatus: 'auto_charged', matchedMovementId: movement.movementId, autoCharged: true, reviewStatus: 'confirmed', reviewResolution: 'auto', reviewedBy: 'auto', reviewedAt: new Date() } }); // #376
     _emitDepositReviewUpdate(user.id, { action: 'confirmed', id: comprobante.id });
     charged = true; // ya acreditó: cualquier error posterior NO debe disparar reintento
+    _depositReviewCloseRepeats(comprobante, 'auto', 'acreditó solo').catch(() => {}); // #908
     // Multi-plataforma: recordar dónde cargó (fallback de la próxima pregunta / timeout).
     try { await User.updateOne({ id: user.id }, { $set: { lastPlatform: pid } }); } catch (_) {}
     try { await _resolvePlatformChoiceMessage(movement, pid); } catch (_) {}
@@ -20534,7 +20569,11 @@ app.post('/api/admin/hgcash/config', authMiddleware, adminMiddleware, async (req
 // #376: CARGAS PENDIENTES — cola de revisión de comprobantes (panel → "⏳ Cargas pendientes")
 // ============================================
 app.get('/api/admin/deposit-reviews/count', authMiddleware, depositorMiddleware, async (req, res) => {
-  try { res.json({ pending: await Comprobante.countDocuments({ reviewStatus: 'pending', autoCharged: { $ne: true } }) }); }
+  try {
+    // #908: una ficha por comprobante (los reenvíos del mismo cuentan una vez)
+    const g = await Comprobante.aggregate([{ $match: { reviewStatus: 'pending', autoCharged: { $ne: true } } }, { $group: { _id: { u: '$userId', a: '$amount' } } }, { $count: 'n' }]);
+    res.json({ pending: (g[0] && g[0].n) || 0 });
+  }
   catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.get('/api/admin/deposit-reviews', authMiddleware, depositorMiddleware, async (req, res) => {
@@ -20543,7 +20582,13 @@ app.get('/api/admin/deposit-reviews', authMiddleware, depositorMiddleware, async
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const q = tab === 'pending' ? { reviewStatus: 'pending', autoCharged: { $ne: true } } : { reviewStatus: { $in: ['confirmed', 'rejected'] } };
     if (req.query.userId) q.userId = String(req.query.userId).slice(0, 80); // #898: la franja de Soporte pide sólo las del cliente abierto
-    const items = await Comprobante.find(q).sort(tab === 'pending' ? { createdAt: 1 } : { reviewedAt: -1 }).limit(limit).lean();
+    const raw = await Comprobante.find(q).sort(tab === 'pending' ? { createdAt: 1 } : { reviewedAt: -1 }).limit(limit).lean();
+    // #908: en PENDIENTES, los reenvíos del mismo comprobante van DENTRO de la ficha del primero (repeats), no como fichas sueltas.
+    const items = []; const repeatsOf = new Map();
+    for (const c of raw) {
+      const main = tab === 'pending' ? items.find((m) => _sameReceipt(m, c)) : null;
+      if (main) { if (!repeatsOf.has(main.id)) repeatsOf.set(main.id, []); repeatsOf.get(main.id).push(c); } else items.push(c);
+    }
     const since = new Date(Date.now() - 24 * 3600 * 1000);
     const amounts = [...new Set(items.map((c) => Number(c.amount)).filter((n) => n > 0))];
     const movs = amounts.length ? await BankMovement.find({ direction: 'Inbound', amount: { $in: amounts }, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(200).lean() : [];
@@ -20558,6 +20603,9 @@ app.get('/api/admin/deposit-reviews', authMiddleware, depositorMiddleware, async
         reviewStatus: c.reviewStatus, reviewResolution: c.reviewResolution || null, reviewedBy: c.reviewedBy || null, reviewedAt: c.reviewedAt || null, reviewNote: c.reviewNote || null,
         bankMatchStatus: c.bankMatchStatus, status: c.status, aiConfidence: c.aiConfidence || 0,
         imageUrl: c.messageId ? `/api/admin/deposit-reviews/${encodeURIComponent(c.id)}/image` : null,
+        sentTimes: 1 + (repeatsOf.get(c.id) || []).length, // #908
+        repeats: (repeatsOf.get(c.id) || []).map((r) => ({ id: r.id, createdAt: r.createdAt, waitingMin: Math.round((now - new Date(r.createdAt).getTime()) / 60000), amount: r.amount, operationNumber: r.operationNumber, aiConfidence: r.aiConfidence || 0,
+          imageUrl: r.messageId ? `/api/admin/deposit-reviews/${encodeURIComponent(r.id)}/image` : null })),
         candidates: movs.filter((m) => _amountsEqual(m.amount, c.amount)).slice(0, 5).map((m) => ({ movementId: m.movementId, fromName: m.fromName, amount: m.amount, date: m.date || m.createdAt, matchStatus: m.matchStatus, matchedUsername: m.matchedUsername || null }))
       }))
     });
@@ -20611,7 +20659,8 @@ app.post('/api/admin/deposit-reviews/:id/confirm', authMiddleware, depositorMidd
       return res.status(out.status && out.status !== 200 ? out.status : 400).json({ error: (out.json && out.json.error) || 'No se pudo cargar' });
     }
     await Comprobante.updateOne({ id }, { $set: { bankMatchStatus: 'manual_charged', autoCharged: true, reviewTxId: out.json.transactionId || null } });
-    await _emitAdminOnlyChatNote(c.userId, c.username, `✅ CARGA PENDIENTE confirmada por ${req.user.username}${_amtStr(amount)} (el cliente la ve como carga automática).`);
+    const reps = (req.body && req.body.keepRepeats) ? 0 : await _depositReviewCloseRepeats(c, req.user.username || 'agente', 'confirmó'); // #908
+    await _emitAdminOnlyChatNote(c.userId, c.username, `✅ CARGA PENDIENTE confirmada por ${req.user.username}${_amtStr(amount)} (el cliente la ve como carga automática).${reps ? ` ${reps} envío(s) repetido(s) del mismo comprobante cerrados.` : ''}`);
     _emitDepositReviewUpdate(c.userId, { action: 'confirmed', id });
     res.json({ success: true, deposit: out.json });
   } catch (e) { logger.error(`confirm deposit-review: ${e.message}`); res.status(500).json({ error: 'Error del servidor' }); }
@@ -20627,7 +20676,8 @@ app.post('/api/admin/deposit-reviews/:id/reject', authMiddleware, depositorMiddl
     if (!c) return res.status(409).json({ error: 'Esa carga ya no está pendiente.' });
     const txt = await renderSystemCommand('/sys_deposit_rejected', DEPOSIT_REJECTED_DEFAULT, { amount: _amtStr(c.amount), motivo: (reason === 'otro' && note) ? note : motivo });
     if (txt) await _sendUserSystemMessage({ id: c.userId, username: c.username }, txt, { metadata: { kind: 'deposit_rejected', comprobanteId: id, amount: c.amount || 0, reason } });
-    await _emitAdminOnlyChatNote(c.userId, c.username, `❌ CARGA PENDIENTE rechazada por ${req.user.username}${_amtStr(c.amount)} — ${motivo}${note ? ' (' + note + ')' : ''}.`);
+    const reps = await _depositReviewCloseRepeats(c, req.user.username || 'agente', 'rechazó'); // #908
+    await _emitAdminOnlyChatNote(c.userId, c.username, `❌ CARGA PENDIENTE rechazada por ${req.user.username}${_amtStr(c.amount)} — ${motivo}${note ? ' (' + note + ')' : ''}.${reps ? ` ${reps} envío(s) repetido(s) cerrados.` : ''}`);
     _emitDepositReviewUpdate(c.userId, { action: 'rejected', id });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -25587,10 +25637,19 @@ async function _storyAutoCtx(dayKey) {
   let rolloverX = 5; try { rolloverX = await _giftRolloverX(); } catch (_) {}
   return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, rolloverX };
 }
+// #909 (owner 2026-10-23: "no vamos a publicar aún los partidos de fútbol, quiero ir primero con publicaciones explicando la app"):
+// los PARTIDOS del día salen sólo con la llave `Config['storyAutoMatches']` encendida (panel → Historias automáticas → ⚽ Partidos).
+// Apagada (default), el plan es sólo de SERVICIO (5 por día, rotando sin repetir los de ayer).
+async function _storyAutoMatchesOn() { const v = await getConfig('storyAutoMatches', false); return v === true || v === 'true' || v === 1 || v === '1'; }
 async function _storyAutoPlan(dayKey, opts) {
-  let matches = []; if (!(opts && opts.noMatches)) { try { matches = await storyAuto.topMatches(dayKey); } catch (_) {} }
+  let matches = [];
+  if (!(opts && opts.noMatches) && await _storyAutoMatchesOn()) { try { matches = await storyAuto.topMatches(dayKey); } catch (e) { _storyDiag.lastError = 'partidos (ESPN): ' + e.message; } }
   return storyAuto.planDay(dayKey, matches, await _storyAutoCtx(dayKey));
 }
+// #909: diagnóstico del motor (última pasada, qué publicó, qué saltó y por qué, último error) ⇒ panel. Se guarda en Config para que lo
+// vea cualquier instancia (los crons corren en todas).
+const _storyDiag = { lastTickAt: null, lastError: null, lastPublished: [], skipped: [] };
+async function _storyDiagSave() { try { await Config.set('storyAutoDiag', Object.assign({}, _storyDiag, { host: require('os').hostname() }), 'historias-auto'); } catch (_) {} }
 // #834: foto de la historia = spec de storyImage con los escudos ya embebidos (un <img> con SVG no puede pedir nada afuera).
 // Render comparte la base con producción (#779): si Render publicara con foto antes del deploy de AWS, producción no tendría la ruta de la
 // foto y la historia saldría en blanco ⇒ en Render se publica sin foto y producción se la agrega (_storyAutoBackfillImages, cada 5 min).
@@ -25675,9 +25734,10 @@ async function _storyAutoTick() {
   try {
     await _storyResetOnce(); // #845
     const now = new Date(); const today = _schedArtKey(now);
+    _storyDiag.lastTickAt = now.toISOString(); _storyDiag.lastError = null; _storyDiag.skipped = [];
     const plan = await _storyAutoPlan(today);
     await _storyAutoBackfillImages(today, plan);
-    for (const it of plan) {
+    for (const it of plan) try { // #909: una historia que falle (foto, red) no frena a las demás del día
       const at = new Date(`${today}T${it.time}:00-03:00`);
       if (at > now) continue;
       const autoKey = `sa-${today}-${it.slot}`;
@@ -25686,7 +25746,8 @@ async function _storyAutoTick() {
       if (it.kind === 'deporte' && await Story.exists({ autoKey: new RegExp('^sa-' + today + '-'), title: String(it.title || '').slice(0, 60) })) continue;
       const bonusPct = Number(it.bonusPct) || 0, bonusHours = Number(it.bonusHours) || 1;
       const newId = uuidv4();
-      const autoImg = await _storyAutoImgSpec(it);
+      let autoImg = null;
+      try { autoImg = await _storyAutoImgSpec(it); } catch (e) { _storyDiag.skipped.push({ slot: String(it.slot), title: it.title, why: 'foto: ' + e.message }); autoImg = null; } // sin foto antes que sin historia
       let doc;
       try {
         doc = await Story.create({
@@ -25699,6 +25760,7 @@ async function _storyAutoTick() {
         });
       } catch (e) { if (e && e.code === 11000) continue; throw e; }
       logger.info(`[historias-auto] ${today} ${it.time} ${it.kind}: ${it.title}`);
+      _storyDiag.lastPublished = [{ at: now.toISOString(), day: today, time: it.time, kind: it.kind, title: it.title }].concat(_storyDiag.lastPublished || []).slice(0, 12);
       // Push a todos sólo si se publica a tiempo (no al recuperar un horario viejo tras un reinicio).
       if (it.notifyAll && now - at < 30 * 60 * 1000) {
         const pTitle = bonusPct > 0 ? `🎁 +${bonusPct}% extra en tu próxima carga` : String(it.title || '📣 Novedad en PICA ROJA');
@@ -25709,8 +25771,8 @@ async function _storyAutoTick() {
             .catch((e) => logger.warn(`[historias-auto] push falló: ${e.message}`));
         }, 50);
       }
-    }
-  } catch (e) { logger.warn('[historias-auto] ' + e.message); } finally { _storyAutoRunning = false; }
+    } catch (e) { _storyDiag.skipped.push({ slot: String(it.slot), title: it.title, why: e.message }); logger.warn(`[historias-auto] ${today} ${it.time} "${it.title}": ${e.message}`); }
+  } catch (e) { _storyDiag.lastError = e.message; logger.warn('[historias-auto] ' + e.message); } finally { _storyAutoRunning = false; await _storyDiagSave(); }
 }
 setTimeout(() => { _storyAutoTick().catch(() => {}); setInterval(() => { _storyAutoTick().catch(() => {}); }, 5 * 60 * 1000); }, 2 * 60 * 1000);
 
@@ -25823,8 +25885,21 @@ app.get('/api/admin/stories-autopilot', authMiddleware, adminMiddleware, async (
         slot: p.slot, removed: !!(d && (d.isActive === false || d.autoKind === 'borrada')), published: !!(d && d.isActive !== false && d.autoKind !== 'borrada'), views: d ? d.views || 0 : null, claims: d ? d.bonusClaims || 0 : null, uses: d ? d.bonusUses || 0 : null, bonusTotal: d ? d.bonusUsedTotal || 0 : null, depositTotal: d ? d.bonusDepositTotal || 0 : null }; }) });
     }
     const bonusStories = await Story.find({ autoKind: 'bono' }).sort({ publishedAt: -1 }).limit(8).select('title publishedAt bonusPct bonusHours views bonusClaims bonusUses bonusUsedTotal bonusDepositTotal pushStats').lean();
-    res.json({ success: true, today, days, bonusStories, sources: { matches: 'ESPN (scoreboard público)', slots: '1girox (catálogo público, más jugados)' } });
+    const matchesOn = await _storyAutoMatchesOn(); // #909
+    let diag = null; try { diag = await getConfig('storyAutoDiag', null); } catch (_) {}
+    const publishedToday = await Story.countDocuments({ autoKey: new RegExp('^sa-' + today + '-'), isActive: true, autoKind: { $ne: 'borrada' } });
+    res.json({ success: true, today, days, bonusStories, matchesOn, diag, publishedToday, disabled: process.env.STORIES_AUTOPILOT_DISABLED === '1', sources: { matches: 'ESPN (scoreboard público)', slots: '1girox (catálogo público, más jugados)' } });
   } catch (e) { logger.warn('[historias-auto] panel: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #909: llave de los PARTIDOS del día en las historias automáticas (sólo admin).
+app.post('/api/admin/stories-autopilot/matches', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (!_storiesAdminOnly(req, res)) return;
+    const on = !!(req.body && (req.body.on === true || req.body.on === 'true' || req.body.on === 1));
+    await Config.set('storyAutoMatches', on, req.user.username || 'admin');
+    logger.info(`[historias-auto] partidos del día ${on ? 'ENCENDIDOS' : 'apagados'} por ${req.user.username}`);
+    res.json({ success: true, matchesOn: on });
+  } catch (e) { logger.warn('[historias-auto] partidos: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
 
 app.patch('/api/admin/stories/:id', authMiddleware, adminMiddleware, async (req, res) => {

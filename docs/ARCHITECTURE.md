@@ -960,6 +960,12 @@ VIPCARGAS con su JWT, y el cliente nunca más necesita conocer su clave del casi
   "⏳ Cargas pendientes" (`/api/admin/deposit-reviews*`): Confirmar = `_agentDepositHandler` (la función de
   `POST /api/admin/deposit`, extraída para reusarla) · Rechazar = `/sys_deposit_rejected`. Duplicados → el cliente recibe
   `/sys_receipt_duplicate`. Cliente: `GET /api/deposits/pending` + socket `deposit_review_update` → franja "⏳ Carga pendiente".
+  **#908 (2026-10-24) — REENVÍOS del mismo comprobante:** la cola agrupa con `_sameReceipt(a, b)` (mismo cliente y misma imagen /
+  misma `dedupeKey` / mismo monto sin un N° de operación distinto / ambos sin monto): la ficha es el primer envío, los otros van en
+  `repeats[]` (+`sentTimes`). Al resolver la ficha (auto, Confirmar, Rechazar) `_depositReviewCloseRepeats` cierra los demás como
+  `rejected`/`reviewResolution:'duplicate'` sin avisar al cliente; "Es otra carga distinta" confirma un envío aparte (`keepRepeats:true`).
+  Un flujo nuevo que resuelva un comprobante pendiente tiene que llamar `_depositReviewCloseRepeats` (si no, los reenvíos quedan
+  pendientes, escalan y se pueden cargar dos veces a mano).
   **#377 — SOPORTE paralelo:** `Message.channel='support'` para lo que escribe el cliente y las respuestas de la columna
   "💬 Soporte" del panel (`/api/admin/support/conversations|agent`); el cliente ve sólo mensajes posteriores a
   `Config['supportChannelSince']`. La persona de turno (`getSupportAgentName`, `/sys_support_names`, 8 h por turno en
@@ -1395,3 +1401,15 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
 - **Seguridad (#665):** `app.use('/api/admin/datos-ia', authMiddleware, adminMiddleware, gatePin)` — la clave se pide DESPUÉS del login.
 - **Casino (#695):** `ui.js enterCasino` espera 4×30 s y el error dice el motivo (`_fetchCasinoSession` devuelve `status`/`timedOut`);
   en Render el arranque en frío (~50 s) y los redeploys son la causa típica del "No pudimos abrirte el casino".
+
+## Historias automáticas (#827 → #909)
+
+`src/services/storyAutopilot.js` arma el PLAN del día (`planDay(dayKey, matches, ctx)`: determinístico para un mismo día) y `_storyAutoTick`
+(server.js, cada 5 min en cada instancia) publica lo que ya pasó de hora con `Story.autoKey = sa-<día>-<slot>` ÚNICO (multi-instancia).
+Slots `0..4` = 10:00 · 13:00 · 16:00 · 19:00 · 21:30 (servicio; lunes el slot favorito, miércoles el bono semanal); `m0..m2` = partidos a las
+00:05 (**#909: sólo con `Config['storyAutoMatches']` encendida**, default apagada; panel → Cronograma → Historias automáticas).
+**Rotación (#909):** cursor `(dayN*5) % temas` ⇒ los 5 temas de hoy nunca son los de ayer; `cycle = floor(dayN*5/temas)` elige la redacción
+(`THEMES[k]` o `ALTS[k][cycle%3 − 1]`). Un tema nuevo va a `THEMES` **y** con 2 alternativas a `ALTS` (texto de servicio: nunca ruleta,
+plata ni sueldos). Foto: `storyImage` (SVG, `GET /api/stories/:id/auto.svg?v=STORY_IMG_VER`); si la foto falla la historia sale sin foto.
+**Diagnóstico:** cada pasada escribe `Config['storyAutoDiag']` (última pasada, publicadas, salteadas con motivo, error) que el panel muestra
+("🛠 Motor…"). Cada historia se publica en su propio try/catch: un error no frena a las demás. Kill switch: `STORIES_AUTOPILOT_DISABLED=1`.

@@ -16105,6 +16105,19 @@ async function loadStoriesAuto() {
         const KIND = { servicio: ['🧭', '#6366f1'], deporte: ['⚽', '#16a34a'], slot: ['🎰', '#db2777'], bono: ['🎁', '#dc2626'] };
         const dayLbl = (k) => new Date(k + 'T12:00:00Z').toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
         let h = '';
+        // #909: llave de los partidos + diagnóstico del motor (última pasada, publicadas hoy, salteadas y por qué)
+        h += '<div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;padding:.4rem .5rem;border:1px solid var(--p-border,rgba(255,255,255,.1));border-radius:10px;margin-bottom:.5rem">' +
+            '<span>⚽ Partidos del día: <b style="color:' + (j.matchesOn ? '#22c55e' : '#f87171') + '">' + (j.matchesOn ? 'ENCENDIDOS (salen a las 00:05)' : 'apagados') + '</b></span>' +
+            '<button type="button" class="btn btn-secondary btn-sm" onclick="storiesAutoMatches(' + (j.matchesOn ? 'false' : 'true') + ')">' + (j.matchesOn ? '⏸ Apagar partidos' : '▶ Encender partidos') + '</button>' +
+            '<span style="color:#888;font-size:.74rem">Apagados, salen sólo las 5 historias de servicio (explican la app). Nunca se repiten con las del día anterior.</span></div>';
+        const dg = j.diag || null;
+        if (j.disabled) h += '<div style="color:#f87171;font-size:.78rem;margin-bottom:.4rem">⛔ El motor está APAGADO por STORIES_AUTOPILOT_DISABLED=1 en el servidor.</div>';
+        if (dg && dg.lastTickAt) {
+            const mins = Math.round((Date.now() - new Date(dg.lastTickAt).getTime()) / 60000);
+            h += '<div style="font-size:.76rem;color:' + (mins > 20 ? '#f87171' : '#8fd3a8') + ';margin-bottom:.4rem">🛠 Motor: última pasada hace ' + mins + ' min · publicadas hoy: <b>' + num(j.publishedToday) + '</b>' +
+                (dg.lastError ? ' · <span style="color:#f87171">error: ' + escHtml(dg.lastError) + '</span>' : '') +
+                ((dg.skipped || []).length ? ' · <span style="color:#fbbf24">salteadas: ' + dg.skipped.map((x) => escHtml((x.title || x.slot) + ' (' + x.why + ')')).join(' · ') + '</span>' : '') + '</div>';
+        } else h += '<div style="font-size:.76rem;color:#f87171;margin-bottom:.4rem">🛠 Motor: todavía no registró ninguna pasada (si esto sigue tras 10 min, el servidor no tiene esta versión o el motor está apagado).</div>';
         (j.days || []).forEach((d, di) => {
             h += '<details' + (di <= 1 ? ' open' : '') + ' style="border-bottom:1px solid var(--p-border,rgba(255,255,255,.08));padding:.3rem 0"><summary style="cursor:pointer"><b style="text-transform:capitalize">' + (di === 0 ? 'Hoy · ' : (di === 1 ? 'Mañana · ' : '')) + escHtml(dayLbl(d.day)) + '</b> · ' +
                 d.items.map((it) => (KIND[it.kind] || ['•'])[0]).join(' ') + (d.matchesKnown ? '' : ' <span style="color:#888;font-size:.74rem">(los partidos se definen ese día)</span>') + '</summary>' +
@@ -16137,7 +16150,16 @@ async function storiesAutoRemove(day, slot) {
         showToast('Historia borrada', 'success'); loadStoriesAuto();
     } catch (e) { showToast('Error de conexión', 'error'); }
 }
-window.loadStoriesAuto = loadStoriesAuto; window.storiesAutoRemove = storiesAutoRemove;
+// #909: llave de los partidos del día
+async function storiesAutoMatches(on) {
+    if (!confirm(on ? '¿Encender los partidos del día? Cada día a las 00:05 sale una historia por partido destacado (ESPN), además de las 5 de servicio.' : '¿Apagar los partidos? Quedan sólo las 5 historias de servicio por día.')) return;
+    try {
+        const r = await authFetch('/api/admin/stories-autopilot/matches', { method: 'POST', body: JSON.stringify({ on: !!on }) }); const j = await r.json();
+        if (!r.ok || !j.success) { showToast(j.error || 'No se pudo cambiar', 'error'); return; }
+        showToast(on ? 'Partidos encendidos' : 'Partidos apagados', 'success'); loadStoriesAuto();
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+window.loadStoriesAuto = loadStoriesAuto; window.storiesAutoRemove = storiesAutoRemove; window.storiesAutoMatches = storiesAutoMatches;
 // ═══ #817: AUTOPILOTO de retención — config + plan del año (este mes → diciembre del año que viene) ═══
 let _apData = null;
 async function loadCronAutopilot() {
@@ -16662,16 +16684,29 @@ function _drvCard(c, plats) {
             '<button type="button" class="btn-small btn-danger" onclick="drvReject(\'' + escapeHtml(c.id) + '\', this)">❌ Rechazar</button>' +
           '</div>'
         : (c.reviewNote ? '<div style="font-size:11px;color:#aaa;margin-top:6px;">Nota: ' + escapeHtml(c.reviewNote) + '</div>' : '');
+    // #908 (owner): el mismo comprobante mandado varias veces = UNA ficha; los otros envíos adentro, con "Es otra carga distinta" por si no lo son.
+    const reps = c.repeats || [];
+    const repChip = reps.length ? '<span style="background:#7c3aed;color:#fff;border-radius:9px;padding:2px 9px;font-size:10.5px;">📎 Enviado ' + (reps.length + 1) + ' veces</span>' : '';
+    const repHtml = reps.length
+        ? '<details style="margin-top:6px;"><summary style="cursor:pointer;color:#c4b5fd;font-size:11.5px;font-weight:700;">📎 El cliente mandó este comprobante ' + (reps.length + 1) + ' veces · ver los otros ' + reps.length + ' envío(s)</summary>' +
+            reps.map(function (r) { return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:#bbb;margin-top:5px;">' +
+                (r.imageUrl ? '<a href="' + escapeHtml(r.imageUrl) + '" target="_blank" rel="noopener" title="Ver este envío"><img src="' + escapeHtml(r.imageUrl) + '" alt="" style="width:34px;height:42px;object-fit:cover;border-radius:5px;border:1px solid rgba(255,255,255,0.2);background:#000;"></a>' : '') +
+                '<span>' + _drvAgo(r.createdAt) + (Number(r.amount) > 0 ? ' · $' + Number(r.amount).toLocaleString('es-AR') : ' · sin monto legible') + (r.operationNumber ? ' · N° ' + escapeHtml(r.operationNumber) : '') + '</span>' +
+                (pend ? '<button type="button" class="btn-secondary btn-small" onclick="drvConfirmRepeat(\'' + escapeHtml(r.id) + '\',' + (Number(r.amount) > 0 ? Math.round(Number(r.amount)) : 0) + ')" title="Si NO es el mismo comprobante sino otra transferencia, cargala aparte">➕ Es otra carga distinta</button>' : '') +
+                '</div>'; }).join('') +
+            '<div style="font-size:11px;color:#888;margin-top:5px;">Al confirmar o rechazar esta ficha, los otros envíos se marcan solos como repetidos (al cliente no se le avisa de nuevo). Si de verdad son transferencias distintas, usá "Es otra carga distinta" en ese envío.</div></details>'
+        : '';
     return '<div class="drv-card" data-id="' + escapeHtml(c.id) + '" style="display:flex;gap:12px;background:rgba(255,255,255,0.04);border:1px solid ' + (pend && c.escalatedAt ? 'rgba(255,170,0,0.55)' : 'rgba(255,255,255,0.12)') + ';border-radius:12px;padding:12px;margin-bottom:10px;">' +
         '<div style="flex:0 0 96px;">' + (c.imageUrl ? '<a href="' + escapeHtml(c.imageUrl) + '" target="_blank" rel="noopener" title="Ver comprobante grande"><img src="' + escapeHtml(c.imageUrl) + '" alt="comprobante" style="width:96px;height:120px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:#000;"></a>' : '<div style="width:96px;height:120px;border-radius:8px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:#666;font-size:11px;">sin imagen</div>') + '</div>' +
         '<div style="flex:1;min-width:0;">' +
             '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">' +
                 '<b style="color:#fff;font-size:15px;cursor:pointer;" onclick="drvOpenChat(\'' + escapeHtml(c.userId || '') + '\',\'' + escapeHtml(c.username || '') + '\')" title="Abrir el chat">@' + escapeHtml(c.username || c.userId || '?') + '</b>' +
-                '<b style="color:#26e07f;font-size:16px;">' + escapeHtml(amt) + '</b>' + chip +
+                '<b style="color:#26e07f;font-size:16px;">' + escapeHtml(amt) + '</b>' + chip + repChip +
                 '<span style="color:#888;font-size:11px;margin-left:auto;">' + _drvAgo(c.createdAt) + (pend ? ' · esperando ' + (c.waitingMin || 0) + ' min' : '') + '</span>' +
             '</div>' +
             '<div style="font-size:11.5px;color:#bbb;margin-top:4px;">' + [c.bank ? '🏛 ' + escapeHtml(c.bank) : '', c.originHolder ? '👤 ' + escapeHtml(c.originHolder) : '', c.operationNumber ? 'N° ' + escapeHtml(c.operationNumber) : '', c.paymentDate ? '📅 ' + escapeHtml(c.paymentDate) : ''].filter(Boolean).join(' · ') + '</div>' +
             '<div style="margin-top:6px;">' + cands + '</div>' +
+            repHtml +
             actions +
             '<div style="margin-top:6px;"><button type="button" class="btn-secondary btn-small" onclick="drvOpenChat(\'' + escapeHtml(c.userId || '') + '\',\'' + escapeHtml(c.username || '') + '\')">💬 Abrir chat</button></div>' +
         '</div></div>';
@@ -16691,6 +16726,19 @@ async function drvConfirm(id, btn) {
         loadDepositReviews();
     } catch (e) { showToast('Error de conexión', 'error'); btn.disabled = false; }
 }
+// #908: un envío agrupado que en realidad es OTRA transferencia: se carga aparte, sin cerrar los demás envíos.
+async function drvConfirmRepeat(id, amount) {
+    let amt = Number(amount) || 0;
+    if (!(amt > 0)) { const v = prompt('Monto de esta carga ($):', ''); amt = Number(String(v || '').replace(/[^\d]/g, '')) || 0; if (!(amt > 0)) return; }
+    if (!confirm('¿Cargar $' + amt.toLocaleString('es-AR') + ' por este envío como una carga DISTINTA?\n\nSólo si es otra transferencia (otro N° de operación). Si es el mismo comprobante repetido, no: confirmá la ficha principal y este se cierra solo.')) return;
+    try {
+        const r = await authFetch('/api/admin/deposit-reviews/' + encodeURIComponent(id) + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, keepRepeats: true }) });
+        const j = await r.json();
+        if (!r.ok) { showToast(j.error || 'No se pudo cargar', 'error'); return; }
+        showToast('✅ Carga acreditada', 'success'); loadDepositReviews();
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+window.drvConfirmRepeat = drvConfirmRepeat;
 async function drvReject(id, btn) {
     const card = btn.closest('.drv-card');
     const reason = card.querySelector('.drv-reason').value; const note = card.querySelector('.drv-note').value.trim();
@@ -17591,7 +17639,7 @@ async function spLoadPending(userId) {
             const why = c.escalateReason || (!(Number(c.amount) > 0) ? 'no se pudo leer el monto del comprobante' : (stuck ? 'la transferencia no se encontró en el banco en ' + esc + ' min' : 'esperando que entre la transferencia al banco'));
             return '<div class="sp-pend-row" data-id="' + escapeHtml(c.id) + '">'
                 + (c.imageUrl ? '<button type="button" class="btn-secondary btn-small" onclick="spPendImg(\'' + escapeHtml(c.id) + '\')">🖼️ Ver foto</button>' : '')
-                + '<span class="sp-pend-why"><b>' + (Number(c.amount) > 0 ? m(c.amount) : 'sin monto') + '</b> · ' + escapeHtml(why) + ' · hace ' + c.waitingMin + ' min' + (c.originHolder ? ' · ' + escapeHtml(c.originHolder) : '') + '</span>'
+                + '<span class="sp-pend-why"><b>' + (Number(c.amount) > 0 ? m(c.amount) : 'sin monto') + '</b> · ' + escapeHtml(why) + ' · hace ' + c.waitingMin + ' min' + (c.originHolder ? ' · ' + escapeHtml(c.originHolder) : '') + (Number(c.sentTimes) > 1 ? ' · 📎 lo mandó ' + c.sentTimes + ' veces' : '') + '</span>'
                 + (stuck ? '<input type="number" class="sp-pend-amt" min="1" step="1" value="' + (Number(c.amount) > 0 ? Math.round(c.amount) : '') + '" placeholder="Monto" aria-label="Monto a cargar">'
                     + '<button type="button" class="btn-primary btn-small" onclick="spPendConfirm(\'' + escapeHtml(c.id) + '\', this)">✅ Confirmar carga</button>'
                     : '<span class="sp-pend-wait">entra sola cuando llega al banco</span>')
