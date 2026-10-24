@@ -323,8 +323,12 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   redacciones alternativas `ALTS` (un tema nuevo va a `THEMES` y a `ALTS`). Cada historia se publica aislada; diagnóstico `Config['storyAutoDiag']`.
 - **COMPROBANTES REPETIDOS (#908):** la cola de Cargas pendientes agrupa reenvíos (`_sameReceipt`) y al resolver una ficha
   `_depositReviewCloseRepeats` cierra los demás como `duplicate`. Un flujo nuevo que confirme/rechace un comprobante pendiente tiene que llamarla.
-- **SORTEOS (#915):** `src/services/sorteos.js` (reglas) + `_sorteoTick` (20 min, stats batch de 1girox) + `SorteoEntry`/`SorteoScore`. Ranking
-  público con nombres tapados; sólo ANOTADOS ganan; requisitos en `Config['sorteos'].requirements`. Premios del extra se acreditan a mano. Panel → App → Sorteos.
+- **SORTEOS (#915 → #981 v2):** `src/services/sorteos.js` (reglas puras, test `scripts/test-sorteos-rules.js`) + `_sorteoTickOne` (20 min, stats batch
+  de 1girox; apuesta POR DÍA vía `SorteoScore.cum`) + `SorteoEntry`/`SorteoScore`/`SorteoTicket`/`SorteoCounter`. **1° premio por TICKETS** (números
+  correlativos que el cliente ve; sorteo = 1 + sha256(semilla|sorteo) mod total, huella publicada al cierre, revelado manual o automático a las 48 h),
+  2° y 3° por ranking (puntos con techo diario $300.000 + constancia). Tickets NUNCA se quitan ni se reasignan (índice único). Requisitos para anotarse:
+  app, notificaciones, Telegram, **celular cargado** y una carga. Premios se entregan a mano (push + nota al ganador). Panel → App → Sorteos (🎟️ / 🎲)
+  y Principal → "Sorteos: ¿sirven?". Un cambio en las reglas de puntos/tickets pasa por `computePoints` y sus tests, nunca por el motor.
 - **HISTORIAS PERSONALES (#886):** `Story.audienceUserId` = sólo la ve ese cliente (bono de bienvenida día 5/15/30, `_newbieOffersTick`,
   `Config['newbieOffers']`). Toda consulta NUEVA de historias para clientes o públicas tiene que filtrar `audienceUserId: null` (o el propio id).
 - **HISTORIAS CON BONO (#742, 2026-10-21):** una historia puede llevar `bonusPct` por `bonusHours` (+ push a todos). **#978:** la automática es SEMANAL (miércoles 12:30, +100 % por 3 h, `STORY_AUTO_BONUS`, `bonusDays=[3]`); ese día el autopiloto no manda campaña. El cliente que toca

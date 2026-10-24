@@ -32,9 +32,10 @@
     }
     // ---- Tarjetas (básico / intermedio) y banner (Girox directo)
     function cardSub(s) {
+        const tk = s.tickets && s.tickets.mine > 0 ? ' · 🎟️ ' + num(s.tickets.mine) : '';
         if (s.status === 'soon') return (s.me && s.me.joined ? 'Registrado ✅ · empieza en ' : 'Empieza en ') + cdShort(s.startsInMs);
         if (s.status === 'closed') return s.winners && s.winners.length ? 'Cerrado · ver ganadores' : 'Cerrado · ganadores el ' + fday(s.publishAt);
-        if (s.me && s.me.joined) return s.me.points > 0 ? 'Registrado · puesto #' + s.me.rank : 'Registrado ✅';
+        if (s.me && s.me.joined) return s.me.points > 0 ? 'Registrado · puesto #' + s.me.rank + tk : 'Registrado ✅';
         return 'Anotate para sumar';
     }
     function paintCards() {
@@ -111,48 +112,81 @@
     }
     function prizesRow(s) { return '<div class="srt-prizes">' + (s.prizes || []).map((p) => '<div class="srt-prize"><span class="srt-prize-img">' + esc(p.img) + '<i class="srt-medal m' + p.pos + '">' + p.pos + '</i></span><b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>').join('') + '</div>'; }
     // #920 (owner): "ponele más lugar cuando entrás: lo principal, con imágenes de lo que se sortea" → portada con los premios grandes.
+    // #981: portada con los premios y CÓMO se gana cada uno (1° por sorteo de tickets · 2° y 3° por ranking).
     function hero(s) {
         const P = (s.prizes || []); const by = (n) => P.find((p) => p.pos === n) || { name: '', value: '', img: '🎁' };
         const p1 = by(1), p2 = by(2), p3 = by(3);
-        const side = (p) => '<div class="srt-hero-s">' + pic(p.img, 'srt-hero-img s', p.name) + '<i class="srt-hero-pos">' + p.pos + '° puesto</i><b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>';
+        const side = (p) => '<div class="srt-hero-s">' + pic(p.img, 'srt-hero-img s', p.name) + '<i class="srt-hero-pos">' + p.pos + '° premio</i><b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '<em class="srt-mode rk">📊 por ranking</em></div>';
         return '<div class="srt-hero"><div class="srt-hero-t">' + (s.key === 'mensual' ? '🎁 Lo que se sortea este mes' : '🎁 Lo que se sortea') + '</div>' +
-            '<div class="srt-hero-1' + (isPic(p1.img) ? ' has-pic' : '') + '">' + pic(p1.img, 'srt-hero-img', p1.name) + '<div class="srt-hero-1t"><i class="srt-hero-pos">🥇 1° puesto</i><b>' + esc(p1.name) + '</b>' + (p1.value ? '<small>' + esc(p1.value) + '</small>' : '') + '</div></div>' +
-            '<div class="srt-hero-row">' + side(p2) + side(p3) + '</div>' +
-            '<p class="srt-hero-p">Ganan los 3 anotados con más puntos al cierre. Cada premio se puede cobrar en efectivo por su valor.</p></div>';
+            '<div class="srt-hero-main">' + pic(p1.img, 'srt-hero-img', p1.name) + '<div class="srt-hero-mt"><i class="srt-hero-pos">1° premio</i><b>' + esc(p1.name) + '</b>' + (p1.value ? '<small>' + esc(p1.value) + '</small>' : '') + '<em class="srt-mode tk">🎟️ se sortea por TICKETS entre los anotados</em></div></div>' +
+            '<div class="srt-hero-row">' + side(p2) + side(p3) + '</div></div>';
     }
     function podium(s) {
         const P = (s.prizes || []); const by = (n) => P.find((p) => p.pos === n) || { name: '', value: '', img: '🎁' };
         const col = (n, cls) => { const p = by(n); return '<div class="srt-pod ' + cls + '"><span class="srt-pod-cup c' + n + '">' + (n === 1 ? '🏆' : (n === 2 ? '🥈' : '🥉')) + '</span><b>' + n + '° puesto</b><small>' + esc(p.name) + (p.value ? ' · ' + esc(p.value) : '') + '</small><div class="srt-pod-bar b' + n + '">' + n + '</div></div>'; };
         return '<div class="srt-podium">' + col(2, 'p2') + col(1, 'p1') + col(3, 'p3') + '</div>';
     }
+    // #981: ranking bien explicado — tu puesto, cuánto te falta para el 3°, los vecinos si estás lejos del top, y qué premio da el ranking.
     function rankingBlock(s) {
-        const me = s.me || {}; let h = '<div class="srt-sec"><h3>📊 Ranking' + (s.status === 'live' ? ' <em class="srt-live">● en vivo</em>' : '') + '</h3>';
+        const me = s.me || {}; const P = s.prizes || []; const rk = P.filter((p) => p.mode !== 'tickets').map((p) => p.pos + '° ' + p.name).join(' y ');
+        let h = '<div class="srt-sec"><h3>📊 Ranking por puntos' + (s.status === 'live' ? ' <em class="srt-live">● en vivo</em>' : '') + '</h3><p class="srt-p srt-muted">Define el <b>' + esc(rk || '2° y 3° premio') + '</b>. Suman las apuestas con plata real (hasta ' + money(s.rules.dayCapArs) + ' por día), los días con carga y las semanas constantes.</p>';
         if (s.status === 'soon') {
-            h += '<p class="srt-p">El ranking arranca el <b>' + fday(s.start) + '</b>. Cada <b>' + money(s.rules.ptsPer) + '</b> apostados con plata real = <b>' + num(s.rules.pts) + ' puntos</b>. Anotate ahora para que tus apuestas sumen desde el primer minuto.</p>';
-            h += '<p class="srt-p srt-muted">Ya se anotaron <b>' + num(s.counts.anotados) + '</b> clientes.</p>';
+            h += '<p class="srt-p">El ranking arranca el <b>' + fday(s.start) + '</b>. Anotate ahora para que tus apuestas sumen desde el primer minuto.</p><p class="srt-p srt-muted">Ya se anotaron <b>' + num(s.counts.anotados) + '</b> clientes.</p>';
         } else {
-            const mine = me.points > 0 ? '<div class="srt-me' + (me.joined ? '' : ' srt-me-warn') + '"><span>Tu puesto</span><b>#' + num(me.rank) + '</b><small>' + num(me.points) + ' pts · apostaste ' + money(me.wagered) + (me.joined ? '' : ' · <u>no estás anotado: no podés ganar</u>') + '</small></div>'
-                : '<div class="srt-me srt-me-0"><span>Todavía no sumaste</span><b>0 pts</b><small>' + (me.joined ? 'Cargá y jugá: cada ' + money(s.rules.ptsPer) + ' apostados = ' + num(s.rules.pts) + ' pts' : 'Anotate, cargá y jugá para entrar al ranking') + '</small></div>';
+            const bd = me.breakdown || {};
+            const mine = me.points > 0 ? '<div class="srt-me' + (me.joined ? '' : ' srt-me-warn') + '"><span>Tu puesto</span><b>#' + num(me.rank) + '</b><small>' + num(me.points) + ' pts · juego ' + num(bd.basePts) + ' · días con carga ' + num(bd.dayPts) + ' · semanas ' + num(me.weekPts) + (bd.missionPts ? ' · misiones ' + num(bd.missionPts) : '') + (me.joined ? '' : ' · <u>no estás anotado: no podés ganar</u>') + '</small>' +
+                (me.gapTo3 != null && me.rank > 3 ? '<div class="srt-gap">Te faltan <b>' + num(me.gapTo3) + ' pts</b> para el 3° puesto</div>' : (me.rank <= 3 ? '<div class="srt-gap ok">¡Estás en el podio del ranking!</div>' : '')) + '</div>'
+                : '<div class="srt-me srt-me-0"><span>Todavía no sumaste</span><b>0 pts</b><small>' + (me.joined ? 'Cargá y jugá: 1 punto por cada $1.000 apostados, +' + num(s.rules.dayDepositPts) + ' por cada día con carga' : 'Anotate, cargá y jugá para entrar al ranking') + '</small></div>';
             h += mine;
-            if (s.status === 'closed' && s.winners && s.winners.length) h += '<p class="srt-p"><b>Ganadores del período:</b></p>' + winnersList(s.winners);
+            if (s.status === 'closed' && s.winners && s.winners.length) h += '<p class="srt-p"><b>Ganadores del ranking:</b></p>' + winnersList(s.winners);
             const rows = s.top || [];
-            h += rows.length ? '<div class="srt-table">' + rows.map((r) => '<div class="srt-row' + (r.me ? ' me' : '') + '"><span class="srt-r">' + (r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : '#' + r.rank) + '</span><span class="srt-n">' + esc(r.name) + (r.me ? ' <i>vos</i>' : '') + '</span><b class="srt-pts">' + num(r.points) + ' pts</b></div>').join('') + '</div>' : '<p class="srt-p srt-muted">Todavía nadie sumó puntos en este período.</p>';
-            h += '<p class="srt-p srt-muted">' + num(s.counts.participantes) + ' jugando · ' + num(s.counts.anotados) + ' anotados · se actualiza cada 20 min. Los nombres van tapados: sólo vos ves el tuyo completo.</p>';
+            const row = (r) => '<div class="srt-row' + (r.me ? ' me' : '') + '"><span class="srt-r">' + (r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : '#' + r.rank) + '</span><span class="srt-n">' + esc(r.name) + (r.me ? ' <i>vos</i>' : '') + (r.joined ? '' : ' <u title="no anotado">sin anotar</u>') + '</span><b class="srt-pts">' + num(r.points) + ' pts</b></div>';
+            h += rows.length ? '<div class="srt-table">' + rows.map(row).join('') + '</div>' : '<p class="srt-p srt-muted">Todavía nadie sumó puntos en este período.</p>';
+            if (s.near && s.near.length) h += '<p class="srt-p srt-muted" style="margin-top:8px">Cerca tuyo:</p><div class="srt-table srt-near">' + s.near.map(row).join('') + '</div>';
+            h += '<p class="srt-p srt-muted">' + num(s.counts.participantes) + ' jugando · ' + num(s.counts.anotados) + ' anotados · se actualiza cada 20 min. Los nombres van tapados: sólo vos ves el tuyo completo. Si el ganador del 1° premio (tickets) es el primero en puntos, el ranking corre al siguiente.</p>';
         }
-        if (s.winners && s.winners.length && s.status !== 'closed') h += '<p class="srt-p"><b>🏅 Ganadores del mes pasado:</b></p>' + winnersList(s.winners);
-        if (s.draw && s.draw.winners && s.draw.winners.length) h += '<p class="srt-p"><b>🎁 ' + esc((s.extra && s.extra.title) || 'SORTEO') + ' · ganadores</b> (' + s.draw.winners.length + ' × ' + money(s.draw.amount) + '):</p><div class="srt-table">' + s.draw.winners.map((w) => '<div class="srt-row' + (w.me ? ' me' : '') + '"><span class="srt-r">🎁</span><span class="srt-n">' + esc(w.name) + (w.me ? ' <i>vos</i>' : '') + '</span><b class="srt-pts">' + money(s.draw.amount) + '</b></div>').join('') + '</div><p class="srt-p srt-muted">Semilla del sorteo: ' + esc(s.draw.seed) + '</p>';
+        if (s.winners && s.winners.length && s.status !== 'closed') h += '<p class="srt-p"><b>🏅 Ganadores del ranking del mes pasado:</b></p>' + winnersList(s.winners);
+        if (s.draw && s.draw.winners && s.draw.winners.length) h += '<p class="srt-p"><b>🎁 ' + esc((s.extra && s.extra.title) || 'SORTEO') + ' · ganadores</b> (' + s.draw.winners.length + ' × ' + money(s.draw.amount) + '):</p><div class="srt-table">' + s.draw.winners.map((w) => '<div class="srt-row' + (w.me ? ' me' : '') + '"><span class="srt-r">🎁</span><span class="srt-n">' + esc(w.name) + (w.me ? ' <i>vos</i>' : '') + '</span><b class="srt-pts">' + money(s.draw.amount) + '</b></div>').join('') + '</div>';
         return h + '</div>';
+    }
+    // #981: MIS TICKETS — cuántos tengo, de cuántos, mi chance, los números y cómo conseguir más.
+    function ticketsBlock(s) {
+        const t = s.tickets || { total: 0, mine: 0, list: [], chance: 0 }, me = s.me || {}, tk = s.rules.tickets || {}, ms = s.rules.milestones || {};
+        const one = t.mine > 0 && t.total > 0 ? Math.round(t.total / t.mine) : 0;
+        const nums = (t.list || []).map((x) => '<i title="' + (x.reason === 'dia' ? 'día con carga' : x.reason === 'hito' ? 'hito' : 'juego') + '">#' + String(x.n).padStart(5, '0') + '</i>').join('');
+        let h = '<div class="srt-sec srt-tk"><h3>🎟️ Mis tickets <small>para el 1° premio' + (s.draws && s.draws.mid && s.draws.mid.length ? ' y los quincenales' : '') + '</small></h3>';
+        if (s.status === 'soon') h += '<p class="srt-p">Los tickets se empiezan a emitir el <b>' + fday(s.start) + '</b>. Cada uno es un número a tu nombre que vas a ver acá.</p>';
+        else h += '<div class="srt-tk-big"><div><b>' + num(t.mine) + '</b><span>tus tickets</span></div><div><b>' + num(t.total) + '</b><span>emitidos en total</span></div><div><b>' + (one ? '1 en ' + num(one) : '—') + '</b><span>tu chance hoy</span></div></div>' +
+            (t.mine > 0 ? '<details class="srt-tk-list"><summary>Ver mis números (' + num(t.mine) + ')</summary><div class="srt-tk-nums">' + nums + (t.mine > (t.list || []).length ? '<i>… y ' + num(t.mine - t.list.length) + ' más</i>' : '') + '</div></details>' : '<p class="srt-p srt-muted">Todavía no tenés tickets: con tu próxima carga y un rato de juego ya aparece el primero.</p>') +
+            (me.joined ? '' : '<p class="srt-p srt-warn">⚠️ Tus tickets cuentan, pero para ganar tenés que estar anotado.</p>');
+        h += '<ul class="srt-rules"><li>🎰 <b>1 ticket</b> por cada <b>' + num(tk.per) + ' puntos</b> de juego del día (máximo ' + num(tk.dayCap) + ' por día)</li><li>📅 <b>+' + num(tk.activeDay) + ' ticket</b> por cada día que cargás desde ' + money(s.rules.dayDepositMin) + '</li>' +
+            (ms.firstDeposit > 0 ? '<li>🚀 <b>+' + num(ms.firstDeposit) + '</b> por tu primera carga del período</li>' : '') + (ms.fourWeeks > 0 ? '<li>🔥 <b>+' + num(ms.fourWeeks) + '</b> por 4 semanas seguidas con actividad</li>' : '') + (ms.tenDeposits > 0 ? '<li>🏁 <b>+' + num(ms.tenDeposits) + '</b> por 10 cargas en el período</li>' : '') +
+            '</ul><p class="srt-p srt-muted">Más tickets, más chances. Pero cualquiera con un ticket puede ganar: el ganador sale al azar de una semilla publicada que cualquiera puede verificar.</p></div>';
+        return h;
+    }
+    // #981: SORTEOS — el del 1° premio (huella al cierre, semilla el día de publicación) y los quincenales.
+    function drawsBlock(s) {
+        const d = s.draws || {}; const main = d.main, mids = d.mid || []; const hasAny = main || mids.length; if (!hasAny && s.status !== 'closed') return '';
+        const box = (title, x, when) => { if (!x) return '<div class="srt-draw"><b>' + title + '</b><small>' + when + '</small></div>';
+            const w = x.winner; return '<div class="srt-draw' + (x.revealedAt ? ' done' : '') + (w && w.me ? ' mine' : '') + '"><b>' + title + '</b>' + (x.revealedAt ? (w ? '<span class="srt-draw-w">🏆 Ticket <b>#' + String(w.n).padStart(5, '0') + '</b> · ' + esc(w.name) + (w.me ? ' <i>¡SOS VOS!</i>' : '') + '</span>' : '<span class="srt-draw-w">Sin ganador: ' + esc(x.note || 'no había tickets') + '</span>') : '<span class="srt-draw-w">⏳ Huella publicada · se revela ' + when + '</span>') +
+                '<small>Tickets: ' + num(x.total) + ' · huella: <code>' + esc(String(x.seedHash || '').slice(0, 16)) + '…</code>' + (x.seed ? ' · semilla: <code>' + esc(x.seed) + '</code>' + (x.skipped ? ' · ' + num(x.skipped) + ' salto(s) por no anotado' : '') : '') + '</small></div>'; };
+        let h = '<div class="srt-sec"><h3>🎲 Sorteos</h3>';
+        for (const m of mids) h += box('💵 Quincenal ' + money(m.amount) + ' · ' + fday(m.date + 'T15:00:00Z'), m.draw, m.status === 'soon' ? 'ese día a las 20 h' : 'hoy a las 20 h');
+        h += box('🏆 1° premio · ' + esc(((s.prizes || [])[0] || {}).name || ''), main, 'el ' + fday(s.publishAt));
+        h += '<p class="srt-p srt-muted">Cómo se calcula: ganador = 1 + (sha256(semilla + "|" + sorteo) mod cantidad de tickets). La huella se publica antes; la semilla, el día del sorteo. Si el número es de alguien no anotado, pasa al siguiente.</p></div>';
+        return h;
     }
     function winnersList(w) { return '<div class="srt-table">' + w.map((x) => '<div class="srt-row' + (x.me ? ' me' : '') + '"><span class="srt-r">' + ['🥇', '🥈', '🥉'][x.pos - 1] + '</span><span class="srt-n">' + esc(x.name) + (x.me ? ' <i>vos</i>' : '') + '</span><b class="srt-pts">' + num(x.points) + ' pts</b></div>').join('') + '</div>'; }
     function joinBlock(s, compact) {
         const me = s.me || {}, ck = me.checks || {}, req = (_data && _data.requirements) || {};
         const cls = compact ? ' compact' : '';
-        if (me.joined) return '<div class="srt-reg">✅ Registrado en el ' + esc(s.title) + '<small> · desde el ' + esc(fday(me.joinedAt)) + '</small></div>'; // #929 · #943: por sorteo
+        if (me.joined) return '<div class="srt-reg">✅ Registrado en el ' + esc(s.title) + '<small> · desde el ' + esc(fday(me.joinedAt)) + '</small></div>';
         const row = (k, ok, txt, extra) => (req[k] === false ? '' : '<li class="' + (ok ? 'ok' : 'no') + '"><i>' + (ok ? '✅' : '⬜') + '</i><span>' + txt + (extra || '') + '</span></li>');
         const tg = _data && _data.telegramUrl ? ' <button type="button" class="srt-link" onclick="VIP.sorteos.tgOpen()">Unirme ›</button>' : '';
-        return '<div class="srt-join' + cls + '"><b>📝 Anotate al ' + esc(s.title) + '</b><small>Sorteo independiente: anotarte acá vale sólo para este sorteo. Para poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
+        return '<div class="srt-join' + cls + '"><b>📝 Anotate al ' + esc(s.title) + '</b><small>Es gratis y vale sólo para este sorteo. Para poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
             row('app', ck.app, 'Tener la app de PICA ROJA instalada', ck.app ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.home.installGiftOpen&&VIP.home.installGiftOpen()}catch(_){}">¿Cómo? ›</button>') +
             row('notif', ck.notif, 'Notificaciones activadas', ck.notif ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.notifications&&VIP.notifications.requestNotificationPermission&&VIP.notifications.requestNotificationPermission()}catch(_){}">Activar ›</button>') +
+            row('phone', ck.phone, 'Tu número de celular cargado en el Perfil', ck.phone ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.openProfile()}catch(_){}">Cargarlo ›</button>') +
             row('deposit', ck.deposit, 'Al menos una carga real', ck.deposit ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.easyLoad()}catch(_){}">Cargar ›</button>') +
             (req.telegram === false ? '' : '<li class="' + (ck.telegram ? 'ok' : 'no') + '"><i>' + (ck.telegram ? '✅' : '⬜') + '</i><label><input type="checkbox" id="srtTg_' + s.key + '"' + (ck.telegram ? ' checked' : '') + '> Ya me uní al Telegram de PICA ROJA (ahí anunciamos los ganadores)</label>' + tg + '</li>') +
             '</ul><button type="button" class="srt-btn' + (compact ? ' sm' : '') + '" onclick="VIP.sorteos.join(\'' + s.key + '\')">Anotarme al ' + esc(s.title) + '</button></div>';
@@ -173,18 +207,20 @@
         const s = get(key); const b = bodyEl || _el('srtBody'), t = titleEl === undefined ? _el('srtTitle') : titleEl; if (!b) return;
         if (!s) { b.innerHTML = '<div class="srt-note">' + (_data && _data.enabled === false ? 'Por ahora no hay sorteos activos.' : 'Este sorteo no está disponible.') + '</div>'; return; }
         if (t) t.textContent = s.emoji + ' ' + s.title;
+        const rt = (s.rules && s.rules.text) || {};
         let h = strip(s);                 // 1) inicio, chico
         h += joinBlock(s, true);          // 2) anotarse, compacto
-        h += hero(s);                     // 3) el premio
-        if (s.extra && s.extra.enabled) h += '<div class="srt-extra"><b>🎁 ' + esc(s.extra.title || 'SORTEO EXTRA') + ' · ' + esc(s.title) + ': ' + num(s.extra.winners) + ' ganadores al azar de ' + money(s.extra.amount) + ' (' + money(s.extra.amount * s.extra.winners) + ' extra en este sorteo)</b><small><b>Extra, aparte del ranking. Para TODOS los que cargan:</b> con ' + num(s.extra.minDeposits) + ' cargas o más ' + (s.key === 'gran' ? 'durante el sorteo' : 'en el mes') + ' entrás al sorteo, ' + (s.extra.requireJoin ? 'estando anotado' : 'estés o no anotado y sin importar el ranking') + '. Se sortea el día 1 del mes siguiente, con la semilla publicada.' + (s.counts.extraElegibles ? ' <b>Ya cumplen ' + num(s.counts.extraElegibles) + ' clientes.</b>' : '') + '</small></div>'; // #939
-        // 4) cómo sumar puntos
-        h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados con plata real</li>' + (s.rules.dayDepositPts ? '<li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li>' : '') + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de la semana si completás tus misiones semanales</li>' : '') + '<li>🚫 Los bonos no suman: cuenta la parte proporcional a tus cargas</li><li>🔄 Se actualiza cada 20 minutos · ganadores el ' + esc(fdh(s.publishAt)) + '</li></ul></div>';
-        h += rankingBlock(s);             // 5) ranking
-        // 6) #936 (owner): las Bases de ESTE sorteo escritas abajo, sobre el sorteo (sin botón): las del auto en el del auto, las del teléfono en el del teléfono
-        // #943 (owner): "las Bases abajo de todo, minimizadas, como para maximizar y leer, y después minimizar de nuevo"
+        h += hero(s);                     // 3) premios y cómo se gana cada uno
+        // 4) #981: cómo ganás, en tres líneas
+        h += '<div class="srt-how"><div><i>🎟️</i><b>1° premio</b><span>Se sortea entre todos los tickets de los anotados. Más tickets, más chances; todos tienen alguna.</span></div><div><i>📊</i><b>2° y 3°</b><span>Para los dos anotados con más puntos al cierre.</span></div>' + (s.extra && s.extra.enabled ? '<div><i>🎁</i><b>' + esc(s.extra.title || 'SORTEO EXTRA') + '</b><span>' + num(s.extra.winners) + ' premios de ' + money(s.extra.amount) + ' al azar entre los que hacen ' + num(s.extra.minDeposits) + ' cargas o más.</span></div>' : '') + '</div>';
+        h += ticketsBlock(s);             // 5) mis tickets
+        // 6) cómo sumás puntos
+        h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>1 punto</b> por cada <b>$1.000</b> apostados con plata real · cuentan hasta <b>' + money(s.rules.dayCapArs) + '</b> por día</li><li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li><li>🗓️ <b>+' + num(s.rules.weekPts) + ' pts</b> por cada semana con ' + num(s.rules.weekActiveDays) + ' días con carga</li>' + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de juego por cada semana con misiones cumplidas</li>' : '') + '<li>🎁 Los bonos no suman: cuenta la parte de lo apostado proporcional a tus cargas reales</li></ul><p class="srt-p srt-muted">El techo diario hace que jugar seguido valga más que una sola noche fuerte.</p></div>';
+        h += drawsBlock(s);               // 7) sorteos (huella / semilla / ganadores)
+        h += rankingBlock(s);             // 8) ranking
         h += '<div class="srt-sec srt-tc-sec"><button type="button" class="srt-tc-toggle" onclick="VIP.sorteos.tcToggle(this)" aria-expanded="false"><span>📜 Bases y condiciones · ' + esc(s.title) + '</span><i>Maximizar ▾</i></button><ol class="srt-tc" hidden>' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol></div>';
-        // #925 (owner): sin la tarjeta del otro sorteo al pie ("sacá adentro del auto, abajo, el del iPhone").
         b.innerHTML = h; try { b.scrollTop = 0; } catch (_) {}
+        void rt;
     }
     async function join(key) {
         const tok = VIP.state && VIP.state.currentToken; if (!tok) return;
@@ -239,7 +275,7 @@
                 const me = s2.me || {}; const mine = me.joined ? (me.points > 0 ? ' · ✅ puesto #' + num(me.rank) : ' · ✅ anotado') : '';
                 return '<div class="srt-mini-s"><div class="srt-mini-sh"><b>' + esc(s2.emoji + ' ' + s2.title) + '</b><small>' + when + mine + '</small></div>' +
                     '<div class="srt-mini-prizes">' + (s2.prizes || []).map((p) => '<div class="srt-mini-p">' + pic(p.img, 'srt-mini-img', p.name) + '<b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>').join('') + '</div>' +
-                    '<p class="srt-mini-txt">' + (s2.key === 'gran' ? 'Del ' + esc(fday(s2.start)) + ' al ' + esc(fday(s2.end)) + ' · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.rules.dayDepositPts ? ' · +' + num(s2.rules.dayDepositPts) + ' por día que cargás' : '') + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO EXTRA') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' al azar' : '') : 'Todos los meses · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' para los que cargan ' + num(s2.extra.minDeposits) + ' veces en el mes' : '')) + '. Ganan los 3 anotados con más puntos.</p></div>';
+                    '<p class="srt-mini-txt">🎟️ 1° premio por sorteo de tickets entre los anotados · 2° y 3° por ranking. ' + (s2.key === 'gran' ? 'Del ' + esc(fday(s2.start)) + ' al ' + esc(fday(s2.end)) + ' · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.rules.dayDepositPts ? ' · +' + num(s2.rules.dayDepositPts) + ' por día que cargás' : '') + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO EXTRA') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' al azar' : '') : 'Todos los meses · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' para los que cargan ' + num(s2.extra.minDeposits) + ' veces en el mes' : '')) + '. Ganan los 3 anotados con más puntos.</p></div>';
             };
             return '<div class="srt-mini-box"><div class="srt-mini-head"><b>🏆 ¡Increíbles premios!</b><button type="button" class="srt-x" onclick="VIP.sorteos.closeMini()" aria-label="Cerrar">✕</button></div>' + ordered.map(one).join('') +
                 '<button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + ordered[0].key + '\')">Anotate, es gratis ›</button><p class="srt-mini-foot">El detalle completo y las Bases están en el menú.</p></div>';

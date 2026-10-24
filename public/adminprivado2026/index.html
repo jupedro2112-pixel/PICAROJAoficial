@@ -134,6 +134,10 @@ document.addEventListener('change', function (ev) {
 <span>📏</span>
 <span>Revisión semanal</span>
 </a>
+<a href="#" class="nav-item" data-section="sorteoStats" title="¿Están sirviendo los sorteos? anotados, tickets emitidos y si retienen">
+<span>🎟️</span>
+<span>Sorteos: ¿sirven?</span>
+</a>
 </div>
 <div class="nav-pinned">
 <div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;text-transform:uppercase;">🎯 Manejo · Atención automática</div>
@@ -2697,6 +2701,12 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                     <div style="color:#9ab;font-size:.78rem;margin:.4rem 0 .6rem">Un cliente recibe como máximo <b>1 aviso por día</b> y el tope mensual de abajo, cuente de donde cuente (recorrido, campaña del día, lotes a mano). El aviso del reembolso y lo que el cliente pide en su Perfil ("Qué avisos querés recibir") van aparte.</div>
                     <div id="ncBody" style="font-size:.84rem">Cargando…</div>
                 </div>
+            </section>
+            <!-- #981: SORTEOS — estadística mínima (Principal, clave de INICIO) -->
+            <section id="sorteoStatsSection" class="section">
+                <div class="panel-header"><h2>🎟️ Sorteos: ¿están sirviendo?</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-secondary" onclick="loadSorteoStats()">🔄</button><button class="btn btn-secondary" onclick="switchSection('sorteos')">⚙️ Ir a Sorteos</button></div></div>
+                <div class="card" style="margin-bottom:1rem;font-size:.8rem;color:#9ab">Semáforo por sorteo con lo mínimo para decidir: cuántos de los que cargan se anotaron, si los anotados cargan más días que los que no, cuántos tickets se emiten por semana y si la rifa no se concentra en una sola persona. Verde = seguir igual · amarillo = empujar la inscripción · rojo = cambiar algo.</div>
+                <div id="ssBody">Cargando…</div>
             </section>
             <!-- #973: REVISIÓN SEMANAL automática (Principal, clave de INICIO) -->
             <section id="weeklyReviewSection" class="section">

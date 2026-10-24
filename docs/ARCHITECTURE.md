@@ -1542,3 +1542,21 @@ misiones, sorteos, VIP y referidos no miran el flag. Un regalo de bienvenida nue
   usan {carga}/{rollover}. Retiro mínimo `Config['withdrawMinArs']` = 5.000; la app lo lee de `platformsData.withdrawMinArs` (fallback 5.000).
 - Registro abierto (`User.noWelcomeGifts`): `retentionJourney.pickStep` calcula `trusted = !noWelcome || deposits ≥ TRUST_DEPOSITS`; sin confianza los
   regalos `fixed` se convierten en percent `UNTRUSTED_PCT` y no existe oferta de 2ª carga. Con confianza el cliente queda como cualquier otro (sin paso especial, #977).
+
+
+## Sorteos v2: tickets y sorteo verificable (#981, 2026-10-24)
+
+**Reglas** (`src/services/sorteos.js`): `computePoints(s, { days: { 'YYYY-MM-DD': { wag, dep } }, depositTotal, bonusGranted, deposits, missionWeeks, weeksElapsed })`
+devuelve puntos (base con techo diario `dayCapArs` × realShare, `dayPts`, `weekPts`, `missionPts`), `depositDays`, `activeWeeks`, `streakWeeks` y
+`tickets { play, days, milestones, total, got }`. `drawNumber(seed, drawKey, total, skip)` = 1 + (sha256(seed|drawKey) mod total) + skip. `terms()` arma las Bases.
+
+**Motor** (`_sorteoTickOne`): por período, agrega cargas reales (total y por día ART), lee el apostado acumulado de 1girox (`_sorteoStats`), guarda
+`cum[hoy]` y deriva `wag` por día como diferencia entre acumulados consecutivos (los días sin pasada se suman al siguiente). Emite tickets por la
+diferencia entre lo que corresponde y lo ya emitido por origen (`ticketsPlay/Days/Milestones`), reservando bloques en `SorteoCounter` (`$inc`) e
+insertando `SorteoTicket` (único por key+periodKey+n). Después corre `_sorteoDrawsAuto`: commit del 1° premio al cierre, revelado automático a las
+48 h de `publishAt`; quincenales (`midDraws.dates`) commit al empezar el día, revelado a las 20 h. `Config['sorteoDraws']` guarda cada sorteo bajo
+`key:periodKey:main` o `key:periodKey:mid:YYYY-MM-DD` ({ seed, seedHash, total, winner, skipped, revealedAt… }); la app ve la semilla sólo revelada.
+
+**Trampas:** tickets nunca bajan (si cambia realShare, se conserva lo emitido); el commit congela `total` — tickets emitidos después no entran a ESE
+sorteo; cambiar `tickets.per`/`dayCap` a mitad de período sólo afecta lo que se emite de ahí en adelante. El ganador del 1° premio se excluye del
+ranking (`_sorteoWinners(key, pk, excludeUserId)`). Requisito teléfono = 10 dígitos cargados (no exige verificación: eso va al cobrar).

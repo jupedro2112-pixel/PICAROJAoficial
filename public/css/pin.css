@@ -2989,3 +2989,33 @@ html[data-theme="dark"] .pf-select { background: var(--p-bg-2, #1f2937); color: 
 .plat-play-btn.plat-ganamos .plat-soon-badge, .plat-play-btn.plat-jugaygana .plat-soon-badge, .plat-play-btn.plat-picaroja .plat-soon-badge { background: transparent !important; color: rgba(255,255,255,.9) !important; }
 /* #980: la ventana del sorteo es una HOJA que sube desde abajo: nunca queda pegada al borde superior (ni bajo la barra de estado) */
 @media (max-width: 559px) { .srt-modal { justify-content: flex-end !important; } }
+
+/* ===== #981 SORTEOS v2: tickets, cómo se gana, sorteos verificables, ranking explicado ===== */
+.srt-hero-main { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.srt-hero-mt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.srt-hero-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.srt-mode { display: inline-block; font: 800 10px/1.2 var(--p-font); letter-spacing: .3px; padding: 3px 8px; border-radius: 999px; margin-top: 4px; background: rgba(255,255,255,.18); color: #fff; font-style: normal; }
+.srt-mode.tk { background: #ffd166; color: #2a0a4f; }
+.srt-how { display: grid; gap: 6px; margin: 10px 0; }
+.srt-how > div { display: grid; grid-template-columns: 26px auto; grid-template-rows: auto auto; column-gap: 8px; padding: 8px 10px; border: 1.5px solid var(--srt-line); border-radius: 12px; background: var(--srt-soft); color: var(--p-text, #111); }
+.srt-how i { grid-row: 1 / span 2; font-size: 20px; font-style: normal; align-self: center; }
+.srt-how b { font-size: 13px; } .srt-how span { font-size: 12px; color: var(--p-muted); }
+.srt-tk { border: 1.5px solid var(--srt-g3) !important; }
+.srt-tk h3 small { font-weight: 600; color: var(--p-muted); font-size: 11px; }
+.srt-tk-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 6px 0 8px; }
+.srt-tk-big > div { background: linear-gradient(160deg, var(--srt-g), var(--srt-g2)); color: #fff; border-radius: 12px; padding: 8px 6px; text-align: center; }
+.srt-tk-big b { display: block; font-size: 20px; line-height: 1.1; } .srt-tk-big span { font-size: 10px; opacity: .85; }
+.srt-tk-list summary { cursor: pointer; font-weight: 800; font-size: 12.5px; color: var(--srt-g2); margin: 4px 0; }
+html[data-theme="dark"] .srt-tk-list summary { color: var(--srt-lite); }
+.srt-tk-nums { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.srt-tk-nums i { font: 700 11px/1 ui-monospace, Menlo, monospace; font-style: normal; padding: 5px 7px; border-radius: 8px; background: var(--srt-soft); border: 1px solid var(--srt-line); color: var(--p-text, #111); }
+.srt-warn { color: #b45309 !important; font-weight: 700; }
+.srt-gap { margin-top: 6px; font-size: 12px; background: rgba(255,255,255,.18); border-radius: 8px; padding: 4px 8px; display: inline-block; }
+.srt-gap.ok { background: #ffd166; color: #2a0a4f; font-weight: 800; }
+.srt-near .srt-row { opacity: .9; }
+.srt-row .srt-n u { font-size: 10px; color: var(--p-muted); text-decoration: none; margin-left: 4px; }
+.srt-draw { border: 1.5px dashed var(--srt-line); border-radius: 12px; padding: 8px 10px; margin: 6px 0; display: flex; flex-direction: column; gap: 3px; color: var(--p-text, #111); }
+.srt-draw.done { border-style: solid; background: var(--srt-soft); }
+.srt-draw.mine { border-color: #ffd166; box-shadow: 0 0 0 3px rgba(255, 209, 102, .35); }
+.srt-draw > b { font-size: 13px; } .srt-draw-w { font-size: 13px; } .srt-draw-w i { color: #b45309; font-weight: 900; font-style: normal; }
+.srt-draw small { font-size: 10.5px; color: var(--p-muted); word-break: break-all; } .srt-draw code { font-size: 10px; }

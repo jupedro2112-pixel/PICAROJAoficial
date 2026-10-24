@@ -8,6 +8,32 @@
 
 ## Sesión 2026-10-24
 
+### 981. 🎟️ SORTEOS v2 "premium y para todos": 1° premio por TICKETS (rifa verificable), 2° y 3° por ranking con techo diario y constancia, quincenales del auto, teléfono como requisito, estadística en Principal — SW v647 · admin SW v205
+**Pedido (owner):** "armá un sistema que no incentive sólo al que tiene más plata; el premio mayor por tickets que el cliente ve antes, sorteo por
+semilla verificable; el auto con hitos y sorteos quincenales; un ranking bien mostrado para que la gente entienda todo; Telegram, app y
+notificaciones siempre para anotarse y también el número de celular; abajo de Revisión semanal una estadística mínima de si los sorteos sirven; lo
+que veas mal borralo y dejalo prolijo (explicación y Bases)".
+- **Reglas** (`src/services/sorteos.js` reescrito + `scripts/test-sorteos-rules.js`): puntos = 1 por cada $1.000 apostados con plata real contando
+  hasta `dayCapArs` ($300.000) por día + `dayDepositPts` (10) por día con carga desde `dayDepositMin` ($2.000) + `weekPts` (50) por semana con
+  `weekActiveDays` (3) días con carga (+ misiones en el Gran). Tickets = 1 por cada `tickets.per` (50) puntos de juego del día (máx. `dayCap` 6/día)
+  + `activeDay` (1) por día con carga + hitos iguales para todos (`milestones`: mensual 10 cargas +3; gran 1ª carga +1, 4 semanas seguidas +5,
+  10 cargas +5). `prizes[0].mode='tickets'`, los otros 'ranking'. `midDraws` del Gran: $200.000 el 15/12, 31/12 y 15/1. `requirements.phone`.
+  Sorteo: `newSeed/commitHash/drawNumber` = 1 + (sha256(semilla|sorteo) mod tickets), salto al siguiente si no está anotado. Bases nuevas (`terms`).
+- **Motor** (`_sorteoTickOne` v2): apuesta POR DÍA a partir del acumulado de 1girox guardado cada día (`SorteoScore.cum`), cargas por día de la DB,
+  tickets emitidos de forma incremental y correlativa (`SorteoTicket` + `SorteoCounter` atómico, nunca se quitan). `_sorteoDrawsAuto`: al cerrar el
+  período publica la huella del 1° premio (y revela solo 48 h después de la publicación si nadie lo hizo); quincenales: huella a las 00 h, semilla a
+  las 20 h. El ganador recibe push personal + nota interna; 2° y 3° del ranking excluyen al ganador del 1°. Rutas: `GET /api/sorteos` (tickets míos
+  y total, chance, lista de números, sorteos con huella/semilla/ganador, vecinos del ranking, distancia al 3°, reglas en texto),
+  `GET /api/admin/sorteos/:key/tickets?u=`, `POST /api/admin/sorteos/:key/draw/commit|reveal`, `GET /api/admin/inicio/sorteos-stats`.
+- **App** (`public/js/sorteos.js`): portada con cómo se gana cada premio, "Cómo ganás" en tres líneas, **Mis tickets** (míos / emitidos / chance "1 en
+  N" / números / cómo conseguir más), cómo sumás puntos (techo y constancia), **Sorteos** (huella, semilla, ganador, fórmula), **Ranking por puntos**
+  con desglose, "te faltan X pts para el 3°", vecinos si estoy lejos del top, Bases nuevas. Requisito "número de celular cargado" con botón a Perfil.
+- **Panel → Sorteos:** configuración completa de las reglas nuevas, pestañas 🎟️ Tickets (emitidos, por origen, buscador) y 🎲 Sorteo (huella /
+  revelar con acta: semilla, total, ticket, ganador, saltos, fórmula). **Principal → "🎟️ Sorteos: ¿sirven?"** (clave de INICIO): semáforo por sorteo
+  (anotados entre los que cargan, días con carga anotados vs no, tickets por semana, concentración de la rifa, estado de los sorteos).
+- Explicación de Soporte (`/sys_sq_sorteo`): {puntos} y {tickets} nuevos; migración `mig981SorteosV2` actualiza el texto guardado. Test del servidor
+  reescrito (`scripts/test-sorteos-server.js`) y del frente ampliado.
+
 ### 980. Menú COMPLETO hasta la primera carga (Girox directo después), "Pronto" de las plataformas abajo y sin fondo, ventana del sorteo como hoja — SW v646
 **Pedido (owner):** "¿qué recomendás que quede iniciado: el completo o el de Girox?" → "completo hasta la primera carga, Girox directo desde la
 primera carga, salvo elección propia" ("ok perfecto, configuralo así"); "el Pronto de las plataformas bajalo: tapa el nombre; sin fondo, abajo

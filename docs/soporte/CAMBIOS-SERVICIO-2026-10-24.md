@@ -74,3 +74,23 @@ El registro desde la página volvió: nombre + celular verificado por SMS. Si el
 - **Comprobantes repetidos:** la cola de Cargas pendientes agrupa los reenvíos del mismo comprobante; al confirmar o rechazar uno se cierran los demás solos.
 - **Reseñas de 5 estrellas** se aprueban solas; las demás siguen pasando por revisión.
 - **Pagos mayores a $100.000** esperan confirmación humana en "Pagos a confirmar"; el resto sale solo por el banco.
+
+
+---
+
+## 4. Sorteos (sistema nuevo, desde el 1 de noviembre)
+
+**Qué cambió.** El premio mayor de cada sorteo (iPhone en el mensual, el auto en el Gran Sorteo) ya **no** se lo lleva el que más apostó: se **sortea entre los tickets** de los anotados. El 2° y el 3° premio siguen por ranking de puntos. Además el Gran Sorteo tiene **sorteos quincenales de $200.000** (15/12, 31/12 y 15/1) y el SORTEO EXTRA de $1.000.000 sigue igual en los dos.
+
+| Pregunta del cliente | Qué responder |
+|---|---|
+| "¿Cómo gano el iPhone / el auto?" | Juntando **tickets**. Cada ticket es un número a tu nombre que ves en "Mis tickets" dentro del sorteo. El día del sorteo sale un número al azar: más tickets, más chances, pero cualquiera con un ticket puede ganar. |
+| "¿Cómo consigo tickets?" | 1 ticket por cada 50 puntos de juego del día (máximo 6 por día), **1 ticket por cada día que cargás** desde $2.000, y tickets extra por hitos: 10 cargas en el período (+3 en el mensual, +5 en el Gran), primera carga del Gran (+1) y 4 semanas seguidas con actividad (+5). |
+| "¿Cómo se suman los puntos?" | 1 punto por cada $1.000 apostados con plata real, contando hasta $300.000 por día; +10 puntos por cada día con carga; +50 por cada semana con 3 días con carga. Los bonos no suman. Jugar seguido vale más que una sola noche fuerte. |
+| "¿Es verdad que es al azar? ¿Cómo sé que no lo eligen a dedo?" | Al cerrar el período se publica la cantidad total de tickets y la **huella** de una semilla secreta. El día del sorteo se revela la semilla y el número ganador sale de una cuenta fija (1 + sha256(semilla + "|" + sorteo) mod cantidad de tickets). Con la semilla y el total, cualquiera puede repetir la cuenta. Todo está en la pantalla "Sorteos" del sorteo y en las Bases. |
+| "Me salió el número pero no estaba anotado." | Para ganar hay que estar anotado. Si el número es de alguien no anotado, pasa al siguiente. Que se anote ahora para el próximo. |
+| "No me deja anotarme: me pide el celular." | Desde ahora para anotarse hay que tener **la app instalada, las notificaciones activadas, estar en el Telegram, el número de celular cargado en el Perfil** y una carga real. El número se carga en Perfil (no hace falta verificarlo por SMS para anotarse; sí para cobrar un premio). |
+| "¿Cuándo y cómo cobro?" | Del 1 al 10 del mes siguiente al cierre. Soporte le escribe por el chat de la app y por Telegram. Titular de la cuenta con DNI y celular verificado. |
+| "¿Qué es el sorteo quincenal?" | Solo en el Gran Sorteo: el 15/12, 31/12 y 15/1 se sortean $200.000 entre todos los tickets emitidos hasta ese día. Los tickets no se gastan: siguen valiendo para el auto. |
+
+**Para encargados:** en el panel, Sorteos → pestaña 🎲 Sorteo tiene el acta de cada sorteo (huella, semilla, total, ticket ganador, saltos) y el botón para revelar el día que corresponde; si nadie lo hace, se revela solo. Los premios y los $200.000 se acreditan o entregan **a mano**; el ganador ya recibió la notificación y hay una nota en su chat. En Principal → "Sorteos: ¿sirven?" está el semáforo para saber si la gente se anota y si retiene.
