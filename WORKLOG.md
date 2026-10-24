@@ -8,6 +8,12 @@
 
 ## Sesión 2026-10-24
 
+### 951. 🎁 Detalle del cierre: caja REGALADO (fichas) por tipo + guía de lectura — admin SW v194
+**Pedido (owner):** "en el detalle anotá también lo regalado; acomodalo bien como corresponde y dónde iría, para no marearse".
+- "Ver detalle" abre con una línea "Cómo leerlo" (plata vs fichas) y cuatro cajas en 2 × 2: 💰 INGRESOS · 💸 GASTOS · 🎁 REGALADO (bonos de carga,
+  reembolsos, ruleta, misiones, fueguito, nivel VIP, rakeback, referidos, extra por instalar, regalo por opinar… desde `detalle.girox.app.regalosPorTipo`,
+  total = `regalos`, y la cuenta de fichas: depósitos − retiros = venta − regalos = NETO) · 🏦 CAJA 00 hs. Debajo sigue la conciliación de siempre.
+
 ### 948. 🧾 Cierre diario: INGRESOS / GASTOS detallados, pagos por banco externo como ingreso, caja del CBU a las 00 hs, $50 por transferencia, sin USDT — admin SW v193
 **Pedido (owner):** "el cierre diario por banco automático; lo de USDT no va; dieron 2 cierres mal; los comprobantes que se marcan pagados desde otro banco
 tomalos como INGRESO y en el detalle poné ingresos y el detalle de todos los gastos; el CBU a las 00 hs plasmalo en el cierre, con los depósitos

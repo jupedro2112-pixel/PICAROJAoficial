@@ -5924,7 +5924,8 @@ async function cierresDetalle(dk) {
         const signed = function (n) { return (n > 0 ? '+' : '') + money(n); };
         const sev = { alta: 'cl-sev-alta', media: 'cl-sev-media', baja: 'cl-sev-baja' };
         let html = '<div class="cl-rec">';
-        // #948: INGRESOS · GASTOS · CAJA 00 hs del día (de DailyClose) arriba de la conciliación
+        // #948: INGRESOS · GASTOS · CAJA 00 hs del día (de DailyClose) arriba de la conciliación · #951: + REGALADO, con una guía de lectura
+        html += '<div class="cl-rec-sum" style="margin-bottom:.5rem"><b>Cómo leerlo:</b> 💰 INGRESOS − 💸 GASTOS = <b>RESULTADO en plata</b> (lo que entró y salió del banco). 🎁 REGALADO son fichas (bonos, reembolsos…): no mueven la caja, bajan el NETO de fichas. 🏦 CAJA compara el saldo del CBU a las 00 hs con lo esperado.</div>';
         { const c = _clItems.find(function (x) { return x.dateKey === dk; }) || {}; const g = s.gastos || 0;
           const bs = c.bankBalanceStartManual != null ? c.bankBalanceStartManual : c.bankBalanceStart, be = c.bankBalanceEndManual != null ? c.bankBalanceEndManual : c.bankBalanceEnd;
           html += '<div class="cl-rec-cols"><div class="cl-rec-box"><b>💰 INGRESOS</b>' +
@@ -5942,7 +5943,10 @@ async function cierresDetalle(dk) {
             '<div>Inicio del día (00 hs): <b>' + (bs != null ? money(bs) : '—') + '</b>' + (c.bankBalanceSource ? ' <small>(' + c.bankBalanceSource + ')</small>' : '') + '</div>' +
             '<div>+ resultado de caja: <b>' + signed(c.resultadoCaja || 0) + '</b> <small>(sin los gastos pagados por fuera de este banco)</small></div>' +
             '<div>= esperado al cierre (00 hs sig.): <b>' + (c.bankBalanceExpectedEnd != null ? money(c.bankBalanceExpectedEnd) : '—') + '</b></div>' +
-            '<div>Real al cierre: <b>' + (be != null ? money(be) : '— (todavía sin saldo)') + '</b>' + (bs != null && be != null ? ' · diferencia <b class="' + (Math.abs(c.diferencia || 0) <= 1000 ? '' : 'cl-warn') + '">' + signed(c.diferencia || 0) + '</b>' : '') + '</div></div></div>'; }
+            '<div>Real al cierre: <b>' + (be != null ? money(be) : '— (todavía sin saldo)') + '</b>' + (bs != null && be != null ? ' · diferencia <b class="' + (Math.abs(c.diferencia || 0) <= 1000 ? '' : 'cl-warn') + '">' + signed(c.diferencia || 0) + '</b>' : '') + '</div></div>' +
+            // #951 (owner): lo REGALADO (fichas, no plata) desglosado por tipo, en su propia caja para no mezclarlo con la caja
+            (function () { const ga = (d.girox && d.girox.app) || {}; const por = ga.regalosPorTipo || {}; const NOM = { bonus: 'Bonos de carga', refund: 'Reembolsos', cashback: 'Reembolso acumulativo', roulette: 'Ruleta diaria', mission: 'Misiones', fire_reward: 'Fueguito', fire: 'Fueguito', vip_levelup: 'Nivel VIP', vip_level: 'Nivel VIP', rakeback: 'Rakeback', referral: 'Referidos', referral_commission: 'Referidos', install_gift: 'Extra por instalar la app', install_bonus: 'Bono por instalar', welcome_gift: 'Bienvenida', welcome_code: 'Código de bienvenida', review_gift: 'Regalo por opinar', story_bonus: 'Bono de historia' }; const keys = Object.keys(por).filter(function (k) { return por[k]; }).sort(function (x, y) { return por[y] - por[x]; });
+              return '<div class="cl-rec-box"><b>🎁 REGALADO (fichas, no sale plata del banco)</b>' + (keys.length ? keys.map(function (k) { return '<div>' + escapeHtml(NOM[k] || k) + ': <b>' + money(por[k]) + '</b></div>'; }).join('') : '<div style="color:#888">Sin regalos ese día</div>') + '<div style="border-top:1px solid var(--p-border);margin-top:4px;padding-top:4px"><b>Total regalado: ' + money(c.regalos || 0) + '</b></div><div style="color:#888;font-size:.85rem;margin-top:3px">Fichas: depósitos ' + money(c.depositos || 0) + ' − retiros ' + money(c.retiros || 0) + ' = venta ' + signed(c.venta || 0) + ' · − regalos = <b>NETO ' + signed(c.neto || 0) + '</b></div></div>'; })() + '</div>'; }
         html += '<div class="cl-rec-cols"><div class="cl-rec-box"><b>🖥️ Sistema</b>' +
             '<div>Depósitos automáticos (banco): <b>' + money(s.depositosAuto || 0) + '</b> · ' + (s.depositosAutoN || 0) + '</div>' +
             '<div>Depósitos a mano (agente): <b class="' + (s.depositosManual ? 'cl-warn' : '') + '">' + money(s.depositosManual || 0) + '</b> · ' + (s.depositosManualN || 0) + '</div>' +
