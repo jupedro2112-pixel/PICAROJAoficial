@@ -356,6 +356,15 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   falte (sólo entradas con COELSA/externalID; la doble carga la frena `HgcashCharge.chargeKey`). Diagnóstico: Cargas automáticas → 🩺.
 - **CHATS QUE SE CIERRAN SOLOS (#895):** un aviso automático nuevo que resuelva lo del cliente (carga, comprobante) llama
   `_chatAutoCloseIfHandled(userId, why)`; el chat sólo queda abierto si el cliente escribió texto sin respuesta. Los chats nuevos nacen cerrados.
+- **CENTRO DE AVISOS (#971, 2026-10-24):** TODO lo automático que le llega al cliente sale de un solo lugar (panel → Cronograma → 🧭 Centro de avisos,
+  `Config['notifCenter']`): RECORRIDO por cliente (`src/services/retentionJourney.js` + `_journeyTick` al mediodía: nuevos / sin app / enfriando / inactivos /
+  perdidos / lejanos, un paso por día, regalos crecientes, fichas según valor del cliente; marca `User.journey.sent`), autopiloto, aviso del reembolso,
+  ofertas de bienvenida, historia con bono (ahora a las 12:30; ese día el autopiloto no manda), historia "pagos de la semana" (lunes). Reglas viejas
+  (NotificationRule) APAGADAS por defecto. **Tope único:** `monthlyCap` (cuenta todos los lotes) + `dailyCap: 1` en `_resolveNotifBatchAudience`
+  (`_notifDayCounts`). Un aviso automático NUEVO tiene que salir por `_createNotifBatchFromBody` (hereda topes) o, si es push directa, pasar
+  `data.kind` ('promo' | 'personal' | 'system') para que `User.notifPrefs` (Perfil → "Qué avisos querés recibir": todos / sólo lo mío / ninguno, +
+  fatiga: 10 promos sin abrir la app pausan las masivas) se respete en `sendPushIfOffline` y en `notificationService.prefsFilter`. Historias: `clicks` y
+  `reactions` (`POST /api/stories/:id/click|react`). INICIO muestra cohortes (`_inicioCohorts`); Cierres el semáforo regalos/depósitos del mes.
 - **Cargas pendientes (#376, 2026-10-18):** la carga manual del panel vive en `_agentDepositHandler(req, res, body)`
   (la ruta `POST /api/admin/deposit` sólo la llama) porque "Confirmar" de la cola de comprobantes la reusa. Todo comprobante
   válido queda `Comprobante.reviewStatus='pending'` hasta que se acredita (auto o manual) o se rechaza; si tocás el flujo de

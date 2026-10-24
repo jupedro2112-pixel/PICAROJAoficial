@@ -5878,6 +5878,15 @@ let _clItems = [], _clUsdt = null;
 const _clM = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
 const _clU = (n) => (n == null ? '—' : 'US$ ' + Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 }));
 const _clC = (v) => '<span style="color:' + (v >= 0 ? 'var(--p-green)' : 'var(--p-red)') + ';font-weight:800">' + _clM(v) + '</span>';
+// #971: semáforo del mes — regalado sobre depositado (verde ≤15 % · amarillo ≤20 % · rojo más). Si está en rojo: bajar frecuencia o % de bonos, nunca el reembolso.
+function _clGiftSemaforo(items) {
+    const m = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 7);
+    const rows = (items || []).filter(function (c) { return String(c.dateKey || '').slice(0, 7) === m; });
+    const dep = rows.reduce(function (a, c) { return a + (Number(c.depositos) || 0); }, 0), reg = rows.reduce(function (a, c) { return a + (Number(c.regalos) || 0); }, 0);
+    if (!dep) return '';
+    const pct = Math.round(reg * 1000 / dep) / 10; const sem = pct <= 15 ? '🟢' : pct <= 20 ? '🟡' : '🔴';
+    return _diaKpi(sem + ' REGALOS / DEPÓSITOS (mes)', pct.toLocaleString('es-AR') + '%', _clM(reg) + ' regalado sobre ' + _clM(dep) + ' · sano hasta 15 % · rojo +20 %: bajá frecuencia o % de bonos, no el reembolso');
+}
 async function cierresLoad() {
     const list = document.getElementById('cierresList'); if (list && !list.innerHTML) list.innerHTML = '<div class="dia-note">Generando los cierres que falten…</div>';
     try {
@@ -5889,6 +5898,7 @@ async function cierresLoad() {
         const malos = _clItems.filter(function (x) { return x.arqueo === 'faltante' || x.arqueo === 'sobrante'; }).length; const bd = document.getElementById('cierresBadge'); if (bd) { bd.textContent = malos; bd.style.display = malos ? '' : 'none'; }
         const t = j.totals || {};
         document.getElementById('cierresTotals').innerHTML = _diaKpi('INGRESOS (30 d)', _clM(t.ingresos)) + _diaKpi('GASTOS', _clM(t.egresos), 'transf. ' + _clM(t.fee) + ' · gastos ' + _clM(t.gastos) + ' · comisión ' + _clM(t.comision)) + _diaKpi('RESULTADO (plata)', _clC(t.resultado)) + _diaKpi('Depósitos', _clM(t.depositos)) + _diaKpi('Retiros', _clM(t.retiros)) + _diaKpi('NETO (fichas)', _clC(t.neto)) + _diaKpi('Días con diferencia', String(malos)); // #948
+        try { document.getElementById('cierresTotals').insertAdjacentHTML('beforeend', _clGiftSemaforo(_clItems)); } catch (_) {} // #971
         if (!list) return;
         // #744 (owner): cierres día a día, automáticos. Diferencia SIEMPRE visible (0 = cuadra) y "Ver detalle" con la conciliación.
         const arq = function (c) { const d = Number(c.diferencia) || 0; const num = (d > 0 ? '+' : '') + _clM(d).replace('$-', '-$'); if (c.arqueo === 'sin_datos') return '<span class="cl-st">— sin datos del banco</span>'; return c.arqueo === 'cuadra' ? '<span class="cl-st fin">✅ Da 0</span>' : ('<span class="cl-st bad">⚠ ' + (c.arqueo === 'faltante' ? 'Faltante' : 'Sobrante') + ' <b>' + num + '</b></span>'); };
@@ -15647,6 +15657,7 @@ async function loadCronograma() {
     loadCronReport();
     loadCronPlans(); // #293
     loadCronAutopilot(); // #817
+    loadNotifCenter(); // #971
     if (!_naLoaded) { _naLoaded = true; naYesterday(); } // #824 análisis (día vencido por defecto)
     loadStoriesAuto(); // #827
 }
@@ -16226,6 +16237,42 @@ async function storiesAutoRepublish() {
     } catch (e) { showToast('Error de conexión', 'error'); }
 }
 window.loadStoriesAuto = loadStoriesAuto; window.storiesAutoRemove = storiesAutoRemove; window.storiesAutoMatches = storiesAutoMatches; window.storiesAutoRepublish = storiesAutoRepublish;
+// ═══ #971: CENTRO DE AVISOS — fuentes, tope único, segmentos de hoy y pasos del recorrido ═══
+async function loadNotifCenter(refresh) {
+    const box = document.getElementById('ncBody'); if (!box) return;
+    try {
+        const r = await authFetch('/api/admin/notif-center' + (refresh ? '?refresh=1' : '')); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error');
+        const c = j.config || {}, pv = j.preview || {}, L = j.segmentLabels || {}; const num = (n) => Number(n || 0).toLocaleString('es-AR'); const money = (n) => '$' + num(n);
+        const DOW = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+        const gift = (s) => s.gift.type === 'none' ? 'sólo aviso' : s.gift.type === 'percent' ? '+' + s.gift.pct + '% en la próxima carga · ' + s.gift.hours + ' h' : 'FICHAS según valor del cliente: ' + (j.tiers || []).map((t) => money(Math.round(t.chips * (s.gift.mult || 1)))).join(' / ');
+        const tog = (k, label, on, hint) => '<label style="display:flex;gap:.5rem;align-items:flex-start;padding:.4rem .55rem;border:1px solid var(--p-line,#334);border-radius:8px;cursor:pointer"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="ncToggle(\'' + k + '\', this.checked)" style="margin-top:.2rem"><span><b>' + label + '</b> ' + (on ? '🟢' : '⚪') + '<br><small style="color:#9ab">' + hint + '</small></span></label>';
+        const fixed = (label, on, hint) => '<div style="padding:.4rem .55rem;border:1px solid var(--p-line,#334);border-radius:8px"><b>' + label + '</b> ' + (on ? '🟢' : '⚪') + '<br><small style="color:#9ab">' + hint + '</small></div>';
+        const jl = j.journeyLast, rl = j.refundLast, nb = j.newbie || {}, ap = j.autopilot || {};
+        const sources = [
+            tog('journey', '🧭 Recorrido por cliente', c.journey, 'Nuevos sin carga, sin app, enfriando (7–13 d), inactivos (14–29 d), perdidos (30–89 d), lejanos (90–180 d). Un paso por día, regalos crecientes. ' + (jl ? 'Último: ' + jl.day + ' · ' + (jl.steps || []).reduce((a, s) => a + (s.sent || 0), 0) + ' avisos en ' + (jl.steps || []).length + ' pasos.' : 'Todavía no corrió (sale al mediodía).')),
+            fixed('🤖 Campaña masiva del día (autopiloto)', ap.enabled, (ap.parts || 3) + ' lotes desde las ' + (ap.time || '20:00') + ' · bono ' + (ap.hours || 4) + ' h · fija, sólo se apaga con AUTOPILOT_DISABLED=1'),
+            tog('refundReminder', '🔁 Aviso del reembolso diario', c.refundReminder, 'A quien perdió ayer y no lo reclamó, a las 11 h; al tocar abre Reembolso. ' + (rl ? 'Último: ' + rl.day + ' · ' + num(rl.sent) + ' enviados.' : 'Todavía no corrió.')),
+            fixed('🎁 Ofertas de bienvenida (historia personal + push)', nb.enabled, 'Días ' + (nb.days || []).join(', ') + ' desde el registro · +' + (nb.pct || 0) + '% por ' + (nb.hours || 0) + ' h · respeta el 1 por día. Se edita en Historias automáticas.'),
+            fixed('📣 Historia con bono (push a todos)', true, 'Los ' + (j.storyBonusDays || []).map((d) => DOW[d]).join(' y ') + ' a las 12:30 · ese día el autopiloto NO manda campaña (un solo aviso).'),
+            tog('winnersStory', '🏆 Historia "pagos de la semana"', c.winnersStory, 'Lunes al mediodía, sin push: cuántos retiros pagamos y el más grande (nombre tapado). Confianza con datos reales.'),
+            tog('legacyRules', '🗂️ Reglas viejas (B3–B6, seguimientos)', c.legacyRules, 'APAGADAS: las reemplaza el recorrido. Encenderlas duplica avisos.')
+        ];
+        const segs = Object.keys(L).map((k) => '<div class="in-box" style="padding:.4rem .6rem"><div class="in-l">' + L[k] + '</div><div class="in-v" style="font-size:1.1rem">' + num((pv.segments || {})[k]) + '</div></div>').join('');
+        const todaySteps = (pv.steps || []).length
+            ? '<table class="data-table" style="width:100%;font-size:.8rem"><thead><tr><th>Paso</th><th>Segmento</th><th>Regalo</th><th>Clientes</th><th>Ejemplos</th></tr></thead><tbody>' + pv.steps.map((s) => '<tr><td><b>' + escHtml(s.name) + '</b></td><td>' + (L[s.segment] || s.segment) + '</td><td>' + (s.gift === 'none' ? 'aviso' : s.gift === 'percent' ? '+' + s.amount + '%' : money(s.amount) + ' en fichas') + '</td><td>' + num(s.n) + '</td><td><small>' + (s.sample || []).map(escHtml).join(', ') + '</small></td></tr>').join('') + '</tbody></table>'
+            : '<div style="color:#9ab">Hoy no le toca ningún paso a nadie (o ya salió).</div>';
+        box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:.5rem">' + sources.join('') + '</div>'
+            + '<div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.7rem 0"><b>Tope por cliente al mes:</b> <input type="number" id="ncCap" class="form-input" style="width:90px" min="2" max="60" value="' + (c.monthlyCap || '') + '" placeholder="auto ' + (j.cap || '') + '"> <button class="btn btn-secondary btn-small" onclick="ncSaveCap()">Guardar</button> <small style="color:#9ab">Hoy rige <b>' + (j.cap || '') + '</b>. Cuenta todo lo que sale por lotes. Los regalos de recuperación (14+ días sin cargar) no se frenan por este tope: recuperar vale más que la cuota.</small></div>'
+            + '<div style="margin:.3rem 0"><small style="color:#9ab">Clientes que bajaron sus avisos desde el Perfil: sólo lo mío <b>' + num((j.optOut || {}).mine) + '</b> · ninguno <b>' + num((j.optOut || {}).none) + '</b>. Además, 10 promos seguidas sin abrir la app pausan las masivas hasta que vuelva.</small></div>'
+            + '<h4 style="margin:.8rem 0 .3rem">📊 Dónde está cada cliente hoy (' + num(pv.total) + ' clientes)</h4><div class="in-grid">' + segs + '</div>'
+            + '<h4 style="margin:.8rem 0 .3rem">📅 Lo que le toca hoy <button class="btn btn-secondary btn-small" onclick="ncRunNow()">▶ Mandar ahora</button></h4>' + todaySteps
+            + '<details style="margin-top:.8rem"><summary style="cursor:pointer"><b>🧭 Los ' + (j.steps || []).length + ' pasos del recorrido</b> (fijos en el código, textos de servicio)</summary><div style="overflow:auto"><table class="data-table" style="width:100%;font-size:.78rem;margin-top:.4rem"><thead><tr><th>Día</th><th>Segmento</th><th>Paso</th><th>Regalo</th><th>Texto</th></tr></thead><tbody>' + (j.steps || []).map((s) => '<tr><td>' + s.day + '</td><td>' + (L[s.segment] || s.segment) + '</td><td><b>' + escHtml(s.name) + '</b>' + (s.capped ? '' : '<br><small style="color:#f59e0b">sin tope mensual</small>') + '</td><td>' + gift(s) + '</td><td><small><b>' + escHtml(s.title) + '</b> ' + escHtml(s.text) + '</small></td></tr>').join('') + '</tbody></table></div></details>';
+    } catch (e) { box.innerHTML = '<span style="color:#f87171">' + escHtml(e.message) + '</span>'; }
+}
+async function ncToggle(k, v) { try { const r = await authFetch('/api/admin/notif-center', { method: 'PUT', body: JSON.stringify({ [k]: !!v }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); loadNotifCenter(); } catch (e) { alert(e.message); loadNotifCenter(); } }
+async function ncSaveCap() { const v = (document.getElementById('ncCap') || {}).value; try { const r = await authFetch('/api/admin/notif-center', { method: 'PUT', body: JSON.stringify({ monthlyCap: v === '' || v == null ? null : Number(v) }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); alert('Guardado. ' + (j.reprogrammed ? 'El autopiloto se reprograma solo con el tope nuevo (' + j.reprogrammed + ' campañas futuras rearmadas).' : '')); loadNotifCenter(); loadCronAutopilot(); } catch (e) { alert(e.message); } }
+async function ncRunNow() { if (!confirm('¿Mandar AHORA los pasos de hoy del recorrido? Sólo le llega a quien todavía no recibió ese paso.')) return; try { const r = await authFetch('/api/admin/notif-center/run', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); alert(j.result ? 'Listo: ' + (j.result.steps || []).reduce((a, s) => a + (s.sent || 0), 0) + ' avisos en ' + (j.result.steps || []).length + ' pasos.' : 'No corrió: está apagado o lo está haciendo otra instancia.'); loadNotifCenter(true); } catch (e) { alert(e.message); } }
+window.loadNotifCenter = loadNotifCenter; window.ncToggle = ncToggle; window.ncSaveCap = ncSaveCap; window.ncRunNow = ncRunNow;
 // ═══ #817: AUTOPILOTO de retención — config + plan del año (este mes → diciembre del año que viene) ═══
 let _apData = null;
 async function loadCronAutopilot() {
@@ -16584,7 +16631,7 @@ async function loadStories() {
                 + '<div><b>' + escapeHtml(s.title || 'CARGAS AUTOMATIC') + '</b> · ' + st + '</div>'
                 + '<div style="color:#ddd;">' + escapeHtml(s.text || '(sin texto)') + '</div>'
                 + (s.bonusPct ? '<div style="color:#ffd54f;font-weight:800;">🎁 Bono +' + s.bonusPct + '% · ' + (s.bonusActive ? 'vigente hasta ' + new Date(s.bonusUntil).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'bono vencido') + ' · ' + (s.bonusClaims || 0) + ' reclamos' + (s.notifyAll ? ' · 🔔 push a todos' : '') + '</div>' : '')
-                + '<div style="color:#888;font-size:11px;">Publicada ' + new Date(s.publishedAt).toLocaleString('es-AR') + ' · ' + s.hours + ' h · ' + (s.views || 0) + ' vistas' + (s.repeatWeekly ? ' · <span style="color:#00c853;font-weight:800;">🔁 semanal</span>' : '') + (s.linkUrl ? ' · link: ' + escapeHtml(s.linkUrl) : '') + (s.createdBy ? ' · por ' + escapeHtml(s.createdBy) : '') + '</div>'
+                + '<div style="color:#888;font-size:11px;">Publicada ' + new Date(s.publishedAt).toLocaleString('es-AR') + ' · ' + s.hours + ' h · ' + (s.views || 0) + ' vistas · 👆 ' + (s.clicks || 0) + ' toques' + (s.reactions && (s.reactions.fire || s.reactions.heart || s.reactions.laugh || s.reactions.like) ? ' · 🔥' + (s.reactions.fire || 0) + ' ❤️' + (s.reactions.heart || 0) + ' 😂' + (s.reactions.laugh || 0) + ' 👍' + (s.reactions.like || 0) : '') + (s.repeatWeekly ? ' · <span style="color:#00c853;font-weight:800;">🔁 semanal</span>' : '') + (s.linkUrl ? ' · link: ' + escapeHtml(s.linkUrl) : '') + (s.createdBy ? ' · por ' + escapeHtml(s.createdBy) : '') + '</div>'
                 + '</div>'
                 + '<div style="display:flex;flex-direction:column;gap:6px;">'
                 + '<button class="btn-secondary btn-sm" onclick="extendStory(\'' + s.id + '\')" title="Vuelve a contar las horas desde ahora">⏱ Extender</button>'
@@ -17546,6 +17593,14 @@ async function loadInicio() {
         if (d.isToday) _inTimer = setTimeout(() => { if (document.getElementById('inicioSection') && document.getElementById('inicioSection').classList.contains('active')) loadInicio(); }, 60000);
     } catch (e) { _renderInicio(box, _inicioEmpty(day), note('⚠️ No se pudo cargar (' + escHtml(e.message) + '). Tocá 🔄.')); }
 }
+// #971: cohortes — de los que se registraron cada mes, cuántos cargaron alguna vez y cuántos cargaron ese mes (M0) y los siguientes.
+function _inicioCohortsHtml(rows, n) {
+    if (!Array.isArray(rows) || !rows.length) return '';
+    const pc = (a, b) => b ? ' <small style="color:#9ab">' + Math.round(a * 100 / b) + '%</small>' : '';
+    return '<h3 class="in-h">📈 Cohortes · ¿los que entran se quedan? (por mes de registro)</h3><div class="card" style="padding:.4rem .6rem;overflow:auto"><table class="data-table" style="width:100%;font-size:.82rem"><thead><tr><th>Mes de registro</th><th>Registrados</th><th>Cargaron alguna vez</th><th>Cargaron ese mes</th><th>Mes +1</th><th>Mes +2</th><th>Mes +3</th></tr></thead><tbody>'
+        + rows.map((c) => '<tr><td><b>' + c.month + '</b></td><td>' + n(c.regs) + '</td><td>' + n(c.depositors) + pc(c.depositors, c.regs) + '</td>' + (c.m || []).map((v) => '<td>' + (v == null ? '—' : n(v) + pc(v, c.regs)) + '</td>').join('') + '</tr>').join('')
+        + '</tbody></table><small style="color:#9ab">Si "Mes +1" y "Mes +2" se sostienen, la retención funciona. Si caen a casi cero, el problema está después de la primera carga, no en la pauta.</small></div>';
+}
 function _renderInicio(box, d, notice) {
     {
         const m = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR'); const n = (x) => x == null ? '—' : Number(x).toLocaleString('es-AR');
@@ -17584,7 +17639,7 @@ function _renderInicio(box, d, notice) {
             grp('📲 Aceptación de la app (clientes que cargaron alguna vez)', // #913: base = cargadores, no registrados
                 box1('💳', 'Cargaron alguna vez', n(d.adoption.depositors), 'de ' + n(d.adoption.totalUsers) + ' registrados', '#6366f1') +
                 box1('📲', 'Instalaron la app', n(d.adoption.withApp), d.adoption.appPct + '% de los que cargaron', '#0ea5e9') +
-                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b'));
+                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b')) + _inicioCohortsHtml(d.cohorts, n); // #971
     }
 }
 

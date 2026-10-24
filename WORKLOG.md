@@ -8,6 +8,40 @@
 
 ## Sesión 2026-10-24
 
+### 971. 🧭 CENTRO DE AVISOS: todo lo automático desde un solo lugar, recorrido de retención por cliente, qué avisos quiere cada uno, historias con reacciones, cohortes y semáforo de regalos — SW v643 · admin SW v199
+**Pedido (owner):** "el 1 2 3 4 cambialo de cuajo: no quiero que se mezclen dos automatizaciones de notificaciones, quiero que salga todo de un mismo
+lugar"; "quiero que todos instalen la app (por eso el 50%); estrategias sobre una persona con app para que no se olvide de jugar, a corto y a largo
+plazo; la gente inactiva que dejó de elegirnos que reciba hasta un regalo si hace falta, un bono fuerte: un cliente vale ~$15.000"; "activar el
+desactivar notificaciones para la gente que no quiere recibir pero sí tener la app, sin espantar"; "¿las historias entran en el centro? ¿está bien
+diseñado? quiero que a la gente le guste interactuar o si no solamente entrar y jugar".
+- **Recorrido de retención** (`src/services/retentionJourney.js`, reglas puras + `scripts/test-retention-journey.js`): cada cliente está en un
+  segmento por días desde su última carga real (o el registro): nuevo sin carga (avisos días 1/3/10/21, sin fichas) · sin app (días 2 y 9) ·
+  activo 0–6 d (nada: autopiloto + reembolso) · enfriando 7–13 d (+30 % / +50 %) · inactivo 14–29 d (+60 % y FICHAS) · perdido 30–89 d (100 % y
+  fichas ×1,5/×2 alternados) · lejano 90–180 d (uno por mes, fuerte); después de 180 d no se insiste. Fichas según VALOR del cliente (promedio de
+  carga 90 d): $2.000 / $5.000 / $10.000 × multiplicador, siempre con el rollover global. Un paso por día; `User.journey.sent` guarda
+  "<paso>@<episodio>" (episodio = día de la última carga) ⇒ si vuelve a cargar, el recorrido arranca de nuevo. Textos de servicio (test: nunca
+  ruleta/sueldos). `_journeyTick` corre al mediodía (12–16 h ART, una vez por día, `_cronClaim`), arma UN lote por paso con
+  `_createNotifBatchFromBody` (nombre "Recorrido · …") ⇒ misma cola, mismo chat + push, mismos topes. Estado en `Config['journeyLast']`.
+- **Tope único:** `dailyCap` nuevo en `_resolveNotifBatchAudience` (`_notifDayCounts`): el autopiloto y el recorrido pasan 1 ⇒ nunca dos lotes el
+  mismo día al mismo cliente. El tope mensual del autopiloto ahora sale de `Config['notifCenter'].monthlyCap` (vacío = automático 8+4). Las ofertas
+  de bienvenida saltean a quien ya recibió algo hoy. Los pasos de recuperación (14+ d) no se frenan por el tope mensual (recuperar vale más).
+- **Historia con bono al mediodía:** salía a las 00:08 con push a TODOS (madrugada). Ahora `BONUS_TIME = '12:30'` y ese día el autopiloto no programa
+  campaña (`_autopilotMonthItems` filtra mié/sáb en el refuerzo, mié después). Migración `mig971NotifCenter` borra las campañas futuras del
+  autopiloto para rearmarlas con `dailyCap` y sin esos días.
+- **Qué avisos quiere el cliente** (`User.notifPrefs.level`: all / mine / none; Perfil → "Qué avisos querés recibir", `GET/POST
+  /api/notifications/prefs`): en vez de apagar las notificaciones del teléfono (y perder el canal), elige cuánto le escribimos. 'none' = sólo
+  Soporte y sus cargas/retiros; 'mine' = nada masivo, sí lo suyo (reembolso, regalos para él, sorteos). Se aplica en `sendPushIfOffline` (lotes:
+  `data.kind` 'promo' | 'personal'; sin kind = sistema, siempre sale) y en `notificationService.prefsFilter` (masivo = promo, usernames =
+  personal). **Fatiga:** 10 promos seguidas sin abrir la app ⇒ no más masivas hasta que entre (`/api/activity/ping` la resetea).
+- **Reglas viejas apagadas:** `_runNotifRulesEvaluator` no corre salvo `notifCenter.legacyRules = true` (B3–B6 leían DailyPlayerStats, que ya no se
+  alimenta; los seguimientos los cubre el recorrido). El aviso del reembolso (#970) se apaga/enciende desde el Centro.
+- **Historias:** reacciones 🔥❤️😂👍 (una por cliente, `Story.reactions` + `reactedBy` select:false, `POST /api/stories/:id/react`) y conteo de
+  toques en el botón (`clicks`, `POST /api/stories/:id/click`); el panel muestra vistas · toques · reacciones. Historia automática "🏆 pagos de la
+  semana" (lunes al mediodía, sin push, `_winnersStoryTick`, `autoKey wk-…`): retiros pagados y el más grande con el nombre tapado.
+- **Panel:** Cronograma → 🧭 Centro de avisos (fuentes con interruptor, tope mensual, clientes que bajaron avisos, dónde está cada cliente hoy, lo
+  que le toca hoy con "▶ Mandar ahora", los 18 pasos con su texto). INICIO → cohortes por mes de registro (`_inicioCohorts`, cache 10 min).
+  Cierres → semáforo REGALOS / DEPÓSITOS del mes (verde ≤15 %, amarillo ≤20 %, rojo más). Staff no toca `/api/admin/notif-center`.
+
 ### 970. 🔔 Push automática "No te olvides de reclamar tu reembolso" a los que perdieron ayer; al tocarla abre Reembolso — SW v642
 **Pedido (owner):** "configurá en notificaciones automáticas a todos los que se registran y pierden: no te olvides de reclamar tu reembolso; y cuando
 aprietan la notificación que los mande directo a ver el reembolso del día anterior".

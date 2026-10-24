@@ -703,6 +703,20 @@ async function unsubscribeFromTopic(fcmToken, topic) {
 // ============================================
 // ENVIAR NOTIFICACIÓN MASIVA A TODOS LOS USUARIOS
 // ============================================
+// #971 (owner: "activar el desactivar notificaciones para la gente que no quiere recibir pero sí tener la app"): User.notifPrefs.level
+// 'none' = ninguna push automática (sólo Soporte y sus cargas/retiros, que no pasan por acá); 'mine' = nada masivo ('promo'), sí lo
+// personal ('personal': reembolso, regalos para él, sorteos). kind viene en data.kind; si no viene, el masivo es 'promo' y el de usernames
+// 'personal'. Fatiga: 10 pushes de promo seguidas sin abrir la app ⇒ no más promos hasta que entre (se resetea en /api/activity/ping).
+function prefsFilter(data, defaultKind) {
+  const kind = (data && data.kind) || defaultKind;
+  if (kind === 'system') return {};
+  const f = { 'notifPrefs.level': { $ne: 'none' } };
+  if (kind === 'promo') { f['notifPrefs.level'] = { $nin: ['none', 'mine'] }; f['notifPrefs.fatigue'] = { $not: { $gte: 10 } }; }
+  return f;
+}
+function bumpFatigue(UserModel, users, data, defaultKind) {
+  try { if (((data && data.kind) || defaultKind) !== 'promo' || !users || !users.length) return; UserModel.updateMany({ username: { $in: users.map((u) => u.username) } }, { $inc: { 'notifPrefs.fatigue': 1 } }).catch(() => {}); } catch (_) {}
+}
 async function sendNotificationToAllUsers(UserModel, title, body, data = {}, filter = {}) {
   if (isRouletteText(title, body, data)) return _blockedRoulette('all', title);
   if (!isInitialized) {
@@ -719,10 +733,12 @@ async function sendNotificationToAllUsers(UserModel, title, body, data = {}, fil
         { fcmToken: { $exists: true, $ne: null } },
         { 'fcmTokens.0': { $exists: true } }
       ],
+      ...prefsFilter(data, 'promo'),
       ...filter
     };
     
     const users = await UserModel.find(query).select('fcmToken fcmTokens username').lean();
+    bumpFatigue(UserModel, users, data, 'promo');
     
     if (users.length === 0) {
       return { success: false, error: 'No hay usuarios con tokens FCM registrados' };
@@ -909,6 +925,7 @@ async function sendNotificationToUsernames(UserModel, usernames, title, body, da
     // Buscar usuarios por username que tengan al menos un token
     const users = await UserModel.find({
       username: { $in: usernames },
+      ...prefsFilter(data, 'personal'),
       $or: [
         { fcmToken: { $exists: true, $ne: null } },
         { 'fcmTokens.0': { $exists: true } }

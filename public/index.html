@@ -2653,7 +2653,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v642</div>
+                    <div class="pf-build" id="appBuildTag">app v643</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2669,6 +2669,11 @@
                 <div class="pf-theme-row" id="pfNotifRow">
                     <span class="pf-theme-k"><b><i class="pi pi-sm">🔔</i>Notificaciones</b><small id="pfNotifHint">Avisos de cargas, reembolsos y premios</small></span>
                     <span style="display:inline-flex;align-items:center;"><button class="pf-ico-btn notif-topbar-btn" id="notificationBtn" title="Estado de las notificaciones" aria-label="Notificaciones">🔔</button><button type="button" class="pf-theme-btn" id="pfNotifActivate" onclick="var b=document.getElementById('notificationBtn'); if(b){ b.disabled=false; b.click(); }">Activar</button></span>
+                </div>
+                <!-- #971 (owner): qué avisos quiere recibir, sin apagar las notificaciones del teléfono (así no perdemos el canal). -->
+                <div class="pf-theme-row" id="pfAvisosRow">
+                    <span class="pf-theme-k"><b><i class="pi pi-sm">🎚️</i>Qué avisos querés recibir</b><small id="pfAvisosHint">Bonos del día, novedades y todo lo tuyo</small></span>
+                    <select class="pf-theme-btn pf-select" id="pfAvisosSel" onchange="VIP.home.setNotifLevel(this.value)" aria-label="Qué avisos querés recibir"><option value="all">Todos</option><option value="mine">Sólo lo mío</option><option value="none">Ninguno</option></select>
                 </div>
             </div>
             <!-- #270 (owner): predominancia a usuario, contraseña y página de la app + botón de captura. -->
@@ -3060,6 +3065,8 @@
             <div class="st-brand-foot"><img src="icons/icon-96x96.png?v=358" alt=""><span><b>PICA ROJA</b><small>oficial · cargas automáticas</small></span></div>
             <div class="st-caption" id="storyCaption"></div>
             <a class="st-link" id="storyLink" href="#" target="_blank" rel="noopener" style="display:none;">Ver más ›</a>
+            <!-- #971: reacciones (una por cliente) -->
+            <div class="st-react" id="storyReact" style="display:none;"></div>
         </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>

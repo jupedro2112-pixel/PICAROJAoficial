@@ -154,6 +154,7 @@ const ALTS = {
 // #931 (owner 2026-10-24): "que se publiquen en el cambio de día: se borran y se publican de vuelta a las 00 hs". Las 5 salen juntas apenas
 // cambia el día (un minuto de diferencia para que el orden del anillo sea estable); duran 24 h y el motor apaga las del día anterior.
 const SLOTS = ['00:05', '00:06', '00:07', '00:08', '00:09'];
+const BONUS_TIME = '12:30'; // #971: la historia con bono (única con push a todos) se publica y avisa al mediodía
 const MATCH_TIME = '00:05'; // #834: los partidos salen apenas cambia el día
 
 /** Slot (juego) favorito: el más jugado de 1girox (catálogo público ordenado por popularidad). La Partner API no da netwin por juego,
@@ -202,7 +203,7 @@ function planDay(dayKey, matches, ctx) {
   if ((ctx.bonusDays || [3]).includes(ctx.dow) && ctx.weeklyBonus && ctx.weeklyBonus.pct > 0) { // #968: días del bono (miércoles; + sábado en el refuerzo)
     const b = ctx.weeklyBonus, i = freeSlot(3);
     if (i >= 0) out[i] = { kind: 'bono', title: `🎁 Bono de la semana: +${b.pct}%`, text: `Sólo por ${b.hours} horas: tocá "Reclamar ahora" y tu próxima carga lleva +${b.pct}% EXTRA automático (con el tope de bonos). ¡Gracias por elegir Pica Roja!`,
-      link: '', label: '', bg: '#be123c', bonusPct: b.pct, bonusHours: b.hours, notifyAll: true,
+      link: '', label: '', bg: '#be123c', bonusPct: b.pct, bonusHours: b.hours, notifyAll: true, time: BONUS_TIME, // #971: la push a todos sale al mediodía (antes 00:08 de la madrugada)
       img: { style: 'page', accent: '#e60023', kicker: 'Bono de la semana', icon: 'regalo', h1: `Sólo por ${b.hours} horas`, h2: `+${b.pct}% extra`, bullets: [['✓', 'Tocá "Reclamar ahora"', 'Acá, en esta historia'], ['$', 'Tu próxima carga', `Lleva +${b.pct}% EXTRA automático`], ['★', 'Sin pedirle a nadie', 'Se aplica solo al cargar']], cta: 'Reclamar ahora', note: 'El bono se juega ×{rx} (rollover) para retirarlo' } };
   }
   // 4) El resto, temas de servicio que rotan día a día (sin el genérico de deportes si ese día ya hay partidos).

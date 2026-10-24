@@ -2971,3 +2971,11 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 #basicView .status-row { order: -3 !important; }
 #basicView .play-bal, #basicView .fit-link { order: -2 !important; }
 #basicView .min-strip.ms-basic, #basicView #firstGuideBasic, #basicView #bvLoadBtn, #basicView #bvLoadPanel, #basicView .bv-btn.bv-wd, #basicView #bvWdPanel { order: -1 !important; }
+
+/* ===== #971: reacciones en las historias + selector "Qué avisos querés recibir" (Perfil) ===== */
+.story-viewer .st-react { pointer-events: auto; display: flex; gap: 6px; justify-content: center; margin: 6px 0 2px; }
+.story-viewer .st-rbtn { pointer-events: auto; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.35); color: #fff; border-radius: 999px; padding: 4px 10px; font-size: 16px; line-height: 1; display: inline-flex; align-items: center; gap: 4px; backdrop-filter: blur(4px); }
+.story-viewer .st-rbtn b { font-size: 11px; font-weight: 800; }
+.story-viewer .st-rbtn.on { background: var(--p-red, #e60023); border-color: var(--p-red, #e60023); transform: scale(1.08); }
+.pf-select { appearance: auto; -webkit-appearance: menulist; max-width: 150px; font-size: 12px; padding: 6px 8px; background: var(--p-bg-2, #f3f4f6); color: var(--p-ink, #111); }
+html[data-theme="dark"] .pf-select { background: var(--p-bg-2, #1f2937); color: var(--p-ink, #f3f4f6); }

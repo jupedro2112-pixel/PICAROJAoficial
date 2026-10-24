@@ -1462,3 +1462,35 @@ plata ni sueldos). Foto: `storyImage` (SVG, `GET /api/stories/:id/auto.svg?v=STO
 ("🛠 Motor…"). Cada historia se publica en su propio try/catch: un error no frena a las demás. Kill switch: `STORIES_AUTOPILOT_DISABLED=1`.
 **Republicar (#911):** `_storyWipeForRepublish` + `_storyAutoTick({ force: true })` (one-shot `mig911StoriesRepublish` al deployar y
 `POST /api/admin/stories-autopilot/republish-today`): apaga las vigentes (no las personales), borra `sa-<hoy|ayer>-*` y publica las de hoy ya.
+
+
+## Centro de avisos (#971, 2026-10-24)
+
+**Idea:** un solo lugar para todo lo automático que le llega al cliente, con un solo tope. Panel → Cronograma → 🧭 Centro de avisos; config en
+`Config['notifCenter']` = { monthlyCap, journey, refundReminder, winnersStory, legacyRules }.
+
+**Fuentes (todas pasan por la misma cola de lotes o respetan sus topes):**
+| Fuente | Cuándo | Cómo sale | Tope |
+|---|---|---|---|
+| Recorrido por cliente (`retentionJourney.js` + `_journeyTick`) | 12–16 h ART, una vez por día | un NotifBatch por paso ("Recorrido · …"), chat + push `kind:'personal'` | 1/día; mensual sólo en pasos `capped` |
+| Autopiloto (campaña masiva) | 20:00, 3 lotes | NotifBatch desde ScheduledCampaign, push `kind:'promo'` | 1/día + mensual |
+| Lotes manuales del panel | cuando el agente quiere | NotifBatch | mensual si lo marca |
+| Aviso del reembolso diario (#970) | 11 h | `sendNotificationToUsernames` (personal) | 1 por día, propio |
+| Ofertas de bienvenida (días 5/15/30) | 18 h | historia personal + push personal | saltea a quien ya recibió un lote hoy |
+| Historia con bono | mié (y sáb en el refuerzo) 12:30 | historia + push a todos (promo) | ese día el autopiloto no programa |
+| Historia "pagos de la semana" | lunes 12 h | historia sin push | — |
+| Reglas viejas (NotificationRule) | — | apagadas salvo `legacyRules` | — |
+
+**Recorrido:** segmento por días desde la última carga real (`SCHED_ADAPTER.realDepositMatch`) o desde el registro: nuevo (0 cargas) · sinapp ·
+activo 0–6 · enfriando 7–13 · inactivo 14–29 · perdido 30–89 · lejano 90–180 · olvidado (+180, nada). `pickStep` devuelve a lo sumo un paso
+(prioridad recuperación > nuevo > sin app; tolerancia de 2 días), con clave "<paso>@<episodio>" guardada en `User.journey.sent` (episodio = día de
+la última carga: una carga nueva reinicia el recorrido). Fichas según `valueTier(avgDeposit 90 d)` chico/medio/grande = $2.000/$5.000/$10.000 ×
+mult, rollover global. Preview sin enviar: `GET /api/admin/notif-center` (`_journeyScan`, cache 10 min); `POST …/run` fuerza la pasada de hoy.
+
+**Preferencia del cliente:** `User.notifPrefs.level` all/mine/none + `fatigue`. Se aplica en `sendPushIfOffline` (lotes, por `data.kind`) y en
+`notificationService.prefsFilter` (masivo = promo, usernames = personal; `kind:'system'` siempre sale). Fatiga: +1 por push promo enviada, 0 al
+abrir la app (`/api/activity/ping`); ≥10 ⇒ sin promos.
+
+**Trampas:** un aviso automático nuevo va por `_createNotifBatchFromBody` (hereda `dailyCap`/`monthlyCap`) o lleva `data.kind`; no agregar otro
+cron de pushes por fuera. `_notifDayCounts`/`_notifMonthCounts` cuentan NotifBatch (no las pushes directas). Al cambiar el tope mensual el PUT
+borra las campañas futuras del autopiloto (`_autopilotClearFuture`) y el tick las rearma.

@@ -594,8 +594,24 @@
         } catch (_) {}
         try { VIP.ui.showModal('verifyPhoneModal'); } catch (_) { const m = _el('verifyPhoneModal'); if (m) m.classList.remove('hidden'); }
     }
+    // #971 (owner): "activar el desactivar notificaciones para la gente que no quiere recibir pero sí tener la app" ⇒ en vez de apagar
+    // las del teléfono (y perder el canal), elige cuánto le escribimos: todos / sólo lo mío / ninguno (Soporte y sus cargas siempre).
+    function _pfAvisosHint(v) { const h = _el('pfAvisosHint'); if (h) h.textContent = v === 'none' ? 'Sólo Soporte y tus cargas y retiros' : v === 'mine' ? 'Tu reembolso, regalos para vos y sorteos; nada masivo' : 'Bonos del día, novedades y todo lo tuyo'; }
+    function paintPfAvisos() {
+        const sel = _el('pfAvisosSel'); if (!sel) return;
+        if (VIP.state && VIP.state.notifLevel) { sel.value = VIP.state.notifLevel; _pfAvisosHint(sel.value); return; }
+        if (!(VIP.state && VIP.state.currentToken)) return;
+        fetch(VIP.config.API_URL + '/api/notifications/prefs', { headers: { 'Authorization': 'Bearer ' + VIP.state.currentToken } }).then((r) => r.json()).then((j) => { if (j && j.level) { VIP.state.notifLevel = j.level; sel.value = j.level; _pfAvisosHint(j.level); } }).catch(() => {});
+    }
+    async function setNotifLevel(v) {
+        try {
+            const r = await fetch(VIP.config.API_URL + '/api/notifications/prefs', { method: 'POST', headers: { 'Authorization': 'Bearer ' + VIP.state.currentToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ level: v }) });
+            const j = await r.json(); if (!(j && j.success)) throw new Error(j && j.error || 'error');
+            VIP.state.notifLevel = j.level; _pfAvisosHint(j.level); try { VIP.ui.showToast('Listo, guardado ✓'); } catch (_) {}
+        } catch (_) { try { VIP.ui.showToast('No se pudo guardar, probá de nuevo', 'error'); } catch (__) {} paintPfAvisos(); }
+    }
     function openProfile() {
-        paintPfPhone(); paintPfNotif(); // #645
+        paintPfPhone(); paintPfNotif(); paintPfAvisos(); // #645 · #971
         _pfShown = true; // #393
         try { if (VIP.autoload && VIP.autoload.hidePreview) VIP.autoload.hidePreview(); } catch (_) {}
         _pfPaint();
@@ -2792,7 +2808,7 @@
         }
     } catch (_) {}
 
-    VIP.home = { supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+    VIP.home = { supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,

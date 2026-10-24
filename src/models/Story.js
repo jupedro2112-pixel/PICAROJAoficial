@@ -46,6 +46,10 @@ const storySchema = new mongoose.Schema({
   notifyAll: { type: Boolean, default: false },
   bonusClaims: { type: Number, default: 0 },
   views: { type: Number, default: 0 },
+  // #971: interacción — toques en el botón de la historia y reacciones (una por cliente; reactedBy no viaja a la app).
+  clicks: { type: Number, default: 0 },
+  reactions: { fire: { type: Number, default: 0 }, heart: { type: Number, default: 0 }, laugh: { type: Number, default: 0 }, like: { type: Number, default: 0 } },
+  reactedBy: { type: [String], default: [], select: false },
   // #827 HISTORIAS AUTOMÁTICAS: 'sa-YYYY-MM-DD-<slot>' (única ⇒ multi-instancia sin duplicar) y qué es ('servicio' | 'deporte').
   // #886 (owner): historia PERSONAL (sólo la ve ese cliente): bono de bienvenida a los N días de registrarse (5 / 15 / 30).
   audienceUserId: { type: String, default: null, index: true },

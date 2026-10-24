@@ -360,6 +360,22 @@ const userSchema = new mongoose.Schema({
   // #823: último teléfono con el que entró (lo detecta index.html): { os, model, w, h, dpr, app, sat, at }.
   lastDevice: { type: mongoose.Schema.Types.Mixed, default: null },
   deviceIds: { type: [String], default: [], index: true },
+  // #971 RECORRIDO DE RETENCIÓN (Centro de avisos): pasos ya enviados ("<paso>@<episodio>", episodio = día de la última carga o 'reg'),
+  // último paso y segmento. Lo escribe sólo _journeyTick (server.js).
+  journey: {
+    segment: { type: String, default: null },
+    lastStep: { type: String, default: null },
+    lastAt: { type: Date, default: null },
+    sent: { type: [{ k: { type: String }, at: { type: Date } }], default: [] }
+  },
+  // #971 QUÉ AVISOS QUIERE (Perfil → "Qué avisos querés recibir"): 'all' (todo) · 'mine' (sólo lo suyo: reembolso, regalos para él,
+  // sorteos; nada masivo) · 'none' (sólo Soporte y sus cargas/retiros). fatigue = pushes de promo seguidas sin que abra la app
+  // (se resetea en /api/activity/ping): con 10 o más, las promos masivas dejan de salirle solas hasta que vuelva a entrar.
+  notifPrefs: {
+    level: { type: String, enum: ['all', 'mine', 'none'], default: 'all' },
+    updatedAt: { type: Date, default: null },
+    fatigue: { type: Number, default: 0 }
+  },
   pendingAccessCodeAt: { type: Date, default: null }, // #965: cuándo se generó el código temporal (vence a los 7 días) // #952: IDs propios del celular (localStorage) vistos en el ping; el radar cruza cuentas por acá
   // Último permiso de notificaciones reportado por el cliente: 'granted' / 'denied' / 'default'
   notifPermission: {

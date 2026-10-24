@@ -142,6 +142,7 @@
             else link.style.display = 'none';
             if (!(s.bonusActive && Number(s.bonusPct) > 0)) link.classList.remove('st-bonus');
         }
+        try { _paintReact(s); } catch (_) {} // #971
         _markSeen(s.id);
         try { if (VIP.state && VIP.state.currentToken) fetch(VIP.config.API_URL + '/api/stories/' + encodeURIComponent(s.id) + '/view', { method: 'POST', headers: { 'Authorization': 'Bearer ' + VIP.state.currentToken } }).catch(() => {}); } catch (_) {}
         _arm(dur);
@@ -158,6 +159,31 @@
             try { VIP.home.storyBonusRefresh(); } catch (_) {}
             try { VIP.home.goGiroxDirect(); } catch (_) {}
         } catch (_) { try { VIP.ui.showToast('Error de conexión', 'error'); } catch (e) {} }
+    }
+    // #971 (owner: "que a la gente le guste interactuar"): reacciones 🔥❤️😂👍 (una por cliente, se recuerda en el teléfono) y
+    // conteo de toques en el botón de la historia (el panel muestra vistas · toques · reacciones por historia).
+    const REACT = [['fire', '🔥'], ['heart', '❤️'], ['laugh', '😂'], ['like', '👍']];
+    let _curId = null, _clickArmed = false;
+    function _myReact(id) { try { return (JSON.parse(localStorage.getItem('vip_st_react') || '{}'))[id] || null; } catch (_) { return null; } }
+    function _saveReact(id, r) { try { const m = JSON.parse(localStorage.getItem('vip_st_react') || '{}'); m[id] = r; const ks = Object.keys(m); while (ks.length > 80) delete m[ks.shift()]; localStorage.setItem('vip_st_react', JSON.stringify(m)); } catch (_) {} }
+    function _auth() { return { 'Authorization': 'Bearer ' + VIP.state.currentToken, 'Content-Type': 'application/json' }; }
+    function _paintReact(s) {
+        _curId = s.id; const box = _el('storyReact'); if (!box) return;
+        if (!(VIP.state && VIP.state.currentToken)) { box.style.display = 'none'; return; }
+        const rx = s.reactions || {}; const mine = _myReact(s.id);
+        box.innerHTML = REACT.map(([k, e]) => '<button type="button" class="st-rbtn' + (mine === k ? ' on' : '') + '" data-r="' + k + '" aria-label="Reaccionar">' + e + (Number(rx[k]) > 0 ? '<b>' + Number(rx[k]) + '</b>' : '') + '</button>').join('');
+        box.style.display = '';
+        box.querySelectorAll('.st-rbtn').forEach((b) => { b.onclick = (ev) => { ev.stopPropagation(); ev.preventDefault(); _react(s, b.getAttribute('data-r')); }; });
+        if (!_clickArmed) {
+            _clickArmed = true;
+            const link = _el('storyLink');
+            if (link) link.addEventListener('click', () => { try { if (_curId && VIP.state && VIP.state.currentToken) fetch(VIP.config.API_URL + '/api/stories/' + encodeURIComponent(_curId) + '/click', { method: 'POST', headers: _auth() }).catch(() => {}); } catch (_) {} }, true);
+        }
+    }
+    async function _react(s, r) {
+        if (_myReact(s.id)) return;
+        _saveReact(s.id, r); s.reactions = s.reactions || {}; s.reactions[r] = (Number(s.reactions[r]) || 0) + 1; _paintReact(s);
+        try { const res = await fetch(VIP.config.API_URL + '/api/stories/' + encodeURIComponent(s.id) + '/react', { method: 'POST', headers: _auth(), body: JSON.stringify({ reaction: r }) }); const j = await res.json(); if (j && j.reactions) { s.reactions = j.reactions; _paintReact(s); } } catch (_) {}
     }
     function openById(id) {
         const go = () => { const i = _items.findIndex((s) => s.id === id); if (i >= 0) open(i); else open(); };

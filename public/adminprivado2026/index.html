@@ -2696,6 +2696,15 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                     </div>
                     <div id="naBody" style="margin-top:.6rem;font-size:.84rem">Cargando…</div>
                 </div>
+                <!-- #971 (owner): CENTRO DE AVISOS — "quiero que salga todo de un mismo lugar": todo lo automático que le llega al cliente, con un solo tope. -->
+                <div class="card" style="margin-bottom:1rem;border:2px solid #7c3aed" id="notifCenterCard">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+                        <h3 style="margin:0;font-size:1rem">🧭 Centro de avisos · todo lo automático sale de acá</h3>
+                        <button class="btn btn-secondary btn-small" onclick="loadNotifCenter(true)">🔄 Actualizar</button>
+                    </div>
+                    <div style="color:#9ab;font-size:.78rem;margin:.4rem 0 .6rem">Un cliente recibe como máximo <b>1 aviso por día</b> y el tope mensual de abajo, cuente de donde cuente (recorrido, campaña del día, lotes a mano). El aviso del reembolso y lo que el cliente pide en su Perfil ("Qué avisos querés recibir") van aparte.</div>
+                    <div id="ncBody" style="font-size:.84rem">Cargando…</div>
+                </div>
                 <!-- #819: la configuración DEFINITIVA va arriba de todo. #817: AUTOPILOTO de retención — programa solo el mes en curso y el siguiente, todos los días, por lotes y grupos -->
                 <div class="card" style="margin-bottom:1rem" id="cronAutopilotCard">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
