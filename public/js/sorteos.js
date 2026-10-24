@@ -38,10 +38,12 @@
     }
     function paintCards() {
         const list = (_data && _data.enabled && _data.sorteos) || [];
+        // #926 (owner): las tarjetas del básico/intermedio van IGUAL que en el completo: dos mitades lado a lado (Gran Sorteo | Sorteo mensual).
+        const ordered = ['gran', 'mensual'].map((k) => list.find((x) => x.key === k)).filter(Boolean).concat(list.filter((x) => !['gran', 'mensual'].includes(x.key)));
+        const pair = () => ordered.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\')">' + pic(p1.img || s.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small><em>Ver más ›</em></span></button>'; }).join('');
         document.querySelectorAll('[data-srt-cards]').forEach((box) => {
-            if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
-            box.hidden = false;
-            box.innerHTML = list.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-card" onclick="VIP.sorteos.open(\'' + s.key + '\')">' + pic(p1.img || s.emoji, 'srt-card-img', p1.name) + '<span class="srt-card-t"><b>' + esc(s.title) + '</b><i>' + esc(p1.name || '') + '</i><small>' + esc(cardSub(s)) + '</small></span></button>'; }).join('');
+            if (!ordered.length) { box.hidden = true; box.innerHTML = ''; return; }
+            box.hidden = false; box.classList.toggle('one', ordered.length === 1); box.innerHTML = pair();
         });
         // #917: pill del medio de la barra del casino (Girox directo): título del sorteo vigente + subtítulo vivo.
         try {
@@ -55,10 +57,8 @@
         } catch (_) {}
         // #922 (owner): el banner de Girox directo dividido en DOS: a la izquierda el Gran Sorteo (auto), a la derecha el mensual (iPhone).
         document.querySelectorAll('[data-srt-banner]').forEach((box) => {
-            const ordered = ['gran', 'mensual'].map((k) => list.find((x) => x.key === k)).filter(Boolean).concat(list.filter((x) => !['gran', 'mensual'].includes(x.key)));
             if (!ordered.length) { box.hidden = true; box.innerHTML = ''; return; }
-            box.hidden = false; box.classList.toggle('one', ordered.length === 1);
-            box.innerHTML = ordered.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\')">' + pic(p1.img || s.emoji, 'srt-ban-img', p1.name) + '<span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small><em>Ver más ›</em></span></button>'; }).join('');
+            box.hidden = false; box.classList.toggle('one', ordered.length === 1); box.innerHTML = pair();
         });
     }
     // ---- Pantalla del sorteo

@@ -2669,7 +2669,7 @@ body.sp-sent .sp-intro:not(.sp-open) .sp-faq-btn { width: auto; margin: 0; paddi
 :root { --srt-g: #2a0a4f; --srt-g2: #4a1283; --srt-g3: #b05cff; --srt-soft: #f4ecff; --srt-line: #d9bfff; --srt-ink: #fff; --srt-lite: #d9b3ff; --srt-sh: rgba(74, 18, 131, .38); }
 html[data-theme="dark"] { --srt-g: #220840; --srt-g2: #3c0f6c; --srt-g3: #b05cff; --srt-soft: #1b0f2e; --srt-line: #4a2a7a; --srt-lite: #d9b3ff; --srt-sh: rgba(60, 15, 108, .5); }
 /* #918 (owner): "los recuadros del sorteo dejalos separados, en dos, no juntos" → uno debajo del otro, cada uno con su recuadro */
-.srt-cards { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 8px 12px 12px; }
+.srt-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 12px 10px; } .srt-cards.one { grid-template-columns: 1fr; } /* #926: como el completo, dos mitades */
 #basicView .srt-cards, #easyView .srt-cards { margin-left: 0; margin-right: 0; }
 .srt-card, .srt-cross { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border: 1.5px solid var(--srt-g3); border-radius: 16px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: var(--srt-ink); font-family: var(--p-font); cursor: pointer; box-shadow: 0 4px 14px var(--srt-sh); }
 .srt-card { width: 100%; } .srt-card::after { content: '›'; margin-left: auto; font-size: 22px; font-weight: 900; opacity: .85; }

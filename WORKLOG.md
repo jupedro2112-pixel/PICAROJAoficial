@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 926. 🟣 Sorteos en el básico/intermedio IGUAL que en el completo: dos mitades lado a lado — SW v615
+**Pedido (owner, capturas):** "esto del menú básico dejalo como el de completo".
+- `paintCards` arma el mismo par (`.srt-ban` Gran Sorteo | Sorteo mensual, con foto, estado vivo y "Ver más ›") para `[data-srt-cards]` y
+  `[data-srt-banner]`; `.srt-cards` pasa a grilla de 2 columnas (`one` si hay un solo sorteo). Las tarjetas apiladas de #918 quedan sin uso.
+
 ### 924/925. 🧱 Servicios del completo en UNA fila como el básico · sin tarjeta cruzada al pie del sorteo — SW v614
 **Pedidos (owner, capturas):** "este recuadro del completo quiero que lo dejes como el básico" y "sacá adentro del auto sorteo, en la parte inferior, el del iPhone".
 - #924: bloque final en pin.css que pisa el 2 × 2 de #758: `.ev-services` en grilla de 4 en todos los modos (completo, Girox directo, entrada), cada
