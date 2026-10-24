@@ -8,6 +8,17 @@
 
 ## Sesión 2026-10-24
 
+### 969. 🎁 SORTEO EXTRA $1.000.000 en LOS DOS sorteos (10 × $100.000 cada uno), aclarado por separado — SW v641 · admin SW v198
+**Pedido (owner):** "el sorteo extra es en el del iPhone y en el del auto: 10 personas de $100.000, serían $1.000.000 extra en cada sorteo; aclaralo
+individualmente y ponelo en la info del detalle, todo".
+- Reglas: `extra` en `mensual` y en `gran` (10 ganadores × $100.000, mínimo 10 cargas: en el mes para el mensual, durante el sorteo para el del auto;
+  estén o no anotados). `normalize` lo mezcla para los dos; `extraWho(extra, span)` + `extraSpan(key)`.
+- Server: filtros y conteos por `s.key`; `POST /api/admin/sorteos/:key/draw-extra` (antes sólo mensual); `GET /api/sorteos` y el admin mandan el
+  `extra` de cada sorteo; el mensaje de Soporte "Explicación del sorteo" lista el extra de cada uno.
+- App: recuadro "🎁 SORTEO EXTRA $1.000.000 · <sorteo>: 10 ganadores al azar de $100.000 ($1.000.000 extra en este sorteo)" en las dos ventanas,
+  Bases de cada sorteo con su propio párrafo, y la hoja del casino lo nombra en los dos.
+- Panel → Sorteos: pestaña 🎁 y campos del extra en Mensual y en Gran Sorteo; el botón de sortear usa el sorteo de la pestaña.
+
 ### 968. 🎁 Refuerzo de regalos octubre-noviembre + partidos en las historias + todo automático
 **Pedido (owner):** "no te olvides lo de las historias: quiero la automatización con los partidos y demás; las notificaciones, todo corriendo automático y
 llegándole a la gente para incentivar; dale un bombazo más fuerte de regalos este mes de octubre y noviembre así retenemos más".
