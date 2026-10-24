@@ -73,6 +73,9 @@
     // #836 (owner): "que siempre cuando la gente entra a la app entre al menú de Girox; si lo cambian, que usen el que cambian" ⇒ '1' = la
     // persona ELIGIÓ un menú (desde el selector o los botones de cambiar menú): al volver a entrar arranca en ése, sin preguntar.
     const MENU_USER_KEY = 'vip_menu_user';
+    // #937 (owner): "cuando la gente instala la app, dejar Girox predeterminada siempre" ⇒ en la app INSTALADA se arranca en Girox directo
+    // aunque haya elegido otro menú en el navegador (durante la sesión puede cambiarlo con "Cambiar menú").
+    function _isInstalledApp() { try { return document.documentElement.classList.contains('is-app') || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; } catch (_) { return false; } }
     function _userPickedMenu() { try { return localStorage.getItem(MENU_USER_KEY) === '1' && !!localStorage.getItem(MENU_PREF_KEY); } catch (_) { return false; } }
     function isMenuFixed() { try { return localStorage.getItem(MENU_FIXED_KEY) === '1'; } catch (_) { return false; } }
     let _homeMode = 'play';
@@ -403,6 +406,7 @@
         const only = MENU_ORDER.filter(_menuOn); if (only.length === 1) { setMenuPref(only[0], { quiet: true, auto: true }); return; } // #635: un solo menú activo → directo
         const pref = getMenuPref();
         if (pref === 'easy' && _homeMode !== 'easy') setHomeMode('easy', { persist: false });
+        if (_isInstalledApp() && _menuOn('girox')) { setMenuPref('girox', { quiet: true, auto: true }); return; } // #937: app instalada ⇒ Girox directo siempre
         if (isMenuFixed() && pref) { setHomeMode(_modeFor(pref)); _afterPref(pref); return; } // #559: preseleccionado → entra directo · #670
         if (pref && _userPickedMenu()) { setHomeMode(_modeFor(pref)); _afterPref(pref); return; } // #836: el menú que eligió la persona
         // #733 (owner): "el menú seleccionado para todos (landing o común) cuando abran la app sea el de Girox, y después lo pueden cambiar
@@ -617,7 +621,7 @@
         try { if (localStorage.getItem('vip_nodep') === '1') document.body.classList.add('nodep'); } catch (_) {} // #731
         try { const cl = localStorage.getItem('vip_menu_layout'); if (cl) _setMenuLayout(Number(cl)); } catch (_) {} // #638: menú 1/2 del caché, sin esperar al server
         _applyMenusEnabled(); _applyMenuLayout(); // #635: menús activos (cacheados al instante, refrescados del server)
-        const m = _modeFor((_userPickedMenu() || isMenuFixed() || !_menuOn('girox')) ? getMenuPref() : 'girox'); // #512 · #836: Girox salvo elección propia
+        const m = _modeFor(((_userPickedMenu() || isMenuFixed()) && !(_isInstalledApp() && _menuOn('girox'))) || !_menuOn('girox') ? getMenuPref() : 'girox'); // #512 · #836: Girox salvo elección propia · #937: instalada ⇒ Girox siempre
         try { sessionStorage.removeItem(HOME_MODE_KEY); } catch (_) {}
         _bindEntryFrame();
         setHomeMode(m, { persist: false });
@@ -2257,7 +2261,7 @@
                 const j = await r.json(); if (!r.ok || !j.token) return;
                 c = { u, t: j.token, at: Date.now() }; try { sessionStorage.setItem('vip_install_tok2', JSON.stringify(c)); } catch (_) {}
             }
-            const pref = getMenuPref(), fixed = isMenuFixed();
+            const pref = _menuOn('girox') ? 'girox' : getMenuPref(), fixed = isMenuFixed(); // #937: la app instalada arranca en Girox
             const href = '/manifest.json?a=' + encodeURIComponent(c.t) + '&u=' + encodeURIComponent(u) + (pref ? '&menu=' + pref + (fixed ? '&fixed=1' : '') : '');
             const l = document.querySelector('link[rel="manifest"]'); if (l && l.getAttribute('href') !== href) l.setAttribute('href', href);
         } catch (_) {}
@@ -2486,6 +2490,8 @@
             bar = _el('casinoTopBar');
         }
         try { if (VIP.sorteos && VIP.sorteos.paintCasino) VIP.sorteos.paintCasino(); } catch (_) {} // #935
+        // #937 (owner): "en Girox directo, al iniciar, la Carga rápida abierta para cargar, siempre"
+        if (_curPref === 'girox') setTimeout(() => { try { toggleCasinoLoad(true); } catch (_) {} }, 450);
         // #700: el contador de historias nuevas copia el de la barra principal; sin historias cargadas el botón igual abre el visor.
         try { const src = _el('storiesBadge'), dst = _el('ctStoriesBadge'); if (src && dst) { dst.textContent = src.textContent; dst.style.display = src.style.display; } const nh = _el('navHistorias'), cs = _el('ctStories'); if (nh && cs) cs.classList.toggle('has-active', nh.classList.contains('has-active') || nh.classList.contains('has-new')); } catch (_) {}
         document.body.classList.add('casino-open'); // #700: los modales (Info, Perfil, historias…) van por encima del casino

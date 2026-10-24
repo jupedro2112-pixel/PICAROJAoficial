@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 937. 🎰 Girox directo al iniciar: sorteo resumido SIN abrir (píldora) + Carga rápida ABIERTA · app instalada ⇒ Girox siempre — SW v624
+**Pedido (owner):** "el sorteo desde Girox, cuando iniciás, que aparezca resumido sin abrir, y la Carga rápida abierta para cargar, siempre así; cuando la
+gente instala la app dejar Girox predeterminada siempre".
+- Casino: `_casinoBarOpen()` default cerrado ⇒ al entrar se ve la píldora "Sorteo mensual" en el medio (el banner de abajo sólo si la tocan; #935
+recordaba abierto). Al armar la barra en Girox directo, `toggleCasinoLoad(true)` abre el panel de Carga rápida a los 450 ms, cada vez.
+- App instalada (`_isInstalledApp()`: clase `is-app` / display-mode standalone): arranca SIEMPRE en Girox directo (si ese menú está activo), aunque
+  haya elegido otro en el navegador; `installManifestSync` manda `menu=girox` en el start_url. Con "Cambiar menú" sigue pudiendo moverse en la sesión.
+
 ### 936. 📜 Bases y condiciones de CADA sorteo escritas abajo del propio sorteo — SW v623
 **Pedido (owner):** "dentro del sorteo del auto que aparezca sólo la info del auto y en el del teléfono la del teléfono, separado, con sus términos y
 condiciones abajo sobre el sorteo".

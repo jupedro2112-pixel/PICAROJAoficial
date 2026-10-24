@@ -191,7 +191,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   (sin regalo) y una migración al boot pisa el texto viejo con "$5.000".
 - **HOME 2.0 de la PWA (#220, 2026-10-16) + chat principal (#266, 2026-10-17):** hay CUATRO modos
   (`VIP.home.setHomeMode`, `sessionStorage vip_home_mode`). **easy (#366, MENÚ FÁCIL):** `#easyView` con saldo,
-  CARGAR AHORA, reembolso / ruleta / referidos / ver la plataforma, ayuda por chat; desde #836 se entra SIEMPRE a Girox directo salvo que la persona haya elegido otro menú (`localStorage vip_menu_user='1'` +
+  CARGAR AHORA, reembolso / ruleta / referidos / ver la plataforma, ayuda por chat; desde #836 se entra SIEMPRE a Girox directo salvo que la persona haya elegido otro menú (#937: en la app INSTALADA, Girox siempre, elija lo que elija; el manifest manda `menu=girox`) (`localStorage vip_menu_user='1'` +
   `vip_menu_pref` = 'easy'|'full'|'basic'|'girox'; ya no se pregunta al arrancar ni a los 10 min; #670: 'girox' = "Girox directo", modo play + casino embebido abierto al toque con Carga rápida y Retirar adentro; menús activos por panel `Config['menusEnabled']`, #635) y "Inicio" (`goHome`) lo respeta. **play (entrada, #267):** `#entryView` con
   tabs Girox/Ganamos y la web pública de la plataforma embebida + botones Carga manual (→ mini) /
   Carga automática (→ full). **mini (= SOPORTE desde #373; antes "Carga manual"):** se entra al CHAT

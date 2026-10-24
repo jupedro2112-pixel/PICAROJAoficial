@@ -187,7 +187,7 @@
     // #935 (owner, captura de la gemela): dentro del casino, con el sorteo ABIERTO hay un banner debajo de la barra ("🏆 Sorteo mensual ·
     // Empieza en… · Ver más ▾" y un – para cerrarlo) y en el medio de la barra queda PICA ROJA; CERRADO, queda la píldora "Sorteo mensual" en el
     // medio y tocarla vuelve a abrir el banner. El estado se recuerda en el teléfono (vip_srt_casino_bar).
-    function _casinoBarOpen() { try { return localStorage.getItem('vip_srt_casino_bar') !== 'closed'; } catch (_) { return true; } }
+    function _casinoBarOpen() { try { return localStorage.getItem('vip_srt_casino_bar') === 'open'; } catch (_) { return false; } } // #937: al iniciar, resumido (píldora) sin abrir
     function casinoBar(open) { try { localStorage.setItem('vip_srt_casino_bar', open ? 'open' : 'closed'); } catch (_) {} paintCasino(); }
     function paintCasino() {
         const list = (_data && _data.enabled && _data.sorteos) || [];
