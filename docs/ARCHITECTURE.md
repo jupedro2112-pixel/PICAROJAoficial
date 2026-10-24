@@ -1481,8 +1481,7 @@ plata ni sueldos). Foto: `storyImage` (SVG, `GET /api/stories/:id/auto.svg?v=STO
 | Historia "pagos de la semana" | lunes 12 h | historia sin push | — |
 | Reglas viejas (NotificationRule) | — | apagadas salvo `legacyRules` | — |
 
-**Recorrido:** segmento por días desde la última carga real (`SCHED_ADAPTER.realDepositMatch`) o desde el registro: nuevo (0 cargas) · sinapp ·
-activo 0–6 · enfriando 7–13 · inactivo 14–29 · perdido 30–89 · lejano 90–180 · olvidado (+180, nada). `pickStep` devuelve a lo sumo un paso
+**Recorrido:** segmento por días desde la última carga real (`SCHED_ADAPTER.realDepositMatch`) o desde el registro: nuevo (0 cargas) · activo 0–6 · enfriando 7–13 · inactivo 14–29 · perdido 30–89 · lejano 90–180 · olvidado (+180, nada). `pickStep` devuelve a lo sumo un paso
 (prioridad recuperación > nuevo > sin app; tolerancia de 2 días), con clave "<paso>@<episodio>" guardada en `User.journey.sent` (episodio = día de
 la última carga: una carga nueva reinicia el recorrido). Fichas según `valueTier(avgDeposit 90 d)` chico/medio/grande = $2.000/$5.000/$10.000 ×
 mult, rollover global. Preview sin enviar: `GET /api/admin/notif-center` (`_journeyScan`, cache 10 min); `POST …/run` fuerza la pasada de hoy.

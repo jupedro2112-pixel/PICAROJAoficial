@@ -8,6 +8,12 @@
 
 ## Sesión 2026-10-24
 
+### 972. Recorrido: sin pasos de "instalá la app" (día 2 y 9)
+**Pedido (owner):** "lo de instalar a los 2 o 9 días no sirve: muchos ya pierden el contacto con nosotros si no tienen la app; tiene que ser en el
+momento toda la parte de instalar la app, por eso lo del 50 instalando la app y notificaciones". Se quitan los pasos `app-2`/`app-9` de
+`retentionJourney.js` (y la etiqueta del segmento en el panel); la instalación sigue resolviéndose al entrar: activar avisos + 50 % EXTRA por
+instalar en la primera carga (`installGift`). `pickStep` conserva el soporte del segmento 'sinapp' por si se quiere volver a usar. Test actualizado.
+
 ### 971. 🧭 CENTRO DE AVISOS: todo lo automático desde un solo lugar, recorrido de retención por cliente, qué avisos quiere cada uno, historias con reacciones, cohortes y semáforo de regalos — SW v643 · admin SW v199
 **Pedido (owner):** "el 1 2 3 4 cambialo de cuajo: no quiero que se mezclen dos automatizaciones de notificaciones, quiero que salga todo de un mismo
 lugar"; "quiero que todos instalen la app (por eso el 50%); estrategias sobre una persona con app para que no se olvide de jugar, a corto y a largo

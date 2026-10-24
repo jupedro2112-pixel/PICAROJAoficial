@@ -357,7 +357,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **CHATS QUE SE CIERRAN SOLOS (#895):** un aviso automático nuevo que resuelva lo del cliente (carga, comprobante) llama
   `_chatAutoCloseIfHandled(userId, why)`; el chat sólo queda abierto si el cliente escribió texto sin respuesta. Los chats nuevos nacen cerrados.
 - **CENTRO DE AVISOS (#971, 2026-10-24):** TODO lo automático que le llega al cliente sale de un solo lugar (panel → Cronograma → 🧭 Centro de avisos,
-  `Config['notifCenter']`): RECORRIDO por cliente (`src/services/retentionJourney.js` + `_journeyTick` al mediodía: nuevos / sin app / enfriando / inactivos /
+  `Config['notifCenter']`): RECORRIDO por cliente (`src/services/retentionJourney.js` + `_journeyTick` al mediodía: nuevos / enfriando / inactivos /
   perdidos / lejanos, un paso por día, regalos crecientes, fichas según valor del cliente; marca `User.journey.sent`), autopiloto, aviso del reembolso,
   ofertas de bienvenida, historia con bono (ahora a las 12:30; ese día el autopiloto no manda), historia "pagos de la semana" (lunes). Reglas viejas
   (NotificationRule) APAGADAS por defecto. **Tope único:** `monthlyCap` (cuenta todos los lotes) + `dailyCap: 1` en `_resolveNotifBatchAudience`

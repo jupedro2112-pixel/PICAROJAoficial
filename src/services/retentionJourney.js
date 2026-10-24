@@ -10,7 +10,7 @@
 //
 // Segmentos (por días desde la ÚLTIMA carga real, o desde el registro si nunca cargó):
 //   nuevo      nunca cargó                      → avisos de servicio (sin fichas: evitamos multicuentas), días 1, 3, 10, 21.
-//   sinapp     no tiene la app instalada        → recordatorio de instalar (el 50% EXTRA por instalar ya lo ofrece la 1ª carga), días 2 y 9.
+//   (sin app: NO hay pasos — #972: instalar la app se resuelve en el momento, al entrar: avisos + 50 % EXTRA en la 1ª carga.)
 //   activo     cargó hace 0–6 días              → nada acá (lo cubren el autopiloto masivo y el aviso del reembolso diario).
 //   enfriando  7–13 días sin cargar             → "te extrañamos" con bono % en la próxima carga.
 //   inactivo   14–29 días                       → bono fuerte y después FICHAS de regalo según el valor del cliente.
@@ -38,11 +38,9 @@ const STEPS = [
     title: '🔴 Pica Roja te está esperando', text: 'Reembolso diario del {daily}% sobre lo que pierdas, misiones semanales, niveles VIP, sorteos con ranking en vivo y referidos que pagan todos los meses. Todo eso te espera desde tu primera carga. ¿Arrancamos hoy? 😉' },
   { id: 'new-21', segment: 'nuevo', day: 21, capped: true, name: 'Último aviso de bienvenida', gift: { type: 'none', hours: 24 },
     title: '💬 ¿Te quedó alguna duda?', text: 'Vimos que todavía no cargaste. Si algo no te cerró o tuviste un problema, escribinos por Soporte y lo resolvemos en el momento. Tu bono de primera carga (+{first}%) sigue guardado para vos 🎁' },
-  // sinapp (desde el registro, con o sin cargas)
-  { id: 'app-2', segment: 'sinapp', day: 2, capped: true, name: 'Instalá la app · día 2', gift: { type: 'none', hours: 24 },
-    title: '📲 Instalá la app, es gratis', text: 'Con la app instalada entrás con un toque, recibís los avisos de tus bonos y reembolsos al instante y no dependés del navegador. Perfil → Instalar la app. Tarda 10 segundos 😉' },
-  { id: 'app-9', segment: 'sinapp', day: 9, capped: true, name: 'Instalá la app · día 9', gift: { type: 'none', hours: 24 },
-    title: '📲 Te estás perdiendo los avisos', text: 'Sin la app instalada no te enteramos de los bonos del día ni de tu reembolso. Instalala desde Perfil → Instalar la app y empezá a recibir todo en el momento 🔔' },
+  // (#972, owner: "lo de instalar a los 2 o 9 días no sirve: muchos ya pierden el contacto si no tienen la app; tiene que ser EN EL
+  //  MOMENTO" ⇒ no hay pasos de instalar la app acá: eso lo hace la propia app al entrar — activar avisos + 50 % EXTRA por instalar en la
+  //  primera carga (installGift). Si en el futuro se quiere un recordatorio, va como paso 'sinapp' y pickStep ya lo soporta.)
   // enfriando (desde la última carga)
   { id: 'cool-7', segment: 'enfriando', day: 7, capped: true, name: 'Te extrañamos · 7 días', gift: { type: 'percent', pct: 30, hours: 24 },
     title: '🔴 Te extrañamos: +{pct}% hoy', text: 'Hace una semana que no te vemos. Cargá en las próximas {h} horas y te sumamos +{pct}% automático en esa carga (con el tope de bonos). Las fichas entran solas en segundos ⚡' },
@@ -131,6 +129,6 @@ function batchBody(pick, usernames, ctx) {
   return b;
 }
 
-const SEGMENT_LABELS = { nuevo: '🆕 Nuevos sin carga', sinapp: '📲 Sin la app', activo: '🟢 Activos (0–6 d)', enfriando: '🟡 Enfriando (7–13 d)', inactivo: '🟠 Inactivos (14–29 d)', perdido: '🔴 Perdidos (30–89 d)', lejano: '⚫ Lejanos (90–180 d)', olvidado: '⚪ Más de 180 d (sin avisos)' };
+const SEGMENT_LABELS = { nuevo: '🆕 Nuevos sin carga', activo: '🟢 Activos (0–6 d)', enfriando: '🟡 Enfriando (7–13 d)', inactivo: '🟠 Inactivos (14–29 d)', perdido: '🔴 Perdidos (30–89 d)', lejano: '⚫ Lejanos (90–180 d)', olvidado: '⚪ Más de 180 d (sin avisos)' };
 
 module.exports = { STEPS, VALUE_TIERS, MAX_DAYS, TOLERANCE, SEGMENT_LABELS, valueTier, classify, pickStep, render, batchBody, dayKey };

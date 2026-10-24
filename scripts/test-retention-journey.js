@@ -21,10 +21,10 @@ assert.ok(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7), sent: [{ k
 // nuevo sin carga
 p = j.pickStep({ createdAt: ago(1), deposits: 0, hasApp: true, sent: [] }, now); assert.strictEqual(p.step.id, 'new-1');
 p = j.pickStep({ createdAt: ago(3), deposits: 0, hasApp: true, sent: [] }, now); assert.strictEqual(p.step.id, 'new-3');
-// sin app: día 2 (y "nuevo" manda si coincide el día)
-p = j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [] }, now); assert.strictEqual(p.step.id, 'new-1', 'nuevo tiene prioridad (tolerancia día 1→2)');
-p = j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [{ k: 'new-1@reg' }] }, now); assert.strictEqual(p.step.id, 'app-2');
-p = j.pickStep(Object.assign({}, base, { createdAt: ago(9), hasApp: false }), now); assert.strictEqual(p.step.id, 'app-9', 'con cargas pero sin app');
+// sin app: ya no hay pasos (#972)
+p = j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [] }, now); assert.strictEqual(p.step.id, 'new-1', 'nuevo (tolerancia día 1→2)');
+assert.strictEqual(j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [{ k: 'new-1@reg' }] }, now), null, '#972: sin pasos de instalar la app');
+assert.strictEqual(j.pickStep(Object.assign({}, base, { createdAt: ago(9), hasApp: false }), now), null, '#972: con cargas y sin app, nada');
 assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7), flagged: true }), now), null, 'marcado por el radar: nada');
 // textos y cuerpo del lote
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), avgDeposit: 30000 }), now);
