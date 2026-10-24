@@ -3022,3 +3022,10 @@ html[data-theme="dark"] .srt-tk-list summary { color: var(--srt-lite); }
 
 /* #983: tope del bono de 1ª carga, siempre a la vista */
 .fd-note .fd-cap { font-size: 11px; font-weight: 700; color: var(--p-muted); margin-left: 2px; }
+
+/* ===== #987 (owner, iPhone 17 Pro Max): los carteles que saltan arriba (toast y aviso en la app) quedan EN LA LÍNEA del menú superior, debajo
+   de la isla/barra de estado (--sat), y sin borroso ni sombra: ni ellos ni la cabecera. ===== */
+.toast { top: calc(6px + var(--sat, env(safe-area-inset-top, 0px))) !important; left: 12px !important; right: 12px !important; width: auto !important; max-width: none !important; text-align: center; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; animation: none !important; }
+html[data-theme="dark"] .toast { box-shadow: none !important; }
+.in-app-notification-banner { top: calc(6px + var(--sat, env(safe-area-inset-top, 0px))) !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.header.header-toolbar.tb-circles, .support-bar, .support-bar.chat-topbar, .casino-topbar, #casinoTopBar { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }

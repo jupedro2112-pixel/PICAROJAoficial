@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 987. Carteles de arriba (toast y aviso en la app) en la línea del menú superior, sin borroso — SW v649
+**Pedido (owner):** "en iPhone 17 Pro Max, cuando salta un texto, lo tapa la parte superior: dejalo en la línea del menú superior y sin borroso arriba".
+- `.toast` (base.css: top 20px/right 20px) y `.in-app-notification-banner` (inline: top 16px) ignoraban la isla/barra de estado. Ahora `top = 6px +
+  --sat` (#823), a lo ancho, sin sombra ni animación. Se quita el `backdrop-filter` de la cabecera, la barra de soporte y la barra del casino.
+
 ### 986. Plataforma PICA ROJA (white-label de 1girox) lista para conectar con credenciales; las tres plataformas del otro proyecto no necesitan código
 **Pedido (owner):** "de allá se usa todo sobre Girox, son páginas que salen de un mismo lado; de allá sólo las plataformas (Ganamos, Pica Roja y
 Jugaygana), el proyecto es éste". Verificado: los adaptadores `ganamos.js` y `jugaygana.js` ya implementan la Partner API de 1girox tal cual (mismos
