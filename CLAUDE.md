@@ -124,7 +124,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   acumulativo), bono de nivel VIP y rakeback. ÚNICA excepción: comisiones de REFERIDOS, retirables sin apostar (multiplier 0).
   **#882/#883 → #976:** TODA carga real (hgcash y manual) va con rollover propio ×`Config['depositRolloverX']` (**1** desde 2026-10-24, antes 3) en
   `_depositWithBonus`; el bono ×5. Retiro mínimo `Config['withdrawMinArs']` $5.000 (#976). Registro abierto (`noWelcomeGifts`): sin fichas gratis ni 2ª
-  carga hasta 5 cargas reales (`retentionJourney.TRUST_DEPOSITS`); a la 5ª, paso `trust-5` y entra a toda la estrategia.
+  carga hasta 5 cargas reales (`retentionJourney.TRUST_DEPOSITS`); desde la 5ª entra a toda la estrategia, sin regalo especial (#977).
   Devoluciones de retiro rechazado: libres (no pasan por ahí). Un flujo nuevo de carga real tiene que usar `_depositWithBonus`.
   El texto de abajo describe el estado anterior (regalo directo ×0) y sigue valiendo sólo para referidos.
 - **Regalos = BONO 0 "regalo directo" (2026-09-07, v1.10+):** reembolsos, ruleta,

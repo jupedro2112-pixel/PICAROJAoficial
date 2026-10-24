@@ -32,10 +32,8 @@ assert.strictEqual(j.pickStep({ createdAt: ago(10), deposits: 0, hasApp: true, s
 assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7), deposits: 3, noWelcome: true }), now).step.id, 'cool-7', 'la recuperación sí');
 // #976: registro abierto: sin fichas hasta 5 cargas (se convierten en +50 %); a las 5 cargas, "ya sos de la casa" una sola vez
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 3, noWelcome: true }), now); assert.strictEqual(p.step.id, 'inact-21'); assert.strictEqual(p.giftType, 'percent'); assert.strictEqual(p.amount, 50, 'fichas → +50 % sin confianza');
-p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 5, noWelcome: true, sent: [{ k: 'trust-5@reg' }] }), now); assert.strictEqual(p.giftType, 'fixed', 'con 5 cargas ya recibe fichas');
-p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(1), deposits: 5, noWelcome: true }), now); assert.strictEqual(p.step.id, 'trust-5'); assert.strictEqual(p.amount, 50);
-assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(1), deposits: 5, noWelcome: true, sent: [{ k: 'trust-5@reg' }] }), now), null, 'una sola vez');
-assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(1), deposits: 5, noWelcome: false }), now), null, 'los de publicidad/referido no tienen bienvenida tardía');
+p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 5, noWelcome: true }), now); assert.strictEqual(p.giftType, 'fixed', 'con 5 cargas ya recibe fichas');
+assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(1), deposits: 5, noWelcome: true }), now), null, '#977: a las 5 cargas no hay regalo especial, sólo entra a la estrategia');
 // #973: ajuste de la revisión semanal
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7) }), now, { pctMult: 1.2, chipsMult: 1.5 }); assert.strictEqual(p.amount, 35, '30 % ×1,2 = 36 → 35 (múltiplo de 5)');
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), avgDeposit: 30000 }), now, { pctMult: 1, chipsMult: 1.5 }); assert.strictEqual(p.amount, 7500, '5.000 ×1,5');

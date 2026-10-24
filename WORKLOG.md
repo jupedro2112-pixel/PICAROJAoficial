@@ -8,6 +8,10 @@
 
 ## Sesión 2026-10-24
 
+### 977. Registro abierto: a las 5 cargas NO hay regalo especial
+**Pedido (owner):** "no le corresponde la bienvenida, le corresponde las notificaciones de los clientes, etc." ⇒ se quita el paso `trust-5` de #976. Al
+llegar a 5 cargas reales el cliente del registro abierto simplemente pasa a recibir lo mismo que cualquier otro (fichas del recorrido, campañas, etc.).
+
 ### 976. 🔓 Rollover de la carga ×1 (bono sigue ×5), retiro mínimo $5.000, aviso a todos, y el registro abierto entra a TODA la estrategia a las 5 cargas — SW v645
 **Pedido (owner):** "modificamos rollover ×1 en las cargas y modificalo en el aviso de todos los clientes; rollover ×5 en bono; retiro mínimo baja a
 $5.000 con la carga de $2.000"; "la configuración [sin regalos] para los clientes nuevos sin cargas; si pasan a ser clientes que depositan, que entren a
