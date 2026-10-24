@@ -25,14 +25,11 @@ vm.createContext(ctx); vm.runInContext(fs.readFileSync('public/js/sorteos.js', '
   must(cardsBox.innerHTML, 'Gran Sorteo', 'Sorteo mensual', 'Registrado ✅', 'Ver más', 'peugeot-208.jpg'); must(bannerBox.innerHTML, 'srt-ban');
   if (cardsBox.innerHTML.indexOf('Gran Sorteo') > cardsBox.innerHTML.indexOf('Sorteo mensual')) throw new Error('orden: el Gran Sorteo va primero');
   console.log('✔ tarjetas/banner OK (' + cardsBox.innerHTML.length + ' chars)');
-  // panel desplegado del mensual (anotarse pendiente, ranking vivo)
+  // #941: tocar una mitad abre la VENTANA (mismo contenido)
   cardsBox._host = cardsBox; S.open('mensual', { target: cardsBox });
-  const body = mkInline().innerHTML; must(body, 'EN VIVO', 'Anotate para participar', 'Lo que se sortea este mes', 'SORTEO', 'Cómo sumás puntos', 'Ranking', 'Tu puesto', '#7', 'lalodj', 'Bases y condiciones'); if (body.includes('srt-cross')) throw new Error('tarjeta cruzada presente'); console.log('✔ panel mensual OK');
-  const head = inserted[inserted.length - 1].innerHTML; if (head.includes('Sorteo mensual') || head.includes('Próximamente') || head.includes('En vivo')) throw new Error('fila de arriba presente'); must(head, '✕ Cerrar'); console.log('✔ sin fila arriba, ✕ flotante OK');
-  // bases adentro + volver
-  S.terms('mensual'); must(mkInline().innerHTML, 'Bases y condiciones', 'Volver al sorteo', 'Cómo funciona'); S.termsClose(); must(mkInline().innerHTML, 'Ranking'); console.log('✔ Bases inline OK');
-  // panel del gran (registrado, próximamente, foto)
-  S.open('gran', { target: cardsBox }); const g = mkInline().innerHTML; must(g, 'Empieza en', 'Registrado', 'peugeot-208.jpg', 'has-pic', '+10 pts', '+10%'); if (g.includes('Anotate para participar')) throw new Error('bloque de anotarse visible estando registrado'); console.log('✔ panel Gran Sorteo OK');
+  const body = mk('srtBody').innerHTML; must(body, 'EN VIVO', 'Anotate para participar', 'Lo que se sortea este mes', 'SORTEO', 'Cómo sumás puntos', 'Ranking', 'Tu puesto', '#7', 'lalodj', 'Bases y condiciones'); if (body.includes('srt-cross')) throw new Error('tarjeta cruzada presente'); console.log('✔ ventana mensual OK');
+  S.open('gran', { target: cardsBox }); const g = mk('srtBody').innerHTML; must(g, 'Empieza en', 'Registrado', '+10 pts', '+10%'); if (g.includes('Anotate para participar')) throw new Error('bloque de anotarse visible estando registrado'); console.log('✔ ventana Gran Sorteo OK');
+  S.close();
   // pantalla completa (desde el casino)
   S.open('mensual'); must(mk('srtBody').innerHTML, 'Ranking'); must(mk('srtTitle').textContent, 'Sorteo mensual'); S.terms('mensual'); if (mk('srtTerms').hidden !== false) throw new Error('capa de Bases no abrió'); S.termsClose(); S.close(); console.log('✔ pantalla completa OK');
   // join

@@ -8,6 +8,13 @@
 
 ## Sesión 2026-10-24
 
+### 941. 🪟 El sorteo abre en VENTANA: ✕ fija arriba, tocar afuera cierra, deslizar hacia abajo cierra — SW v628
+**Pedido (owner, captura):** "abrilo tipo ventana y que la cruz arriba quede fija para cerrar; apretando afuera de la ventana que se pueda salir; después
+deslizar para abajo también".
+- `#srtModal` pasa a hoja `.srt-win` sobre el menú (fondo oscurecido; click en el fondo ⇒ `close`), cabecera sticky con agarradera y ✕, cuerpo con
+  scroll propio, Bases como capa adentro. `_swipeInit`: arrastrar desde la cabecera (o desde el cuerpo si está arriba de todo) más de 90 px ⇒ cierra
+  con animación. Las mitades y "Ver más en el menú" abren siempre esta ventana; el panel desplegado (#928/#940) queda sin uso.
+
 ### 939. 🎁 SORTEO $100.000: para TODOS los que cargan (mínimo 10 cargas en el mes), 10 × $10.000 fijos, sorteo transparente el día 1 desde el panel — SW v626 · admin SW v192
 **Pedido (owner):** "el sorteo de 100.000: cambiamos términos y todo detalle, que sea para todos los que cargan, requisito mínimo 10 cargas en el mes; armá
 bien todo el admin para sortear eso el día 1 de forma transparente; y poné en la app SORTEO".

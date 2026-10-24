@@ -59,10 +59,10 @@
     // Tocando una de las dos mitades el sorteo se DESPLIEGA debajo (panel .srt-inline con ✕); la pantalla completa queda para el botón de adentro
     // del casino (no hay dónde desplegar).
     let _inline = null, _inlineKey = null, _inlineView = 'main';
+    // #941 (owner): "abrilo tipo ventana, que la cruz arriba quede fija para cerrar; apretando afuera de la ventana que se pueda salir; deslizar
+    // para abajo también". Siempre la VENTANA (#srtModal): el panel desplegado (#928) queda sin uso.
     function open(key, ev) {
-        const host = ev && ev.target && ev.target.closest ? ev.target.closest('[data-srt-cards],[data-srt-banner]') : null;
-        if (host) return openInline(key || 'mensual', host);
-        const m = _el('srtModal'); if (!m) return;
+        const m = _el('srtModal'); if (!m) return; _swipeInit();
         _open = key || 'mensual'; m.hidden = false; document.documentElement.classList.add('srt-lock');
         const t = _el('srtTerms'); if (t) t.hidden = true;
         if (_data) paintView(_open); else { const b = _el('srtBody'); if (b) b.innerHTML = '<div class="srt-note">Cargando…</div>'; }
@@ -70,7 +70,17 @@
         clearInterval(_tick); _tick = setInterval(tickCd, 1000);
         try { document.addEventListener('keydown', _esc); } catch (_) {}
     }
-    function close() { closeInline(); const m = _el('srtModal'); if (m) m.hidden = true; _open = null; if (!_inline) clearInterval(_tick); document.documentElement.classList.remove('srt-lock'); try { document.removeEventListener('keydown', _esc); } catch (_) {} }
+    function close() { closeInline(); const m = _el('srtModal'); if (m) m.hidden = true; const w = _el('srtWin'); if (w) { w.style.transform = ''; w.style.transition = ''; } _open = null; if (!_inline) clearInterval(_tick); document.documentElement.classList.remove('srt-lock'); try { document.removeEventListener('keydown', _esc); } catch (_) {} }
+    // Deslizar hacia abajo para cerrar: desde la cabecera siempre; desde el cuerpo sólo si está arriba de todo (scrollTop 0).
+    let _sw = null, _swReady = false;
+    function _swipeInit() {
+        if (_swReady) return; const w = _el('srtWin'), b = _el('srtBody'), h = _el('srtHead'); if (!w || !b || !h) return; _swReady = true;
+        const start = (e, fromHead) => { const t = e.touches && e.touches[0]; if (!t) return; if (!fromHead && b.scrollTop > 0) { _sw = null; return; } const tl = _el('srtTerms'); if (tl && !tl.hidden && !fromHead) { _sw = null; return; } _sw = { y: t.clientY, dy: 0, head: fromHead }; w.style.transition = 'none'; };
+        const move = (e) => { if (!_sw) return; const t = e.touches && e.touches[0]; if (!t) return; _sw.dy = Math.max(0, t.clientY - _sw.y); if (_sw.dy > 0) { w.style.transform = 'translateY(' + _sw.dy + 'px)'; if (_sw.head || b.scrollTop <= 0) { try { e.preventDefault(); } catch (_) {} } } };
+        const end = () => { if (!_sw) return; const dy = _sw.dy; _sw = null; w.style.transition = 'transform .18s ease-out'; if (dy > 90) { w.style.transform = 'translateY(110%)'; setTimeout(close, 160); } else w.style.transform = ''; };
+        h.addEventListener('touchstart', (e) => start(e, true), { passive: true }); b.addEventListener('touchstart', (e) => start(e, false), { passive: true });
+        w.addEventListener('touchmove', move, { passive: false }); w.addEventListener('touchend', end); w.addEventListener('touchcancel', end);
+    }
     function openInline(key, host) {
         if (_inline && _inlineKey === key && _inline.previousElementSibling === host) { closeInline(); return; } // mismo botón ⇒ se pliega
         closeInline();
@@ -243,9 +253,7 @@
         closeMini();
         try { if (VIP.ui && VIP.ui.closeCasinoFrame) VIP.ui.closeCasinoFrame(); } catch (_) {}
         setTimeout(() => {
-            const hosts = Array.from(document.querySelectorAll('[data-srt-cards],[data-srt-banner]')).filter((h) => h.offsetParent !== null && !h.hidden);
-            const host = hosts[0]; if (host) { openInline(key, host); return; }
-            open(key); // sin lugar donde desplegar ⇒ pantalla completa
+            open(key); // #941: la ventana del sorteo sobre el menú
         }, 350);
     }
     function tgOpen() { const u = _data && _data.telegramUrl; if (u) window.open(u, '_blank', 'noopener'); }

@@ -2894,3 +2894,14 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 .srt-inline-body { padding-top: 10px; }
 .srt-inline-body > .srt-strip:first-child { padding-right: 96px; }
 .srt-inline-body > .srt-strip:first-child, .srt-inline-body > *:last-child { border-radius: 14px; }
+
+/* #941: el sorteo en VENTANA (hoja sobre el menú): fondo oscurecido (tocar afuera cierra), cabecera fija con ✕, cuerpo con scroll, deslizable */
+.srt-modal { background: rgba(0, 0, 0, .55) !important; align-items: flex-end; justify-content: center; padding: 0; }
+.srt-win { width: 100%; max-width: 520px; max-height: calc(100dvh - 36px - var(--sat, env(safe-area-inset-top, 0px))); display: flex; flex-direction: column; position: relative; background: var(--p-bg, #fff); color: var(--p-text, #111); border-radius: 22px 22px 0 0; overflow: hidden; box-shadow: 0 -10px 40px rgba(0, 0, 0, .35); will-change: transform; }
+@media (min-width: 560px) { .srt-modal { align-items: center; padding: 16px; } .srt-win { border-radius: 22px; max-height: calc(100dvh - 64px); } }
+.srt-win .srt-head { position: sticky; top: 0; z-index: 3; padding: 10px 12px 10px 14px; border-radius: 0; justify-content: space-between; touch-action: none; }
+.srt-win .srt-head b { flex: 1; font-size: 16px; }
+.srt-win .srt-head .srt-x { background: rgba(255,255,255,.22); width: 34px; height: 34px; line-height: 34px; font-size: 16px; }
+.srt-grip { position: absolute; left: 50%; top: 4px; width: 42px; height: 4px; margin-left: -21px; border-radius: 2px; background: rgba(255,255,255,.55); }
+.srt-win .srt-body { padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px)); overscroll-behavior: contain; }
+.srt-win .srt-terms { position: absolute; inset: 0; }

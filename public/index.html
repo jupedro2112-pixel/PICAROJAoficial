@@ -1355,12 +1355,15 @@
                 </div>
             </div>
             <!-- #915 (owner): SORTEOS con ranking en vivo — pantalla completa por sorteo + Bases en capa aparte (✕ arriba a la izquierda). js/sorteos.js -->
-            <div id="srtModal" class="srt-modal" hidden role="dialog" aria-modal="true" aria-labelledby="srtTitle">
-                <div class="srt-head"><button type="button" class="srt-back" onclick="VIP.sorteos.close()">‹ Volver</button><b id="srtTitle">🏆 Sorteo</b></div>
-                <div class="srt-body" id="srtBody"><div class="srt-note">Cargando…</div></div>
-                <div id="srtTerms" class="srt-terms" hidden role="dialog" aria-modal="true">
-                    <div class="srt-terms-head"><button type="button" class="srt-x" onclick="VIP.sorteos.termsClose()" aria-label="Cerrar">✕</button><b>Bases y condiciones</b></div>
-                    <div class="srt-terms-body" id="srtTermsBody"></div>
+            <!-- #941 (owner): VENTANA sobre el menú: ✕ fija arriba, tocar afuera cierra, deslizar hacia abajo cierra (js/sorteos.js _swipe) -->
+            <div id="srtModal" class="srt-modal" hidden role="dialog" aria-modal="true" aria-labelledby="srtTitle" onclick="if (event.target === this) VIP.sorteos.close()">
+                <div class="srt-win" id="srtWin">
+                    <div class="srt-head" id="srtHead"><i class="srt-grip" aria-hidden="true"></i><b id="srtTitle">🏆 Sorteo</b><button type="button" class="srt-x" onclick="VIP.sorteos.close()" aria-label="Cerrar">✕</button></div>
+                    <div class="srt-body" id="srtBody"><div class="srt-note">Cargando…</div></div>
+                    <div id="srtTerms" class="srt-terms" hidden role="dialog" aria-modal="true">
+                        <div class="srt-terms-head"><button type="button" class="srt-x" onclick="VIP.sorteos.termsClose()" aria-label="Cerrar">✕</button><b>Bases y condiciones</b></div>
+                        <div class="srt-terms-body" id="srtTermsBody"></div>
+                    </div>
                 </div>
             </div>
             <!-- #910 (owner): el resumen de Soporte en un RECUADRO encima de todo, con scroll y botón cerrar -->
@@ -2650,7 +2653,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v627</div>
+                    <div class="pf-build" id="appBuildTag">app v628</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
