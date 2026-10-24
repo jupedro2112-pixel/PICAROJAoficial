@@ -2847,3 +2847,17 @@ body.casino-open .srt-modal { z-index: 100002 !important; }
 .srt-mini-p i { font-style: normal; font-size: 9.5px; font-weight: 900; color: var(--srt-g2); letter-spacing: .5px; } .srt-mini-p b { font-size: 11px; font-weight: 900; line-height: 1.15; }
 .srt-mini-txt { margin: 4px 0 8px; font-size: 12.5px; line-height: 1.35; color: var(--p-text); }
 .srt-mini-me { font-size: 12px; font-weight: 800; color: var(--srt-g); margin-bottom: 8px; }
+
+/* #934 (owner, captura): el panel desplegado del sorteo se veía RECORTADO en el básico: .basic-view es flex-column con scroll y un hijo con
+   overflow:hidden se encoge. Nada de lo del sorteo se achica. */
+.srt-inline, .srt-cards, .srt-banner { flex: 0 0 auto !important; min-height: 0; }
+/* #934 (owner, captura): Info del servicio — SÓLO título + ícono (nada de texto) hasta tocar Ver más; recuadro más marcado ("se pierde mucho") */
+#infoMsg .im-card:not(.open) .im-sec { display: block !important; -webkit-line-clamp: unset !important; max-height: none !important; font-size: 0 !important; line-height: 0 !important; padding: 10px 6px 10px 12px !important; }
+#infoMsg .im-card:not(.open) .im-sec > b:first-child { display: flex !important; align-items: center; gap: 9px; margin: 0 !important; font: 800 13.5px/1.3 var(--p-font) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#infoMsg .im-card:not(.open) .im-sec > b:first-child > span:not(.info-badge) { overflow: hidden; text-overflow: ellipsis; }
+#infoMsg .im-card .im-sec > b:first-child .im-ico { width: 34px !important; height: 34px !important; flex: 0 0 34px !important; border-radius: 10px !important; background: var(--p-red-soft) !important; border: 0 !important; color: var(--p-red) !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; margin: 0 !important; }
+#infoMsg .im-card .im-sec > b:first-child .im-ico svg { width: 19px !important; height: 19px !important; display: block; stroke: currentColor; }
+#infoMsg .im-card { border: 1.5px solid #cfcfd6 !important; border-radius: 14px !important; background: var(--p-card) !important; box-shadow: 0 2px 10px rgba(0, 0, 0, .08) !important; }
+html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
+#infoMsg.im-grid { gap: 8px !important; }
+#infoMsg .im-card:not(.open) .im-more { font: 800 12px var(--p-font) !important; color: var(--p-red) !important; }

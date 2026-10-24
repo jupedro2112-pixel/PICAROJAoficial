@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 934. 🧩 Panel del sorteo sin recorte en el básico · Info sólo título + ícono con recuadro marcado · auto como dibujo — SW v621
+**Pedidos (owner, capturas):** "esto quiero que se vea desde adentro de cada uno" (el panel desplegado salía cortado), "que se vea sólo los títulos y los
+íconos de cada título; poné mejor recuadro, se pierde mucho", "el auto ponelo como versión igual que el teléfono".
+- Recorte: `.basic-view` es flex-column con scroll y el panel (overflow hidden) se encogía ⇒ `.srt-inline/.srt-cards/.srt-banner { flex: 0 0 auto }`.
+- Info: plegada = sólo la fila título + ícono (texto con `font-size:0`, el `<b>` recupera 13,5 px); ícono 34 px en caja roja suave; tarjetas con
+  borde 1,5 px más oscuro y sombra; "Ver más ›" rojo.
+- Gran Sorteo: 1° premio vuelve al 🚗 (dibujo, como el 📱). La foto del 208 queda en el repo para pegarla en el panel si se quiere.
+
 ### 931. 📖 Historias automáticas: las 5 a las 00 hs (se apagan las de ayer), Soporte siempre primero, fotos con el ESTILO DE LA PÁGINA, republicar ahora — SW v620 · admin SW v191
 **Pedido (owner):** "revisá que estén funcionando las historias con el estilo que pedí; siempre quiero que vaya del lado de la atención y se publiquen
 en el cambio de día: se borran y se publican de vuelta a las 00 hs; ahora borrá y publicá de vuelta; poné un estilo más del estilo de la página, todo".
