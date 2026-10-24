@@ -8,6 +8,12 @@
 
 ## Sesión 2026-10-24
 
+### 920. 🎁 Pantalla del sorteo: PORTADA con los premios grandes y sus imágenes arriba de todo — SW v610
+**Pedido (owner, captura):** "ponele más lugar cuando entrás: lo principal, con imágenes de lo que se sortea".
+- `hero(s)` en sorteos.js: recuadro violeta "🎁 Lo que se sortea este mes" con el 1° puesto grande (imagen 92 px + nombre 22 px + valor) y el 2° y
+  3° debajo, lado a lado, con su imagen. Va PRIMERO en los dos sorteos. Se sacó el podio de medallas (repetía los premios) y la fila chica de
+  premios del Gran Sorteo; la sección "Ganadores" queda sólo con la fecha de publicación.
+
 ### 919. 🟣 Sorteos: violeta OSCURO como la captura (fondo profundo #2a0a4f→#4a1283, borde lila #b05cff, texto blanco, "Ver más" lila claro) — SW v609
 **Pedido (owner, captura de la gemela):** "este color así".
 - Tokens `--srt-*` (claro y dark) + `--srt-lite`; borde lila de 1,5 px en tarjetas, banner, tarjeta cruzada, botón Anotarme, recuadro "Tu puesto", cabeceras

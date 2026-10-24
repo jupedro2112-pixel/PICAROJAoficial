@@ -81,6 +81,16 @@
         return '<div class="srt-cd-h"><b>' + esc(s.emoji + ' ' + s.title) + '</b><span>' + lbl + '</span></div><div class="srt-cd" data-cd="' + until + '">' + box('d', c.d, 'DÍAS') + box('h', c.h, 'HS') + box('m', c.m, 'MIN') + box('s', c.s, 'SEG') + '</div>';
     }
     function prizesRow(s) { return '<div class="srt-prizes">' + (s.prizes || []).map((p) => '<div class="srt-prize"><span class="srt-prize-img">' + esc(p.img) + '<i class="srt-medal m' + p.pos + '">' + p.pos + '</i></span><b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>').join('') + '</div>'; }
+    // #920 (owner): "ponele más lugar cuando entrás: lo principal, con imágenes de lo que se sortea" → portada con los premios grandes.
+    function hero(s) {
+        const P = (s.prizes || []); const by = (n) => P.find((p) => p.pos === n) || { name: '', value: '', img: '🎁' };
+        const p1 = by(1), p2 = by(2), p3 = by(3);
+        const side = (p) => '<div class="srt-hero-s"><span class="srt-hero-img s">' + esc(p.img) + '</span><i class="srt-hero-pos">' + p.pos + '° puesto</i><b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>';
+        return '<div class="srt-hero"><div class="srt-hero-t">' + (s.key === 'mensual' ? '🎁 Lo que se sortea este mes' : '🎁 Lo que se sortea') + '</div>' +
+            '<div class="srt-hero-1"><span class="srt-hero-img">' + esc(p1.img) + '</span><div class="srt-hero-1t"><i class="srt-hero-pos">🥇 1° puesto</i><b>' + esc(p1.name) + '</b>' + (p1.value ? '<small>' + esc(p1.value) + '</small>' : '') + '</div></div>' +
+            '<div class="srt-hero-row">' + side(p2) + side(p3) + '</div>' +
+            '<p class="srt-hero-p">Ganan los 3 anotados con más puntos al cierre. Cada premio se puede cobrar en efectivo por su valor.</p></div>';
+    }
     function podium(s) {
         const P = (s.prizes || []); const by = (n) => P.find((p) => p.pos === n) || { name: '', value: '', img: '🎁' };
         const col = (n, cls) => { const p = by(n); return '<div class="srt-pod ' + cls + '"><span class="srt-pod-cup c' + n + '">' + (n === 1 ? '🏆' : (n === 2 ? '🥈' : '🥉')) + '</span><b>' + n + '° puesto</b><small>' + esc(p.name) + (p.value ? ' · ' + esc(p.value) : '') + '</small><div class="srt-pod-bar b' + n + '">' + n + '</div></div>'; };
@@ -126,17 +136,16 @@
         const s = get(key); const b = _el('srtBody'), t = _el('srtTitle'); if (!b) return;
         if (!s) { b.innerHTML = '<div class="srt-note">' + (_data && _data.enabled === false ? 'Por ahora no hay sorteos activos.' : 'Este sorteo no está disponible.') + '</div>'; return; }
         if (t) t.textContent = s.emoji + ' ' + s.title;
-        let h = '';
+        let h = hero(s);
         if (s.key === 'mensual') {
             if (s.extra && s.extra.enabled) h += '<div class="srt-extra"><b>🎁 Premio extra: ' + money(s.extra.amount * s.extra.winners) + ' en ' + num(s.extra.winners) + ' ganadores de ' + money(s.extra.amount) + '</b><small>Por cada ' + num(s.extra.per) + ' clientes anotados con al menos ' + num(s.extra.minDeposits) + ' cargas en el mes se sortean ' + num(s.extra.winners) + ' premios de ' + money(s.extra.amount) + '. Participan todos los que cumplan, sin importar el ranking.' + (s.counts.extraWinners ? ' <b>Hoy ya hay ' + num(s.counts.extraWinners) + ' premios en juego.</b>' : '') + '</small></div>';
             h += '<div class="srt-sec srt-cdwrap">' + cdBlock(s) + '<p class="srt-p srt-muted">Del ' + fday(s.start) + ' al ' + fday(s.end) + ' · ganadores el ' + fdh(s.publishAt) + '</p></div>';
             h += rankingBlock(s);
-            h += '<div class="srt-sec"><h3>🏅 Ganadores</h3>' + podium(s) + '<p class="srt-p">Los 3 anotados con más puntos al cierre ganan. Se publican el ' + fdh(s.publishAt) + ' y los contacta nuestro Soporte de entrega de premios.</p></div>';
+            h += '<div class="srt-sec"><h3>🏅 Ganadores</h3><p class="srt-p">Los 3 anotados con más puntos al cierre ganan. Se publican el ' + fdh(s.publishAt) + ' y los contacta nuestro Soporte de entrega de premios.</p></div>';
             h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados con plata real</li><li>🚫 Los bonos no suman: cuenta la parte proporcional a tus cargas</li><li>🔄 Se actualiza cada 20 minutos</li></ul></div>';
         } else {
-            h += '<div class="srt-sec srt-cdwrap">' + cdBlock(s) + prizesRow(s) + '<ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados</li>' + (s.rules.dayDepositPts ? '<li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li>' : '') + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de la semana si completás tus misiones semanales</li>' : '') + '</ul><p class="srt-p">Del ' + fday(s.start) + ' al ' + fday(s.end) + '. Ganan los 3 anotados con más puntos.</p></div>';
+            h += '<div class="srt-sec srt-cdwrap">' + cdBlock(s) + '<ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados</li>' + (s.rules.dayDepositPts ? '<li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li>' : '') + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de la semana si completás tus misiones semanales</li>' : '') + '</ul><p class="srt-p">Del ' + fday(s.start) + ' al ' + fday(s.end) + '. Ganan los 3 anotados con más puntos.</p></div>';
             h += rankingBlock(s);
-            h += '<div class="srt-sec"><h3>🏅 Ganadores</h3>' + podium(s) + '</div>';
         }
         h += joinBlock(s);
         h += crossCard(s);
