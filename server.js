@@ -21096,7 +21096,7 @@ app.post('/api/admin/datos-ia-pin', authMiddleware, adminMiddleware, async (req,
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general.' });
     const pin = String((req.body && req.body.pin) || '').trim();
     if (pin && !/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
-    await Config.set('datosIaPinHash', pin ? _sha(pin) : null, req.user.username); _datosPinCache = { at: 0, hash: null };
+    await Config.set('datosIaPinHash', pin ? _sha(pin) : null, req.user.username); _datosPinCache = { at: 0, hash: null }; _inicioPinCache = { at: 0, hash: undefined }; // #982: Principal usa la misma si no tiene propia
     logger.info(`[datos-ia] clave ${pin ? 'cargada' : 'quitada'} por ${req.user.username}`);
     res.json({ success: true, enabled: !!pin });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -21114,7 +21114,9 @@ app.post('/api/admin/datos-ia/usdt', authMiddleware, adminMiddleware, async (req
 // (instalaron, notificaciones, total registrados), todo en recuadros y con clave". CLAVE propia en Config['inicioPinHash'] (sha256; NUNCA en
 // el código: el repo es público). Sin clave creada ⇒ 428 y el panel pide crearla. Header `x-inicio-pin`.
 let _inicioPinCache = { at: 0, hash: undefined };
-async function _inicioPinHash() { if (_inicioPinCache.hash !== undefined && Date.now() - _inicioPinCache.at < 60000) return _inicioPinCache.hash; let h = null; try { h = await getConfig('inicioPinHash', null); } catch (_) {} _inicioPinCache = { at: Date.now(), hash: h || null }; return _inicioPinCache.hash; }
+// #982 (owner): "pongamos la misma clave a todo" ⇒ si no se creó una clave propia de INICIO, Principal (INICIO, Centro de avisos, Revisión semanal,
+// Sorteos) usa la CLAVE DE DATOS (Config['datosIaPinHash']). Una sola clave para todo lo que la pide; si algún día quieren separarlas, 🔑 en INICIO.
+async function _inicioPinHash() { if (_inicioPinCache.hash !== undefined && Date.now() - _inicioPinCache.at < 60000) return _inicioPinCache.hash; let h = null; try { h = (await getConfig('inicioPinHash', null)) || (await getConfig('datosIaPinHash', null)); } catch (_) {} _inicioPinCache = { at: Date.now(), hash: h || null }; return _inicioPinCache.hash; }
 app.get('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, res) => { res.json({ enabled: !!(await _inicioPinHash()), canEdit: req.user.role === 'admin' }); });
 app.post('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, res) => {
   try {

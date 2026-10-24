@@ -651,7 +651,7 @@ function setupRoleBasedUI() {
     // #889 (owner): los agentes de PAGOS y CARGAS ven sólo: Soporte, Cargas pendientes, Retiros pendientes, Cargas automáticas, Ruleta
     // diaria, Referidos, Usuarios y Transacciones. (Los permisos reales los pone el servidor; esto ordena lo que ven.)
     if (role === 'depositor' || role === 'withdrawer') {
-        const AGENT_SECTIONS = ['support', 'chats', 'depositReviews', 'payReview', 'cargasAuto', 'roulette', 'referrals', 'users', 'transactions']; // #898: + Soporte
+        const AGENT_SECTIONS = ['support', 'depositReviews', 'payReview', 'cargasAuto', 'chats']; // #898 · #982 (owner): sólo Soporte, Comprobantes a verificar, Pagos a confirmar, Cargas automáticas y Chat completo
         document.querySelectorAll('.sidebar-nav .nav-item').forEach((it) => { if (!AGENT_SECTIONS.includes(it.dataset.section)) it.style.display = 'none'; else it.style.display = ''; });
         document.querySelectorAll('.sidebar-nav .nav-group-title').forEach((t) => {
             let n = t.nextElementSibling, any = false;
@@ -6099,7 +6099,7 @@ async function datosIaGate(label) {
     try {
         const r = await authFetch('/api/admin/datos-ia-pin'); const j = r.ok ? await r.json() : { enabled: false };
         if (!j.enabled) return true;
-        let pin = sessionStorage.getItem('datos_pin');
+        let pin = sessionStorage.getItem('datos_pin') || sessionStorage.getItem('inicio_pin'); // #982: una sola clave
         if (!pin) { pin = prompt('🔒 ' + (label || 'Datos') + ' está protegido. Ingresá la clave:'); if (!pin) { showSection('commands'); return false; } sessionStorage.setItem('datos_pin', pin.trim()); }
         const t = await authFetch('/api/admin/datos-ia/usdt');
         if (t.status === 423) { sessionStorage.removeItem('datos_pin'); showToast('Clave incorrecta', 'error'); showSection('commands'); return false; }
@@ -17633,7 +17633,7 @@ async function fraudReview(userId, status) {
 
 // ===== #876 INICIO =====
 let _inTimer = null;
-async function _inicioFetch(path, opts) { const pin = sessionStorage.getItem('inicio_pin') || ''; const o = Object.assign({}, opts || {}); o.headers = Object.assign({ 'x-inicio-pin': pin }, o.headers || {}); return authFetch(path, o); }
+async function _inicioFetch(path, opts) { const pin = sessionStorage.getItem('inicio_pin') || sessionStorage.getItem('datos_pin') || ''; /* #982: una sola clave */ const o = Object.assign({}, opts || {}); o.headers = Object.assign({ 'x-inicio-pin': pin }, o.headers || {}); return authFetch(path, o); }
 async function inicioCreatePin() {
     const p1 = window.prompt('Creá la clave de INICIO (4 a 32 caracteres):', ''); if (!p1) return false;
     const p2 = window.prompt('Repetí la clave:', ''); if (p1 !== p2) { showToast('Las claves no coinciden', 'error'); return false; }

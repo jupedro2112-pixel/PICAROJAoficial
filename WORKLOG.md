@@ -8,6 +8,15 @@
 
 ## Sesión 2026-10-24
 
+### 982. 🔑 Una sola clave para todo lo protegido y agentes con 5 secciones — admin SW v206
+**Pedido (owner):** "¿cuál es la clave de todo? pongamos [clave] a todo; los agentes de cargas y pagos sólo Soporte, Comprobantes a verificar, Pagos
+a confirmar, Cargas automáticas y Chat completo; el resto libre pero lo que pide clave con la misma".
+- Si no hay clave propia de INICIO, `_inicioPinHash` usa `Config['datosIaPinHash']` ⇒ la clave de Datos vale también para Principal (INICIO, Centro de
+  avisos, Revisión semanal, Sorteos: ¿sirven?). El panel comparte la clave entre `datos_pin` e `inicio_pin` en la sesión: se escribe una vez. Guardar
+  la clave de Datos refresca la de INICIO. La clave la carga el owner en Configuración → Clave de Datos; nunca va en el código (repo público).
+- `AGENT_SECTIONS` = support, depositReviews, payReview, cargasAuto, chats (se quitan Ruleta, Referidos, Usuarios y Transacciones del menú de
+  depositor/withdrawer; las mutaciones sensibles ya las bloquea `STAFF_DENY_MUTATIONS`).
+
 ### 981. 🎟️ SORTEOS v2 "premium y para todos": 1° premio por TICKETS (rifa verificable), 2° y 3° por ranking con techo diario y constancia, quincenales del auto, teléfono como requisito, estadística en Principal — SW v647 · admin SW v205
 **Pedido (owner):** "armá un sistema que no incentive sólo al que tiene más plata; el premio mayor por tickets que el cliente ve antes, sorteo por
 semilla verificable; el auto con hitos y sorteos quincenales; un ranking bien mostrado para que la gente entienda todo; Telegram, app y

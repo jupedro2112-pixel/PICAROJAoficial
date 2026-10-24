@@ -302,8 +302,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   respondimos y el cliente no contestó en `Config['supportAutoCloseMinutes']` (30 min, owner #916) ⇒ le llega `/sys_support_autoclosed`
   ({min}), para él el chat arranca de cero (vuelve la presentación) y el chat pasa a CERRADO en el panel. Un filtro nuevo de mensajes del
   cliente debe respetar ese campo.
-- **CLAVE DE INICIO (#876):** el tablero INICIO del panel usa `Config['inicioPinHash']` (aparte de la de Datos; header `x-inicio-pin`). Se crea
-  y cambia desde el panel; nunca escribirla en código ni docs.
+- **CLAVE DE INICIO (#876 → #982):** Principal (INICIO, Centro de avisos, Revisión semanal, Sorteos: ¿sirven?) usa `Config['inicioPinHash']` y, si no
+  existe, la CLAVE DE DATOS (`datosIaPinHash`): una sola clave para todo (header `x-inicio-pin`; el panel comparte `datos_pin`/`inicio_pin`). Se carga
+  desde el panel; nunca escribirla en código ni docs. **AGENTES (#982):** depositor/withdrawer ven sólo 5 secciones (`AGENT_SECTIONS`).
 - **CLAVE DE DATOS (#590/#743):** `Config['datosIaPinHash']` protege Datos IA, Datos, Datos 2.0, Ingresos diarios, Usuarios con app (header
   `x-datos-pin`, gates `app.use` ANTES de esas rutas) y abre SMS masivo. Una sección nueva "de datos" se suma a `_datosPinGate` (server) y a
   `datosIaGate(label)` + la regex de `authFetch` (panel). La clave vive sólo en la DB (se carga en Configuración), nunca en código ni docs.
