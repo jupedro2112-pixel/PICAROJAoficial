@@ -286,9 +286,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   acceso = autologin. Cambios en el alta de la landing afectan también a la entrada rápida.
   **#414:** hay un SOPORTE PARA VISITANTES sin cuenta (pantalla de ingreso → `GuestThread`, rutas `/api/public/support/*`
   con token secreto; panel → columna "Visitantes" de Soporte, `/api/admin/guest-support/*`). No mezcla con `Message`.
-  **#401:** además cada cliente tiene `User.supportSessionSince`: el cron `_supportAutoCloseTick` (10 min) lo pone a "ahora" cuando
-  respondimos y el cliente no contestó en `Config['supportAutoCloseHours']` (6 h) ⇒ para él el chat arranca de cero (vuelve la
-  presentación); el panel ve todo igual. Un filtro nuevo de mensajes del cliente debe respetar ese campo.
+  **#401/#916:** además cada cliente tiene `User.supportSessionSince`: el cron `_supportAutoCloseTick` (5 min) lo pone a "ahora" cuando
+  respondimos y el cliente no contestó en `Config['supportAutoCloseMinutes']` (30 min, owner #916) ⇒ le llega `/sys_support_autoclosed`
+  ({min}), para él el chat arranca de cero (vuelve la presentación) y el chat pasa a CERRADO en el panel. Un filtro nuevo de mensajes del
+  cliente debe respetar ese campo.
 - **CLAVE DE INICIO (#876):** el tablero INICIO del panel usa `Config['inicioPinHash']` (aparte de la de Datos; header `x-inicio-pin`). Se crea
   y cambia desde el panel; nunca escribirla en código ni docs.
 - **CLAVE DE DATOS (#590/#743):** `Config['datosIaPinHash']` protege Datos IA, Datos, Datos 2.0, Ingresos diarios, Usuarios con app (header

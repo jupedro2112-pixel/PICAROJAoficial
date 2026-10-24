@@ -13117,6 +13117,13 @@ async function initializeData() {
       response: '🔒 El agente cerró el chat. Para cualquier consulta, volvé a seleccionar una opción.'
     },
     {
+      // #916 (owner 2026-10-24): cierre AUTOMÁTICO de Soporte cuando el cliente no contesta en {min} minutos.
+      name: '/sys_support_autoclosed',
+      description: 'Soporte: mensaje que ve el cliente cuando la charla se cierra SOLA porque no contestó en {min} minutos después de nuestra respuesta (Config supportAutoCloseMinutes, 30). Vacío = cierra sin aviso.',
+      type: 'message',
+      response: '⏱️ Por no recibir respuesta en {min} minutos, cerramos la conversación de forma automática. Si necesitás algo más, elegí una opción y te atendemos.'
+    },
+    {
       // #373 (2026-10-18): SOPORTE (ex "Carga manual") — la persona que se presenta al entrar al chat.
       // #377: nombres separados por coma; rotan cada 8 h (08–16 / 16–24 / 00–08, hora AR).
       name: '/sys_support_names',
@@ -27700,17 +27707,25 @@ setTimeout(() => { _platformChoiceTick().catch(() => {}); }, 30 * 1000);
 setInterval(() => { _platformChoiceTick().catch(() => {}); }, 60 * 1000);
 setInterval(() => { _depositReviewTick().catch(() => {}); }, 60 * 1000); // #376: cargas pendientes (escalar / cerrar)
 
-// #401 (owner 2026-10-18): CIERRE AUTOMÁTICO del chat de SOPORTE. "Si respondemos y el cliente no responde por 6 hs,
-// cerramos el chat": se le pone User.supportSessionSince = ahora → para él el chat vuelve a empezar (presentación de
-// Soporte otra vez, sin historial); el panel sigue viendo todo y recibe una nota interna. Config['supportAutoCloseHours']
-// (default 6; 0 = apagado). Multi-instancia: el updateOne condicional (supportSessionSince < último mensaje) evita doble cierre.
-const SUPPORT_AUTOCLOSE_HOURS_DEFAULT = 6;
+// #401 (owner 2026-10-18): CIERRE AUTOMÁTICO del chat de SOPORTE. "Si respondemos y el cliente no responde, cerramos el chat": se le pone
+// User.supportSessionSince = ahora → para él el chat vuelve a empezar (presentación de Soporte otra vez, sin historial); el panel sigue
+// viendo todo y recibe una nota interna. Multi-instancia: el updateOne condicional (supportSessionSince < último mensaje) evita doble cierre.
+// #916 (owner 2026-10-24): "hacé cierre de mensaje si el usuario no contesta dentro de los 30 min: por no recibir respuestas cerramos la
+// conversación de forma automática". Plazo en MINUTOS (Config['supportAutoCloseMinutes'], default 30; antes 6 h), el cliente recibe
+// /sys_support_autoclosed ({min}) y el chat también pasa a CERRADO en el panel (ChatStatus, closedBy 'auto'). Corre cada 5 min.
+// Config['supportAutoCloseHours'] = 0 sigue apagándolo (compatibilidad).
+const SUPPORT_AUTOCLOSE_MIN_DEFAULT = 30;
+async function _supportAutoCloseMinutes() {
+  try { const h = await getConfig('supportAutoCloseHours', null); if (h != null && Number(h) === 0) return 0; } catch (_) {}
+  try { const m = Number(await getConfig('supportAutoCloseMinutes', SUPPORT_AUTOCLOSE_MIN_DEFAULT)); if (Number.isFinite(m) && m >= 0) return m; } catch (_) {}
+  return SUPPORT_AUTOCLOSE_MIN_DEFAULT;
+}
 async function _supportAutoCloseTick() {
-  let hours = SUPPORT_AUTOCLOSE_HOURS_DEFAULT;
-  try { const h = Number(await getConfig('supportAutoCloseHours', SUPPORT_AUTOCLOSE_HOURS_DEFAULT)); if (Number.isFinite(h) && h >= 0) hours = h; } catch (_) {}
-  if (!(hours > 0)) return;
+  const minutes = await _supportAutoCloseMinutes();
+  if (!(minutes > 0)) return;
+  const hours = Math.round(minutes / 6) / 10; // sólo para el log
   const since = (await getSupportChannelSince()) || new Date(0);
-  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - minutes * 60 * 1000);
   const rows = await Message.aggregate([
     { $match: { timestamp: { $gte: since }, adminOnly: { $ne: true }, $or: [{ channel: 'support' }, { senderRole: 'user' }] } },
     { $sort: { timestamp: -1 } },
@@ -27727,16 +27742,21 @@ async function _supportAutoCloseTick() {
         { new: true, projection: { id: 1, username: 1 } }
       ).lean();
       if (!u) continue; // ya cerrado por otra instancia o no hubo actividad nueva desde el último cierre
-      // #613: el cliente ve el cierre como mensaje fijado con fecha (igual que el cierre manual #602)
-      try { await _sendUserSystemMessage(u, await renderSystemCommand('/sys_support_closed', '🔒 El agente cerró el chat. Para cualquier consulta, volvé a seleccionar una opción.', {}), { metadata: { kind: 'support_closed', channel: 'support' } }); } catch (_) {}
-      await _emitAdminOnlyChatNote(u.id, u.username, '🔒 Chat de Soporte cerrado automáticamente: ' + hours + ' h sin respuesta del cliente. Si vuelve a escribir, para él arranca de cero (acá queda todo el historial).');
+      // #613: el cliente ve el cierre como mensaje fijado con fecha (igual que el cierre manual #602). #916: texto propio del cierre automático.
+      try { const txt = await renderSystemCommand('/sys_support_autoclosed', '⏱️ Por no recibir respuesta en {min} minutos, cerramos la conversación de forma automática. Si necesitás algo más, elegí una opción y te atendemos.', { min: String(minutes) }); if (String(txt || '').trim()) await _sendUserSystemMessage(u, txt, { metadata: { kind: 'support_closed', channel: 'support' } }); } catch (_) {}
+      await _emitAdminOnlyChatNote(u.id, u.username, '⏱️ Chat de Soporte cerrado automáticamente: ' + minutes + ' min sin respuesta del cliente. Si vuelve a escribir, para él arranca de cero (acá queda todo el historial).');
       try { io.to('user_' + u.id).emit('support_session_reset', { since: now.toISOString() }); } catch (_) {}
+      // #916: también se cierra en el panel (sale de Abiertos); si el cliente vuelve a escribir, se reabre como siempre.
+      try {
+        const rc = await ChatStatus.updateOne({ userId: u.id, status: 'open' }, { $set: { status: 'closed', closedAt: now, closedBy: 'auto', assignedTo: null } });
+        if (rc && rc.modifiedCount) { try { await delayClockResolve(u.id, { responded: true, agentId: 'system', agentUsername: 'automático', via: 'auto' }); } catch (_) {} try { notifyAdmins('chat_closed', { userId: u.id, by: 'sistema', adminId: 'system' }); } catch (_) {} }
+      } catch (e) { logger.warn('[support-autoclose] ChatStatus ' + u.id + ': ' + e.message); }
     } catch (e) { logger.warn('[support-autoclose] ' + r._id + ': ' + e.message); }
   }
-  if (rows.length) logger.info('[support-autoclose] revisadas ' + rows.length + ' conversaciones (>' + hours + ' h sin respuesta del cliente)');
+  if (rows.length) logger.info('[support-autoclose] revisadas ' + rows.length + ' conversaciones (>' + minutes + ' min / ' + hours + ' h sin respuesta del cliente)');
 }
 setTimeout(() => { _supportAutoCloseTick().catch(() => {}); }, 4 * 60 * 1000);
-setInterval(() => { _supportAutoCloseTick().catch(() => {}); }, 10 * 60 * 1000);
+setInterval(() => { _supportAutoCloseTick().catch(() => {}); }, 5 * 60 * 1000); // #916: cada 5 min (plazo de 30 min)
 
 function _schedCanManage(role) { return NOTIF_BATCH_SEND_ROLES.includes(role); }
 function _schedCanView(role) { return NOTIF_BATCH_VIEW_ROLES.includes(role); }

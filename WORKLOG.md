@@ -8,6 +8,16 @@
 
 ## Sesión 2026-10-24
 
+### 916. ⏱️ Soporte: cierre automático a los 30 min sin respuesta del cliente, con mensaje de cierre y cerrado en el panel
+**Pedido (owner):** "hacé cierre de mensaje si el usuario no contesta dentro de los 30 min: 'por no recibir respuestas cerramos la conversación
+de forma automática', eso en Soporte".
+- `_supportAutoCloseTick` (#401) pasa de 6 h a **30 minutos** (`Config['supportAutoCloseMinutes']`, default 30; `supportAutoCloseHours = 0`
+  sigue apagándolo) y corre cada 5 min (antes 10). Cuenta desde NUESTRA última respuesta sin contestación del cliente.
+- Al cerrar: el cliente recibe `/sys_support_autoclosed` (nuevo, editable en COMANDOS, variable {min}: "⏱️ Por no recibir respuesta en 30
+  minutos, cerramos la conversación de forma automática. Si necesitás algo más, elegí una opción y te atendemos."; vacío = sin aviso), para él el
+  chat arranca de cero (`supportSessionSince`), nota interna para el panel y **el chat pasa a CERRADO en el panel** (ChatStatus 'auto', sale de
+  Abiertos; si vuelve a escribir se reabre como siempre).
+
 ### 915. 🏆 SORTEOS con ranking en vivo: Sorteo mensual + Gran Sorteo, inscripción con requisitos, Bases, panel — SW v606 · admin SW v188
 **Pedido (owner, con capturas de la gemela PICA ROJA):** "armá un ranking viendo todo lo apostado de los jugadores de Girox del general, tapá los
 nombres y que cada uno desde la app se registre y pueda ver su nombre completo y su puesto; ponelo arriba del menú básico abajo del saldo y en el
