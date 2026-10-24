@@ -12807,6 +12807,10 @@ async function initializeData() {
   // #872 (owner 2026-10-23): "sacá el registro desde el inicio, que sea sólo con invitación" ⇒ registrationMode 'invite' (#748): desde la app
   // sólo se registra quien trae link de referido real o de una campaña ACTIVA (las landings de pauta siguen creando cuentas). Una sola vez;
   // después se cambia en Configuración → Registro de clientes.
+  // #954 (owner 2026-10-24): "dejá fino el cierre a partir de hoy, ya que está el botón de pago de otro banco": los cierres valen desde hoy.
+  try { if (!(await getConfig('mig954CloseSince', null))) { const cur = String((await getConfig('closeSince', null)) || ''); if (!cur || cur < '2026-10-24') await Config.set('closeSince', '2026-10-24', 'mig#954'); await Config.set('mig954CloseSince', new Date().toISOString(), 'mig#954'); console.log('✅ #954: cierres desde 2026-10-24'); } } catch (e) { console.warn('[startup-migration] #954:', e.message); }
+  // #955 (owner): "la ruleta diaria: un tiro con cargas de $5.000" (los textos de la app leen el valor: se actualizan solos).
+  try { if (!(await getConfig('mig955RouletteMin5000', null))) { const r = (await getConfig('dailyRoulette', null)) || {}; if (r && typeof r === 'object') { r.minDepositArs = 5000; await Config.set('dailyRoulette', r, 'mig#955'); } await Config.set('mig955RouletteMin5000', new Date().toISOString(), 'mig#955'); console.log('✅ #955: ruleta diaria con $5.000 cargados en el día'); } } catch (e) { console.warn('[startup-migration] #955:', e.message); }
   try { if (!(await getConfig('mig872InviteOnly', null))) { await Config.set('registrationMode', 'invite', 'mig#872'); await Config.set('mig872InviteOnly', new Date().toISOString(), 'mig#872'); console.log('✅ #872: registro sólo con invitación'); } } catch (e) { console.warn('[startup-migration] #872:', e.message); }
   // #879 (owner): "verificar el teléfono por única vez y después retirar sin problemas": se apaga el código SMS en CADA retiro (una vez;
   // el tilde sigue en Configuración). El teléfono verificado sigue siendo obligatorio para retirar.
@@ -13844,6 +13848,7 @@ async function _withdrawalRequestHandler(req, res) {
 
     // Para retirar, la cuenta debe tener el teléfono verificado por SMS.
     // El registro es sin SMS, pero el retiro siempre exige verificación.
+    if (user.isBlocked === true || user.isActive === false) return res.status(403).json({ error: 'Tu cuenta no puede retirar en este momento. Escribinos por Soporte.', code: 'ACCOUNT_BLOCKED' }); // #954
     if (user.phoneVerified !== true && !req._testBypass) { // #714: la prueba del tester no exige teléfono
       return res.status(400).json({
         error: 'Para retirar tu premio necesitás verificar tu teléfono por SMS.',
@@ -20682,6 +20687,12 @@ app.post('/api/admin/deposit-reviews/:id/confirm', authMiddleware, depositorMidd
     const id = String(req.params.id);
     const c = await Comprobante.findOne({ id }).lean();
     if (!c) return res.status(404).json({ error: 'Comprobante no encontrado' });
+    // #954 (owner: "revisá bien que no entren comprobantes duplicados"): un comprobante marcado REPETIDO al llegar (misma imagen o mismos datos que
+    // uno anterior, propio o de otro cliente) no se puede confirmar ni por API; sólo el admin general con force:true, dejando rastro.
+    if (c.status === 'duplicate' && !(req.user.role === 'admin' && req.body && req.body.force === true)) {
+      logger.warn(`[comprobante] ${req.user.username} intentó confirmar un comprobante REPETIDO ${id} (original de @${c.duplicateOfUsername || c.username})`);
+      return res.status(409).json({ error: 'Comprobante REPETIDO: ya se usó antes (' + (c.duplicateOfUsername && c.duplicateOfUsername !== c.username ? 'lo envió @' + c.duplicateOfUsername : 'el mismo cliente') + '). Cada transferencia se acredita UNA sola vez.' });
+    }
     if (c.reviewStatus !== 'pending' || c.autoCharged) return res.status(409).json({ error: 'Esa carga ya fue resuelta (' + (c.reviewResolution || c.reviewStatus || c.bankMatchStatus) + ').' });
     const amount = Number(req.body && req.body.amount) > 0 ? Number(req.body.amount) : Number(c.amount);
     if (!(amount > 0)) return res.status(400).json({ error: 'Monto inválido: el comprobante no tiene monto legible, ingresalo a mano.' });
@@ -23668,7 +23679,7 @@ const ROULETTE_PRIZES = [
 // UNA carga real desde el lunes 00:00 (hora AR). Se combina con los otros gates.
 // #669 (owner): la ruleta se desbloquea con una carga de $20.000 (propia de la ruleta, distinta de la carga mínima general de $5.000)
 // "para no generar tantos regalos". Config['dailyRoulette'].minDepositArs; 0 = usar la carga mínima general.
-const ROULETTE_MIN_DEPOSIT_DEFAULT = 10000; // #677 (owner): $10.000 cargados EN EL DÍA (sumando cargas, ej. 2 de $5.000) = 1 giro gratis
+const ROULETTE_MIN_DEPOSIT_DEFAULT = 5000; // #955 (owner): $5.000 · // #677 (owner): $10.000 cargados EN EL DÍA (sumando cargas, ej. 2 de $5.000) = 1 giro gratis
 const DAILY_ROULETTE_DEFAULT = { enabled: true, requireAppInstalled: true, minCargas30d: 10, requireActiveWeek: false, minDepositArs: ROULETTE_MIN_DEPOSIT_DEFAULT, prizes: ROULETTE_PRIZES };
 async function _rouletteMinDepositArs(cfg) {
   const v = Number(cfg && cfg.minDepositArs);

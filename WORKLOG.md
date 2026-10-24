@@ -8,6 +8,26 @@
 
 ## Sesión 2026-10-24
 
+### 954. 🔒 Auditoría: comprobantes duplicados y retiros · cierres válidos desde hoy
+**Pedido (owner):** "revisá bien que no entren comprobantes duplicados y que no retiren plata gente que no puede; dejá fino el cierre a partir de hoy
+ya que está el botón de pago de otro banco".
+- **Comprobantes (revisado):** al llegar, un comprobante con la misma IMAGEN (imageHash) o los mismos DATOS (N° de operación, o monto+titular+CBU+fecha)
+  que uno anterior —propio o de otro cliente— se guarda `status:'duplicate'`, NO entra a Cargas pendientes, avisa al cliente (`/sys_receipt_duplicate`)
+  y deja nota interna; la carga automática va por movimiento del banco con `HgcashCharge.chargeKey` (no acredita dos veces); confirmar a mano reusa
+  la misma `reference` (1girox responde duplicate). **Agujero cerrado:** `POST /api/admin/deposit-reviews/:id/confirm` aceptaba por API un
+  comprobante marcado repetido ⇒ ahora 409 "Comprobante REPETIDO: ya se usó antes (lo envió @x)"; sólo admin general con `force:true` y queda en el log.
+- **Retiros (revisado):** se validan contra `wagering.available` (nunca `balance`), teléfono verificado, mínimo, un pedido a la vez, claim atómico al
+  pagar, re-chequeo del disponible al descontar fichas (`_deductChipsAtConfirm`), >$100.000 con OK humano (#566), radar de estafas (#873/#952).
+  **Agregado:** cuenta bloqueada o inactiva ⇒ 403 también en el pedido de retiro (antes sólo la frenaba el login).
+- **Cierres:** one-shot `mig954CloseSince` ⇒ `Config['closeSince'] = 2026-10-24`: los cierres (y la tabla) valen desde hoy, con pagos por banco
+  externo, fondeos, $50 por transferencia e ingresos/gastos (#948). Los días anteriores quedan fuera.
+
+### 955. 🎡 Ruleta diaria: un giro con $5.000 cargados en el día — SW v636
+**Pedido (owner):** "la ruleta diaria: que tengan un tiro con cargas de 5.000; cambiá todo eso de Info automáticamente cuando modificamos algo".
+- One-shot `mig955RouletteMin5000` ⇒ `Config['dailyRoulette'].minDepositArs = 5000` (editable en el panel → Ruleta diaria, "Carga que desbloquea");
+  `ROULETTE_MIN_DEPOSIT_DEFAULT` = 5000. Los textos de la app ya leen ese valor (`.rl-min` en Inicio, menú intermedio, básico e Info: roulette.js
+  `_paintUnlock`), así que cambiarlo en el panel actualiza todo solo; se sacó el ejemplo fijo "ej. 2 de $5.000" de la Info.
+
 ### 952. 🕵️ Radar: posible duplicado por ID del CELULAR y por NÚMERO de teléfono (no por IP) — SW v635
 **Pedido (owner):** "el posible duplicado dejá de hacerlo por IP, hacelo por teléfono, y que tome algo del celular (IMEI) y ahí sí detallalo".
 - El navegador no expone el IMEI: la app genera UNA vez un ID propio del celular (`localStorage vip_device_id`, activity.js `_deviceId`) y lo manda en
