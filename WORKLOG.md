@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 922. 🚗📱 Banner de Girox directo en DOS: Gran Sorteo (auto) a la izquierda y Sorteo mensual (iPhone) a la derecha — SW v612
+**Pedido (owner, captura):** "dividilo en 2 y poné de un lado el del auto y del otro, segundo, el del iPhone".
+- `[data-srt-banner]` pasa a grilla de 2 columnas (`.srt-banner`, clase `one` si hay un solo sorteo); orden fijo gran → mensual. Cada mitad: imagen
+  del premio, título, estado vivo y "Ver más ›" debajo (textos con elipsis para que entren).
+
 ### 921. 📐 Pantalla del sorteo, orden final: inicio chico · anotarse compacto · premio · puntos · ranking · Bases — SW v611
 **Pedido (owner):** "el comienzo del sorteo ponelo mucho más chico arriba, el anotarse más chiquito segundo, tercero el premio, cómo sumar puntos y el
 ranking anteúltimo".

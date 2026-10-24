@@ -50,12 +50,12 @@
                     if (su) su.textContent = s0.status === 'live' ? (s0.me && s0.me.joined && s0.me.points > 0 ? 'PUESTO #' + num(s0.me.rank) : 'EN VIVO · NOVEDAD') : (s0.status === 'soon' ? 'NOVEDAD · ' + cdShort(s0.startsInMs).toUpperCase() : 'CERRADO'); }
             }
         } catch (_) {}
+        // #922 (owner): el banner de Girox directo dividido en DOS: a la izquierda el Gran Sorteo (auto), a la derecha el mensual (iPhone).
         document.querySelectorAll('[data-srt-banner]').forEach((box) => {
-            const s = list.find((x) => x.status === 'live') || list[0];
-            if (!s) { box.hidden = true; box.innerHTML = ''; return; }
-            const p1 = (s.prizes || [])[0] || {};
-            box.hidden = false;
-            box.innerHTML = '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\')"><span class="srt-ban-img">' + esc(p1.img || s.emoji) + '</span><span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small></span><em>Ver más ›</em></button>';
+            const ordered = ['gran', 'mensual'].map((k) => list.find((x) => x.key === k)).filter(Boolean).concat(list.filter((x) => !['gran', 'mensual'].includes(x.key)));
+            if (!ordered.length) { box.hidden = true; box.innerHTML = ''; return; }
+            box.hidden = false; box.classList.toggle('one', ordered.length === 1);
+            box.innerHTML = ordered.map((s) => { const p1 = (s.prizes || [])[0] || {}; return '<button type="button" class="srt-ban" onclick="VIP.sorteos.open(\'' + s.key + '\')"><span class="srt-ban-img">' + esc(p1.img || s.emoji) + '</span><span class="srt-ban-t"><b>🏆 ' + esc(s.title) + '</b><small>' + esc(cardSub(s)) + '</small><em>Ver más ›</em></span></button>'; }).join('');
         });
     }
     // ---- Pantalla del sorteo

@@ -2678,10 +2678,12 @@ html[data-theme="dark"] { --srt-g: #220840; --srt-g2: #3c0f6c; --srt-g3: #b05cff
 .srt-card-t b { font-size: 15px; font-weight: 900; line-height: 1.15; }
 .srt-card-t i { font-style: normal; font-size: 13px; font-weight: 700; opacity: .95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .srt-card-t small { font-size: 11.5px; font-weight: 700; opacity: .85; margin-top: 2px; }
-.srt-banner { margin: 2px 12px 8px; } body:not(.home-play) #srtBannerPlay { display: none; }
+.srt-banner { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 12px 8px; } .srt-banner.one { grid-template-columns: 1fr; } body:not(.home-play) #srtBannerPlay { display: none; } /* #922: dos, lado a lado */
 .srt-ban { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1.5px solid var(--srt-g3); border-radius: 14px; background: linear-gradient(135deg, var(--srt-g), var(--srt-g2)); color: var(--srt-ink); font-family: var(--p-font); cursor: pointer; text-align: left; box-shadow: 0 4px 14px var(--srt-sh); }
-.srt-ban-img { font-size: 26px; line-height: 1; }
-.srt-ban-t { display: flex; flex-direction: column; flex: 1; min-width: 0; } .srt-ban-t b { font-size: 13.5px; font-weight: 900; } .srt-ban-t small { font-size: 11.5px; font-weight: 700; opacity: .9; }
+.srt-ban { padding: 9px 10px; gap: 8px; min-width: 0; }
+.srt-ban-img { font-size: 30px; line-height: 1; flex: 0 0 auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,.3)); }
+.srt-ban-t { display: flex; flex-direction: column; flex: 1; min-width: 0; } .srt-ban-t b { font-size: 12.5px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .srt-ban-t small { font-size: 11px; font-weight: 700; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srt-ban-t em { margin-top: 2px; font-size: 11px; }
 .srt-ban em { font-style: normal; font-size: 13px; font-weight: 900; color: var(--srt-lite); }
 .srt-card::after, .srt-cross em { color: var(--srt-lite); }
 /* pantalla */
