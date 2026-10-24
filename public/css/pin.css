@@ -2822,3 +2822,28 @@ body.casino-open .srt-modal { z-index: 100002 !important; }
 .srt-inline-head.slim .srt-inline-x { background: var(--srt-g); border-color: var(--srt-g); padding: 4px 10px; font-size: 11.5px; }
 .srt-reg { display: flex; align-items: baseline; gap: 4px; padding: 7px 11px; margin-bottom: 8px; border-radius: 12px; background: var(--srt-soft); border: 1px solid var(--srt-line); color: var(--srt-g); font: 900 13px var(--p-font); }
 .srt-reg small { font-size: 11px; font-weight: 700; color: var(--p-muted); }
+
+/* #932 (owner, captura): Info del servicio — SÓLO los títulos plegados (el texto aparece con "Ver más"), logo chiquito sobre el título y
+   fondo claro (nada de negro) */
+#infoModal .modal-content { background: var(--p-bg) !important; color: var(--p-text) !important; }
+#infoModal .info-head-sm { display: flex !important; flex-direction: column; align-items: center; gap: 2px; }
+#infoModal .info-logo { width: 34px; height: 34px; border-radius: 9px; display: block; margin: 0 auto 2px; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+#infoModal .info-head-sm h2 { color: var(--p-text) !important; }
+.info-msg.im-compact .im-sec:not(.open) { max-height: 50px !important; padding-bottom: 0 !important; }
+.info-msg.im-compact .im-sec:not(.open)::after { display: none !important; }
+.info-msg.im-compact .im-sec:not(.open) > b:first-child { white-space: nowrap; overflow: hidden; margin-bottom: 0 !important; }
+.info-msg.im-compact .im-sec > b:first-child .info-badge { flex: 0 0 auto; }
+
+/* #933: hoja resumida del sorteo DENTRO del casino (contador, premios, 2 líneas, Ver más en el menú) */
+.srt-mini { position: fixed; inset: 0; z-index: 100003; display: flex; align-items: flex-start; justify-content: center; padding: calc(64px + var(--sat, env(safe-area-inset-top, 0px))) 12px 12px; background: rgba(0, 0, 0, .45); font-family: var(--p-font); }
+.srt-mini-box { width: 100%; max-width: 400px; background: var(--p-bg, #fff); color: var(--p-text, #111); border: 1.5px solid var(--srt-g3); border-radius: 18px; padding: 10px 12px 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, .4); }
+.srt-mini-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; } .srt-mini-head b { font-size: 15px; font-weight: 900; }
+.srt-mini-head .srt-x { width: 30px; height: 30px; line-height: 30px; font-size: 15px; background: var(--srt-g); }
+.srt-mini-cdl { font-size: 10.5px; font-weight: 900; letter-spacing: .6px; color: var(--srt-g2); margin: 2px 0 6px; text-align: center; }
+.srt-mini .srt-cd-b { padding: 6px 2px; } .srt-mini .srt-cd-b b { font-size: 20px; }
+.srt-mini-prizes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 10px 0 8px; }
+.srt-mini-p { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; background: var(--srt-soft); border: 1px solid var(--srt-line); border-radius: 12px; padding: 8px 4px; }
+.srt-mini-img { font-size: 30px; line-height: 1; } .srt-mini-img.pic { width: 100%; height: 54px; border-radius: 8px; overflow: hidden; }
+.srt-mini-p i { font-style: normal; font-size: 9.5px; font-weight: 900; color: var(--srt-g2); letter-spacing: .5px; } .srt-mini-p b { font-size: 11px; font-weight: 900; line-height: 1.15; }
+.srt-mini-txt { margin: 4px 0 8px; font-size: 12.5px; line-height: 1.35; color: var(--p-text); }
+.srt-mini-me { font-size: 12px; font-weight: 800; color: var(--srt-g); margin-bottom: 8px; }

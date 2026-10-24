@@ -142,6 +142,7 @@ function matchCard(m) {
 function renderSvg(spec) {
   spec = spec || {};
   if (spec.style === 'premium') return renderPremium(spec); // #845
+  if (spec.style === 'page') return renderPage(spec); // #931
   const parts = [];
   parts.push(`<rect width="${W}" height="${H}" fill="${WHITE}"/>`);
   if (_spade) parts.push(`<image href="${_spade}" x="${(W - 150) / 2}" y="250" width="150" height="150"/>`);
@@ -278,6 +279,62 @@ function renderPremium(spec) {
   P.push(ctext(ctaY + 50, 'Tocá el botón de abajo  ↓', 30, GOLD2, { maxw: 760, weight: 800 }));
   const note = od && spec.match ? 'Cuota de referencia · puede variar en Girox según el horario' : clean(spec.note);
   if (note) P.push(ctext(ctaY + 110, note, 23, MUT2, { maxw: 880, bold: false, weight: 600 }));
+  P.push(ctext(1672, 'Gracias por confiar en PICA ROJA', 28, MUTED));
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${P.join('')}</svg>`;
+}
+
+// ───────────────────────── #931 ESTILO DE LA PÁGINA (owner: "un estilo más del estilo de la página, todo") ─────────────────────────
+// Como la app (pin.css): fondo BLANCO, pica + PICA ROJA arriba, subtítulo en píldora roja suave, tarjeta GRIS CLARO redondeada con la
+// ilustración en círculo rojo (sin dorado ni fondo negro), titular negro + línea grande ROJA, 3 beneficios con marcador rojo sobre filas
+// blancas, flecha roja al botón de abajo y nota gris. spec.style = 'page'. Mismos campos que 'premium'.
+const SOFT = '#ffe9ec', LINE = '#e5e5ea', TXT2 = '#3f3f46';
+function renderPage(spec) {
+  const P = [];
+  P.push(`<rect width="${W}" height="${H}" fill="${WHITE}"/>`);
+  if (_spade) P.push(`<image href="${_spade}" x="${(W - 150) / 2}" y="250" width="150" height="150"/>`);
+  P.push(ctext(448, 'PICA ROJA', 38, BLACK));
+  P.push(ctext(486, 'oficial · cargas automáticas', 24, MUTED, { bold: false }));
+  const accent = /^#[0-9a-f]{6}$/i.test(spec.accent || '') ? spec.accent : RED;
+  P.push(`<rect x="${PX0}" y="${PY0}" width="${PX1 - PX0}" height="${PY1 - PY0}" rx="48" fill="${GRAY}" stroke="${LINE}" stroke-width="2"/>`);
+  const kicker = clean(spec.kicker).toUpperCase();
+  if (kicker) { const kw = Math.min(880, estW(kicker, 28, true) + 10 * (kicker.length - 1) + 80); P.push(`<rect x="${(W - kw) / 2}" y="${PY0 + 44}" width="${kw}" height="58" rx="29" fill="${SOFT}"/>`); P.push(ctext(PY0 + 84, kicker, 28, RED, { maxw: 840, spacing: 6 })); }
+  if (spec.match) P.push(_matchHero(spec.match).split(GOLD).join(LINE));
+  else if (spec.photos && spec.photos.length) P.push(_photos(spec.photos).split(GOLD).join('#ffffff'));
+  else P.push(_glyph(spec.icon, accent).split(GOLD).join('#ffffff'));
+  const h1 = clean(spec.h1), h2 = clean(spec.h2).toUpperCase();
+  let y = spec.match ? 1010 : 1012;
+  if (h1) { const sz = Math.min(64, fitSize(h1, 64, 860)); P.push(ctext(y, h1, sz, BLACK, { maxw: 880, weight: 900 })); y += 18; }
+  if (h2) { const sz = Math.min(104, fitSize(h2, 104, 880)); P.push(ctext(y + sz * 0.86, h2, sz, RED, { maxw: 900, weight: 900 })); y += sz + 22; }
+  const od = spec.odds && spec.odds.home && spec.odds.away ? spec.odds : null;
+  if (od && spec.match) {
+    const cells = [[clean(spec.match.home), od.home], ['Empate', od.draw], [clean(spec.match.away), od.away]].filter((c) => c[1]);
+    const bw = 258, gap = 22, tot = cells.length * bw + (cells.length - 1) * gap; let bx = (W - tot) / 2; const oy = Math.max(y + 6, 1150);
+    for (const [lab, val] of cells) {
+      const cxx = bx + bw / 2;
+      P.push(`<rect x="${bx}" y="${oy}" width="${bw}" height="112" rx="20" fill="#fff" stroke="${LINE}" stroke-width="2"/>`);
+      const ls = Math.min(26, Math.floor(26 * (bw - 30) / Math.max(1, estW(lab, 26, true))));
+      P.push(`<text x="${cxx}" y="${oy + 38}" text-anchor="middle" font-family="${FONT}" font-size="${ls}" font-weight="700" fill="${MUTED}">${esc(lab)}</text>`);
+      P.push(`<text x="${cxx}" y="${oy + 92}" text-anchor="middle" font-family="${FONT}" font-size="50" font-weight="900" fill="${RED}">${Number(val).toFixed(2)}</text>`);
+      bx += bw + gap;
+    }
+    y = oy + 112 + 6;
+  }
+  const bl = (spec.bullets || []).slice(0, od && spec.match ? 2 : 3);
+  let by = Math.max(y + 8, od && spec.match ? y + 14 : 1150);
+  for (const b of bl) {
+    const sym = esc(String(b[0] || '✓').slice(0, 2)), t = clean(b[1]), sub = clean(b[2]);
+    P.push(`<rect x="${PX0 + 40}" y="${by - 6}" width="${PX1 - PX0 - 80}" height="78" rx="18" fill="#fff" stroke="${LINE}" stroke-width="2"/>`);
+    P.push(`<circle cx="182" cy="${by + 32}" r="30" fill="${RED}"/><text x="182" y="${by + 46}" text-anchor="middle" font-family="${FONT}" font-size="${sym.length > 1 ? 24 : 34}" font-weight="900" fill="#fff">${sym}</text>`);
+    const fit1 = estW(t, 33, true) > 690 ? ` textLength="690" lengthAdjust="spacingAndGlyphs"` : '';
+    const fit2 = estW(sub, 25, false) > 690 ? ` textLength="690" lengthAdjust="spacingAndGlyphs"` : '';
+    P.push(`<text x="236" y="${by + 27}" font-family="${FONT}" font-size="33" font-weight="800" fill="${BLACK}"${fit1}>${esc(t)}</text>`);
+    if (sub) P.push(`<text x="236" y="${by + 61}" font-family="${FONT}" font-size="25" font-weight="600" fill="${TXT2}"${fit2}>${esc(sub)}</text>`);
+    by += 92;
+  }
+  const ctaY = Math.min(PY1 - 150, Math.max(by + 16, 1440));
+  P.push(ctext(ctaY + 50, 'Tocá el botón de abajo  ↓', 30, RED, { maxw: 760, weight: 900 }));
+  const note = od && spec.match ? 'Cuota de referencia · puede variar en Girox según el horario' : clean(spec.note);
+  if (note) P.push(ctext(ctaY + 110, note, 23, MUTED, { maxw: 880, bold: false, weight: 600 }));
   P.push(ctext(1672, 'Gracias por confiar en PICA ROJA', 28, MUTED));
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${P.join('')}</svg>`;
 }

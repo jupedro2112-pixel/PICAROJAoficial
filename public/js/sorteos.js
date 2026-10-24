@@ -192,6 +192,36 @@
             toast('🏆 ¡Listo! Ya estás anotado. Tus apuestas suman puntos.', 'success'); await load();
         } catch (_) { toast('Sin conexión. Probá de nuevo.', 'error'); }
     }
+    // #933 (owner): "que ese menú en Girox abra una ventana ahí adentro, no en el menú: una explicación resumida y, si quiere ver más, que vaya al
+    // menú; sólo el contador y lo que se sortea". Hoja chica sobre el casino: contador vivo, los 3 premios con imagen, 2 líneas y "Ver más".
+    function openMini(key) {
+        key = key || 'mensual'; closeMini();
+        const s = get(key); const m = document.createElement('div'); m.className = 'srt-mini'; m.id = 'srtMini'; m.setAttribute('role', 'dialog');
+        m.addEventListener('click', (e) => { if (e.target === m) closeMini(); });
+        const inner = () => {
+            const s2 = get(key); if (!s2) return '<div class="srt-mini-box"><div class="srt-note">' + (_data ? 'Este sorteo no está disponible.' : 'Cargando…') + '</div></div>';
+            const until = untilOf(s2); const c = cd(until - Date.now()); const box = (k, v, t) => '<div class="srt-cd-b"><b data-k="' + k + '">' + String(v).padStart(2, '0') + '</b><small>' + t + '</small></div>';
+            const cdHtml = s2.status === 'closed' ? '<div class="srt-strip"><span>🔒 Cerrado · ganadores el ' + esc(fday(s2.publishAt)) + '</span></div>' : '<div class="srt-mini-cdl">' + (s2.status === 'soon' ? 'EMPIEZA EN' : '<em class="srt-live">● EN VIVO</em> · TERMINA EN') + '</div><div class="srt-cd" data-cd="' + until + '">' + box('d', c.d, 'DÍAS') + box('h', c.h, 'HS') + box('m', c.m, 'MIN') + box('s', c.s, 'SEG') + '</div>';
+            const prizes = '<div class="srt-mini-prizes">' + (s2.prizes || []).map((p) => '<div class="srt-mini-p">' + pic(p.img, 'srt-mini-img', p.name) + '<i>' + p.pos + '°</i><b>' + esc(p.name) + '</b></div>').join('') + '</div>';
+            const expl = s2.status === 'live' ? 'Cada ' + money(s2.rules.ptsPer) + ' apostados = ' + num(s2.rules.pts) + ' puntos. Los 3 anotados con más puntos al cierre se llevan los premios.' : 'Cuando empiece, cada ' + money(s2.rules.ptsPer) + ' apostados suman ' + num(s2.rules.pts) + ' puntos. Anotate en el menú para participar.';
+            const me = s2.me || {}; const mine = me.joined ? (me.points > 0 ? '✅ Registrado · puesto #' + num(me.rank) + ' · ' + num(me.points) + ' pts' : '✅ Registrado') : '📝 Todavía no estás anotado';
+            return '<div class="srt-mini-box"><div class="srt-mini-head"><b>' + esc(s2.emoji + ' ' + s2.title) + '</b><button type="button" class="srt-x" onclick="VIP.sorteos.closeMini()" aria-label="Cerrar">✕</button></div>' + cdHtml + prizes + '<p class="srt-mini-txt">' + esc(expl) + '</p><div class="srt-mini-me">' + mine + '</div><button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + key + '\')">Ver más en el menú ›</button></div>';
+        };
+        m.innerHTML = inner(); document.body.appendChild(m); m._paint = () => { m.innerHTML = inner(); };
+        clearInterval(_tick); _tick = setInterval(tickCd, 1000);
+        if (!_data) load().then(() => { const x = _el('srtMini'); if (x && x._paint) x._paint(); });
+    }
+    function closeMini() { const m = _el('srtMini'); if (m) m.remove(); if (!_open && !_inline) clearInterval(_tick); }
+    // "Ver más": cierra la hoja y el casino y despliega el sorteo en el menú (donde estén las dos mitades).
+    function goMenu(key) {
+        closeMini();
+        try { if (VIP.ui && VIP.ui.closeCasinoFrame) VIP.ui.closeCasinoFrame(); } catch (_) {}
+        setTimeout(() => {
+            const hosts = Array.from(document.querySelectorAll('[data-srt-cards],[data-srt-banner]')).filter((h) => h.offsetParent !== null && !h.hidden);
+            const host = hosts[0]; if (host) { openInline(key, host); return; }
+            open(key); // sin lugar donde desplegar ⇒ pantalla completa
+        }, 350);
+    }
     function tgOpen() { const u = _data && _data.telegramUrl; if (u) window.open(u, '_blank', 'noopener'); }
     function termsHtml(s) { return '<h2>📜 Bases y condiciones · ' + esc(s.title) + '</h2><ol class="srt-tc">' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol><p class="srt-p srt-muted">PICA ROJA · ' + esc(fday(_data.now)) + '</p>'; }
     function terms(key) {
@@ -213,5 +243,5 @@
         load(); clearInterval(_poll); _poll = setInterval(load, 5 * 60 * 1000);
         try { document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); }); } catch (_) {}
     }
-    VIP.sorteos = { init, load, open, close, closeInline, join, terms, termsClose, tgOpen };
+    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, join, terms, termsClose, tgOpen };
 })();

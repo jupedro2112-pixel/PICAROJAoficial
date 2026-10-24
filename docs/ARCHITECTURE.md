@@ -1417,6 +1417,9 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
   deja los puntajes como estaban. Sólo anotados pueden ganar; el ranking público muestra a todos con nombre tapado (`mask`), el propio completo.
 - **Requisitos para anotarse** (`_sorteoChecksOf`): app instalada (token FCM standalone), notificaciones (token), Telegram (declarado), una carga real.
   Toggles en `config.requirements`. Un requisito nuevo va ahí y en `_sorteoMissing` + checklist del front.
+- **Front (#928/#933):** tocar una mitad DESPLIEGA el sorteo ahí mismo (`openInline`, panel `.srt-inline` con ✕, Bases adentro); el recuadro de la barra
+  del casino abre una HOJA RESUMIDA (`openMini`: contador, 3 premios, 2 líneas, "Ver más en el menú" ⇒ `goMenu` cierra el casino y despliega en el
+  menú). La pantalla completa `#srtModal` queda de respaldo.
 - **Front:** contenedores `[data-srt-cards]` (básico e intermedio) y `[data-srt-banner]` (Girox directo, sólo `body.home-play`), pantalla `#srtModal`
   con capa `#srtTerms` (Bases, ✕ arriba a la izquierda). Verde: tokens `--srt-*` en pin.css (claro + dark).
 
@@ -1444,7 +1447,8 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
 
 `src/services/storyAutopilot.js` arma el PLAN del día (`planDay(dayKey, matches, ctx)`: determinístico para un mismo día) y `_storyAutoTick`
 (server.js, cada 5 min en cada instancia) publica lo que ya pasó de hora con `Story.autoKey = sa-<día>-<slot>` ÚNICO (multi-instancia).
-Slots `0..4` = 10:00 · 13:00 · 16:00 · 19:00 · 21:30 (servicio; lunes el slot favorito, miércoles el bono semanal); `m0..m2` = partidos a las
+Slots `0..4` = **00:05 · 00:06 · 00:07 · 00:08 · 00:09 (#931: las 5 juntas al cambiar el día; `_storyAutoRetirePrevious` apaga las de días
+anteriores en la misma pasada; el slot 0 es SIEMPRE Soporte/atención, los otros 4 rotan)**; lunes el slot favorito, miércoles el bono semanal; `m0..m2` = partidos a las
 00:05 (**#909: sólo con `Config['storyAutoMatches']` encendida**, default apagada; panel → Cronograma → Historias automáticas).
 **Rotación (#909):** cursor `(dayN*5) % temas` ⇒ los 5 temas de hoy nunca son los de ayer; `cycle = floor(dayN*5/temas)` elige la redacción
 (`THEMES[k]` o `ALTS[k][cycle%3 − 1]`). Un tema nuevo va a `THEMES` **y** con 2 alternativas a `ALTS` (texto de servicio: nunca ruleta,

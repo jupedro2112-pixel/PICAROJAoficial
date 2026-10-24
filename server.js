@@ -25747,7 +25747,7 @@ const _STORY_IMAGES_ON = true; // #850: también Render (sirve sus propias fotos
 // con URL ABSOLUTA a Render (producción vieja no tiene /auto.svg pero la app muestra imágenes https). Producción usa la ruta relativa y, ya
 // con este código, pasa a servir ella las que hubiera publicado Render (_storyAutoBackfillImages).
 const _STORY_IMG_BASE = process.env.RENDER === 'true' ? String(process.env.RENDER_EXTERNAL_URL || 'https://fabrioctubre.onrender.com').replace(/\/$/, '') : '';
-const STORY_IMG_VER = '858'; // 858: cuotas en los partidos // #853: subirlo cuando cambia el dibujo ⇒ los teléfonos piden la foto nueva (la vieja queda en caché 1 día)
+const STORY_IMG_VER = '931'; // 931: estilo de la página (blanco/gris/rojo) // 858: cuotas en los partidos // #853: subirlo cuando cambia el dibujo ⇒ los teléfonos piden la foto nueva (la vieja queda en caché 1 día)
 const _storyImgUrl = (id) => `${_STORY_IMG_BASE}/api/stories/${id}/auto.svg?v=${STORY_IMG_VER}`;
 async function _storyAutoImgSpec(it) {
   if (!_STORY_IMAGES_ON || !it || !it.img) return null;
@@ -25828,13 +25828,18 @@ async function _storyWipeForRepublish(who) {
   logger.info(`[historias-auto] #911 ${who}: ${n1} historias apagadas, ${n2} automáticas borradas ⇒ se publican las de hoy ahora`);
   return { off: n1, del: n2 };
 }
-async function _storyReset911Once() {
+async function _storyReset911Once(key) {
+  key = key || 'mig911StoriesRepublish'; // #931: misma mecánica, otra llave ("ahora borrá y publicá de vuelta")
   try {
-    if (await getConfig('mig911StoriesRepublish', null)) return false;
-    await Config.set('mig911StoriesRepublish', new Date().toISOString(), 'mig#911'); // primero la marca: multi-instancia, una sola corre
-    await _storyWipeForRepublish('deploy');
+    if (await getConfig(key, null)) return false;
+    await Config.set(key, new Date().toISOString(), 'mig#911'); // primero la marca: multi-instancia, una sola corre
+    await _storyWipeForRepublish('deploy ' + key);
     return true;
   } catch (e) { logger.warn('[historias-auto] #911 reset: ' + e.message); return false; }
+}
+// #931: al publicar las del día nuevo se APAGAN las automáticas de días anteriores (la gente ve sólo las de hoy).
+async function _storyAutoRetirePrevious(today) {
+  try { const r = await Story.updateMany({ isActive: true, autoKey: { $regex: '^sa-' }, $nor: [{ autoKey: { $regex: '^sa-' + today + '-' } }] }, { $set: { isActive: false } }); const n = r.modifiedCount || r.nModified || 0; if (n) logger.info('[historias-auto] #931 ' + n + ' historias de días anteriores apagadas'); } catch (e) { logger.warn('[historias-auto] retirar anteriores: ' + e.message); }
 }
 let _storyAutoRunning = false;
 async function _storyAutoTick(opts) {
@@ -25844,10 +25849,13 @@ async function _storyAutoTick(opts) {
   try {
     await _storyResetOnce(); // #845
     if (await _storyReset911Once()) force = true; // #911
+    if (await _storyReset911Once('mig931StoriesRepublish')) force = true; // #931: borrar y publicar de vuelta con el estilo nuevo
     const now = new Date(); const today = _schedArtKey(now);
     _storyDiag.lastTickAt = now.toISOString(); _storyDiag.lastError = null; _storyDiag.skipped = [];
     const plan = await _storyAutoPlan(today);
     await _storyAutoBackfillImages(today, plan);
+    // #931: cambio de día ⇒ las de ayer se apagan en la misma pasada en que salen las de hoy
+    if (plan.some((it) => force || new Date(`${today}T${it.time}:00-03:00`) <= now)) await _storyAutoRetirePrevious(today);
     for (const it of plan) try { // #909: una historia que falle (foto, red) no frena a las demás del día
       const early = new Date(`${today}T${it.time}:00-03:00`) > now; // #911: con force sale igual, "ahora"
       if (early && !force) continue;

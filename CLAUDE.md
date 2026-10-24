@@ -301,7 +301,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   (`AGENT_SECTIONS` en admin.js). (La clave temporal del panel de #889 se revirtió en #892.)
 - **ALERTAS DE ESTAFA (#873):** `src/services/fraudRadar.js` (reglas + puntaje + caso). Una señal nueva de estafa va como regla ahí (con
   evidencia); nunca bloquear automático: el panel bloquea con `/api/admin/users/:id/block`. Probar con MongoDB en memoria (WORKLOG #873).
-- **HISTORIAS AUTOMÁTICAS (#827):** `src/services/storyAutopilot.js` (contenido) + `_storyAutoTick` (publica 5/día, `Story.autoKey` único).
+- **HISTORIAS AUTOMÁTICAS (#827 → #931):** `src/services/storyAutopilot.js` (contenido) + `_storyAutoTick` (publica 5/día JUNTAS a las 00:05-00:09 y apaga
+  las del día anterior; la primera es SIEMPRE Soporte/atención; `Story.autoKey` único; fotos estilo de la página `style:'page'`).
   Partidos de ESPN (1girox no expone eventos; su Deportes es Digitain sin deep link). Textos de SERVICIO, nunca "ruleta" ni plata/sueldos.
   **#834:** con FOTO (`src/services/storyImage.js`, SVG con el estilo de las manuales, `GET /api/stories/:id/auto.svg`); partidos a las 00:05
   (slots `m0..m2`). En Render no se arman fotos (comparte la base: producción se las agrega).

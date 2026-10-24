@@ -8,6 +8,31 @@
 
 ## Sesión 2026-10-24
 
+### 931. 📖 Historias automáticas: las 5 a las 00 hs (se apagan las de ayer), Soporte siempre primero, fotos con el ESTILO DE LA PÁGINA, republicar ahora — SW v620 · admin SW v191
+**Pedido (owner):** "revisá que estén funcionando las historias con el estilo que pedí; siempre quiero que vaya del lado de la atención y se publiquen
+en el cambio de día: se borran y se publican de vuelta a las 00 hs; ahora borrá y publicá de vuelta; poné un estilo más del estilo de la página, todo".
+- `SLOTS` = 00:05 · 00:06 · 00:07 · 00:08 · 00:09 (las 5 juntas al cambiar el día; duran 24 h). `_storyAutoRetirePrevious` apaga las `sa-*` de días
+  anteriores en la misma pasada en que salen las de hoy. One-shot `mig931StoriesRepublish` (misma mecánica que #911, `_storyReset911Once(key)`):
+  al deployar borra las vigentes y publica las de hoy con el estilo nuevo.
+- Plan: el slot 0 es SIEMPRE Soporte/atención (redacciones rotando por día); los otros 4 rotan con paso 5 sobre 12 temas ⇒ 12 combinaciones
+  distintas y nunca un tema repetido respecto al día anterior (probado 36 días; con paso 4 salían sólo 3 combinaciones).
+- Fotos: `style:'page'` en todos los temas ⇒ `renderPage` en storyImage.js: fondo blanco, pica + PICA ROJA, subtítulo en píldora roja suave, tarjeta
+  gris claro con la ilustración en círculo rojo (sin dorado ni negro), titular negro + línea roja, beneficios en filas blancas con marcador rojo,
+  flecha roja al botón. `STORY_IMG_VER` = 931 (los teléfonos piden la foto nueva). Las personales de #886 siguen 'premium'.
+- Panel: el título de Historias automáticas dice "5 por día a las 00 hs". Pendiente: ver en producción el 🛠 Motor tras el deploy.
+
+### 932. ℹ️ Info del servicio: sólo títulos plegados, logo chiquito sobre el título, fondo claro — (SW v620)
+**Pedido (owner, captura):** "sólo títulos; poné en el inicio un logo chiquito sobre el título; y el fondo no le pongas fondo negro".
+- `.im-sec` plegada muestra sólo la fila del título (ícono + título, sin la línea de texto ni el degradé); "Ver más ›" la abre como siempre.
+  Logo `.info-logo` (34 px) arriba de "Información del servicio". `#infoModal .modal-content` con fondo `--p-bg` (pisaba modals.css con fondo oscuro).
+
+### 933. 🎰 Girox directo: el recuadro del sorteo abre una HOJA RESUMIDA ahí adentro (contador + premios + 2 líneas + "Ver más en el menú") — (SW v620)
+**Pedido (owner, captura):** "que ese menú en Girox abra una ventana ahí adentro, no en el menú: una explicación resumida y si quiere ver más que vaya al
+menú; sólo el contador y lo que se sortea".
+- `openMini(key)` (sorteos.js): hoja `.srt-mini` sobre el casino con contador vivo (empieza en / termina en), los 3 premios con imagen, dos líneas de
+  explicación, estado del cliente (registrado / puesto) y botón "Ver más en el menú ›" ⇒ `goMenu`: cierra la hoja y el casino y despliega el sorteo
+  en el menú donde estén las dos mitades (si no hay dónde, pantalla completa). El recuadro de la barra ahora llama a `openMini`.
+
 ### 930. ✅ Revisión de todo lo del día: pruebas simuladas de sorteos (server + app + panel) y de #916 · 2 fixes — SW v619 · admin SW v190
 **Pedido (owner):** "revisá que esté funcionando, que esté bien todo". Sin node_modules no se puede levantar el server ni Mongo: se probó con
 modelos/1girox/DOM simulados (`scripts/test-sorteos-server.js`, `scripts/test-sorteos-front.js`; correr con `node scripts/...`).
