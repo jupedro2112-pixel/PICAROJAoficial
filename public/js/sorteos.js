@@ -115,41 +115,44 @@
         return h + '</div>';
     }
     function winnersList(w) { return '<div class="srt-table">' + w.map((x) => '<div class="srt-row' + (x.me ? ' me' : '') + '"><span class="srt-r">' + ['🥇', '🥈', '🥉'][x.pos - 1] + '</span><span class="srt-n">' + esc(x.name) + (x.me ? ' <i>vos</i>' : '') + '</span><b class="srt-pts">' + num(x.points) + ' pts</b></div>').join('') + '</div>'; }
-    function joinBlock(s) {
+    function joinBlock(s, compact) {
         const me = s.me || {}, ck = me.checks || {}, req = (_data && _data.requirements) || {};
-        if (me.joined) return '<div class="srt-join ok"><b>✅ Estás anotado</b><small>desde el ' + fdh(me.joinedAt) + '. Tus apuestas suman puntos solas.</small></div>';
+        const cls = compact ? ' compact' : '';
+        if (me.joined) return '<div class="srt-join ok' + cls + '"><b>✅ Estás anotado</b><small>desde el ' + fdh(me.joinedAt) + ' · tus apuestas suman solas</small></div>';
         const row = (k, ok, txt, extra) => (req[k] === false ? '' : '<li class="' + (ok ? 'ok' : 'no') + '"><i>' + (ok ? '✅' : '⬜') + '</i><span>' + txt + (extra || '') + '</span></li>');
         const tg = _data && _data.telegramUrl ? ' <button type="button" class="srt-link" onclick="VIP.sorteos.tgOpen()">Unirme ›</button>' : '';
-        return '<div class="srt-join"><b>📝 Anotarme para participar</b><small>Para sumar puntos y poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
+        return '<div class="srt-join' + cls + '"><b>📝 Anotate para participar</b><small>Para poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
             row('app', ck.app, 'Tener la app de PICA ROJA instalada', ck.app ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.home.installGiftOpen&&VIP.home.installGiftOpen()}catch(_){}">¿Cómo? ›</button>') +
             row('notif', ck.notif, 'Notificaciones activadas', ck.notif ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.notifications&&VIP.notifications.requestNotificationPermission&&VIP.notifications.requestNotificationPermission()}catch(_){}">Activar ›</button>') +
             row('deposit', ck.deposit, 'Al menos una carga real', ck.deposit ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.easyLoad()}catch(_){}">Cargar ›</button>') +
             (req.telegram === false ? '' : '<li class="' + (ck.telegram ? 'ok' : 'no') + '"><i>' + (ck.telegram ? '✅' : '⬜') + '</i><label><input type="checkbox" id="srtTg_' + s.key + '"' + (ck.telegram ? ' checked' : '') + '> Ya me uní al Telegram de PICA ROJA (ahí anunciamos los ganadores)</label>' + tg + '</li>') +
-            '</ul><button type="button" class="srt-btn" onclick="VIP.sorteos.join(\'' + s.key + '\')">Anotarme ahora</button></div>';
+            '</ul><button type="button" class="srt-btn' + (compact ? ' sm' : '') + '" onclick="VIP.sorteos.join(\'' + s.key + '\')">Anotarme ahora</button></div>';
     }
     function crossCard(s) {
         const o = (_data.sorteos || []).find((x) => x.key !== s.key); if (!o) return '';
         const p1 = (o.prizes || [])[0] || {};
         return '<button type="button" class="srt-cross" onclick="VIP.sorteos.open(\'' + o.key + '\')"><span class="srt-card-img">' + esc(p1.img || o.emoji) + '</span><span class="srt-card-t"><b>' + esc(o.title) + '</b><i>' + esc(p1.name) + '</i><small>' + esc(cardSub(o)) + '</small></span><em>Ver ›</em></button>';
     }
+    // #921 (owner): orden de la pantalla — 1) inicio del sorteo bien chico arriba · 2) anotarse compacto · 3) el premio · 4) cómo sumar puntos ·
+    // 5) ranking · 6) Bases (y la tarjeta del otro sorteo al final).
+    function strip(s) {
+        const until = untilOf(s);
+        const lbl = s.status === 'soon' ? '⏳ Empieza en <b data-cd-short="' + until + '">' + esc(cdShort(s.startsInMs)) + '</b>' : (s.status === 'live' ? '<em class="srt-live">● EN VIVO</em> · termina en <b data-cd-short="' + until + '">' + esc(cdShort(s.endsInMs)) + '</b>' : '🔒 Cerrado · ganadores el ' + esc(fday(s.publishAt)));
+        return '<div class="srt-strip"><span>' + lbl + '</span><small>Del ' + esc(fday(s.start)) + ' al ' + esc(fday(s.end)) + '</small></div>';
+    }
     function paintView(key) {
         const s = get(key); const b = _el('srtBody'), t = _el('srtTitle'); if (!b) return;
         if (!s) { b.innerHTML = '<div class="srt-note">' + (_data && _data.enabled === false ? 'Por ahora no hay sorteos activos.' : 'Este sorteo no está disponible.') + '</div>'; return; }
         if (t) t.textContent = s.emoji + ' ' + s.title;
-        let h = hero(s);
-        if (s.key === 'mensual') {
-            if (s.extra && s.extra.enabled) h += '<div class="srt-extra"><b>🎁 Premio extra: ' + money(s.extra.amount * s.extra.winners) + ' en ' + num(s.extra.winners) + ' ganadores de ' + money(s.extra.amount) + '</b><small>Por cada ' + num(s.extra.per) + ' clientes anotados con al menos ' + num(s.extra.minDeposits) + ' cargas en el mes se sortean ' + num(s.extra.winners) + ' premios de ' + money(s.extra.amount) + '. Participan todos los que cumplan, sin importar el ranking.' + (s.counts.extraWinners ? ' <b>Hoy ya hay ' + num(s.counts.extraWinners) + ' premios en juego.</b>' : '') + '</small></div>';
-            h += '<div class="srt-sec srt-cdwrap">' + cdBlock(s) + '<p class="srt-p srt-muted">Del ' + fday(s.start) + ' al ' + fday(s.end) + ' · ganadores el ' + fdh(s.publishAt) + '</p></div>';
-            h += rankingBlock(s);
-            h += '<div class="srt-sec"><h3>🏅 Ganadores</h3><p class="srt-p">Los 3 anotados con más puntos al cierre ganan. Se publican el ' + fdh(s.publishAt) + ' y los contacta nuestro Soporte de entrega de premios.</p></div>';
-            h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados con plata real</li><li>🚫 Los bonos no suman: cuenta la parte proporcional a tus cargas</li><li>🔄 Se actualiza cada 20 minutos</li></ul></div>';
-        } else {
-            h += '<div class="srt-sec srt-cdwrap">' + cdBlock(s) + '<ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados</li>' + (s.rules.dayDepositPts ? '<li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li>' : '') + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de la semana si completás tus misiones semanales</li>' : '') + '</ul><p class="srt-p">Del ' + fday(s.start) + ' al ' + fday(s.end) + '. Ganan los 3 anotados con más puntos.</p></div>';
-            h += rankingBlock(s);
-        }
-        h += joinBlock(s);
+        let h = strip(s);                 // 1) inicio, chico
+        h += joinBlock(s, true);          // 2) anotarse, compacto
+        h += hero(s);                     // 3) el premio
+        if (s.key === 'mensual' && s.extra && s.extra.enabled) h += '<div class="srt-extra"><b>🎁 Premio extra: ' + money(s.extra.amount * s.extra.winners) + ' en ' + num(s.extra.winners) + ' ganadores de ' + money(s.extra.amount) + '</b><small>Por cada ' + num(s.extra.per) + ' clientes anotados con al menos ' + num(s.extra.minDeposits) + ' cargas en el mes se sortean ' + num(s.extra.winners) + ' premios de ' + money(s.extra.amount) + '. Participan todos los que cumplan, sin importar el ranking.' + (s.counts.extraWinners ? ' <b>Hoy ya hay ' + num(s.counts.extraWinners) + ' premios en juego.</b>' : '') + '</small></div>';
+        // 4) cómo sumar puntos
+        h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados con plata real</li>' + (s.rules.dayDepositPts ? '<li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li>' : '') + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de la semana si completás tus misiones semanales</li>' : '') + '<li>🚫 Los bonos no suman: cuenta la parte proporcional a tus cargas</li><li>🔄 Se actualiza cada 20 minutos · ganadores el ' + esc(fdh(s.publishAt)) + '</li></ul></div>';
+        h += rankingBlock(s);             // 5) ranking
+        h += '<button type="button" class="srt-terms-btn" onclick="VIP.sorteos.terms(\'' + s.key + '\')">📜 Bases y condiciones ›</button>'; // 6) bases
         h += crossCard(s);
-        h += '<button type="button" class="srt-terms-btn" onclick="VIP.sorteos.terms(\'' + s.key + '\')">📜 Bases y condiciones ›</button>';
         b.innerHTML = h; try { b.scrollTop = 0; } catch (_) {}
     }
     async function join(key) {

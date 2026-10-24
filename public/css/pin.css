@@ -2764,3 +2764,11 @@ body.casino-open .srt-modal { z-index: 100002 !important; }
 .srt-hero-s b { font-size: 14px; font-weight: 900; line-height: 1.15; } .srt-hero-s small { font-size: 11.5px; font-weight: 700; opacity: .9; }
 .srt-hero-p { margin: 10px 2px 0; font-size: 12.5px; line-height: 1.35; opacity: .92; }
 @media (max-width: 360px) { .srt-hero-img { width: 76px; height: 76px; font-size: 52px; } .srt-hero-1t b { font-size: 19px; } }
+
+/* #921: franja chica del inicio + anotarse compacto */
+.srt-strip { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--srt-soft); border: 1px solid var(--srt-line); border-radius: 12px; padding: 7px 11px; margin-bottom: 8px; font-size: 12.5px; font-weight: 700; color: var(--p-text); }
+.srt-strip b { color: var(--srt-g2); font-variant-numeric: tabular-nums; } .srt-strip small { font-size: 11px; color: var(--p-muted); font-weight: 700; }
+.srt-join.compact { padding: 9px 11px; margin-bottom: 8px; border-width: 1.5px; } .srt-join.compact > b { font-size: 13.5px; } .srt-join.compact > small { font-size: 11.5px; }
+.srt-join.compact .srt-req { margin: 6px 0; } .srt-join.compact .srt-req li { font-size: 12.5px; padding: 3px 0; }
+.srt-join.ok.compact { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; } .srt-join.ok.compact > small { margin: 0; }
+.srt-btn.sm { padding: 10px; font-size: 13.5px; border-radius: 12px; }

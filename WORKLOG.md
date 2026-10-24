@@ -8,6 +8,13 @@
 
 ## Sesión 2026-10-24
 
+### 921. 📐 Pantalla del sorteo, orden final: inicio chico · anotarse compacto · premio · puntos · ranking · Bases — SW v611
+**Pedido (owner):** "el comienzo del sorteo ponelo mucho más chico arriba, el anotarse más chiquito segundo, tercero el premio, cómo sumar puntos y el
+ranking anteúltimo".
+- `strip(s)`: franja de una línea ("⏳ Empieza en 7 d 22 h · Del 1 al 30 de noviembre" / "● EN VIVO · termina en…"), con cuenta regresiva viva.
+- `joinBlock(s, true)`: versión compacta (checklist más chica, botón chico; anotado = una línea). Luego `hero` (premios), premio extra, "Cómo sumás
+  puntos" (incluye fecha de publicación), ranking, botón Bases y la tarjeta del otro sorteo al final. Se sacó el bloque grande de cuenta regresiva.
+
 ### 920. 🎁 Pantalla del sorteo: PORTADA con los premios grandes y sus imágenes arriba de todo — SW v610
 **Pedido (owner, captura):** "ponele más lugar cuando entrás: lo principal, con imágenes de lo que se sortea".
 - `hero(s)` en sorteos.js: recuadro violeta "🎁 Lo que se sortea este mes" con el 1° puesto grande (imagen 92 px + nombre 22 px + valor) y el 2° y
