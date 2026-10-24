@@ -34,7 +34,7 @@
     function cardSub(s) {
         if (s.status === 'soon') return 'Empieza en ' + cdShort(s.startsInMs);
         if (s.status === 'closed') return s.winners && s.winners.length ? 'Cerrado · ver ganadores' : 'Cerrado · ganadores el ' + fday(s.publishAt);
-        if (s.me && s.me.joined) return s.me.points > 0 ? 'Puesto #' + s.me.rank + ' · ' + num(s.me.points) + ' pts' : 'Anotado · cargá y jugá para sumar';
+        if (s.me && s.me.joined) return s.me.points > 0 ? 'Registrado · puesto #' + s.me.rank : 'Registrado ✅';
         return 'Anotate para sumar';
     }
     function paintCards() {
@@ -84,7 +84,8 @@
         if (_inline && _inlineKey === key && _inline.previousElementSibling === host) { closeInline(); return; } // mismo botón ⇒ se pliega
         closeInline();
         const s = get(key); const p = document.createElement('div'); p.className = 'srt-inline'; p.id = 'srtInline';
-        p.innerHTML = '<div class="srt-inline-head"><b id="srtInlineTitle">' + esc(s ? s.emoji + ' ' + s.title : 'Sorteo') + '</b><button type="button" class="srt-inline-x" onclick="VIP.sorteos.closeInline()" aria-label="Cerrar">✕ Cerrar</button></div><div class="srt-inline-body" id="srtInlineBody"><div class="srt-note">Cargando…</div></div>';
+        // #929 (owner): "sacá de adentro del sorteo del auto el sorteo del auto" → sin título repetido arriba (la mitad tocada ya lo dice); sólo la ✕.
+        p.innerHTML = '<div class="srt-inline-head slim"><span class="srt-inline-hint">' + (s ? esc(s.emoji) : '') + ' ' + (s && s.status === 'live' ? 'En vivo' : (s && s.status === 'soon' ? 'Próximamente' : '')) + '</span><button type="button" class="srt-inline-x" onclick="VIP.sorteos.closeInline()" aria-label="Cerrar">✕ Cerrar</button></div><div class="srt-inline-body" id="srtInlineBody"><div class="srt-note">Cargando…</div></div>';
         host.insertAdjacentElement('afterend', p); _inline = p; _inlineKey = key; _inlineView = 'main';
         try { host.querySelectorAll('.srt-ban').forEach((b) => b.classList.remove('on')); const btns = host.querySelectorAll('.srt-ban'); const idx = ['gran', 'mensual'].indexOf(key); if (btns[idx]) btns[idx].classList.add('on'); } catch (_) {}
         if (_data) paintView(key, _el('srtInlineBody'), null); load();
@@ -144,7 +145,7 @@
     function joinBlock(s, compact) {
         const me = s.me || {}, ck = me.checks || {}, req = (_data && _data.requirements) || {};
         const cls = compact ? ' compact' : '';
-        if (me.joined) return '<div class="srt-join ok' + cls + '"><b>✅ Estás anotado</b><small>desde el ' + fdh(me.joinedAt) + ' · tus apuestas suman solas</small></div>';
+        if (me.joined) return '<div class="srt-reg">✅ Registrado<small> · desde el ' + esc(fday(me.joinedAt)) + '</small></div>'; // #929: al completar el registro el bloque se va
         const row = (k, ok, txt, extra) => (req[k] === false ? '' : '<li class="' + (ok ? 'ok' : 'no') + '"><i>' + (ok ? '✅' : '⬜') + '</i><span>' + txt + (extra || '') + '</span></li>');
         const tg = _data && _data.telegramUrl ? ' <button type="button" class="srt-link" onclick="VIP.sorteos.tgOpen()">Unirme ›</button>' : '';
         return '<div class="srt-join' + cls + '"><b>📝 Anotate para participar</b><small>Para poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
@@ -170,7 +171,6 @@
         const s = get(key); const b = bodyEl || _el('srtBody'), t = titleEl === undefined ? _el('srtTitle') : titleEl; if (!b) return;
         if (!s) { b.innerHTML = '<div class="srt-note">' + (_data && _data.enabled === false ? 'Por ahora no hay sorteos activos.' : 'Este sorteo no está disponible.') + '</div>'; return; }
         if (t) t.textContent = s.emoji + ' ' + s.title;
-        try { const it = _el('srtInlineTitle'); if (bodyEl && it) it.textContent = s.emoji + ' ' + s.title; } catch (_) {}
         let h = strip(s);                 // 1) inicio, chico
         h += joinBlock(s, true);          // 2) anotarse, compacto
         h += hero(s);                     // 3) el premio

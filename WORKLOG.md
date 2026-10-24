@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 929. ✂️ Panel desplegado sin el título repetido · al registrarse el bloque se va y dice "Registrado" — SW v618
+**Pedido (owner):** "sacá de adentro del sorteo del auto el sorteo del auto; si completan el registro que se vaya y diga registrado".
+- Cabecera del panel `.srt-inline-head.slim`: sólo estado (En vivo / Próximamente) y "✕ Cerrar"; el título ya lo dice la mitad tocada.
+- `joinBlock` anotado ⇒ línea chica `.srt-reg` "✅ Registrado · desde el …". Las mitades dicen "Registrado ✅" o "Registrado · puesto #N".
+
 ### 928. 📂 El sorteo se despliega AHÍ MISMO debajo de las mitades (con ✕ Cerrar), sin abrir la pantalla completa — SW v617
 **Pedido (owner):** "cuando la gente aprieta sorteo, que se pueda ver ahí adentro sin que se abra en el menú y que se pueda sacar desde ahí".
 - `open(key, ev)`: si el toque viene de `[data-srt-cards]`/`[data-srt-banner]` ⇒ `openInline`: panel `.srt-inline` insertado DEBAJO del par (cabecera
