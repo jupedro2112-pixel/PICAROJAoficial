@@ -2955,3 +2955,13 @@ html[data-theme="dark"] #infoMsg .im-card { border-color: #3d3d44 !important; }
 #bvLoadBtn > span > b { font-size: 15px !important; line-height: 1.1 !important; white-space: normal !important; letter-spacing: .3px !important; display: block; }
 #bvLoadBtn.ev-cta-live > span > b { font-size: 14px !important; }
 #bvLoadBtn .bv-min { white-space: normal !important; font-size: 11px !important; line-height: 1.2 !important; display: block; }
+
+/* #961 (owner, capturas): las tarjetas de plataforma del COMPLETO iguales a los chips del BÁSICO (mismo tamaño, nombre entero, PRONTO abajo) */
+#platformsButtons { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 4px !important; }
+.plat-play-wrap { min-width: 0 !important; flex: none !important; width: auto !important; }
+.plat-play-btn, .plat-play-btn.is-pref, .plat-play-btn.soon { width: 100% !important; height: 70px !important; min-height: 0 !important; padding: 5px 2px 5px !important; border-radius: 10px !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 2px !important; box-sizing: border-box; }
+.plat-play-btn .plat-logo { width: 22px !important; height: 22px !important; margin: 0 !important; }
+.plat-play-name { font-size: 9.5px !important; font-weight: 800 !important; text-transform: none !important; letter-spacing: 0 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; max-width: 100% !important; line-height: 1.1 !important; margin: 0 !important; }
+.plat-play-sub { display: none !important; }
+.plat-play-btn .plat-reco, .plat-play-btn .plat-soon-badge { position: static !important; margin: 1px 0 0 !important; font-size: 7px !important; padding: 1px 5px !important; letter-spacing: .4px !important; line-height: 1.3 !important; }
+.plat-play-btn .plat-check { position: absolute !important; top: 3px !important; right: 3px !important; width: 13px !important; height: 13px !important; font-size: 9px !important; line-height: 13px !important; border-radius: 50% !important; }

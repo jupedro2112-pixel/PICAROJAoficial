@@ -8,6 +8,11 @@
 
 ## Sesión 2026-10-24
 
+### 961. 🎰 Plataformas del completo con el mismo tamaño que en el básico — SW v639
+**Pedido (owner, capturas):** "respetar el del menú básico, poner el mismo tamaño para que quede igual en el completo y entre bien el texto".
+`#platformsButtons` en grilla de 4, tarjetas de 70 px con logo 22 px, nombre 9,5 px sin mayúsculas (entra entero), PRONTO / RECOMENDADO abajo, sin
+subtítulo, tilde chico arriba a la derecha.
+
 ### 959. 🌐 IP real del cliente detrás de Cloudflare (`trust proxy` por rangos) — src/utils/trustedProxy.js
 **Pedido (owner):** confirmó que todo el tráfico entra por Cloudflare ("listo, ya está"). Express confía sólo en los saltos de Cloudflare (rangos v4/v6
 publicados) y en redes privadas/locales (ELB, nginx): el primer salto ajeno es la IP real ⇒ límites por IP, `registrationIp` y radar con la IP del
