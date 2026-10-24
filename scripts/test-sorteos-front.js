@@ -27,8 +27,8 @@ vm.createContext(ctx); vm.runInContext(fs.readFileSync('public/js/sorteos.js', '
   console.log('✔ tarjetas/banner OK (' + cardsBox.innerHTML.length + ' chars)');
   // #941: tocar una mitad abre la VENTANA (mismo contenido)
   cardsBox._host = cardsBox; S.open('mensual', { target: cardsBox });
-  const body = mk('srtBody').innerHTML; must(body, 'EN VIVO', 'Anotate para participar', 'Lo que se sortea este mes', 'SORTEO', 'Cómo sumás puntos', 'Ranking', 'Tu puesto', '#7', 'lalodj', 'Bases y condiciones'); if (body.includes('srt-cross')) throw new Error('tarjeta cruzada presente'); console.log('✔ ventana mensual OK');
-  S.open('gran', { target: cardsBox }); const g = mk('srtBody').innerHTML; must(g, 'Empieza en', 'Registrado', '+10 pts', '+10%'); if (g.includes('Anotate para participar')) throw new Error('bloque de anotarse visible estando registrado'); console.log('✔ ventana Gran Sorteo OK');
+  const body = mk('srtBody').innerHTML; must(body, 'EN VIVO', 'Anotate al Sorteo mensual', 'Anotarme al Sorteo mensual', 'Lo que se sortea este mes', 'SORTEO', 'Cómo sumás puntos', 'Ranking', 'Tu puesto', '#7', 'lalodj', 'Bases y condiciones · Sorteo mensual', 'Maximizar'); if (/Gran Sorteo|Peugeot/.test(body)) throw new Error('la ventana del mensual menciona al Gran Sorteo'); if (body.includes('srt-cross')) throw new Error('tarjeta cruzada presente'); console.log('✔ ventana mensual OK');
+  S.open('gran', { target: cardsBox }); const g = mk('srtBody').innerHTML; must(g, 'Empieza en', 'Registrado en el Gran Sorteo', '+10 pts', '+10%', 'Bases y condiciones · Gran Sorteo'); if (g.includes('Anotate al')) throw new Error('bloque de anotarse visible estando registrado'); if (/Sorteo mensual|iPhone|SORTEO EXTRA/.test(g)) throw new Error('la ventana del Gran Sorteo menciona al mensual'); console.log('✔ ventana Gran Sorteo OK');
   S.close();
   // pantalla completa (desde el casino)
   S.open('mensual'); must(mk('srtBody').innerHTML, 'Ranking'); must(mk('srtTitle').textContent, 'Sorteo mensual'); S.terms('mensual'); if (mk('srtTerms').hidden !== false) throw new Error('capa de Bases no abrió'); S.termsClose(); S.close(); console.log('✔ pantalla completa OK');

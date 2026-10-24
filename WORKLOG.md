@@ -8,6 +8,14 @@
 
 ## Sesión 2026-10-24
 
+### 943. 🧷 Dos sorteos separados: inscripción con el nombre de cada uno · Bases minimizadas abajo de todo (Maximizar / Minimizar) — SW v630
+**Pedido (owner, captura):** "en el Gran Sorteo aparece el detalle de ambos en los 2, necesito que separes, son 2 sorteos separados; y las Bases dejalas abajo
+de todo minimizadas, para maximizar y leer y después minimizar de nuevo".
+- Verificado con la prueba: la ventana y las Bases del Gran Sorteo no mencionan al mensual ni al revés (ahora la prueba lo exige). Lo que se veía
+  igual en los dos era el bloque de inscripción: pasa a "📝 Anotate al Gran Sorteo / al Sorteo mensual" (aclara que vale sólo para ese sorteo),
+  botón "Anotarme al …" y "✅ Registrado en el …".
+- Bases: sección al final con botón "📜 Bases y condiciones · <sorteo> · Maximizar ▾" (`tcToggle`); abre la lista y pasa a "Minimizar ▴".
+
 ### 942. 📅 Gran Sorteo (auto) desde el 1 de diciembre · los 10 × $10.000 son "SORTEO EXTRA", al azar — SW v629
 **Pedido (owner):** "el sorteo del auto, en el contador tomalo como que empieza el 1 de diciembre; los 10 sorteos al azar de 100.000 serían como extra".
 - Default `gran.start` = 2026-12-01 (fin sigue 2027-01-31; editable en el panel). El contador, la franja y las Bases lo toman solos.

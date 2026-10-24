@@ -147,15 +147,15 @@
     function joinBlock(s, compact) {
         const me = s.me || {}, ck = me.checks || {}, req = (_data && _data.requirements) || {};
         const cls = compact ? ' compact' : '';
-        if (me.joined) return '<div class="srt-reg">✅ Registrado<small> · desde el ' + esc(fday(me.joinedAt)) + '</small></div>'; // #929: al completar el registro el bloque se va
+        if (me.joined) return '<div class="srt-reg">✅ Registrado en el ' + esc(s.title) + '<small> · desde el ' + esc(fday(me.joinedAt)) + '</small></div>'; // #929 · #943: por sorteo
         const row = (k, ok, txt, extra) => (req[k] === false ? '' : '<li class="' + (ok ? 'ok' : 'no') + '"><i>' + (ok ? '✅' : '⬜') + '</i><span>' + txt + (extra || '') + '</span></li>');
         const tg = _data && _data.telegramUrl ? ' <button type="button" class="srt-link" onclick="VIP.sorteos.tgOpen()">Unirme ›</button>' : '';
-        return '<div class="srt-join' + cls + '"><b>📝 Anotate para participar</b><small>Para poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
+        return '<div class="srt-join' + cls + '"><b>📝 Anotate al ' + esc(s.title) + '</b><small>Sorteo independiente: anotarte acá vale sólo para este sorteo. Para poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
             row('app', ck.app, 'Tener la app de PICA ROJA instalada', ck.app ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.home.installGiftOpen&&VIP.home.installGiftOpen()}catch(_){}">¿Cómo? ›</button>') +
             row('notif', ck.notif, 'Notificaciones activadas', ck.notif ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.notifications&&VIP.notifications.requestNotificationPermission&&VIP.notifications.requestNotificationPermission()}catch(_){}">Activar ›</button>') +
             row('deposit', ck.deposit, 'Al menos una carga real', ck.deposit ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.easyLoad()}catch(_){}">Cargar ›</button>') +
             (req.telegram === false ? '' : '<li class="' + (ck.telegram ? 'ok' : 'no') + '"><i>' + (ck.telegram ? '✅' : '⬜') + '</i><label><input type="checkbox" id="srtTg_' + s.key + '"' + (ck.telegram ? ' checked' : '') + '> Ya me uní al Telegram de PICA ROJA (ahí anunciamos los ganadores)</label>' + tg + '</li>') +
-            '</ul><button type="button" class="srt-btn' + (compact ? ' sm' : '') + '" onclick="VIP.sorteos.join(\'' + s.key + '\')">Anotarme ahora</button></div>';
+            '</ul><button type="button" class="srt-btn' + (compact ? ' sm' : '') + '" onclick="VIP.sorteos.join(\'' + s.key + '\')">Anotarme al ' + esc(s.title) + '</button></div>';
     }
     function crossCard(s) {
         const o = (_data.sorteos || []).find((x) => x.key !== s.key); if (!o) return '';
@@ -181,7 +181,8 @@
         h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>' + num(s.rules.pts) + ' pts</b> cada ' + money(s.rules.ptsPer) + ' apostados con plata real</li>' + (s.rules.dayDepositPts ? '<li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li>' : '') + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de la semana si completás tus misiones semanales</li>' : '') + '<li>🚫 Los bonos no suman: cuenta la parte proporcional a tus cargas</li><li>🔄 Se actualiza cada 20 minutos · ganadores el ' + esc(fdh(s.publishAt)) + '</li></ul></div>';
         h += rankingBlock(s);             // 5) ranking
         // 6) #936 (owner): las Bases de ESTE sorteo escritas abajo, sobre el sorteo (sin botón): las del auto en el del auto, las del teléfono en el del teléfono
-        h += '<div class="srt-sec srt-tc-sec"><h3>📜 Bases y condiciones · ' + esc(s.title) + '</h3><ol class="srt-tc">' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol></div>';
+        // #943 (owner): "las Bases abajo de todo, minimizadas, como para maximizar y leer, y después minimizar de nuevo"
+        h += '<div class="srt-sec srt-tc-sec"><button type="button" class="srt-tc-toggle" onclick="VIP.sorteos.tcToggle(this)" aria-expanded="false"><span>📜 Bases y condiciones · ' + esc(s.title) + '</span><i>Maximizar ▾</i></button><ol class="srt-tc" hidden>' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol></div>';
         // #925 (owner): sin la tarjeta del otro sorteo al pie ("sacá adentro del auto, abajo, el del iPhone").
         b.innerHTML = h; try { b.scrollTop = 0; } catch (_) {}
     }
@@ -256,6 +257,7 @@
             open(key); // #941: la ventana del sorteo sobre el menú
         }, 350);
     }
+    function tcToggle(btn) { try { const ol = btn.nextElementSibling; const open = ol.hidden; ol.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false'); const i = btn.querySelector('i'); if (i) i.textContent = open ? 'Minimizar ▴' : 'Maximizar ▾'; if (open) setTimeout(() => { try { btn.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (_) {} }, 50); } catch (_) {} }
     function tgOpen() { const u = _data && _data.telegramUrl; if (u) window.open(u, '_blank', 'noopener'); }
     function termsHtml(s) { return '<h2>📜 Bases y condiciones · ' + esc(s.title) + '</h2><ol class="srt-tc">' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol><p class="srt-p srt-muted">PICA ROJA · ' + esc(fday(_data.now)) + '</p>'; }
     function terms(key) {
@@ -277,5 +279,5 @@
         load(); clearInterval(_poll); _poll = setInterval(load, 5 * 60 * 1000);
         try { document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); }); } catch (_) {}
     }
-    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, paintCasino, casinoBar, join, terms, termsClose, tgOpen };
+    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, paintCasino, casinoBar, join, terms, termsClose, tcToggle, tgOpen };
 })();
