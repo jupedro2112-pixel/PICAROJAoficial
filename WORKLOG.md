@@ -8,6 +8,13 @@
 
 ## Sesión 2026-10-24
 
+### 963. 📷 Fotos reales de los premios (chicas, no cargadas) en lugar de los dibujos
+**Pedido (owner):** "fotos de los premios más reales pero no tan cargadas, así en ese tamaño: auto, iPhone y el resto, más realismo, que no parezca infantil".
+- `public/images/sorteos/`: iphone.jpg (pantalla del iPhone 15 Pro Max), regalo.jpg (caja con moño, para la orden de compra), fichas.jpg (fichas de casino),
+  peugeot-208.jpg (auto), caribe.jpg (playa de Punta Cana), usd.jpg (maletín con dólares). Todas de Wikimedia Commons con licencia CC BY / CC0,
+  recortadas a 480×320 y 14-107 KB; créditos y links en CREDITS.txt (obligatorio para CC BY). Son los defaults de los 6 premios en
+  `src/services/sorteos.js`; desde el panel se puede pegar la URL de la foto del premio real cuando lo tengas.
+
 ### 962. ▭ Orden del básico: sorteos debajo de la barra, Nivel/Racha, saldo, CARGAR/RETIRAR — SW v640
 **Pedido (owner, capturas):** "en el básico los sorteos abajo de la barra superior, arriba de Nivel; CARGAR/RETIRAR abajo del saldo; el resto todo ok".
 Todo con `order` en la columna flex de `#basicView` (pisa el order:999 de #947): sorteos (-4) · status-row (-3) · saldo + ajustar pantalla (-2) ·
