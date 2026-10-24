@@ -5513,6 +5513,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       const code = String(temporaryCode).trim();
       const codeOk = userObj.pendingAccessCode
         && userObj.phoneVerificationPending === true
+        && (!userObj.pendingAccessCodeAt || Date.now() - new Date(userObj.pendingAccessCodeAt).getTime() < 7 * 86400000) // #965
         && safeCompare(code, String(userObj.pendingAccessCode));
       if (!codeOk) {
         logger.debug(`Invalid temporary code for ${loginIdentifier}`);
@@ -6247,7 +6248,7 @@ app.post('/api/auth/change-password/pending', authMiddleware, authLimiter, async
     user.password = newPassword;
     user.passwordChangedAt = new Date();
     user.mustChangePassword = false;
-    user.pendingAccessCode = pendingCode;
+    user.pendingAccessCode = pendingCode; user.pendingAccessCodeAt = new Date(); // #965: vence a los 7 días
     // El usuario entra, pero queda con verificación de teléfono pendiente:
     // no podrá retirar hasta verificar por SMS.
     user.phoneVerificationPending = true;
@@ -12078,7 +12079,19 @@ async function _minifyBundles() {
     const r = csso.minify(b.css, { restructure: false, comments: false });
     if (r && r.css && r.css.length > 1000) b.cssMin = r.css;
   } catch (e) { logger.warn('[bundle] csso no disponible o falló (' + e.message + '): CSS sin minificar'); }
-  logger.info(`[bundle] minificado: js ${Math.round(b.js.length / 1024)}→${Math.round((b.jsMin || b.js).length / 1024)} KB · css ${Math.round(b.css.length / 1024)}→${Math.round((b.cssMin || b.css).length / 1024)} KB`);
+  // #964: precomprimido UNA vez (brotli y gzip) en vez de comprimir en caliente en cada pedido no cacheado.
+  try { const zlib = require('zlib'); const js = b.jsMin || b.js, css = b.cssMin || b.css;
+    b.jsBr = zlib.brotliCompressSync(Buffer.from(js), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } }); b.jsGz = zlib.gzipSync(js, { level: 9 });
+    b.cssBr = zlib.brotliCompressSync(Buffer.from(css), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } }); b.cssGz = zlib.gzipSync(css, { level: 9 });
+  } catch (e) { logger.warn('[bundle] precompresión falló (' + e.message + '): se comprime en caliente'); }
+  logger.info(`[bundle] minificado: js ${Math.round(b.js.length / 1024)}→${Math.round((b.jsMin || b.js).length / 1024)} KB (br ${Math.round(((b.jsBr || '').length) / 1024)} KB) · css ${Math.round(b.css.length / 1024)}→${Math.round((b.cssMin || b.css).length / 1024)} KB (br ${Math.round(((b.cssBr || '').length) / 1024)} KB)`);
+}
+function _sendPre(req, res, raw, br, gz) {
+  res.setHeader('Vary', 'Accept-Encoding');
+  const ae = String(req.headers['accept-encoding'] || '');
+  if (br && /\bbr\b/.test(ae)) { res.setHeader('Content-Encoding', 'br'); return res.end(br); }
+  if (gz && /\bgzip\b/.test(ae)) { res.setHeader('Content-Encoding', 'gzip'); return res.end(gz); }
+  return res.send(raw);
 }
 setTimeout(() => { _minifyBundles().catch(() => {}); }, 1500);
 function _assetHeaders(req, res, type) {
@@ -12086,8 +12099,8 @@ function _assetHeaders(req, res, type) {
   if (req.query && req.query.v) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   else { res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); res.setHeader('Pragma', 'no-cache'); }
 }
-app.get('/js/bundle.js', (req, res) => { const b = _buildBundles(); if (!b.ok) return res.status(404).send('// sin bundle'); _assetHeaders(req, res, 'application/javascript; charset=utf-8'); res.send(b.jsMin || b.js); }); // #738: minificado si está
-app.get('/css/bundle.css', (req, res) => { const b = _buildBundles(); if (!b.ok) return res.status(404).send('/* sin bundle */'); _assetHeaders(req, res, 'text/css; charset=utf-8'); res.send(b.cssMin || b.css); });
+app.get('/js/bundle.js', (req, res) => { const b = _buildBundles(); if (!b.ok) return res.status(404).send('// sin bundle'); _assetHeaders(req, res, 'application/javascript; charset=utf-8'); _sendPre(req, res, b.jsMin || b.js, b.jsBr, b.jsGz); }); // #738: minificado · #964: precomprimido
+app.get('/css/bundle.css', (req, res) => { const b = _buildBundles(); if (!b.ok) return res.status(404).send('/* sin bundle */'); _assetHeaders(req, res, 'text/css; charset=utf-8'); _sendPre(req, res, b.cssMin || b.css, b.cssBr, b.cssGz); });
 // #738: HTML más liviano — se sacan los comentarios y las sangrías de las líneas, pero SÓLO fuera de <script>/<style>/<textarea>
 // (adentro podrían ser parte de un string). Y se precarga el bundle JS desde el <head> (va al final del body: así empieza a bajar antes).
 function _slimHtml(html) {
@@ -21486,6 +21499,7 @@ async function _closeEnsure(dayKey, recalc) {
 // todo día ya terminado se FINALIZA solo (finalizedBy 'auto'; un cierre finalizado a mano no se toca). USDT es opcional.
 async function _closeSince() { try { const v = await getConfig('closeSince', null); return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null; } catch (_) { return null; } }
 async function _closeTick() {
+  if (!(await _cronClaim('close', 15 * 60000))) return; // #964: una instancia por pasada (llamadas al banco y a 1girox)
   const _since = await _closeSince(); // #762: los cierres valen desde esta fecha (limpieza de pruebas)
   try {
     for (let i = 1; i <= 3; i++) { if (_since && datosIa.dateKeyART(new Date(Date.now() - i * 86400000)) < _since) continue; const dk = datosIa.dateKeyART(new Date(Date.now() - i * 86400000)); const ex = await DailyClose.findOne({ dateKey: dk }).select('id status finalizedBy recalculatedAt').lean(); if (!ex || ex.status !== 'finalizado' || ex.finalizedBy === 'auto') { if (!ex || !ex.recalculatedAt || Date.now() - new Date(ex.recalculatedAt).getTime() > 55 * 60 * 1000) await _closeEnsure(dk, true); } }
@@ -24122,7 +24136,7 @@ async function _rouletteSimWinnersBuild(dateKey, nowMs) {
   }
   return out;
 }
-app.get('/api/roulette/recent-winners', authMiddleware, async (req, res) => {
+app.get('/api/roulette/recent-winners', authMiddleware, _memoJson(20000), async (req, res) => { // #964: cache 20 s
   try {
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 50));
     const dateKey = _rouletteDateKeyART();
@@ -24233,7 +24247,18 @@ function _generateExampleClaims(n) {
   return out;
 }
 
-app.get('/api/claims-feed', async (req, res) => {
+// #964 (velocidad): respuesta JSON cacheada en memoria por URL (feeds que todos los clientes piden cada 30-45 s).
+function _memoJson(ms) {
+  const cache = new Map();
+  return (req, res, next) => {
+    const k = String(req.originalUrl || req.url); const h = cache.get(k);
+    if (h && Date.now() - h.at < ms) { res.set('Cache-Control', 'public, max-age=' + Math.floor(ms / 1000)); return res.status(200).json(h.body); }
+    const orig = res.json.bind(res);
+    res.json = (body) => { try { if ((res.statusCode || 200) === 200) { cache.set(k, { at: Date.now(), body }); if (cache.size > 300) cache.clear(); } } catch (_) {} return orig(body); };
+    next();
+  };
+}
+app.get('/api/claims-feed', _memoJson(30000), async (req, res) => {
   try {
     const out = [];
     const [spins, refunds, bonusUsers] = await Promise.all([
@@ -25867,15 +25892,18 @@ async function _storyAutoImgSpec(it) {
 }
 // #834 (owner): las historias automáticas que YA estaban publicadas sin foto (texto sobre color) reciben la suya: se busca en el plan del
 // día la que tiene el mismo título. Sólo las vigentes; las borradas por el admin no se tocan.
+let _storyBackfillMigDone = false; // #964: las dos migraciones de URL de abajo corren UNA vez por arranque (eran 2 updateMany con regex cada 5 min)
 async function _storyAutoBackfillImages(today, plan) {
   if (!_STORY_IMAGES_ON) return;
   try {
+    if (!_storyBackfillMigDone) { _storyBackfillMigDone = true;
     // #850: en PRODUCCIÓN, las fotos que publicó Render (URL absoluta a Render) pasan a servirse desde acá.
     // #850: en PRODUCCIÓN, las fotos que publicó Render (URL absoluta a Render) pasan a servirse desde acá.
     if (!_STORY_IMG_BASE) { try { await Story.updateMany({ autoKey: /^sa-/, mediaUrl: /^https:\/\/[^/]+\/api\/stories\/[^/]+\/auto\.svg/ }, [{ $set: { mediaUrl: { $concat: ['/api/stories/', '$id', '/auto.svg?v=' + STORY_IMG_VER] } } }]); } catch (_) {} }
     // #853: además, toda historia automática con foto queda apuntando a la versión vigente del dibujo (?v=STORY_IMG_VER).
     try { await Story.updateMany({ autoKey: /^sa-/, mediaUrl: /\/api\/stories\/[^/]+\/auto\.svg/, $nor: [{ mediaUrl: new RegExp('auto\\.svg\\?v=' + STORY_IMG_VER + '$') }] },
       [{ $set: { mediaUrl: { $concat: [_STORY_IMG_BASE, '/api/stories/', '$id', '/auto.svg?v=' + STORY_IMG_VER] } } }]); } catch (_) {}
+    } // #964
     // #858: historias automáticas VIGENTES armadas con un diseño anterior ⇒ se rearma la foto desde el plan del día (mismo título), p. ej. para
     // sumar las cuotas al partido de hoy sin borrarla. Si el título ya no está en el plan, queda como estaba.
     try {
@@ -26022,6 +26050,7 @@ async function _newbieOffersTick() {
   try {
     const cfg = await getNewbieOffersConfig(); if (!cfg.enabled || !cfg.days.length) return;
     const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (hourArt < cfg.hour || hourArt >= 23) return;
+    if (!(await _cronClaim('newbie', 8 * 60000))) return; // #964: una instancia por pasada
     const today = _schedArtKey(now); const t0 = new Date(today + 'T00:00:00-03:00').getTime();
     const rx = await _giftRolloverX().catch(() => 5), dx = await getDepositRolloverX().catch(() => 3);
     for (const n of cfg.days) {
@@ -26114,6 +26143,16 @@ async function _sorteoTickOne(cfg, key, now) {
   });
   for (let i = 0; i < ops.length; i += 500) await SorteoScore.bulkWrite(ops.slice(i, i + 500), { ordered: false });
   return { candidates: cands.length, scored: ops.length, ms: Date.now() - t0, period: p.periodKey, status: p.status };
+}
+// #964: lock genérico para crons pesados en multi-instancia: una sola instancia corre la pasada; las demás saltean hasta que vence.
+async function _cronClaim(name, ttlMs) {
+  try {
+    const key = ('cronlock_' + name).toLowerCase(); const now = Date.now();
+    const r = await Config.findOneAndUpdate({ key, $or: [{ 'value.until': { $lt: now } }, { 'value.until': null }] }, { $set: { value: { until: now + ttlMs, at: new Date().toISOString() }, updatedAt: new Date() } }, { new: true });
+    if (r) return true;
+    if (!(await Config.exists({ key }))) { await Config.set(key, { until: now + ttlMs, at: new Date().toISOString() }, 'system'); return true; }
+    return false;
+  } catch (_) { return true; }
 }
 // #957: una sola instancia corre la pasada (lock de 15 min en Config); las demás saltean. Con force (panel) corre igual.
 async function _sorteoClaim() {

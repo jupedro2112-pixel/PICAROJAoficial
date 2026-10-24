@@ -8,6 +8,25 @@
 
 ## Sesión 2026-10-24
 
+### 966. ↩️ Premios: vuelven los dibujos (las fotos de #963 no gustaron) · se borran esas fotos
+**Pedido (owner):** "las fotos están mal, poné las que estaban, estaban bien, y borramos estas". Defaults de los 6 premios otra vez con emoji (📱 🛍️ 🎰 /
+🚗 🏝️ 💵); se eliminan iphone/regalo/fichas/caribe/usd.jpg. Queda sólo la foto del 208 (CC BY) por si se quiere pegar en el panel. El soporte de
+foto por premio (`pic()`, URL en el campo del panel) sigue disponible.
+
+### 964. ⚡ Velocidad (2ª tanda): feeds cacheados, crons con una sola instancia, bundle precomprimido, migraciones una vez, banners sin uso borrados
+**Pedido (owner):** "limpiamos la rapidez de la página sin romper nada".
+- `_memoJson(ms)`: `/api/claims-feed` (30 s) y `/api/roulette/recent-winners` (20 s) responden desde memoria (cada cliente los pedía cada 30-45 s).
+- `_cronClaim(name, ttl)` (lock en Config): `_closeTick` (15 min) y `_newbieOffersTick` (8 min) corren en UNA instancia por pasada (antes cada
+  instancia repetía las llamadas al banco / 1girox / render de historias).
+- Bundle JS/CSS precomprimido con brotli y gzip una sola vez al arrancar (`_sendPre`; `compression()` no re-comprime lo que ya trae
+  Content-Encoding). Antes se comprimía en caliente en cada pedido no cacheado (817 KB de JS).
+- Las dos migraciones de URL de fotos de historias (#850/#853) corren una vez por arranque, no en cada pasada de 5 min.
+- `public/images/banners/` (10 jpg, ~3,5 MB, sin ninguna referencia) eliminada del repo.
+
+### 965. 🔐 Código temporal de acceso con vencimiento (7 días)
+`User.pendingAccessCodeAt`: el código temporal (login sin clave mientras el teléfono está sin verificar) vence a los 7 días; los códigos viejos sin
+fecha siguen valiendo hasta que verifiquen el teléfono. El bloqueo por cuenta del login (#956) frena la fuerza bruta.
+
 ### 963. 📷 Fotos reales de los premios (chicas, no cargadas) en lugar de los dibujos
 **Pedido (owner):** "fotos de los premios más reales pero no tan cargadas, así en ese tamaño: auto, iPhone y el resto, más realismo, que no parezca infantil".
 - `public/images/sorteos/`: iphone.jpg (pantalla del iPhone 15 Pro Max), regalo.jpg (caja con moño, para la orden de compra), fichas.jpg (fichas de casino),

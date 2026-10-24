@@ -19,9 +19,9 @@ function defaults() {
       enabled: true, key: 'mensual', title: 'Sorteo mensual', emoji: '🏆', startMonth: '2026-11',
       pts: 100, ptsPer: 100000,
       prizes: [
-        { pos: 1, img: '/images/sorteos/iphone.jpg', name: 'iPhone 18 Pro Max', value: '' }, // #963: fotos reales (CC, ver public/images/sorteos/CREDITS.txt)
-        { pos: 2, img: '/images/sorteos/regalo.jpg', name: 'Orden de compra', value: '$1.000.000' },
-        { pos: 3, img: '/images/sorteos/fichas.jpg', name: '$500.000 para jugar', value: '' }
+        { pos: 1, img: '📱', name: 'iPhone 18 Pro Max', value: '' }, // #966 (owner): los dibujos de antes (las fotos no gustaron)
+        { pos: 2, img: '🛍️', name: 'Orden de compra', value: '$1.000.000' },
+        { pos: 3, img: '🎰', name: '$500.000 para jugar', value: '' }
       ],
       // #939 (owner): "el sorteo de $100.000: para TODOS los que cargan, requisito mínimo 10 cargas en el mes; se sortea el día 1 en el admin de forma
       // transparente; en la app se llama SORTEO". per = 0 ⇒ cantidad FIJA de ganadores (10 × $10.000); per > 0 ⇒ N ganadores por cada `per` que cumplen.
@@ -32,9 +32,9 @@ function defaults() {
       enabled: true, key: 'gran', title: 'Gran Sorteo', emoji: '🚗', start: '2026-12-01', end: '2027-01-31', // #942 (owner): el del auto empieza el 1 de diciembre
       pts: 100, ptsPer: 100000, dayDepositMin: 10000, dayDepositPts: 10, missionWeekPct: 10,
       prizes: [
-        { pos: 1, img: '/images/sorteos/peugeot-208.jpg', name: 'Peugeot 208 0 km', value: 'Valorado en $30.000.000' }, // #963 (owner): fotos reales en todos los premios
-        { pos: 2, img: '/images/sorteos/caribe.jpg', name: 'Viaje al Caribe para 2', value: 'Todo incluido · 5 días' },
-        { pos: 3, img: '/images/sorteos/usd.jpg', name: 'USD 2.000', value: 'En efectivo' }
+        { pos: 1, img: '🚗', name: 'Peugeot 208 0 km', value: 'Valorado en $30.000.000' }, // #966 (owner): dibujo
+        { pos: 2, img: '🏝️', name: 'Viaje al Caribe para 2', value: 'Todo incluido · 5 días' },
+        { pos: 3, img: '💵', name: 'USD 2.000', value: 'En efectivo' }
       ],
       publishHour: 12
     }
