@@ -355,3 +355,7 @@ tr.fin td { opacity: .92; }
 .sp-quick-add { border-style: dashed; }
 .sp-quick-form { flex-basis: 100%; display: grid; gap: 6px; margin-top: 4px; }
 .sp-quick-form input, .sp-quick-form textarea, .sp-quick-form select { width: 100%; }
+
+/* #973: grupo PRINCIPAL arriba del menú */
+.nav-principal { border-bottom: 1px solid var(--p-border, rgba(255,255,255,.08)); padding-bottom: 4px; margin-bottom: 2px; }
+.nav-principal .nav-item { font-weight: 800; }

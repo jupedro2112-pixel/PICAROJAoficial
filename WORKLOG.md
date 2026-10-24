@@ -8,6 +8,29 @@
 
 ## Sesión 2026-10-24
 
+### 973. 📏 REVISIÓN SEMANAL automática (mide y ajusta sola), menú PRINCIPAL con clave (INICIO · Centro de avisos · Revisión semanal), avisos de reembolso semanal y mensual — admin SW v200
+**Pedido (owner):** "dejá arriba Principal con clave: INICIO y este Centro; lo que se deja de usar, último"; "avisos de reembolso SIEMPRE a los que
+tienen disponible, sea diario, semanal o mensual"; "¿lo analizás y lo modificás vos? armá un sistema de medición semanal para reajustar viendo la
+retención y todo lo que necesites; si ves todo bien dejás todo como está, si no impulsás todo; todo automático, con reportes de todo, y si hace
+falta otra sección abajo del Centro".
+- **Revisión semanal** (`src/services/weeklyReview.js` reglas puras + `scripts/test-weekly-review.js`; `_weeklyMetrics` + `_weeklyReviewTick` en
+  server.js, lunes 10–14 h ART, una vez por semana, `_cronClaim`). Mide: cargadores y monto de la semana vs la anterior; **volvieron** (cargaron la
+  semana anterior y también ésta) vs la previa; **regalado / depositado** de los cierres; efectividad de los lotes de hace 7–14 d (recorrido: carga en
+  7 d por paso; campaña masiva: carga en 48 h); reembolsos reclamados por tipo; registrados → primeras cargas; app instalada entre los que cargaron
+  en 30 d; avisos bajados y fatiga; cohortes; segmentos. Decide: regalos > 20 % ⇒ **frenar** un escalón; regalos ≤ 15 % y (volvieron cayó ≥ 3 pts o
+  el recorrido convirtió < 5 % con ≥ 30 contactados) ⇒ **impulsar**; si no, mantener (y si antes se impulsó y ya se recuperó, vuelve un escalón). El
+  escalón (−2…+3, `Config['journeyTuning']`) multiplica el % de bono (×1 + 0,1·n) y las fichas (×1 + 0,25·n) del recorrido (`pickStep(…, tuning)`)
+  y suma/resta puntos a la campaña masiva (`_tuningCache.apPctPlus`; al cambiar se rearman las campañas futuras). Nunca toca el reembolso.
+  Informe completo + historial (12 semanas) en `Config['weeklyReview']`; texto plano para copiar (`weeklyReview.reportText`) y "▶ Medir ahora".
+  Recomendaciones no automáticas (cohorte M+1 < 25 %, app < 50 %, opt-out > 10 %, campaña < 3 %, registro→1ª carga < 30 %, pocos reclamos del diario).
+- **Menú PRINCIPAL 🔒** arriba de todo: INICIO · Centro de avisos (sección propia, ya no dentro de Cronograma) · Revisión semanal. Las rutas del Centro
+  pasaron a `/api/admin/inicio/notif-center*` y la revisión a `/api/admin/inicio/weekly-review*` ⇒ misma clave de INICIO (gate #876; panel
+  `_inicioGuard`). Último grupo "🗄️ No se usa (reemplazado)": Encuesta, Inactivos, Bono $5.000, Cuentas sospechosas, Demoras, Notificaciones (manual),
+  Historias (manual). La clave de INICIO la fija el owner desde el panel (🔑 en INICIO); nunca va en el código ni en los docs.
+- **Aviso de reembolso para los tres períodos** (`_refundRemindPlan` / `_refundRemindRun`): diario (todos los días), **semanal** (lunes y jueves,
+  `/sys_refund_reminder_weekly`) y **mensual** (día 1 y 8, `/sys_refund_reminder_monthly`), a quien perdió en el período (stats de 1girox) y no reclamó
+  ese tipo (`RefundClaim type + periodKey`). Un envío por slot (`Config['refundRemindLast'].slots`), push personal (respeta "sólo lo mío").
+
 ### 972. Recorrido: sin pasos de "instalá la app" (día 2 y 9)
 **Pedido (owner):** "lo de instalar a los 2 o 9 días no sirve: muchos ya pierden el contacto con nosotros si no tienen la app; tiene que ser en el
 momento toda la parte de instalar la app, por eso lo del 50 instalando la app y notificaciones". Se quitan los pasos `app-2`/`app-9` de

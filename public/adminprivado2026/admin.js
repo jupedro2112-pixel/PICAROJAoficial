@@ -5001,6 +5001,8 @@ function switchSection(section) {
     if (section === 'cronohist') { loadStoriesAuto(); loadNewbieOffers(); } // #871 · #886
     if (section === 'fraud') loadFraud(); // #873
     if (section === 'inicio') loadInicio(); // #876
+    if (section === 'notifCenter') loadNotifCenter(); // #971/#973
+    if (section === 'weeklyReview') loadWeeklyReview(); // #973
     if (section === 'sorteos') loadSorteos(); // #915
     if (section === 'referrals') loadAdminReferralSummary();
     if (section === 'stories') loadStories(); // #361
@@ -15657,7 +15659,6 @@ async function loadCronograma() {
     loadCronReport();
     loadCronPlans(); // #293
     loadCronAutopilot(); // #817
-    loadNotifCenter(); // #971
     if (!_naLoaded) { _naLoaded = true; naYesterday(); } // #824 análisis (día vencido por defecto)
     loadStoriesAuto(); // #827
 }
@@ -16238,10 +16239,23 @@ async function storiesAutoRepublish() {
 }
 window.loadStoriesAuto = loadStoriesAuto; window.storiesAutoRemove = storiesAutoRemove; window.storiesAutoMatches = storiesAutoMatches; window.storiesAutoRepublish = storiesAutoRepublish;
 // ═══ #971: CENTRO DE AVISOS — fuentes, tope único, segmentos de hoy y pasos del recorrido ═══
+// #973: las secciones de PRINCIPAL comparten la clave de INICIO (header x-inicio-pin). Devuelve la respuesta o null (ya pintó el motivo en box).
+async function _inicioGuard(path, box, opts) {
+    const note = (t) => { if (box) box.innerHTML = '<div class="in-note">' + t + '</div>'; };
+    let r = await _inicioFetch(path, opts);
+    if (r.status === 428) { note('🔑 Todavía no hay clave de INICIO: creala para ver esta sección.'); if (await inicioCreatePin()) return _inicioFetch(path, opts); return null; }
+    if (r.status === 423) {
+        const pin = window.prompt('🔒 Clave de INICIO:', ''); if (!pin) { note('🔒 Protegido con clave: tocá 🔄 para ingresarla.'); return null; }
+        sessionStorage.setItem('inicio_pin', pin); r = await _inicioFetch(path, opts);
+        if (r.status === 423) { sessionStorage.removeItem('inicio_pin'); note('❌ Clave incorrecta: tocá 🔄 para probar de nuevo.'); return null; }
+    }
+    return r;
+}
 async function loadNotifCenter(refresh) {
     const box = document.getElementById('ncBody'); if (!box) return;
     try {
-        const r = await authFetch('/api/admin/notif-center' + (refresh ? '?refresh=1' : '')); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error');
+        const r = await _inicioGuard('/api/admin/inicio/notif-center' + (refresh ? '?refresh=1' : ''), box); if (!r) return;
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error');
         const c = j.config || {}, pv = j.preview || {}, L = j.segmentLabels || {}; const num = (n) => Number(n || 0).toLocaleString('es-AR'); const money = (n) => '$' + num(n);
         const DOW = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
         const gift = (s) => s.gift.type === 'none' ? 'sólo aviso' : s.gift.type === 'percent' ? '+' + s.gift.pct + '% en la próxima carga · ' + s.gift.hours + ' h' : 'FICHAS según valor del cliente: ' + (j.tiers || []).map((t) => money(Math.round(t.chips * (s.gift.mult || 1)))).join(' / ');
@@ -16269,10 +16283,52 @@ async function loadNotifCenter(refresh) {
             + '<details style="margin-top:.8rem"><summary style="cursor:pointer"><b>🧭 Los ' + (j.steps || []).length + ' pasos del recorrido</b> (fijos en el código, textos de servicio)</summary><div style="overflow:auto"><table class="data-table" style="width:100%;font-size:.78rem;margin-top:.4rem"><thead><tr><th>Día</th><th>Segmento</th><th>Paso</th><th>Regalo</th><th>Texto</th></tr></thead><tbody>' + (j.steps || []).map((s) => '<tr><td>' + s.day + '</td><td>' + (L[s.segment] || s.segment) + '</td><td><b>' + escHtml(s.name) + '</b>' + (s.capped ? '' : '<br><small style="color:#f59e0b">sin tope mensual</small>') + '</td><td>' + gift(s) + '</td><td><small><b>' + escHtml(s.title) + '</b> ' + escHtml(s.text) + '</small></td></tr>').join('') + '</tbody></table></div></details>';
     } catch (e) { box.innerHTML = '<span style="color:#f87171">' + escHtml(e.message) + '</span>'; }
 }
-async function ncToggle(k, v) { try { const r = await authFetch('/api/admin/notif-center', { method: 'PUT', body: JSON.stringify({ [k]: !!v }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); loadNotifCenter(); } catch (e) { alert(e.message); loadNotifCenter(); } }
-async function ncSaveCap() { const v = (document.getElementById('ncCap') || {}).value; try { const r = await authFetch('/api/admin/notif-center', { method: 'PUT', body: JSON.stringify({ monthlyCap: v === '' || v == null ? null : Number(v) }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); alert('Guardado. ' + (j.reprogrammed ? 'El autopiloto se reprograma solo con el tope nuevo (' + j.reprogrammed + ' campañas futuras rearmadas).' : '')); loadNotifCenter(); loadCronAutopilot(); } catch (e) { alert(e.message); } }
-async function ncRunNow() { if (!confirm('¿Mandar AHORA los pasos de hoy del recorrido? Sólo le llega a quien todavía no recibió ese paso.')) return; try { const r = await authFetch('/api/admin/notif-center/run', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); alert(j.result ? 'Listo: ' + (j.result.steps || []).reduce((a, s) => a + (s.sent || 0), 0) + ' avisos en ' + (j.result.steps || []).length + ' pasos.' : 'No corrió: está apagado o lo está haciendo otra instancia.'); loadNotifCenter(true); } catch (e) { alert(e.message); } }
+async function ncToggle(k, v) { try { const r = await _inicioFetch('/api/admin/inicio/notif-center', { method: 'PUT', body: JSON.stringify({ [k]: !!v }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); loadNotifCenter(); } catch (e) { alert(e.message); loadNotifCenter(); } }
+async function ncSaveCap() { const v = (document.getElementById('ncCap') || {}).value; try { const r = await _inicioFetch('/api/admin/inicio/notif-center', { method: 'PUT', body: JSON.stringify({ monthlyCap: v === '' || v == null ? null : Number(v) }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); alert('Guardado. ' + (j.reprogrammed ? 'El autopiloto se reprograma solo con el tope nuevo (' + j.reprogrammed + ' campañas futuras rearmadas).' : '')); loadNotifCenter(); loadCronAutopilot(); } catch (e) { alert(e.message); } }
+async function ncRunNow() { if (!confirm('¿Mandar AHORA los pasos de hoy del recorrido? Sólo le llega a quien todavía no recibió ese paso.')) return; try { const r = await _inicioFetch('/api/admin/inicio/notif-center/run', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); alert(j.result ? 'Listo: ' + (j.result.steps || []).reduce((a, s) => a + (s.sent || 0), 0) + ' avisos en ' + (j.result.steps || []).length + ' pasos.' : 'No corrió: está apagado o lo está haciendo otra instancia.'); loadNotifCenter(true); } catch (e) { alert(e.message); } }
 window.loadNotifCenter = loadNotifCenter; window.ncToggle = ncToggle; window.ncSaveCap = ncSaveCap; window.ncRunNow = ncRunNow;
+// ═══ #973: REVISIÓN SEMANAL — informe, decisión, historial y texto para copiar ═══
+let _wrText = '';
+async function loadWeeklyReview() {
+    const box = document.getElementById('wrBody'); if (!box) return;
+    try {
+        const r = await _inicioGuard('/api/admin/inicio/weekly-review', box); if (!r) return;
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error');
+        _wrText = j.text || ''; const rep = j.report, t = j.tuning || {};
+        const n = (v) => Number(v || 0).toLocaleString('es-AR'); const money = (v) => '$' + n(Math.round(v || 0)); const pc = (v) => v == null ? '—' : (Math.round(v * 1000) / 10).toLocaleString('es-AR') + ' %';
+        const box1 = (ico, label, val, sub, c) => '<div class="in-box" style="border-top:3px solid ' + (c || '#6366f1') + '"><div class="in-l">' + ico + ' ' + label + '</div><div class="in-v">' + val + '</div>' + (sub ? '<div class="in-s">' + sub + '</div>' : '') + '</div>';
+        const tun = 'Ajuste vigente: nivel <b>' + (t.level > 0 ? '+' : '') + (t.level || 0) + '</b> · bonos del recorrido ×' + (t.pctMult || 1) + ' · fichas ×' + (t.chipsMult || 1) + ' · campaña masiva ' + ((t.apPctPlus || 0) >= 0 ? '+' : '') + (t.apPctPlus || 0) + ' pts';
+        if (!rep || !rep.metrics) { box.innerHTML = '<div class="in-note">Todavía no corrió: sale sola el lunes a las 10 h. ' + tun + '. <button class="btn btn-secondary btn-small" onclick="wrRun()">▶ Medir ahora</button></div>'; return; }
+        const m = rep.metrics, d = rep.decision || {}; const col = d.verdict === 'impulsar' ? '#f59e0b' : d.verdict === 'frenar' ? '#ef4444' : '#22c55e'; const V = { impulsar: '🚀 IMPULSAR', frenar: '🛑 FRENAR', mantener: '✅ MANTENER' };
+        const rate = (o) => o && o.targets ? o.converted / o.targets : null;
+        const steps = Object.keys((m.journey && m.journey.steps) || {});
+        box.innerHTML = '<div class="card" style="border-left:6px solid ' + col + ';margin-bottom:1rem"><div style="font-size:1.1rem;font-weight:900;color:' + col + '">' + (V[d.verdict] || d.verdict) + ' <small style="color:#9ab;font-weight:600">· semana ' + m.week.from + ' → ' + m.week.to + ' · nivel ' + d.prevLevel + ' → ' + d.level + (rep.forced ? ' · medición manual' : '') + '</small></div><ul style="margin:.4rem 0 0 1rem;padding:0;font-size:.85rem">' + (d.reasons || []).map((x) => '<li>' + escHtml(x) + '</li>').join('') + '</ul><div style="font-size:.78rem;color:#9ab;margin-top:.4rem">' + tun + '</div></div>'
+            + '<div class="in-grid">'
+            + box1('💳', 'Cargaron esta semana', n(m.deposits.users), n(m.deposits.count) + ' cargas · ' + money(m.deposits.amount) + ' · semana anterior ' + n(m.deposits.prevUsers), '#6366f1')
+            + box1('🔁', 'Volvieron', pc(m.repeatRate), 'de los que cargaron la semana anterior · la previa ' + pc(m.prevRepeatRate), m.repeatRate != null && m.prevRepeatRate != null && m.repeatRate < m.prevRepeatRate - 0.03 ? '#ef4444' : '#22c55e')
+            + box1('🎁', 'Regalos / depósitos', pc(m.giftRatio), money(m.gifts.regalos) + ' de ' + money(m.gifts.depositos) + ' (' + m.gifts.days + ' cierres)', m.giftRatio == null ? '#9ca3af' : m.giftRatio <= 0.15 ? '#22c55e' : m.giftRatio <= 0.2 ? '#f59e0b' : '#ef4444')
+            + box1('🆕', 'Registrados → 1ª carga', n(m.newRegs) + ' → ' + n(m.firstDeposits), m.newRegs ? pc(m.firstDeposits / m.newRegs) + ' hicieron su primera carga' : '', '#0ea5e9')
+            + box1('📲', 'Con la app (cargaron en 30 d)', pc(m.app && m.app.appPct), (m.app ? n(m.app.withApp) + ' de ' + n(m.app.depositors30) : ''), '#0ea5e9')
+            + box1('🎚️', 'Bajaron sus avisos', n(m.prefs.mine + m.prefs.none), 'sólo lo mío ' + n(m.prefs.mine) + ' · ninguno ' + n(m.prefs.none) + ' · pausados por fatiga ' + n(m.prefs.fatigued), '#f59e0b')
+            + box1('🧭', 'Recorrido (carga en 7 d)', pc(rate(m.journey)), n(m.journey.converted) + ' de ' + n(m.journey.targets) + ' contactados hace 7–14 d', '#7c3aed')
+            + box1('🤖', 'Campaña masiva (48 h)', pc(rate(m.campaigns)), n(m.campaigns.converted) + ' de ' + n(m.campaigns.targets), '#7c3aed')
+            + '</div>'
+            + (steps.length ? '<h3 class="in-h">🧭 Qué paso del recorrido funciona</h3><div class="card" style="padding:.4rem .6rem;overflow:auto"><table class="data-table" style="width:100%;font-size:.82rem"><thead><tr><th>Paso</th><th>Contactados</th><th>Cargaron en 7 d</th><th>%</th></tr></thead><tbody>' + steps.map((k) => { const s = m.journey.steps[k]; return '<tr><td><b>' + escHtml(k) + '</b></td><td>' + n(s.targets) + '</td><td>' + n(s.converted) + '</td><td>' + pc(s.targets ? s.converted / s.targets : null) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '')
+            + '<h3 class="in-h">💸 Reembolsos reclamados en la semana</h3><div class="in-grid">' + (Object.keys(m.refunds || {}).length ? Object.keys(m.refunds).map((k) => box1('💸', { daily: 'Diario', weekly: 'Semanal', monthly: 'Mensual' }[k] || k, n(m.refunds[k].n), money(m.refunds[k].amount), '#10b981')).join('') : '<div class="in-note">Ninguno</div>') + '</div>'
+            + ((d.recommendations || []).length ? '<h3 class="in-h">💡 Dónde está el problema de fondo (no automático)</h3><div class="card"><ul style="margin:0 0 0 1rem;padding:0;font-size:.85rem">' + d.recommendations.map((x) => '<li style="margin:.2rem 0">' + escHtml(x) + '</li>').join('') + '</ul></div>' : '')
+            + (m.segments ? '<h3 class="in-h">📊 Segmentos del recorrido (último día)</h3><div class="in-grid">' + Object.keys(m.segments).map((k) => box1('', k, n(m.segments[k]), '', '#64748b')).join('') + '</div>' : '')
+            + _inicioCohortsHtml(m.cohorts, n)
+            + ((rep.history || []).length ? '<h3 class="in-h">🗓️ Historial</h3><div class="card" style="padding:.4rem .6rem;overflow:auto"><table class="data-table" style="width:100%;font-size:.82rem"><thead><tr><th>Semana</th><th>Decisión</th><th>Nivel</th><th>Cargadores</th><th>Volvieron</th><th>Regalos/dep.</th><th>Recorrido</th></tr></thead><tbody>' + rep.history.map((x) => '<tr><td>' + x.weekKey + '</td><td>' + (V[x.verdict] || x.verdict || '—') + '</td><td>' + (x.level == null ? '—' : x.level) + '</td><td>' + n(x.depositors) + ' · ' + money(x.amount) + '</td><td>' + pc(x.repeatRate) + '</td><td>' + pc(x.giftRatio) + '</td><td>' + (x.journey ? n(x.journey.converted) + '/' + n(x.journey.targets) : '—') + '</td></tr>').join('') + '</tbody></table></div>' : '')
+            + '<details style="margin-top:1rem"><summary style="cursor:pointer"><b>📋 Informe en texto</b> (para copiar y analizar afuera)</summary><textarea readonly style="width:100%;min-height:260px;font-family:monospace;font-size:.75rem;margin-top:.4rem">' + escHtml(_wrText) + '</textarea></details>';
+    } catch (e) { box.innerHTML = '<span style="color:#f87171">' + escHtml(e.message) + '</span>'; }
+}
+async function wrRun() {
+    if (!confirm('¿Medir la semana AHORA y aplicar la decisión? (Normalmente corre sola los lunes a las 10 h.)')) return;
+    const box = document.getElementById('wrBody'); if (box) box.innerHTML = '<div class="in-note">⏳ Midiendo la semana… (puede tardar un minuto)</div>';
+    try { const r = await _inicioGuard('/api/admin/inicio/weekly-review/run', box, { method: 'POST' }); if (!r) return; const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); if (!j.report) alert('No corrió: otra instancia lo está haciendo. Probá en un minuto.'); loadWeeklyReview(); } catch (e) { alert(e.message); loadWeeklyReview(); }
+}
+async function wrCopy() { try { await navigator.clipboard.writeText(_wrText || 'Todavía no hay revisión semanal.'); showToast('📋 Informe copiado', 'success'); } catch (_) { alert('No se pudo copiar automáticamente: abrí "Informe en texto" abajo y copialo de ahí.'); } }
+window.loadWeeklyReview = loadWeeklyReview; window.wrRun = wrRun; window.wrCopy = wrCopy;
 // ═══ #817: AUTOPILOTO de retención — config + plan del año (este mes → diciembre del año que viene) ═══
 let _apData = null;
 async function loadCronAutopilot() {

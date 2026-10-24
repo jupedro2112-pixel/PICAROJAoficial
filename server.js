@@ -4113,7 +4113,7 @@ const authMiddleware = async (req, res, next) => {
 // acreditar fichas, historias y notificaciones masivas, bonos y estrategias, configuración, claves, clientes (editar/borrar/login sin clave).
 // Los agentes siguen pudiendo lo suyo: cargas (deposit, deposit-reviews), pagos (payouts), soporte/chats, lecturas (GET).
 const STAFF_DENY_MUTATIONS = [
-  /^\/api\/admin\/(roulette|stories|stories-autopilot|bonus-strategy|send-notification|notification-rules|notif-batches|notif-templates|cronograma|encuesta|inactividad|community-code|promo-bonus|strategy|strategy-plans|vip-levels|fire|refund-tiers|refund-config|platforms|campaigns|publisher-admins|webhooks|cierres|config|commands|sorteos|notif-center|newbie-offers|fraud|datos-ia|datos|inicio-pin|datos-pin|bank|hgcash\/(config|credentials|fanout)|girox|gastos|expenses|menus|registration|install-gift|missions|referral|referrals|users\/[^/]+\/(login-without-password|role|reset-password|block|unblock|fraud|force-logout|reset-test|change-influencer))/i,
+  /^\/api\/admin\/(roulette|stories|stories-autopilot|bonus-strategy|send-notification|notification-rules|notif-batches|notif-templates|cronograma|encuesta|inactividad|community-code|promo-bonus|strategy|strategy-plans|vip-levels|fire|refund-tiers|refund-config|platforms|campaigns|publisher-admins|webhooks|cierres|config|commands|sorteos|inicio\/(notif-center|weekly-review)|newbie-offers|fraud|datos-ia|datos|inicio-pin|datos-pin|bank|hgcash\/(config|credentials|fanout)|girox|gastos|expenses|menus|registration|install-gift|missions|referral|referrals|users\/[^/]+\/(login-without-password|role|reset-password|block|unblock|fraud|force-logout|reset-test|change-influencer))/i,
   /^\/api\/users\/[^/]+$/i // PUT/DELETE /api/users/:id (editar saldo / borrar cliente)
 ];
 const adminMiddleware = (req, res, next) => {
@@ -13197,6 +13197,19 @@ async function initializeData() {
       description: 'Push automática (una vez por día, 11 h) a quien PERDIÓ ayer y no reclamó el reembolso diario. Variable: {pct} (% diario). Al tocarla la app abre Reembolso. Vacío = no se manda.',
       type: 'message',
       response: '🔁 Ayer no fue tu día, pero te devolvemos el {pct}% 💸 Tocá acá y reclamá tu reembolso de ayer: se acredita al toque.'
+    },
+    {
+      // #973: avisos del reembolso SEMANAL (lunes y jueves) y MENSUAL (día 1 y 8) a quien perdió en el período y no reclamó.
+      name: '/sys_refund_reminder_weekly',
+      description: 'Push automática (lunes y jueves) a quien PERDIÓ la semana pasada y no reclamó el reembolso semanal. Variable: {pct}. Vacío = no se manda.',
+      type: 'message',
+      response: '📅 Tenés un reembolso SEMANAL del {pct}% esperándote 💸 Tocá acá y reclamalo: se acredita al toque.'
+    },
+    {
+      name: '/sys_refund_reminder_monthly',
+      description: 'Push automática (día 1 y 8) a quien PERDIÓ el mes pasado y no reclamó el reembolso mensual. Variable: {pct}. Vacío = no se manda.',
+      type: 'message',
+      response: '🗓️ Tu reembolso MENSUAL del {pct}% ya está disponible 💸 Tocá acá y reclamalo antes de que venza.'
     },
     {
       // #916 (owner 2026-10-24): cierre AUTOMÁTICO de Soporte cuando el cliente no contesta en {min} minutos.
@@ -26114,35 +26127,57 @@ function _newbieImg(n, pct, hours, rx, dx) {
 // (cargaron en los últimos 15 días) con push, que AYER perdieron en el casino (netwin de 1girox > 0, mismo criterio que el reembolso diario) y
 // todavía no reclamaron el diario de ayer. Push con url /?open=refund ⇒ la app abre Reembolso. Texto editable: /sys_refund_reminder ({pct}).
 const REFUND_REMIND_DEFAULT = '🔁 Ayer no fue tu día, pero te devolvemos el {pct}% 💸 Tocá acá y reclamá tu reembolso de ayer: se acredita al toque.';
+// #973 (owner): "avisos de reembolso SIEMPRE a los que tienen disponible, sea diario, semanal o mensual". Semanal: lunes y jueves; mensual: día 1 y 8.
+const REFUND_REMIND_WEEKLY_DEFAULT = '📅 Tenés un reembolso SEMANAL del {pct}% esperándote 💸 Tocá acá y reclamalo: se acredita al toque.';
+const REFUND_REMIND_MONTHLY_DEFAULT = '🗓️ Tu reembolso MENSUAL del {pct}% ya está disponible 💸 Tocá acá y reclamalo antes de que venza.';
 let _refundRemindRunning = false;
+// Plan de cada tipo: rango y clave del período (misma que usa el reclamo), % vigente, texto, cuántos días atrás buscar cargadores y el "slot"
+// (una sola pasada por slot: diario = el día; semanal = período#lunes/jueves; mensual = período#1/#8).
+async function _refundRemindPlan(kind, now) {
+  const tiers = await getRefundTiersByPeriod(); const maxPct = (t) => (t || []).reduce((m, x) => Math.max(m, Number(x.pct) || 0), 0);
+  const today = _schedArtKey(now), dow = new Date(now.getTime() - 3 * 3600000).getUTCDay(), dom = Number(today.slice(8, 10));
+  if (kind === 'daily') { const r = periodRanges.getYesterdayRangeArgentinaEpoch(); return { r, periodKey: 'daily:' + _schedArtKey(new Date(now.getTime() - 86400000)), pct: maxPct(tiers.daily), cmd: '/sys_refund_reminder', def: REFUND_REMIND_DEFAULT, activeDays: 15, title: '🔁 No te olvides de reclamar tu reembolso', slot: today, due: true }; }
+  if (kind === 'weekly') { const r = periodRanges.getLastWeekRangeArgentinaEpoch(); return { r, periodKey: 'weekly:' + r.fromDateStr, pct: maxPct(tiers.weekly), cmd: '/sys_refund_reminder_weekly', def: REFUND_REMIND_WEEKLY_DEFAULT, activeDays: 30, title: '📅 Tu reembolso semanal te espera', slot: r.fromDateStr + '#' + dow, due: dow === 1 || dow === 4 }; }
+  const r = periodRanges.getLastMonthRangeArgentinaEpoch(); return { r, periodKey: 'monthly:' + r.fromDateStr.slice(0, 7), pct: maxPct(tiers.monthly), cmd: '/sys_refund_reminder_monthly', def: REFUND_REMIND_MONTHLY_DEFAULT, activeDays: 60, title: '🗓️ Tu reembolso mensual está disponible', slot: r.fromDateStr.slice(0, 7) + '#' + dom, due: dom === 1 || dom === 8 };
+}
+async function _refundRemindRun(kind, plan, now) {
+  const from = new Date(plan.r.fromEpoch * 1000), to = new Date(plan.r.toEpoch * 1000);
+  const ids = await Transaction.distinct('userId', { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, timestamp: { $gte: new Date(now.getTime() - plan.activeDays * 86400000) } });
+  const users = ids.length ? await User.find({ id: { $in: ids }, role: 'user', isActive: { $ne: false }, isBlocked: { $ne: true }, 'notifPrefs.level': { $ne: 'none' }, $or: [{ fcmToken: { $nin: [null, ''] } }, { 'fcmTokens.0': { $exists: true } }] }).select('id username').lean() : [];
+  const claimed = new Set((await RefundClaim.find({ type: kind, periodKey: plan.periodKey, userId: { $in: users.map((u) => u.id) } }).select('userId').lean()).map((c) => c.userId));
+  const names = users.filter((u) => !claimed.has(u.id)).map((u) => u.username);
+  const losers = []; let apiErr = null;
+  for (let i = 0; i < names.length && !apiErr; i += 100) {
+    const chunk = names.slice(i, i + 100); const b = await girox.getPlayersStatsBatch(chunk, from, to, 'refund-remind-' + kind);
+    if (!b.success) { apiErr = b.error || b.code || 'stats batch falló'; break; }
+    for (const n of chunk) { const p = b.players[n]; if (p && Number(p.casinoNetwin) > 0) losers.push(n); }
+  }
+  if (apiErr) return { error: apiErr };
+  let sent = null;
+  if (losers.length) {
+    const text = await renderSystemCommand(plan.cmd, plan.def, { pct: String(plan.pct) });
+    if (String(text || '').trim()) sent = await sendNotificationToUsernames(User, losers, plan.title, text, { url: '/?open=refund', type: 'refund_reminder', kind: 'personal', refundKind: kind, tag: 'refund-' + plan.periodKey });
+  }
+  return { kind, slot: plan.slot, periodKey: plan.periodKey, at: now.toISOString(), candidates: names.length, losers: losers.length, sent: sent ? (sent.successCount || sent.sent || 0) : 0 };
+}
 async function _refundReminderTick() {
   if (_refundRemindRunning || process.env.REFUND_REMIND_DISABLED === '1') return; _refundRemindRunning = true;
   try {
     const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (hourArt < 11 || hourArt >= 21) return;
-    const today = _schedArtKey(now), yday = _schedArtKey(new Date(now.getTime() - 86400000));
-    const last = await getConfig('refundRemindLast', null); if (last && last.day === today) return; // ya salió hoy
-    if (!(await _cronClaim('refundremind', 10 * 60000))) return; // una instancia por pasada
-    if ((await getNotifCenterConfig()).refundReminder === false) return; // #971: apagado desde el Centro de avisos
-    const pct = await getDailyRefundPct(); if (!(pct > 0)) return;
-    const r = periodRanges.getYesterdayRangeArgentinaEpoch(); const from = new Date(r.fromEpoch * 1000), to = new Date(r.toEpoch * 1000);
-    const ids = await Transaction.distinct('userId', { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, timestamp: { $gte: new Date(now.getTime() - 15 * 86400000) } });
-    const users = ids.length ? await User.find({ id: { $in: ids }, role: 'user', isActive: { $ne: false }, isBlocked: { $ne: true }, $or: [{ fcmToken: { $nin: [null, ''] } }, { 'fcmTokens.0': { $exists: true } }] }).select('id username').lean() : [];
-    const claimed = new Set((await RefundClaim.find({ type: 'daily', periodKey: 'daily:' + yday, userId: { $in: users.map((u) => u.id) } }).select('userId').lean()).map((c) => c.userId));
-    const names = users.filter((u) => !claimed.has(u.id)).map((u) => u.username);
-    const losers = []; let apiErr = null;
-    for (let i = 0; i < names.length && !apiErr; i += 100) {
-      const chunk = names.slice(i, i + 100); const b = await girox.getPlayersStatsBatch(chunk, from, to, 'refund-remind');
-      if (!b.success) { apiErr = b.error || b.code || 'stats batch falló'; break; }
-      for (const n of chunk) { const p = b.players[n]; if (p && Number(p.casinoNetwin) > 0) losers.push(n); }
+    if ((await getNotifCenterConfig()).refundReminder === false) return; // apagado desde el Centro de avisos
+    const last = (await getConfig('refundRemindLast', null)) || {}; const slots = Object.assign({}, last.slots || {});
+    if (!last.slots && last.day) slots.daily = last.day; // compat con el registro anterior (#970)
+    let claimed = false;
+    for (const kind of ['daily', 'weekly', 'monthly']) {
+      const plan = await _refundRemindPlan(kind, now); if (!plan.due || !(plan.pct > 0) || slots[kind] === plan.slot) continue;
+      if (!claimed) { if (!(await _cronClaim('refundremind', 10 * 60000))) return; claimed = true; } // una instancia por pasada
+      const r = await _refundRemindRun(kind, plan, now);
+      if (r.error) { logger.warn('[reembolso-aviso] ' + kind + ': ' + r.error + ': se reintenta en la próxima pasada'); continue; }
+      slots[kind] = plan.slot; const kinds = Object.assign({}, last.kinds || {}); kinds[kind] = r;
+      Object.assign(last, { day: _schedArtKey(now), at: now.toISOString(), kind, candidates: r.candidates, losers: r.losers, sent: r.sent, slots, kinds });
+      await Config.set('refundRemindLast', last, 'system');
+      logger.info(`[reembolso-aviso] ${kind} ${plan.periodKey}: ${r.candidates} sin reclamar · ${r.losers} perdieron · push ${r.sent}`);
     }
-    if (apiErr) { logger.warn('[reembolso-aviso] ' + apiErr + ': se reintenta en la próxima pasada'); return; }
-    let sent = null;
-    if (losers.length) {
-      const text = await renderSystemCommand('/sys_refund_reminder', REFUND_REMIND_DEFAULT, { pct: String(pct) });
-      if (String(text || '').trim()) sent = await sendNotificationToUsernames(User, losers, '🔁 No te olvides de reclamar tu reembolso', text, { url: '/?open=refund', type: 'refund_reminder', tag: 'refund-' + yday });
-    }
-    await Config.set('refundRemindLast', { day: today, at: now.toISOString(), candidates: names.length, losers: losers.length, sent: sent ? (sent.successCount || sent.sent || 0) : 0 }, 'system');
-    logger.info(`[reembolso-aviso] ${today}: ${names.length} activos sin reclamar · ${losers.length} perdieron ayer · push ${JSON.stringify(sent || {}).slice(0, 120)}`);
   } catch (e) { logger.warn('[reembolso-aviso] ' + e.message); } finally { _refundRemindRunning = false; }
 }
 setTimeout(() => { _refundReminderTick().catch(() => {}); setInterval(() => { _refundReminderTick().catch(() => {}); }, 15 * 60 * 1000); }, 6 * 60 * 1000);
@@ -26194,6 +26229,10 @@ setTimeout(() => { _newbieOffersTick().catch(() => {}); setInterval(() => { _new
 //   · Preferencia del cliente (User.notifPrefs): todo / sólo lo mío / ninguno, + fatiga (10 promos sin abrir ⇒ pausa).
 // Config['notifCenter'] = { monthlyCap, journey, refundReminder, winnersStory, legacyRules }. Estado: Config['journeyLast'].
 const retentionJourney = require('./src/services/retentionJourney');
+const weeklyReview = require('./src/services/weeklyReview');
+// #973: ajuste vigente (nivel de la revisión semanal). Cache en memoria porque el generador del autopiloto es sincrónico.
+let _tuningCache = weeklyReview.tuningFor(0);
+async function getJourneyTuning() { let t = null; try { t = await getConfig('journeyTuning', null); } catch (_) {} _tuningCache = weeklyReview.tuningFor(t && Number.isFinite(Number(t.level)) ? Number(t.level) : 0); return _tuningCache; }
 async function getNotifCenterConfig() {
   let c = {}; try { c = (await getConfig('notifCenter', null)) || {}; } catch (_) {}
   const cap = Math.round(Number(c.monthlyCap));
@@ -26201,6 +26240,7 @@ async function getNotifCenterConfig() {
 }
 // Estado de TODOS los clientes (una agregación de cargas reales de la vida + 90 días) ⇒ segmento y paso de hoy. No escribe nada.
 async function _journeyScan(now) {
+  await getJourneyTuning();
   const since90 = new Date(now.getTime() - 90 * 86400000);
   const [users, agg] = await Promise.all([
     User.find({ role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, createdAt: { $lte: new Date(now.getTime() - 86400000) } }).select('id username createdAt fraudFlags fcmToken fcmTokens fcmTokenContext journey notifPrefs').lean(),
@@ -26215,7 +26255,7 @@ async function _journeyScan(now) {
       hasApp: _notifChannelOf(u) === 'app', flagged: _isFlagged(u), sent: (u.journey && u.journey.sent) || [] };
     const c = retentionJourney.classify(st, now); segments[c.segment] = (segments[c.segment] || 0) + 1;
     if (u.notifPrefs && u.notifPrefs.level === 'none') continue; // pidió no recibir avisos
-    const p = retentionJourney.pickStep(st, now); if (!p) continue;
+    const p = retentionJourney.pickStep(st, now, _tuningCache); if (!p) continue;
     const g = picks.get(p.step.id) || { pick: p, users: [] }; g.users.push({ id: u.id, username: u.username, key: p.key, segment: p.segment }); picks.set(p.step.id, g);
   }
   return { total: users.length, segments, picks: [...picks.values()] };
@@ -26293,7 +26333,8 @@ app.post('/api/notifications/prefs', authMiddleware, async (req, res) => {
   } catch (_) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 // Panel.
-app.get('/api/admin/notif-center', authMiddleware, adminMiddleware, async (req, res) => {
+// #973: las rutas del Centro van bajo /api/admin/inicio/* ⇒ misma clave que INICIO (gate app.use de #876).
+app.get('/api/admin/inicio/notif-center', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const [nc, ap] = await Promise.all([getNotifCenterConfig(), getAutopilotConfig()]);
     if (!_journeyPreview.v || Date.now() - _journeyPreview.at > 10 * 60000 || req.query.refresh === '1') {
@@ -26308,7 +26349,7 @@ app.get('/api/admin/notif-center', authMiddleware, adminMiddleware, async (req, 
       storyBonusDays: _giftBoostOn() ? [3, 6] : [3], optOut: Object.fromEntries(optOut.map((o) => [o._id, o.n])) });
   } catch (e) { logger.error('[notif-center] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
-app.put('/api/admin/notif-center', authMiddleware, adminMiddleware, async (req, res) => {
+app.put('/api/admin/inicio/notif-center', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const b = req.body || {}; const cur = (await getConfig('notifCenter', null)) || {}; const next = Object.assign({}, cur); let capChanged = false;
     if (b.monthlyCap !== undefined) {
@@ -26322,8 +26363,80 @@ app.put('/api/admin/notif-center', authMiddleware, adminMiddleware, async (req, 
     res.json({ success: true, config: await getNotifCenterConfig(), reprogrammed });
   } catch (e) { logger.error('[notif-center] put: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
-app.post('/api/admin/notif-center/run', authMiddleware, adminMiddleware, async (req, res) => {
+app.post('/api/admin/inicio/notif-center/run', authMiddleware, adminMiddleware, async (req, res) => {
   try { const out = await _journeyTick(true); res.json({ success: true, result: out }); } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+// ===== #973 REVISIÓN SEMANAL AUTOMÁTICA (lunes 10–14 h ART) =====
+// Mide la semana (retención, regalos/depósitos, efectividad del recorrido y de la campaña masiva, reembolsos, app, avisos) y decide con
+// src/services/weeklyReview.js: impulsar / mantener / frenar (nivel −2…+3 ⇒ multiplicadores del recorrido y ± puntos del autopiloto). Guarda el
+// informe completo en Config['weeklyReview'] (con historial) y el ajuste en Config['journeyTuning']. Panel → Principal → Revisión semanal.
+async function _weeklyMetrics(now) {
+  const D = 86400000, t0 = now.getTime(); const w1 = new Date(t0 - 7 * D), w2 = new Date(t0 - 14 * D), w3 = new Date(t0 - 21 * D);
+  const REAL = SCHED_ADAPTER.realDepositMatch();
+  const agg = await Transaction.aggregate([{ $match: Object.assign({ timestamp: { $gte: w3 } }, REAL) }, { $group: { _id: '$userId',
+    n1: { $sum: { $cond: [{ $gte: ['$timestamp', w1] }, 1, 0] } }, a1: { $sum: { $cond: [{ $gte: ['$timestamp', w1] }, '$amount', 0] } },
+    in2: { $max: { $cond: [{ $and: [{ $gte: ['$timestamp', w2] }, { $lt: ['$timestamp', w1] }] }, 1, 0] } }, in3: { $max: { $cond: [{ $lt: ['$timestamp', w2] }, 1, 0] } } } }]);
+  let dep1 = 0, amt1 = 0, cnt1 = 0, dep2 = 0, both12 = 0, dep3 = 0, both23 = 0;
+  for (const a of agg) { const i1 = a.n1 > 0; if (i1) { dep1++; amt1 += a.a1; cnt1 += a.n1; } if (a.in2) { dep2++; if (i1) both12++; } if (a.in3) { dep3++; if (a.in2) both23++; } }
+  const dk1 = _schedArtKey(w1), dk0 = _schedArtKey(new Date(t0 - D));
+  const closes = await DailyClose.find({ dateKey: { $gte: dk1, $lte: dk0 } }).select('depositos regalos').lean();
+  const cDep = closes.reduce((x, c) => x + (Number(c.depositos) || 0), 0), cReg = closes.reduce((x, c) => x + (Number(c.regalos) || 0), 0);
+  // Efectividad de los lotes enviados hace 7–14 días (ya tuvieron su semana para responder): recorrido = carga en 7 d; masivo = carga en 48 h.
+  const batches = await NotifBatch.find({ sentAt: { $gte: w2, $lt: w1 }, isPublic: { $ne: true } }).select('name sentAt recipients.userId').lean();
+  const steps = {}; const camp = { targets: 0, converted: 0 }; const jny = { targets: 0, converted: 0 };
+  for (const b of batches) {
+    const ids = [...new Set((b.recipients || []).map((r) => r.userId).filter(Boolean))]; if (!ids.length) continue;
+    const isJ = /^Recorrido/.test(b.name || ''); const sentAt = new Date(b.sentAt); const until = new Date(sentAt.getTime() + (isJ ? 7 : 2) * D);
+    const conv = await Transaction.distinct('userId', Object.assign({ userId: { $in: ids }, timestamp: { $gt: sentAt, $lte: until } }, REAL));
+    const tgt = isJ ? jny : camp; tgt.targets += ids.length; tgt.converted += conv.length;
+    if (isJ) { const k = String(b.name).replace(/^Recorrido · /, ''); steps[k] = steps[k] || { targets: 0, converted: 0 }; steps[k].targets += ids.length; steps[k].converted += conv.length; }
+  }
+  const rc = await RefundClaim.aggregate([{ $match: { claimedAt: { $gte: w1 } } }, { $group: { _id: '$type', n: { $sum: 1 }, amount: { $sum: { $ifNull: ['$amount', 0] } } } }]);
+  const [optMine, optNone, fatigued, regs, totalUsers] = await Promise.all([
+    User.countDocuments({ role: 'user', 'notifPrefs.level': 'mine' }), User.countDocuments({ role: 'user', 'notifPrefs.level': 'none' }),
+    User.countDocuments({ role: 'user', 'notifPrefs.fatigue': { $gte: 10 } }), User.countDocuments({ role: 'user', createdAt: { $gte: w1 } }), User.countDocuments({ role: 'user' })]);
+  const dep30 = await Transaction.distinct('userId', Object.assign({ timestamp: { $gte: new Date(t0 - 30 * D) } }, REAL));
+  const withApp = dep30.length ? await User.countDocuments({ id: { $in: dep30 }, $or: [{ fcmTokenContext: 'standalone' }, { 'fcmTokens.context': 'standalone' }] }) : 0;
+  const firstAgg = await Transaction.aggregate([{ $match: REAL }, { $group: { _id: '$userId', first: { $min: '$timestamp' } } }, { $match: { first: { $gte: w1 } } }, { $count: 'n' }]);
+  const cohorts = await _inicioCohorts(REAL).catch(() => []);
+  const lastM = cohorts.length >= 2 ? cohorts[cohorts.length - 2] : null;
+  const cohortM1 = lastM && lastM.regs >= 20 && lastM.m && lastM.m[1] != null ? lastM.m[1] / lastM.regs : null;
+  const jl = await getConfig('journeyLast', null);
+  return { week: { from: dk1, to: dk0 }, deposits: { users: dep1, count: cnt1, amount: Math.round(amt1), prevUsers: dep2 }, repeatRate: dep2 ? both12 / dep2 : null, prevRepeatRate: dep3 ? both23 / dep3 : null,
+    giftRatio: cDep > 0 ? cReg / cDep : null, gifts: { regalos: Math.round(cReg), depositos: Math.round(cDep), days: closes.length }, journey: Object.assign({ steps }, jny), campaigns: camp,
+    refunds: Object.fromEntries(rc.map((r) => [r._id, { n: r.n, amount: Math.round(r.amount || 0) }])), prefs: { mine: optMine, none: optNone, fatigued, optOutPct: totalUsers ? (optMine + optNone) / totalUsers : 0 },
+    app: { depositors30: dep30.length, withApp, appPct: dep30.length ? withApp / dep30.length : null }, newRegs: regs, firstDeposits: firstAgg[0] ? firstAgg[0].n : 0, totalUsers, cohortM1, cohorts, segments: (jl && jl.segments) || null };
+}
+let _weeklyRunning = false;
+async function _weeklyReviewTick(force) {
+  if (_weeklyRunning) return null; _weeklyRunning = true;
+  try {
+    const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; const dow = new Date(now.getTime() - 3 * 3600000).getUTCDay();
+    const weekKey = _schedArtKey(new Date(now.getTime() - ((dow + 6) % 7) * 86400000)); // lunes de esta semana
+    if (!force && (dow !== 1 || hourArt < 10 || hourArt >= 14)) return null;
+    const cur = await getConfig('weeklyReview', null); if (!force && cur && cur.weekKey === weekKey) return null;
+    if (!(await _cronClaim('weeklyreview', 15 * 60000))) return null;
+    const metrics = await _weeklyMetrics(now); const tuning0 = await getJourneyTuning();
+    const decision = weeklyReview.decide(metrics, tuning0);
+    if (decision.changed) {
+      await Config.set('journeyTuning', Object.assign({}, decision.tuning, { updatedAt: now.toISOString(), by: 'revisión semanal ' + weekKey }), 'system'); _tuningCache = decision.tuning;
+      await _autopilotClearFuture().catch(() => 0); // el autopiloto se rearma con los puntos nuevos
+    }
+    const hist = (cur && Array.isArray(cur.history)) ? cur.history.slice() : [];
+    if (cur && cur.weekKey && cur.weekKey !== weekKey && cur.metrics) hist.unshift({ weekKey: cur.weekKey, at: cur.at, level: cur.tuning && cur.tuning.level, verdict: cur.decision && cur.decision.verdict, giftRatio: cur.metrics.giftRatio, repeatRate: cur.metrics.repeatRate, depositors: cur.metrics.deposits && cur.metrics.deposits.users, amount: cur.metrics.deposits && cur.metrics.deposits.amount, journey: cur.metrics.journey && { targets: cur.metrics.journey.targets, converted: cur.metrics.journey.converted } });
+    const rep = { weekKey, at: now.toISOString(), forced: !!force, metrics, decision, tuning: decision.tuning, history: hist.slice(0, 12) };
+    await Config.set('weeklyReview', rep, 'system');
+    logger.info(`[revisión-semanal] ${weekKey}: ${decision.verdict} (nivel ${decision.prevLevel} → ${decision.level})`);
+    return rep;
+  } catch (e) { logger.warn('[revisión-semanal] ' + e.message); return null; } finally { _weeklyRunning = false; }
+}
+setTimeout(() => { _weeklyReviewTick().catch(() => {}); setInterval(() => { _weeklyReviewTick().catch(() => {}); }, 30 * 60 * 1000); }, 11 * 60 * 1000);
+app.get('/api/admin/inicio/weekly-review', authMiddleware, adminMiddleware, async (req, res) => {
+  try { const rep = await getConfig('weeklyReview', null); const tuning = await getJourneyTuning(); res.json({ success: true, report: rep, tuning, text: weeklyReview.reportText(rep), levels: { min: weeklyReview.LEVEL_MIN, max: weeklyReview.LEVEL_MAX } }); }
+  catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/inicio/weekly-review/run', authMiddleware, adminMiddleware, async (req, res) => {
+  try { const rep = await _weeklyReviewTick(true); res.json({ success: true, report: rep, text: weeklyReview.reportText(rep) }); } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 
 // ===== #915 (owner 2026-10-24): SORTEOS CON RANKING EN VIVO (mensual + Gran Sorteo) =====
@@ -28802,6 +28915,7 @@ const AUTOPILOT_BOOST = { until: '2026-11', capPlus: 4, hoursPlus: 2, pctPlus: 1
 const _apBoost = (month) => String(month || _schedArtKey(new Date()).slice(0, 7)) <= AUTOPILOT_BOOST.until;
 async function getAutopilotConfig() {
   const nc = await getNotifCenterConfig().catch(() => ({})); // #971: el tope mensual se fija en el Centro de avisos (si no, el automático)
+  await getJourneyTuning().catch(() => {}); // #973: refresca el ajuste antes de programar
   const r = { enabled: process.env.AUTOPILOT_DISABLED !== '1', cap: nc.monthlyCap || (AUTOPILOT_DEFAULT.cap + (_apBoost() ? AUTOPILOT_BOOST.capPlus : 0)), hours: AUTOPILOT_DEFAULT.hours + (_apBoost() ? AUTOPILOT_BOOST.hoursPlus : 0) };
   const num = (v, d, lo, hi) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
   return {
@@ -28868,7 +28982,7 @@ function _autopilotMonthItemsRaw(month, cfg) {
         (pct) => ['💎 Subí de nivel VIP: +' + pct + '%', 'Cada carga te acerca al próximo nivel VIP y sus beneficios. Hoy +' + pct + '% EXTRA en tu carga por {h} horas.'],
         (pct) => ['🤝 Jugá con tus amigos: +' + pct + '%', 'Invitá a tus amigos con tu link y ganá por lo que juegan. Hoy tenés +' + pct + '% EXTRA en tu carga por {h} horas.']
       ];
-      const tb = (pct0, reason, extra) => { const pct = Math.min(100, pct0 + (_apBoost(month) ? AUTOPILOT_BOOST.pctPlus : 0)); const t = TH[(d * 3 + mo) % TH.length](pct); return { reason, payload: bono(pct, t[0], t[1], extra || aud) }; }; // #968: +10 en el refuerzo
+      const tb = (pct0, reason, extra) => { const pct = Math.max(10, Math.min(100, pct0 + (_apBoost(month) ? AUTOPILOT_BOOST.pctPlus : 0) + (_tuningCache.apPctPlus || 0))); /* #973: ± de la revisión semanal */ const t = TH[(d * 3 + mo) % TH.length](pct); return { reason, payload: bono(pct, t[0], t[1], extra || aud) }; }; // #968: +10 en el refuerzo
       if (sp) it = { reason: sp.name, payload: bono(sp.pct || 20, sp.title, sp.message, aud) };
       else if (d <= 4) it = { reason: 'Inicio de mes', payload: bono(30, '🎉 Mes nuevo en Pica Roja: +30%', 'Arrancamos el mes con todo: carga automática en segundos, retiros rápidos y soporte en la app. Cargá en las próximas {h} horas y te sumamos +30% EXTRA.', aud) };
       else if (d === 5) it = tb(20, 'Día 5 (más chico)');

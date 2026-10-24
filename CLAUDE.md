@@ -365,6 +365,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `data.kind` ('promo' | 'personal' | 'system') para que `User.notifPrefs` (Perfil → "Qué avisos querés recibir": todos / sólo lo mío / ninguno, +
   fatiga: 10 promos sin abrir la app pausan las masivas) se respete en `sendPushIfOffline` y en `notificationService.prefsFilter`. Historias: `clicks` y
   `reactions` (`POST /api/stories/:id/click|react`). INICIO muestra cohortes (`_inicioCohorts`); Cierres el semáforo regalos/depósitos del mes.
+  **#973 REVISIÓN SEMANAL:** `src/services/weeklyReview.js` + `_weeklyReviewTick` (lunes 10 h) mide la semana y AJUSTA SOLA el nivel
+  `Config['journeyTuning']` (−2…+3 ⇒ multiplicadores del recorrido y ± puntos del autopiloto); informe en `Config['weeklyReview']`. Panel → PRINCIPAL 🔒
+  (INICIO · Centro de avisos · Revisión semanal, todas con la clave de INICIO: rutas bajo `/api/admin/inicio/*`). Si cambiás una regla de regalos,
+  probá `node scripts/test-weekly-review.js` y `test-retention-journey.js`. Aviso del reembolso: diario, semanal (lun/jue) y mensual (1 y 8).
 - **Cargas pendientes (#376, 2026-10-18):** la carga manual del panel vive en `_agentDepositHandler(req, res, body)`
   (la ruta `POST /api/admin/deposit` sólo la llama) porque "Confirmar" de la cola de comprobantes la reusa. Todo comprobante
   válido queda `Comprobante.reviewStatus='pending'` hasta que se acredita (auto o manual) o se rechaza; si tocás el flujo de

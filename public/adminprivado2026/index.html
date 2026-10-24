@@ -119,6 +119,22 @@ document.addEventListener('change', function (ev) {
             <nav class="sidebar-nav">
                 <!-- #743 (owner 2026-10-21): MENÚ REORGANIZADO — Configuración · Atención · App · Administrativo · Publicidad (+ Interno abajo). Todo lo que es DATOS (Datos IA, Datos, Datos 2.0, Ingresos diarios, Usuarios con app) y SMS masivo piden la clave (Configuración → Clave de Datos). -->
 <!-- #901 (owner): "dejá fijado arriba Manejo · Atención automática" con lo nuevo de cargas / retiros / soporte; el resto, abajo. -->
+<!-- #973 (owner): "dejá arriba PRINCIPAL con clave: INICIO y el Centro de avisos; lo que se deja de usar, último". Las tres secciones usan la clave de INICIO. -->
+<div class="nav-pinned nav-principal">
+<div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;text-transform:uppercase;">⭐ Principal 🔒</div>
+<a href="#" class="nav-item" data-section="inicio">
+<span>🏠</span>
+<span>INICIO</span>
+</a>
+<a href="#" class="nav-item" data-section="notifCenter" title="Todo lo automático que le llega al cliente, desde un solo lugar">
+<span>🧭</span>
+<span>Centro de avisos</span>
+</a>
+<a href="#" class="nav-item" data-section="weeklyReview" title="Cada lunes mide la semana y ajusta sola los regalos; informe completo para analizar">
+<span>📏</span>
+<span>Revisión semanal</span>
+</a>
+</div>
 <div class="nav-pinned">
 <div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;text-transform:uppercase;">🎯 Manejo · Atención automática</div>
 <a href="#" class="nav-item" data-section="support" title="Soporte: lo que escribas le llega al cliente; desde acá también cargás y retirás">
@@ -151,10 +167,6 @@ document.addEventListener('change', function (ev) {
 
 
 <div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;text-transform:uppercase;">⚡ Automático (lo hace solo)</div>
-<a href="#" class="nav-item" data-section="inicio">
-<span>🏠</span>
-<span>INICIO</span>
-</a>
 
 <a href="#" class="nav-item" data-section="fraud" title="Clientes que podrían estar intentando estafar: evidencia y bloqueo">
 <span>🚨</span>
@@ -215,14 +227,6 @@ document.addEventListener('change', function (ev) {
 <span>🎯</span>
 <span>Estrategia clientes</span>
 </a>
-<a href="#" class="nav-item" data-section="encuesta">
-<span>📊</span>
-<span>Encuesta</span>
-</a>
-<a href="#" class="nav-item" data-section="inactivos">
-<span>💤</span>
-<span>Inactivos</span>
-</a>
 <a href="#" class="nav-item nav-item-sms-masivo" data-section="sms" style="display:none">
 <span>📱</span>
 <span>SMS Masivo 🔒</span>
@@ -261,22 +265,9 @@ document.addEventListener('change', function (ev) {
 <span>📱</span>
 <span>Usuarios con app 🔒</span>
 </a>
-<a href="#" class="nav-item" data-section="centralWelcomeBonus">
-<span>🎁</span>
-<span>Bono $5.000</span>
-</a>
 <a href="#" class="nav-item" data-section="reembolsos">
 <span>💸</span>
 <span>Reembolsos reclamados</span>
-</a>
-<a href="#" class="nav-item" data-section="suspiciousAccounts">
-<span>🕵️</span>
-<span>Cuentas sospechosas</span>
-</a>
-<a href="#" class="nav-item nav-item-chat-delays" data-section="chatDelays" style="display:none">
-<span>⏱️</span>
-<span>Demoras</span>
-<span id="chatDelaysWaitingBadge" class="badge hidden">0</span>
 </a>
 <div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;text-transform:uppercase;">📣 Publicidad</div>
 <a href="#" class="nav-item" data-section="campaigns">
@@ -293,14 +284,37 @@ document.addEventListener('change', function (ev) {
 </a>
 <!-- #408 (owner): se eliminaron del menú "Automatización" y "Estrategia de bonos" (grupo "No se usa"); sus secciones se quitaron del HTML. -->
                 <!-- #383/#387 (owner): el chat viejo (tipo WhatsApp) queda INTERNO y abajo de todo; Soporte pasó arriba (#387). -->
-                <div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;text-transform:uppercase;opacity:.6;">Interno</div>
                 <!-- #821 (owner): Notificaciones manuales abajo (la estrategia automática del Cronograma manda; lo programado viejo quedó anulado) -->
-                <a href="#" class="nav-item nav-legacy" data-section="notifications" title="Envíos manuales (la estrategia automática está en Cronograma)">
+                                <!-- #827 (owner): Historias manuales abajo (las automáticas corren solas, se ven en Cronograma) -->
+                                <!-- #973 (owner): lo que se dejó de usar, último. Encuesta e Inactivos quedaron apagados por flags; Bono $5.000 (instalar) apagado (#221);
+                     Cuentas sospechosas la reemplazan las Alertas de estafa (#873); Notificaciones e Historias manuales las reemplazan el Centro de avisos y las historias automáticas. -->
+                <div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;opacity:.6;text-transform:uppercase;">🗄️ No se usa (reemplazado)</div>
+<a href="#" class="nav-item nav-legacy" data-section="encuesta">
+<span>📊</span>
+<span>Encuesta</span>
+</a>
+<a href="#" class="nav-item nav-legacy" data-section="inactivos">
+<span>💤</span>
+<span>Inactivos</span>
+</a>
+<a href="#" class="nav-item nav-legacy" data-section="centralWelcomeBonus">
+<span>🎁</span>
+<span>Bono $5.000</span>
+</a>
+<a href="#" class="nav-item nav-legacy" data-section="suspiciousAccounts">
+<span>🕵️</span>
+<span>Cuentas sospechosas</span>
+</a>
+<a href="#" class="nav-item nav-legacy nav-item-chat-delays" data-section="chatDelays" style="display:none">
+<span>⏱️</span>
+<span>Demoras</span>
+<span id="chatDelaysWaitingBadge" class="badge hidden">0</span>
+</a>
+<a href="#" class="nav-item nav-legacy nav-legacy" data-section="notifications" title="Envíos manuales (la estrategia automática está en Cronograma)">
                     <span class="icon icon-bell"></span>
                     <span>Notificaciones (manual)</span>
                 </a>
-                <!-- #827 (owner): Historias manuales abajo (las automáticas corren solas, se ven en Cronograma) -->
-                <a href="#" class="nav-item nav-legacy" data-section="stories" title="Historias manuales (las automáticas están en Cronograma)">
+<a href="#" class="nav-item nav-legacy nav-legacy" data-section="stories" title="Historias manuales (las automáticas están en Cronograma)">
                     <span>📽️</span>
                     <span>Historias (manual)</span>
                 </a>
@@ -2665,6 +2679,25 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                  #190 CRONOGRAMA — campañas programadas (fecha/hora AR),
                  calendario mensual, tandas y comparativo semanal/mensual.
                  ============================================ -->
+            <!-- #971/#973: CENTRO DE AVISOS (Principal, clave de INICIO) -->
+            <section id="notifCenterSection" class="section">
+                <div class="panel-header"><h2>🧭 Centro de avisos</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-secondary" onclick="loadNotifCenter(true)">🔄</button></div></div>
+                <!-- #971 (owner): CENTRO DE AVISOS — "quiero que salga todo de un mismo lugar": todo lo automático que le llega al cliente, con un solo tope. -->
+                <div class="card" style="margin-bottom:1rem" id="notifCenterCard">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+                        <h3 style="margin:0;font-size:1rem">🧭 Centro de avisos · todo lo automático sale de acá</h3>
+                        <button class="btn btn-secondary btn-small" onclick="loadNotifCenter(true)">🔄 Actualizar</button>
+                    </div>
+                    <div style="color:#9ab;font-size:.78rem;margin:.4rem 0 .6rem">Un cliente recibe como máximo <b>1 aviso por día</b> y el tope mensual de abajo, cuente de donde cuente (recorrido, campaña del día, lotes a mano). El aviso del reembolso y lo que el cliente pide en su Perfil ("Qué avisos querés recibir") van aparte.</div>
+                    <div id="ncBody" style="font-size:.84rem">Cargando…</div>
+                </div>
+            </section>
+            <!-- #973: REVISIÓN SEMANAL automática (Principal, clave de INICIO) -->
+            <section id="weeklyReviewSection" class="section">
+                <div class="panel-header"><h2>📏 Revisión semanal</h2><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn btn-secondary" onclick="wrCopy()" title="Copia el informe en texto para pegarlo donde quieras analizarlo">📋 Copiar informe</button><button class="btn btn-secondary" onclick="wrRun()">▶ Medir ahora</button><button class="btn btn-secondary" onclick="loadWeeklyReview()">🔄</button></div></div>
+                <div class="card" style="margin-bottom:1rem;font-size:.8rem;color:#9ab">Todos los lunes a las 10 h el sistema mide la semana (cuántos cargaron, cuántos volvieron, cuánto se regaló sobre lo depositado, cuánto convirtió cada paso del recorrido y la campaña masiva, reembolsos, app instalada, avisos bajados) y decide solo: <b>impulsar</b> (más % y más fichas en el recorrido, más puntos en la campaña), <b>mantener</b> o <b>frenar</b>. Nunca toca el reembolso. Acá queda el informe completo y el historial.</div>
+                <div id="wrBody">Cargando…</div>
+            </section>
             <section id="cronogramaSection" class="section">
                 <div class="panel-header">
                     <h2>📅 Cronograma notis <small style="font-size:.6em;color:#f59e0b;font-weight:800">· AUTOMÁTICO (NO TOCAR)</small></h2>
@@ -2696,15 +2729,7 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                     </div>
                     <div id="naBody" style="margin-top:.6rem;font-size:.84rem">Cargando…</div>
                 </div>
-                <!-- #971 (owner): CENTRO DE AVISOS — "quiero que salga todo de un mismo lugar": todo lo automático que le llega al cliente, con un solo tope. -->
-                <div class="card" style="margin-bottom:1rem;border:2px solid #7c3aed" id="notifCenterCard">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
-                        <h3 style="margin:0;font-size:1rem">🧭 Centro de avisos · todo lo automático sale de acá</h3>
-                        <button class="btn btn-secondary btn-small" onclick="loadNotifCenter(true)">🔄 Actualizar</button>
-                    </div>
-                    <div style="color:#9ab;font-size:.78rem;margin:.4rem 0 .6rem">Un cliente recibe como máximo <b>1 aviso por día</b> y el tope mensual de abajo, cuente de donde cuente (recorrido, campaña del día, lotes a mano). El aviso del reembolso y lo que el cliente pide en su Perfil ("Qué avisos querés recibir") van aparte.</div>
-                    <div id="ncBody" style="font-size:.84rem">Cargando…</div>
-                </div>
+                <div class="card" style="margin-bottom:1rem;border:1px solid #7c3aed"><b>🧭 El Centro de avisos se movió arriba de todo</b> (menú → Principal → Centro de avisos, con la clave de INICIO). Lo de abajo sigue siendo la campaña masiva diaria y las historias automáticas, que el Centro coordina.</div>
                 <!-- #819: la configuración DEFINITIVA va arriba de todo. #817: AUTOPILOTO de retención — programa solo el mes en curso y el siguiente, todos los días, por lotes y grupos -->
                 <div class="card" style="margin-bottom:1rem" id="cronAutopilotCard">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">

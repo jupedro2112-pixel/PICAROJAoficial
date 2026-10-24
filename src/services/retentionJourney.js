@@ -88,7 +88,8 @@ function classify(state, now) {
 }
 
 // Paso de HOY para un cliente (o null). Orden de prioridad: recuperación > nuevo > instalar la app.
-function pickStep(state, now) {
+// tuning (#973, revisión semanal): { pctMult, chipsMult } multiplica el % de bono y las fichas de cada paso.
+function pickStep(state, now, tuning) {
   if (!state || state.flagged) return null;
   const c = classify(state, now);
   const sent = new Set((state.sent || []).map((s) => (s && s.k) || s));
@@ -104,7 +105,8 @@ function pickStep(state, now) {
   if (!ok.length) return null;
   const tier = valueTier(state.avgDeposit);
   const g = ok[0].st.gift;
-  const amount = g.type === 'percent' ? g.pct : g.type === 'fixed' ? Math.round(tier.chips * (g.mult || 1)) : 0;
+  const tn = tuning || {}; const pm = Number(tn.pctMult) > 0 ? Number(tn.pctMult) : 1, cm = Number(tn.chipsMult) > 0 ? Number(tn.chipsMult) : 1;
+  const amount = g.type === 'percent' ? Math.max(5, Math.min(200, Math.round(g.pct * pm / 5) * 5)) : g.type === 'fixed' ? Math.max(500, Math.round(tier.chips * (g.mult || 1) * cm / 500) * 500) : 0;
   return { step: ok[0].st, key: ok[0].key, segment: c.segment, days: c.days, tier: tier.key, giftType: g.type, amount, hours: g.hours || 24 };
 }
 

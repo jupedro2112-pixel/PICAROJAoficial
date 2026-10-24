@@ -26,6 +26,10 @@ p = j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [] }, now)
 assert.strictEqual(j.pickStep({ createdAt: ago(2), deposits: 0, hasApp: false, sent: [{ k: 'new-1@reg' }] }, now), null, '#972: sin pasos de instalar la app');
 assert.strictEqual(j.pickStep(Object.assign({}, base, { createdAt: ago(9), hasApp: false }), now), null, '#972: con cargas y sin app, nada');
 assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7), flagged: true }), now), null, 'marcado por el radar: nada');
+// #973: ajuste de la revisión semanal
+p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7) }), now, { pctMult: 1.2, chipsMult: 1.5 }); assert.strictEqual(p.amount, 35, '30 % ×1,2 = 36 → 35 (múltiplo de 5)');
+p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), avgDeposit: 30000 }), now, { pctMult: 1, chipsMult: 1.5 }); assert.strictEqual(p.amount, 7500, '5.000 ×1,5');
+p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(30) }), now, { pctMult: 1.3 }); assert.strictEqual(p.amount, 130, '100 % ×1,3');
 // textos y cuerpo del lote
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), avgDeposit: 30000 }), now);
 const b = j.batchBody(p, ['juan', 'ana'], { monthlyCap: 12, rolloverX: 5, vars: { first: 100, daily: 10, min: '5.000' } });

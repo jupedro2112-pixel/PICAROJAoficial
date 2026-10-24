@@ -1493,3 +1493,23 @@ abrir la app (`/api/activity/ping`); ≥10 ⇒ sin promos.
 **Trampas:** un aviso automático nuevo va por `_createNotifBatchFromBody` (hereda `dailyCap`/`monthlyCap`) o lleva `data.kind`; no agregar otro
 cron de pushes por fuera. `_notifDayCounts`/`_notifMonthCounts` cuentan NotifBatch (no las pushes directas). Al cambiar el tope mensual el PUT
 borra las campañas futuras del autopiloto (`_autopilotClearFuture`) y el tick las rearma.
+
+
+## Revisión semanal automática (#973, 2026-10-24)
+
+**Qué hace:** cada lunes (10–14 h ART, una vez, `_cronClaim('weeklyreview')`) `_weeklyMetrics(now)` arma las métricas de la semana y
+`weeklyReview.decide(metrics, tuningActual)` devuelve impulsar / mantener / frenar con razones y recomendaciones. Si cambia el nivel, se guarda
+`Config['journeyTuning']` (= `tuningFor(level)`: pctMult, chipsMult, apPctPlus) y se borran las campañas futuras del autopiloto para que se rearmen.
+Informe + historial en `Config['weeklyReview']`. Rutas (clave de INICIO): `GET /api/admin/inicio/weekly-review`, `POST …/run` (fuerza).
+
+**Métricas:** cargadores/cargas/monto de la semana y cargadores de la anterior; `repeatRate` = de los que cargaron la semana anterior, cuántos
+también ésta (y `prevRepeatRate` para la semana previa); `giftRatio` = regalos/depósitos de los `DailyClose` de la semana; efectividad de los
+NotifBatch enviados hace 7–14 d (recorrido: carga real en 7 d, por paso; masivo: en 48 h); `RefundClaim` por tipo; registrados y primeras cargas;
+app instalada entre los que cargaron en 30 d; opt-out y fatiga; cohortes (`_inicioCohorts`); segmentos del último `journeyLast`.
+
+**Dónde se aplica el nivel:** `retentionJourney.pickStep(state, now, tuning)` (bono % ×pctMult redondeado a 5, tope 200; fichas ×chipsMult
+redondeadas a 500) y `_autopilotMonthItemsRaw` (`tb`: pct + apPctPlus, entre 10 y 100). El cache `_tuningCache` se refresca en
+`getJourneyTuning()` (lo llaman `_journeyScan` y `getAutopilotConfig`).
+
+**Trampas:** la decisión necesita cierres (`giftRatio` null ⇒ se trata como "hay margen") y ≥ 30 contactados para juzgar una conversión; no
+cambiar los umbrales sin correr `scripts/test-weekly-review.js`. El informe en texto (`reportText`) es lo que el owner copia para analizar afuera.
