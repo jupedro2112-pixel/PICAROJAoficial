@@ -828,9 +828,15 @@ async function changeUserPassword(username, newPassword) {
  *
  * @returns { success, redirectUrl, token } | { success:false, error, code }
  */
-async function createSession(username, password = null) {
+// #985 (owner 2026-10-24): "sacarle el menú superior; que el usuario de Girox se maneje siempre desde la app". El Partner API v1.15 tiene el
+// MODO EMBEBIDO del login único: con embed:true el casino oculta sus controles de sesión (Cerrar sesión / Iniciar sesión / Registrarse) en esa
+// pestaña o iframe, así el cambio de usuario pasa SOLO por nuestra app y nunca quedan cruzados. Va siempre (la app abre Girox adentro); kill switch
+// GIROX_SSO_EMBED=0. Lo que el casino NO permite ocultar por API (resto del header, cambio de clave en su Perfil) hay que pedírselo a 1girox.
+async function createSession(username, password = null, opts = {}) {
   const body = {};
   if (password) body.password = String(password);
+  const embed = opts && opts.embed != null ? !!opts.embed : process.env.GIROX_SSO_EMBED !== '0';
+  if (embed) body.embed = true;
 
   const r = await _request({
     method: 'post',

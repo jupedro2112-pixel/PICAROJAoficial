@@ -337,6 +337,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   próxima carga. Un bono nuevo que deba aplicarse a la carga va a esa cadena (no a `creditUserBalance`); el cliente que no reclamó no ve nada.
 - **LINK DE RESULTADOS DEL PUBLICISTA (#805):** `Campaign.statsToken` ⇒ `/r/<token>` muestra números agregados de esa campaña sin login
   (sólo lectura). Generar uno nuevo invalida el anterior; desactivar = `statsToken:null`. Nunca agregar ahí datos de usuarios ni retiros.
+- **GIROX EMBEBIDO (#985):** el login único va con `embed:true` (oculta los controles de sesión del casino; `GIROX_SSO_EMBED=0` lo apaga). No se puede
+  modificar la página de 1girox desde el iframe (otro dominio): header completo y cambio de clave en su Perfil se piden a 1girox; NUNCA hacer un proxy/espejo.
 - **KEY POR PUBLICISTA (#699, 2026-10-21):** un usuario que se registró por el link de un publicista (`User.giroxOwnerCampaign`) se opera
   en 1girox con la API key de ESE publicista (`Campaign.giroxApiKey`, resolver `girox.setKeyResolver` en server.js), no con la principal.
   Si a unos clientes les falla el casino/saldo y a otros no: mirar "Creado por" en 1girox y la key del publicista en el panel. Nunca

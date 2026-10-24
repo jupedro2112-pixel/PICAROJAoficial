@@ -8,6 +8,16 @@
 
 ## Sesión 2026-10-24
 
+### 985. Girox embebido: login único en MODO EMBEBIDO (sin controles de sesión del casino)
+**Pedido (owner):** "armemos un Girox para la gente usando la misma página, como plataforma principal interna de Pica Roja: sacarle el menú superior y
+que en el Perfil no se pueda cambiar la contraseña de Girox; siempre desde la app, que la cambia también en Girox".
+- `giroxService.createSession` manda `embed: true` (Partner API v1.15 §2.7): el casino oculta Cerrar sesión / Iniciar sesión / Registrarse en la pestaña
+  o iframe abierto por SSO ⇒ el usuario se maneja sólo desde la app. Env `GIROX_SSO_EMBED=0` lo apaga. El cambio de clave desde la app ya se sincroniza
+  a Girox (`PUT /players/{username}/password`).
+- Lo que NO se puede hacer desde nuestro lado (la página de 1girox es de otro dominio y no se puede tocar su HTML desde el iframe): ocultar el resto del
+  header ni el formulario de cambio de clave de su Perfil. Eso se pide a 1girox (modo "white-label / clave administrada por el partner"). Se descartó
+  hacer un espejo/proxy de 1girox.com bajo picaroja.com: rompe los juegos (los proveedores validan el dominio) y viola el acuerdo con la plataforma.
+
 ### 984. Clave única de verdad: guardarla desde Datos o desde INICIO fija las dos, sin pedir la anterior al admin — admin SW v207
 **Pedido (owner):** "no agarra [la clave]". Causa probable: ya había una clave distinta guardada (INICIO o Datos) o el bloqueo por 6 intentos.
 - `POST /api/admin/datos-ia-pin` y `POST /api/admin/inicio-pin` (sólo rol admin) escriben `datosIaPinHash` e `inicioPinHash` con el mismo valor y
