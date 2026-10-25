@@ -58,7 +58,8 @@ VIP.lobby = (function () {
             '<div class="prl-pr-bal" id="prlPrBal"></div>' + // #989: el usuario/saldo debajo del menú superior
             // #989 (owner): "un CÍRCULO de Carga rápida cuando la gente entra a jugar; abierto, que se vea y se diferencie de la página (si no se pierde todo del
             // mismo color)": cerrado = círculo verde con el logo + "CARGA RÁPIDA" debajo, centrado; abierto = el panel verde (picaroja.css .prl-qldock .casino-load).
-            '<div class="prl-qldock" id="prlQlDock"><button type="button" class="prl-qlchip" id="prlQlChip" onclick="VIP.lobby.load()" aria-label="Carga rápida"><span class="prl-qlc"><img src="' + SK.bar + '" alt=""><i>⚡</i></span><small>CARGA RÁPIDA</small></button></div>' +
+            // #989 (owner): "que sea movible y esté abajo a la derecha": el círculo flota abajo a la derecha (se arrastra, _dragQl) y el panel abre ahí mismo.
+            '<button type="button" class="prl-qlchip" id="prlQlChip" onclick="VIP.lobby.ql()" aria-label="Carga rápida" title="Carga rápida · arrastrame si te tapa algo"><span class="prl-qlc"><img src="' + SK.bar + '" alt=""><i>⚡</i></span><small>CARGA RÁPIDA</small></button>' +
             '<main class="prl-main" id="prlMain"></main>' +
             '<button type="button" class="prl-top-btn" id="prlUp" hidden onclick="VIP.lobby.top()" aria-label="Volver arriba">' + ico('up') + '</button>' +
             // #989 (owner): Menú a la izquierda · En vivo · Inicio · Deportes en la punta (+ Slots). Igual que la barra de la app cuando está (#prNav).
@@ -260,8 +261,23 @@ VIP.lobby = (function () {
             else { const m = $('prlMain'); if (m) m.innerHTML = _hero() + '<div class="prl-note">' + esc(d.error || 'No pudimos traer los juegos. Probá de nuevo.') + '</div>'; }
         } catch (_) { const m = $('prlMain'); if (m) m.innerHTML = _hero() + '<div class="prl-note">Sin conexión. Probá de nuevo.</div>'; }
     }
+    let _qlDragged = false;
+    function ql() { if (_qlDragged) return; load(); }
+    function _dragQl() { // #920 (gemela): el círculo se mueve como la burbuja de Girox; queda donde lo dejás (posición recordada)
+        const b = $('prlQlChip'); if (!b || b._drag || !window.PointerEvent) return; b._drag = true; b.style.touchAction = 'none';
+        try { const pos = JSON.parse(localStorage.getItem('vip_prl_ql_pos') || 'null'); if (pos && pos.left >= 0 && pos.top >= 0 && pos.left < window.innerWidth - 60 && pos.top < window.innerHeight - 40) { b.style.left = pos.left + 'px'; b.style.top = pos.top + 'px'; b.style.right = 'auto'; b.style.bottom = 'auto'; } } catch (_) {}
+        let sx = 0, sy = 0, r0 = null, dr = false;
+        b.addEventListener('pointerdown', (e) => { sx = e.clientX; sy = e.clientY; r0 = b.getBoundingClientRect(); dr = false; try { b.setPointerCapture(e.pointerId); } catch (_) {} });
+        b.addEventListener('pointermove', (e) => {
+            if (!r0) return; const dx = e.clientX - sx, dy = e.clientY - sy; if (!dr && Math.abs(dx) + Math.abs(dy) < 8) return; dr = true;
+            const host = b.offsetParent ? b.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
+            b.style.left = Math.min(Math.max(4, r0.left + dx), window.innerWidth - r0.width - 4) - host.left + 'px'; b.style.top = Math.min(Math.max(10, r0.top + dy), window.innerHeight - r0.height - 10) - host.top + 'px'; b.style.right = 'auto'; b.style.bottom = 'auto';
+        });
+        const end = () => { if (r0 && dr) { try { localStorage.setItem('vip_prl_ql_pos', JSON.stringify({ left: parseInt(b.style.left, 10), top: parseInt(b.style.top, 10) })); } catch (_) {} _qlDragged = true; setTimeout(() => { _qlDragged = false; }, 400); } r0 = null; dr = false; };
+        b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
+    }
     function open(view) {
-        const el = _shell(); el.hidden = false; document.body.classList.add('prl-open', 'casino-open'); // #914: modales (Perfil, Info, Retiro…) arriba de la página
+        const el = _shell(); el.hidden = false; try { _dragQl(); } catch (_) {} document.body.classList.add('prl-open', 'casino-open'); // #914: modales (Perfil, Info, Retiro…) arriba de la página
         try { _prNav(true); } catch (_) {} // F988
         _view = view || 'inicio'; _render(); _paintBal();
         try { VIP.stories.paint(); } catch (_) {} // #931: aro y contador de historias en la barra
@@ -367,5 +383,5 @@ VIP.lobby = (function () {
             let n = 0; const t = setInterval(() => { n++; if (VIP.state && VIP.state.currentToken && VIP.config) { clearInterval(t); try { VIP.home.openPlatform('picaroja'); } catch (_) { open('inicio'); } try { history.replaceState(null, '', location.pathname); } catch (_) {} } else if (n > 60) clearInterval(t); }, 500);
         }
     } catch (_) {}
-    return { liveProv, sportOf: (p) => SPORT_KEYS[p] || null, open, close, go, all, more, menu, withdraw, profile, top, search, play, sport, sportMatch, load, support, extraAll, listMore, back, sportsMenu, sportPick, skin: () => 'picaroja' };
+    return { liveProv, sportOf: (p) => SPORT_KEYS[p] || null, open, close, go, all, more, menu, withdraw, profile, top, search, play, sport, sportMatch, load, ql, support, extraAll, listMore, back, sportsMenu, sportPick, skin: () => 'picaroja' };
 })();

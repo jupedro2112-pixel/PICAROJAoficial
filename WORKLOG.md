@@ -68,6 +68,8 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   `localStorage vip_pr_disabled` y `_prOff()` anula la puerta (`_isDoor` false, `_localBrand()` = 'girox', `_injectPR` la saca de la lista, `openPlatform('picaroja')`
   ⇒ 1girox, stories `_doorBrand` null, la pantalla de ingreso no la muestra): todos entran al casino de 1girox, también quien la tenía elegida. No mueve
   plata (misma cuenta). Encendida de vuelta: vuelve a ser la predeterminada. La app lo toma en la próxima apertura (cache de /api/platforms 60 s).
+- **Círculo movible abajo a la derecha (owner) — SW v656:** `#prlQlChip` ya no va centrado arriba: flota abajo a la derecha (sobre la barra), se arrastra
+  (`_dragQl`, posición en `localStorage vip_prl_ql_pos`) y el panel verde abre ahí mismo (`#prLobby .casino-load`, fijo abajo a la derecha como en Girox).
 
 ## Sesión 2026-10-24
 
