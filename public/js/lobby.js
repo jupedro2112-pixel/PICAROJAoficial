@@ -110,8 +110,16 @@ VIP.lobby = (function () {
             const b = $('prlBoard'); if (b && b.isConnected) b.outerHTML = _hero();
         });
     }
+    // #989 (owner: "si aprietan Apostar que vaya a la deportiva a ese partido, si se puede"): HOY no se puede saltar al partido puntual — el Digitain de
+    // 1girox es un widget (SportFrame) fijo en su portada y Digitain no publica links por evento para nuestro dominio (gemela #940). Lo más cerca:
+    // abrir Digitain logueado (el mismo ingreso directo que un slot) y, mientras carga, avisar qué partido buscar. Si 1girox/Digitain dan un link por
+    // evento, se arma acá (`sportMatch`) sin tocar el resto.
+    function sportMatch(home, away) {
+        sport('/sports-new');
+        try { setTimeout(() => { try { VIP.ui.showToast('⚽ En Deportes buscá ' + home + ' – ' + away + ' y apostá con tu saldo', 'info'); } catch (_) {} }, 2200); } catch (_) {}
+    }
     function _match(m) {
-        const o = m.odds; const go = "VIP.lobby.sport('/sports-new')";
+        const o = m.odds; const go = "VIP.lobby.sportMatch('" + jsq(m.home) + "', '" + jsq(m.away) + "')";
         const team = (n, l) => '<span class="prl-mt">' + (l ? '<img src="' + esc(l) + '" alt="" loading="lazy" onerror="this.remove()">' : '<i></i>') + '<b>' + esc(n) + '</b></span>';
         const odd = (k, v) => '<button type="button" class="prl-mo" onclick="' + go + '"><small>' + k + '</small><b>' + (v ? Number(v).toFixed(2) : '—') + '</b></button>';
         return '<div class="prl-m">' +
@@ -353,5 +361,5 @@ VIP.lobby = (function () {
             let n = 0; const t = setInterval(() => { n++; if (VIP.state && VIP.state.currentToken && VIP.config) { clearInterval(t); try { VIP.home.openPlatform('picaroja'); } catch (_) { open('inicio'); } try { history.replaceState(null, '', location.pathname); } catch (_) {} } else if (n > 60) clearInterval(t); }, 500);
         }
     } catch (_) {}
-    return { liveProv, sportOf: (p) => SPORT_KEYS[p] || null, open, close, go, all, more, menu, withdraw, profile, top, search, play, sport, load, support, extraAll, listMore, back, sportsMenu, sportPick, skin: () => 'picaroja' };
+    return { liveProv, sportOf: (p) => SPORT_KEYS[p] || null, open, close, go, all, more, menu, withdraw, profile, top, search, play, sport, sportMatch, load, support, extraAll, listMore, back, sportsMenu, sportPick, skin: () => 'picaroja' };
 })();

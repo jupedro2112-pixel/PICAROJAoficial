@@ -52,6 +52,10 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   inicio con Top partidos arriba y sin fotos, proveedores, lobby, populares, nuevos, deportes directos, En vivo, Slots con carga al bajar, Juegos nuevos,
   Carga rápida abierta/✕/botón/no se reabre) + `test-sorteos-front.js`, `test-sorteos-rules.js` y el humo de #988 siguen OK; `node --check` en todo.
   No se pudo abrir en un navegador real (Tails sin node_modules): revisar en el teléfono el alto de la Carga rápida abierta sobre la página y los escudos de ESPN.
+- **Apostar en un partido puntual (owner: "que vaya a la deportiva a ese partido, si se puede") — SW v652:** HOY no se puede: el Digitain de 1girox es un widget
+  (SportFrame) fijo en su portada y Digitain no publica links por evento para nuestro dominio (gemela #940: bloquea Tor y exige el `parent` autorizado).
+  Lo más cerca: `VIP.lobby.sportMatch(home, away)` abre Digitain logueado (mismo ingreso directo que un slot) y a los 2 s avisa "⚽ En Deportes buscá A – B".
+  Para que salte al partido hay que pedirle a 1girox un link por evento de Digitain (o que Digitain autorice picaroja.com); se enchufa en `sportMatch`.
 
 ## Sesión 2026-10-24
 
