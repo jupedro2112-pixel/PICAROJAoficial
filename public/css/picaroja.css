@@ -137,6 +137,7 @@ body.prl-appnav #bottomNav .tn-ico svg.prl-ic, body.prl-appnav #bottomNav .tn-ic
 body.prl-appnav #prlSportPop.prl-sportpop { z-index: 99996; }
 body.prl-appnav #bottomNav #navPrLive, body.prl-appnav #bottomNav #navPrSlots { flex: 1 1 0; } /* #989: 5 botones: Menú · Slots · Inicio · En vivo · Deportes */
 body.prl-appnav #bottomNav .tn-btn .tn-lbl { font-size: 9px; letter-spacing: 0; }
+body.prl-appnav #bottomNav #navInicio .prl-nav-logo img { width: 24px; height: 24px; border-radius: 7px; display: block; object-fit: cover; background: #fff; } /* #989: logo PICA ROJA en el Inicio del medio */
 body.has-install-bar .prl { bottom: 0; padding-bottom: calc(64px + var(--sab, 0px)); box-sizing: border-box; } /* #920: sin hueco entre el menú y la barra de instalar */
 body.has-install-bar .prl-nav { padding-bottom: 6px; }
 /* #922 selector chico de deportes (Digitain · Ultim8 · Caballos · TurfWin · Póker) */

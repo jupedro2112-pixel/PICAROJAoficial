@@ -112,6 +112,8 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   después de Proveedores, "Casino en vivo" = los 4 lobbies de Girox en UNA fila con las tarjetas de siempre, y enseguida Populares (los más jugados).
   Orden del Inicio: sorteos · Top partidos · Proveedores · Casino en vivo (4) · Populares · buscador · Nuevos · En vivo · proveedores principales.
 - **Botón de los recuadros del sorteo (owner): "Inscribite, es gratis ›"** (anotado: "Ya estás inscripto ✓ · Ver detalle ›") — SW v667.
+- **Barra de abajo (owner: "Menú, Slots, Inicio en el medio con el logo PICA ROJA pero mismo formato, En vivo con logo de ruleta y Deportes") — SW v668:**
+  `_prNav` también reemplaza el ícono de `#navInicio` por el logo (`.prl-nav-logo`, se restaura al cerrar) y "En vivo" lleva el ícono `roulette` (también en la barra propia).
 
 ## Sesión 2026-10-24
 

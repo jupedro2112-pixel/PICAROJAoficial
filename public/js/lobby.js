@@ -34,7 +34,8 @@ VIP.lobby = (function () {
         search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
         menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
         up: '<path d="M6 5h12M12 20V9M7 13l5-5 5 5"/>',
-        wallet: '<path d="M4 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a1 1 0 0 1-1-1V7z"/><path d="M4 7l11-3v3"/><path d="M15 13.5h2.5"/>'
+        wallet: '<path d="M4 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a1 1 0 0 1-1-1V7z"/><path d="M4 7l11-3v3"/><path d="M15 13.5h2.5"/>',
+        roulette: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6M3 12h6M15 12h6M5.6 5.6l4.3 4.3M14.1 14.1l4.3 4.3M18.4 5.6l-4.3 4.3M9.9 14.1l-4.3 4.3"/><circle cx="16.3" cy="7.7" r="1.3" fill="currentColor"/>' // #989: En vivo con ruleta
     };
     const ico = (k) => '<svg class="prl-ic" viewBox="0 0 24 24" aria-hidden="true">' + (IC[k] || '') + '</svg>';
     const SK = { name: 'PICA ROJA', home: '/images/picaroja/logo-mono.svg', bar: '/icons/icon-192x192.png' };
@@ -67,7 +68,7 @@ VIP.lobby = (function () {
             // barra propia (sin #bottomNav): Menú · Slots · Inicio · En vivo · Deportes (#989, igual que la barra de la app con la página abierta)
             '<nav class="prl-nav" aria-label="Menú"><button type="button" data-v="menu" onclick="VIP.home.casinoFullMenu()">' + ico('menu') + '<span>Menú</span></button>' + nb('slots', 'slots', 'Slots') +
               '<button type="button" data-v="inicio" class="prl-home" onclick="VIP.lobby.go(\'inicio\')"><img src="' + SK.home + '" alt=""><span>Inicio</span></button>' +
-              nb('vivo', 'live', 'En vivo') + '<button type="button" data-v="deportes" onclick="VIP.lobby.sportsMenu(event)">' + ico('sport') + '<span>Deportes</span></button>' +
+              nb('vivo', 'roulette', 'En vivo') + '<button type="button" data-v="deportes" onclick="VIP.lobby.sportsMenu(event)">' + ico('sport') + '<span>Deportes</span></button>' +
             '</nav>' +
             '<div class="prl-drawer" id="prlDrawer" hidden onclick="if(event.target===this)VIP.lobby.menu(false)"><aside class="prl-dr" role="dialog" aria-label="Mi cuenta"><div id="prlDrBody"></div></aside></div>' +
             '</div>');
@@ -348,9 +349,10 @@ VIP.lobby = (function () {
             _navSaved = {};
             Object.keys(_NAV_SWAP).forEach((id) => { const b = $(id); if (!b) return; const x = _NAV_SWAP[id]; _navSaved[id] = { html: b.innerHTML, on: b.getAttribute('onclick') };
                 b.innerHTML = '<span class="tn-ico">' + ico(x.ico) + '</span><span class="tn-lbl">' + x.lbl + '</span>'; b.setAttribute('onclick', x.on); });
-            const ini = $('navInicio'); if (ini) { _navSaved.navInicio = { on: ini.getAttribute('onclick') }; ini.setAttribute('onclick', 'VIP.lobby.close(true);VIP.home.goHome()'); }
+            // #989 (owner): Inicio en el medio con el LOGO de PICA ROJA, mismo formato (el botón rojo grande de la app)
+            const ini = $('navInicio'); if (ini) { _navSaved.navInicio = { html: ini.innerHTML, on: ini.getAttribute('onclick') }; ini.setAttribute('onclick', 'VIP.lobby.close(true);VIP.home.goHome()'); ini.innerHTML = '<span class="tn-ico tn-ico-dia prl-nav-logo" aria-hidden="true"><img src="' + SK.bar + '" alt=""></span><span class="tn-lbl">Inicio</span>'; }
             const mn = $('navMenu'); if (mn && !$('navPrSlots')) mn.insertAdjacentHTML('afterend', _navExtra('navPrSlots', mn.className, "VIP.lobby.go('slots')", 'slots', 'Slots', 'Todos los slots')); // Slots al lado de Menú
-            const pf = $('navPerfil'); if (pf && !$('navPrLive')) pf.insertAdjacentHTML('beforebegin', _navExtra('navPrLive', pf.className, "VIP.lobby.go('vivo')", 'live', 'En vivo', 'Casino en vivo')); // Casino en vivo al lado de Deportes
+            const pf = $('navPerfil'); if (pf && !$('navPrLive')) pf.insertAdjacentHTML('beforebegin', _navExtra('navPrLive', pf.className, "VIP.lobby.go('vivo')", 'roulette', 'En vivo', 'Casino en vivo')); // Casino en vivo (ruleta) al lado de Deportes
             document.body.classList.add('prl-appnav');
         } else if (!on && _navSaved) {
             Object.keys(_navSaved).forEach((id) => { const b = $(id); if (!b) return; if (_navSaved[id].html != null) b.innerHTML = _navSaved[id].html; b.setAttribute('onclick', _navSaved[id].on); });
