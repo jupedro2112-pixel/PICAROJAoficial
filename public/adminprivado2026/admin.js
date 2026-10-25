@@ -6115,8 +6115,8 @@ async function saveDatosIaPin(remove) {
     try {
         const r = await authFetch('/api/admin/datos-ia-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin }) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
-        try { if (pin) { sessionStorage.setItem('datos_pin', pin); sessionStorage.setItem('inicio_pin', pin); } else { sessionStorage.removeItem('datos_pin'); sessionStorage.removeItem('inicio_pin'); } } catch (_) {} // #984: queda activa ya
-        document.getElementById('dpPin').value = ''; showToast(j.enabled ? '🔑 Clave guardada: vale para Datos y para Principal (INICIO, Centro de avisos, Revisión semanal, Sorteos)' : 'Sin clave', 'success'); loadDatosIaPin();
+        try { sessionStorage.removeItem('datos_pin'); } catch (_) {}
+        document.getElementById('dpPin').value = ''; showToast(j.enabled ? 'Clave de Datos IA guardada' : 'Datos IA sin clave', 'success'); loadDatosIaPin();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 window.datosIaGate = datosIaGate; window.loadDatosIaPin = loadDatosIaPin; window.saveDatosIaPin = saveDatosIaPin;
@@ -17639,13 +17639,13 @@ async function inicioCreatePin() {
     const p2 = window.prompt('Repetí la clave:', ''); if (p1 !== p2) { showToast('Las claves no coinciden', 'error'); return false; }
     const r = await authFetch('/api/admin/inicio-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: p1 }) }); const j = await r.json();
     if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return false; }
-    sessionStorage.setItem('inicio_pin', p1); sessionStorage.setItem('datos_pin', p1); showToast('🔑 Clave creada (Principal y Datos)', 'success'); return true;
+    sessionStorage.setItem('inicio_pin', p1); showToast('🔑 Clave de INICIO creada', 'success'); return true;
 }
 async function inicioChangePin() {
-    const cur = ''; // #984: el administrador general la cambia sin la anterior
-    const p1 = window.prompt('Clave nueva (vale para Principal y para Datos):', ''); if (!p1) return; const p2 = window.prompt('Repetí la clave nueva:', ''); if (p1 !== p2) { showToast('Las claves no coinciden', 'error'); return; }
+    const cur = window.prompt('Clave actual de INICIO:', ''); if (cur === null) return;
+    const p1 = window.prompt('Clave nueva:', ''); if (!p1) return; const p2 = window.prompt('Repetí la clave nueva:', ''); if (p1 !== p2) { showToast('Las claves no coinciden', 'error'); return; }
     const r = await authFetch('/api/admin/inicio-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: p1, current: cur }) }); const j = await r.json();
-    if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } sessionStorage.setItem('inicio_pin', p1); sessionStorage.setItem('datos_pin', p1); showToast('🔑 Clave cambiada (Principal y Datos)', 'success');
+    if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } sessionStorage.setItem('inicio_pin', p1); showToast('🔑 Clave cambiada', 'success');
 }
 // #880 (owner): "dejá todo recuadrado con los datos en 0 si no tenemos datos": los recuadros se dibujan SIEMPRE (en 0 mientras carga,
 // sin clave o si falla) y después se llenan con los números reales.

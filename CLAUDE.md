@@ -58,9 +58,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - `src/utils/periodRanges.js` — rangos de fecha (ayer / semana / mes) en hora argentina.
 - `src/platforms/` — **multi-plataforma (2026-10-16):** registro (`index.js`), adaptador girox
   (envoltura de giroxService), **esqueleto de Ganamos** (`ganamos.js`, mismo contrato, sin API
-  hasta cargar `GANAMOS_API_URL`/`GANAMOS_API_KEY`), **de JUGAYGANA** (`jugaygana.js`, #378, ídem con `JUGAYGANA_*`;
-  logo en `public/images/jugaygana.png`) **y de PICA ROJA** (`picaroja.js`, #986, ídem con `PICAROJA_*`). Las tres son white-label de 1girox:
-  misma Partner API, se conectan SOLO con credenciales (SSM). Checklist: `docs/PLATFORMS.md`.
+  hasta cargar `GANAMOS_API_URL`/`GANAMOS_API_KEY`) **y de JUGAYGANA** (`jugaygana.js`, #378, ídem con `JUGAYGANA_*`;
+  logo en `public/images/jugaygana.png`). Checklist para conectarla: `docs/PLATFORMS.md`.
 - `src/models/` — schemas Mongoose canónicos (fuente de verdad). `Story.js` (#361) = HISTORIAS de la app que
   publica el admin (panel → Historias; PWA `js/stories.js`, anillo arriba a la derecha al lado de Perfil; vencen por
   horas, `Config['storiesConfig']`). No confundir con `InfluencerStory` (placements de publicistas).
@@ -338,12 +337,6 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   próxima carga. Un bono nuevo que deba aplicarse a la carga va a esa cadena (no a `creditUserBalance`); el cliente que no reclamó no ve nada.
 - **LINK DE RESULTADOS DEL PUBLICISTA (#805):** `Campaign.statsToken` ⇒ `/r/<token>` muestra números agregados de esa campaña sin login
   (sólo lectura). Generar uno nuevo invalida el anterior; desactivar = `statsToken:null`. Nunca agregar ahí datos de usuarios ni retiros.
-- **CASINO CON EL BLOQUE DEL MENÚ ARRIBA (#988):** dentro de la plataforma, debajo de la barra, va `#casinoHome` (saldo · sorteos · nivel/racha · CARGÁ AQUÍ ·
-  servicios copiados del básico) y el overlay SCROLLEA (barra sticky, iframe de una pantalla). Sin 1ª carga el cartel rojo grande ocupa el lugar del saldo; con
-  carga, CARGÁ AQUÍ rectangular; los dos despliegan la Carga rápida ahí mismo (`toggleCasinoLoad(force, true)`). Lo flotante del overlay va `position:fixed`.
-  #937 (flotante abierto al iniciar) quedó reemplazado.
-- **GIROX EMBEBIDO (#985):** el login único va con `embed:true` (oculta los controles de sesión del casino; `GIROX_SSO_EMBED=0` lo apaga). No se puede
-  modificar la página de 1girox desde el iframe (otro dominio): header completo y cambio de clave en su Perfil se piden a 1girox; NUNCA hacer un proxy/espejo.
 - **KEY POR PUBLICISTA (#699, 2026-10-21):** un usuario que se registró por el link de un publicista (`User.giroxOwnerCampaign`) se opera
   en 1girox con la API key de ESE publicista (`Campaign.giroxApiKey`, resolver `girox.setKeyResolver` en server.js), no con la principal.
   Si a unos clientes les falla el casino/saldo y a otros no: mirar "Creado por" en 1girox y la key del publicista en el panel. Nunca

@@ -1464,17 +1464,6 @@ plata ni sueldos). Foto: `storyImage` (SVG, `GET /api/stories/:id/auto.svg?v=STO
 `POST /api/admin/stories-autopilot/republish-today`): apaga las vigentes (no las personales), borra `sa-<hoy|ayer>-*` y publica las de hoy ya.
 
 
-## Casino con el bloque del menú arriba (#988, 2026-10-24)
-
-Al abrir la plataforma (`VIP.ui._showCasinoFrame` → `renderCasinoTabs` en home.js), debajo de `#casinoTopBar` se inserta UNA vez `#casinoHome`
-(`_casinoHomeEnsure`): saldo (`.js-play-bal`), "Ajustar la pantalla", tarjetas del sorteo (`data-srt-cards`, repintadas con `VIP.sorteos.paint()`),
-nivel/racha (copias sin ids de `#vipMiniBtn`/`#fireMiniBtn`, `_casinoHomeSync` cada 5 s), CARGÁ AQUÍ y los 4 servicios copiados de `#basicView`
-(`.bv-sec-t` + `.bv-quick`, sin ids). El overlay scrollea (`#casinoOverlay{overflow-y:auto}`), la barra es sticky y `_casinoFrameFit` fija el alto del
-iframe en una pantalla menos la barra. Estados: `body.nodep` ⇒ `#chCtaBig` (cartel rojo grande) en lugar del saldo; sin `nodep` ⇒ `#chLoadBtn` rectangular.
-Ambos llaman `VIP.home.casinoHomeLoad()` = `toggleCasinoLoad(force, true)`: el MISMO HTML de la Carga rápida flotante, pintado en `#chLoadPanel`
-(`.casino-load.ch-inline`, estático). `_paintFirstLoad` pinta también estos dos botones. **Trampas:** lo flotante del overlay tiene que ser `position:fixed`
-(el overlay ahora scrollea); un elemento nuevo del básico que quieras ver en el casino se copia acá (sin ids, los `onclick` globales siguen valiendo).
-
 ## Centro de avisos (#971, 2026-10-24)
 
 **Idea:** un solo lugar para todo lo automático que le llega al cliente, con un solo tope. Panel → Cronograma → 🧭 Centro de avisos; config en

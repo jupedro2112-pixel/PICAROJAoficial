@@ -8,72 +8,16 @@
 
 ## Sesión 2026-10-25
 
-### 989-R. ⏪ REVERTIDO: la plataforma "Pica Roja APP" y todo lo posterior (#989, #990) — main vuelve al estado de #988 (app v650)
-**Pedido (owner):** "revertí todo hasta que te pedí de traer Pica Roja; volvé a antes de Pica Roja; después de Pica Roja no va nada".
-- `main` quedó con el árbol EXACTO del commit `7513a45` (#988): sin `public/js/lobby.js`, `css/picaroja.css`, `data/*`, `images/picaroja/*`,
-  `src/services/sportsBoard.js`, rutas `/api/games/lobby`, `/api/sports/board`, `/api/me/brand`, `/api/admin/picaroja-app`, `/api/admin/meta-pixels`,
-  `/api/admin/girox/test-game`, el registro vuelve a tener `picaroja` como adaptador "Pronto" (#986), la CAPI vuelve a mandar sólo al píxel propio y al `_2`.
-- Todo ese trabajo (#989 completo: página, Top partidos, sorteos en recuadros, interruptor del panel, favoritos, Volver; y #990: píxeles por publicista con
-  CAPI por alcance y carga desde el panel) quedó guardado en la rama **`picaroja-989-backup`** (GitHub), commit `2f55808`. Si se quiere retomar: mirar su
-  WORKLOG (#989/#990) y volver a aplicar; nada de eso vive en `main`.
-- Versiones: app v650 y admin SW v207 (las de #988). Los teléfonos que tenían v676+ toman la vuelta atrás porque el SW cambia de contenido.
+### ⏪ main = lo que CORRE en producción (24/10, #982 + fallback ×1, app v647 · admin SW v206). Todo lo posterior quedó fuera.
+**Pedido (owner):** "revertí a lo último que subí, que quede igual igual así no se rompe nada". Se verificó contra picaroja.com (home.js, pin.css,
+landing, sorteos.js, index.html y admin-sw.js idénticos) que producción corre el commit `945cdee` (o `14edc06`, que sólo difiere en un fallback del
+server). `main` quedó con ESE árbol exacto; la única diferencia es esta nota.
+- **Fuera de `main` (pero en el historial de git y, lo de Pica Roja, en la rama `picaroja-989-backup`):** #983 (tope del bono de 1ª carga visible),
+  #984 (clave única), #985 (Girox embebido), #986 (PICA ROJA "Pronto"), #987 (toasts arriba), #988 (bloque del menú arriba del casino), #989 (plataforma
+  Pica Roja APP) y #990 (píxeles por publicista). Para retomar cualquiera: `git show <commit>` / `git cherry-pick`, nunca sin probar.
+- Deployar este `main` a AWS deja producción tal cual está hoy (nada cambia para los clientes).
 
 ## Sesión 2026-10-24
-
-### 988. 🎰 Dentro de la plataforma: arriba el bloque del menú (saldo · sorteos · nivel/racha · cargá · servicios) y abajo la plataforma entera — SW v650
-**Pedido (owner, captura):** "cuando entrás a la plataforma que parezca que seguís en el menú completo, pero que abajo cambie: Slots/Inicio/Deportes y,
-después de las fotos, el orden de juegos como está en la plataforma. Esto [captura del bloque: saldo, sorteos, nivel/racha, cartel rojo, servicios] es el inicio
-de la página completa con la página. En la primera carga, el cartel rojo de APRETÁ AQUÍ donde está el saldo, encimado y ajustado; cuando carga, que se vaya y
-quede uno más normal a mitad de tamaño: el botón Cargá aquí de PICA ROJA como el resto; cerrado, rectangular; expandido, tipo carga rápida".
-**Hecho (home.js `_casinoHomeEnsure`, pin.css #988):**
-- Bloque `#casinoHome` debajo de la barra del casino (`renderCasinoTabs` lo crea una vez y lo repinta en cada apertura): saldo (`.js-play-bal`, se actualiza
-  con el resto), "Ajustar la pantalla", las dos mitades del sorteo (`data-srt-cards`; `VIP.sorteos.paint` nuevo), nivel VIP + racha (COPIAS sin ids de
-  `#vipMiniBtn` / `#fireMiniBtn`, sincronizadas cada 5 s en el mismo intervalo de `_fireMiniSync`), CARGÁ AQUÍ y "Todo lo que ofrecemos" con los 4 servicios
-  (copiados del básico: Misiones · Reembolsos · Referidos · Ruleta; abren sus modales por encima del casino).
-- El overlay del casino ahora SCROLLEA (`overflow-y:auto`), la barra es sticky y el iframe mide una pantalla menos la barra (`_casinoFrameFit`, también al
-  rotar): al bajar, la plataforma queda sola con sus fotos, Slots/Inicio/Deportes y sus juegos tal cual los muestra 1girox (eso no se toca: es su página).
-  Lo flotante (burbuja CARGA RÁPIDA, panel flotante, franjas del gesto de volver, barra de instalar) pasó a `position:fixed` para no scrollear con el bloque.
-- **Sin primera carga** (`body.nodep`): el cartel rojo grande "X% VIGENTE · APRETÁ AQUÍ · carga mínima" ocupa el LUGAR del saldo (el saldo se esconde).
-  **Con carga:** vuelve el saldo y debajo queda "CARGÁ AQUÍ · Carga mínima $2.000" rectangular a mitad de altura (`.ch-load`; si hay promo viva dice
-  "X% VIGENTE · CARGÁ AQUÍ"). Los dos despliegan la **Carga rápida ahí mismo** (`#chLoadPanel`, `toggleCasinoLoad(force, true)`: alias/CBU/titular,
-  Adjuntar comprobante, Retirar, Soporte) y la ✕ o el mismo botón la pliegan (`VIP.home.casinoHomeLoad`).
-- #937 (abrir el flotante de Carga rápida al iniciar en Girox directo) queda reemplazado: la carga está a la vista arriba. La burbuja de abajo sigue.
-- Pruebas: `node --check`, `scripts/test-sorteos-front.js` y una simulación del bloque + desplegable (sin undefined, tags balanceados, ids sin duplicar).
-
-### 987. Carteles de arriba (toast y aviso en la app) en la línea del menú superior, sin borroso — SW v649
-**Pedido (owner):** "en iPhone 17 Pro Max, cuando salta un texto, lo tapa la parte superior: dejalo en la línea del menú superior y sin borroso arriba".
-- `.toast` (base.css: top 20px/right 20px) y `.in-app-notification-banner` (inline: top 16px) ignoraban la isla/barra de estado. Ahora `top = 6px +
-  --sat` (#823), a lo ancho, sin sombra ni animación. Se quita el `backdrop-filter` de la cabecera, la barra de soporte y la barra del casino.
-
-### 986. Plataforma PICA ROJA (white-label de 1girox) lista para conectar con credenciales; las tres plataformas del otro proyecto no necesitan código
-**Pedido (owner):** "de allá se usa todo sobre Girox, son páginas que salen de un mismo lado; de allá sólo las plataformas (Ganamos, Pica Roja y
-Jugaygana), el proyecto es éste". Verificado: los adaptadores `ganamos.js` y `jugaygana.js` ya implementan la Partner API de 1girox tal cual (mismos
-endpoints, `X-Api-Key`, mapeo de `wagering`): conectar = cargar `<PREFIJO>_API_URL` + `_API_KEY` (+ `_PLAY_URL`) en SSM.
-- Nuevo `src/platforms/picaroja.js` (copia del de Ganamos con prefijo `PICAROJA_`), registrado en `src/platforms/index.js` (ADAPTERS + DEFAULT_ITEMS, id
-  `picaroja`, logo el ícono de la app). La tarjeta "Pronto" de la PWA (`_withPicaroja`) ya desaparece sola cuando la plataforma `picaroja` existe en la
-  lista; mapeo de logo por id agregado. `docs/PLATFORMS.md`: tabla de variables por plataforma. Nada que pedirle al otro proyecto salvo las credenciales.
-
-### 985. Girox embebido: login único en MODO EMBEBIDO (sin controles de sesión del casino)
-**Pedido (owner):** "armemos un Girox para la gente usando la misma página, como plataforma principal interna de Pica Roja: sacarle el menú superior y
-que en el Perfil no se pueda cambiar la contraseña de Girox; siempre desde la app, que la cambia también en Girox".
-- `giroxService.createSession` manda `embed: true` (Partner API v1.15 §2.7): el casino oculta Cerrar sesión / Iniciar sesión / Registrarse en la pestaña
-  o iframe abierto por SSO ⇒ el usuario se maneja sólo desde la app. Env `GIROX_SSO_EMBED=0` lo apaga. El cambio de clave desde la app ya se sincroniza
-  a Girox (`PUT /players/{username}/password`).
-- Lo que NO se puede hacer desde nuestro lado (la página de 1girox es de otro dominio y no se puede tocar su HTML desde el iframe): ocultar el resto del
-  header ni el formulario de cambio de clave de su Perfil. Eso se pide a 1girox (modo "white-label / clave administrada por el partner"). Se descartó
-  hacer un espejo/proxy de 1girox.com bajo picaroja.com: rompe los juegos (los proveedores validan el dominio) y viola el acuerdo con la plataforma.
-
-### 984. Clave única de verdad: guardarla desde Datos o desde INICIO fija las dos, sin pedir la anterior al admin — admin SW v207
-**Pedido (owner):** "no agarra [la clave]". Causa probable: ya había una clave distinta guardada (INICIO o Datos) o el bloqueo por 6 intentos.
-- `POST /api/admin/datos-ia-pin` y `POST /api/admin/inicio-pin` (sólo rol admin) escriben `datosIaPinHash` e `inicioPinHash` con el mismo valor y
-  limpian `_pinFails` (bloqueo por intentos). El admin general no necesita la clave anterior: el login del panel ya lo protege; la clave es para el staff.
-- Panel: al guardar queda activa en la sesión (`datos_pin` + `inicio_pin`); título "Clave de Datos y Principal (una sola)".
-
-### 983. Tope del bono de 1ª carga a la vista en todos lados; crear la clave de INICIO también fija la de Datos — SW v648
-**Pedido (owner):** "¿aclaraste en algún lado el tope del bono del 100 %? no lo veo por ningún lado" · "¿cuál es la clave de Sorteos y Revisión semanal?".
-- "hasta $15.000" (valor vivo de `firstDepositCapArs`) en: notas de primera carga del básico/completo (`.fd-cap`), cartel de bienvenida, landing de pauta
-  (`welcome.capArs`), historia automática de bienvenida (`{tope}`) y pasos del recorrido (`{tope}`). La FAQ de Soporte y el texto del cartel ya lo tenían.
-- Clave: al crear la de INICIO desde el panel, si no hay clave de Datos se guarda la misma ⇒ una sola clave para Principal y Datos, se cree desde donde se cree.
 
 ### 982. 🔑 Una sola clave para todo lo protegido y agentes con 5 secciones — admin SW v206
 **Pedido (owner):** "¿cuál es la clave de todo? pongamos [clave] a todo; los agentes de cargas y pagos sólo Soporte, Comprobantes a verificar, Pagos

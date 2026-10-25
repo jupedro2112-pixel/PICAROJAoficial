@@ -36,11 +36,11 @@ const STEPS = [
   { id: 'new-1', segment: 'nuevo', day: 1, capped: true, name: 'Bienvenida día 1', gift: { type: 'none', hours: 24 },
     title: '👋 ¡Bienvenido a Pica Roja!', text: 'Tu cuenta ya está lista. Cargás por transferencia y las fichas entran solas en segundos; retirás cuando quieras a tu CBU. Si tenés cualquier duda, el Soporte está adentro de la app, de verdad te contestamos. ¡Te esperamos! 🔴' },
   { id: 'new-3', segment: 'nuevo', day: 3, capped: true, needsWelcome: true, name: 'Primera carga con bono', gift: { type: 'none', hours: 24 },
-    title: '🎁 Tu primera carga lleva +{first}%', text: 'Todavía no hiciste tu primera carga: cuando la hagas, te sumamos +{first}% automático (hasta ${tope}). Desde ${min} ya estás jugando. Entrá a la app, tocá Cargar y listo 🚀' },
+    title: '🎁 Tu primera carga lleva +{first}%', text: 'Todavía no hiciste tu primera carga: cuando la hagas, te sumamos +{first}% automático (con el tope de bonos). Desde ${min} ya estás jugando. Entrá a la app, tocá Cargar y listo 🚀' },
   { id: 'new-10', segment: 'nuevo', day: 10, capped: true, name: 'Recordatorio día 10', gift: { type: 'none', hours: 24 },
     title: '🔴 Pica Roja te está esperando', text: 'Reembolso diario del {daily}% sobre lo que pierdas, misiones semanales, niveles VIP, sorteos con ranking en vivo y referidos que pagan todos los meses. Todo eso te espera desde tu primera carga. ¿Arrancamos hoy? 😉' },
   { id: 'new-21', segment: 'nuevo', day: 21, capped: true, needsWelcome: true, name: 'Último aviso de bienvenida', gift: { type: 'none', hours: 24 },
-    title: '💬 ¿Te quedó alguna duda?', text: 'Vimos que todavía no cargaste. Si algo no te cerró o tuviste un problema, escribinos por Soporte y lo resolvemos en el momento. Tu bono de primera carga (+{first}%, hasta ${tope}) sigue guardado para vos 🎁' },
+    title: '💬 ¿Te quedó alguna duda?', text: 'Vimos que todavía no cargaste. Si algo no te cerró o tuviste un problema, escribinos por Soporte y lo resolvemos en el momento. Tu bono de primera carga (+{first}%) sigue guardado para vos 🎁' },
   // (#972, owner: "lo de instalar a los 2 o 9 días no sirve: muchos ya pierden el contacto si no tienen la app; tiene que ser EN EL
   //  MOMENTO" ⇒ no hay pasos de instalar la app acá: eso lo hace la propia app al entrar — activar avisos + 50 % EXTRA por instalar en la
   //  primera carga (installGift). Si en el futuro se quiere un recordatorio, va como paso 'sinapp' y pickStep ya lo soporta.)
@@ -118,11 +118,11 @@ function pickStep(state, now, tuning) {
 
 // Texto con variables. vars: { first, daily, min } (porcentajes y mínimo globales); monto/pct/h salen del paso.
 function render(pick, vars) {
-  const v = Object.assign({ first: 50, tope: '15.000', daily: 10, min: '5.000' }, vars || {});
+  const v = Object.assign({ first: 50, daily: 10, min: '5.000' }, vars || {});
   const money = (n) => Math.round(Number(n) || 0).toLocaleString('es-AR');
   const fill = (t) => String(t || '')
     .replace(/\{h\}/g, String(pick.hours)).replace(/\{pct\}/g, String(pick.giftType === 'percent' ? pick.amount : v.first))
-    .replace(/\{monto\}/g, money(pick.amount)).replace(/\{first\}/g, String(v.first)).replace(/\{tope\}/g, String(v.tope)).replace(/\{daily\}/g, String(v.daily)).replace(/\{min\}/g, String(v.min));
+    .replace(/\{monto\}/g, money(pick.amount)).replace(/\{first\}/g, String(v.first)).replace(/\{daily\}/g, String(v.daily)).replace(/\{min\}/g, String(v.min));
   return { title: fill(pick.step.title).slice(0, 100), message: fill(pick.step.text).slice(0, 500) };
 }
 

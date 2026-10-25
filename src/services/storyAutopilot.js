@@ -118,7 +118,7 @@ const THEMES = [
   { key: 'deportes', title: '⚽ Deportes en vivo', text: 'Fútbol argentino, Libertadores, Champions, Premier y mucho más. Apostá antes y durante el partido desde Deportes.', link: 'app:deportes', label: 'Ir a Deportes ›', bg: '#14532d', img: { style: 'page', accent: '#16a34a', kicker: 'Deportes', icon: 'deportes', h1: 'Apostá al fútbol en', h2: 'vivo', bullets: [['★', 'Fútbol argentino', 'Liga, Copa y la Selección'], ['✦', 'Copas internacionales', 'Libertadores, Champions y más'], ['✓', 'Antes y durante', 'Apostá mientras se juega']], cta: 'Ir a deportes' } },
   { key: 'app', title: '📲 Llevá Pica Roja en el celu', text: 'Instalá la app: entrás en un toque, te llegan los avisos de bonos y tenés todo a mano.', link: 'app:instalar', label: 'Instalar la app ›', bg: '#334155', img: { style: 'page', accent: '#e60023', kicker: 'Instalá la app', icon: 'app', h1: 'Llevá Pica Roja', h2: 'en tu celu', bullets: [['✓', 'Entrás en un toque', 'Con tu sesión iniciada'], ['★', 'Te avisamos todo', 'Cargas, retiros y bonos'], ['$', 'Regalos para la app', 'Bonos para los que la tienen']], cta: 'Instalar la app' } },
   { key: 'seguro', title: '🔒 Tu cuenta, segura', text: 'Verificación por SMS y retiros sólo a cuentas a tu nombre. Tu plata y tus datos, cuidados.', link: 'app:verificar', label: 'Verificar mi celular ›', bg: '#0c4a6e', img: { style: 'page', accent: '#0284c7', kicker: 'Tu cuenta, segura', icon: 'seguro', h1: 'Verificá tu', h2: 'teléfono', bullets: [['✓', 'Verificación por SMS', 'Sólo vos confirmás tus retiros'], ['$', 'Retiros a tu nombre', 'Sólo a cuentas tuyas'], ['★', 'Datos cuidados', 'Tu plata y tus datos protegidos']], cta: 'Verificar mi celular' } },
-  { key: 'primera', title: '🎁 Bienvenida para los nuevos', text: 'Si es tu primera carga, te sumamos un {pct}% extra automático (hasta {tope}). Todos los días se suman jugadores nuevos.', link: 'app:cargar', label: 'Hacer mi primera carga ›', bg: '#be123c', img: { style: 'page', accent: '#e60023', kicker: 'Bienvenida', icon: 'regalo', h1: 'Tu primera carga con', h2: '+{pct}% extra', bullets: [['$', '+{pct}% automático', 'En tu primera carga'], ['★', 'Después, más regalos', 'Instalando la app y activando notificaciones'], ['✓', 'Todos los días', 'Se suman jugadores nuevos']], cta: 'Hacer mi primera carga', note: 'El bono se juega ×{rx} (rollover) para retirarlo' } }
+  { key: 'primera', title: '🎁 Bienvenida para los nuevos', text: 'Si es tu primera carga, te sumamos un {pct}% extra automático. Todos los días se suman jugadores nuevos.', link: 'app:cargar', label: 'Hacer mi primera carga ›', bg: '#be123c', img: { style: 'page', accent: '#e60023', kicker: 'Bienvenida', icon: 'regalo', h1: 'Tu primera carga con', h2: '+{pct}% extra', bullets: [['$', '+{pct}% automático', 'En tu primera carga'], ['★', 'Después, más regalos', 'Instalando la app y activando notificaciones'], ['✓', 'Todos los días', 'Se suman jugadores nuevos']], cta: 'Hacer mi primera carga', note: 'El bono se juega ×{rx} (rollover) para retirarlo' } }
 ];
 // #909 (owner 2026-10-24: "que publique 5 historias todos los días y que las rote, siempre eran nuevas historias"): cada tema tiene
 // OTRAS redacciones; cuando el tema vuelve a tocar (cada ~3 días) sale con la siguiente, así ningún día repite texto con el anterior.
@@ -148,7 +148,7 @@ const ALTS = {
     { title: '🔔 No te pierdas nada', text: 'Instalá Pica Roja en el celu: avisos de bonos, acceso directo y todo a mano.' }],
   seguro: [{ title: '🛡️ Jugá tranquilo', text: 'Celular verificado por SMS y retiros sólo a cuentas a tu nombre. Tu cuenta está protegida.' },
     { title: '🔒 Seguridad primero', text: 'Verificá tu celular desde Perfil: así tu cuenta y tus retiros quedan protegidos.' }],
-  primera: [{ title: '🎁 Tu primera carga, con extra', text: 'Si todavía no hiciste tu primera carga, llevás un {pct}% extra automático (hasta {tope}). Empezá hoy.' },
+  primera: [{ title: '🎁 Tu primera carga, con extra', text: 'Si todavía no hiciste tu primera carga, llevás un {pct}% extra automático. Empezá hoy.' },
     { title: '🆕 Para los que recién llegan', text: 'La primera carga trae un {pct}% extra automático. Bienvenido a Pica Roja.' }]
 };
 // #931 (owner 2026-10-24): "que se publiquen en el cambio de día: se borran y se publican de vuelta a las 00 hs". Las 5 salen juntas apenas
@@ -229,8 +229,7 @@ function planDay(dayKey, matches, ctx) {
   }
   // {pct} = bono de la 1ª carga, {rx} = rollover global (Config): nunca fijos en el texto.
   const rx = ctx.rolloverX > 0 ? ctx.rolloverX : 5;
-  const tope = ctx.firstCap > 0 ? '$' + Math.round(ctx.firstCap).toLocaleString('es-AR') : 'el tope de bonos'; // #983
-  const fill = (v) => (typeof v === 'string' ? v.replace(/\{pct\}/g, String(pct)).replace(/\{tope\}/g, tope).replace(/\{rx\}/g, String(rx)) : (Array.isArray(v) ? v.map(fill) : (v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)])) : v))); // #845: también listas (beneficios)
+  const fill = (v) => (typeof v === 'string' ? v.replace(/\{pct\}/g, String(pct)).replace(/\{rx\}/g, String(rx)) : (Array.isArray(v) ? v.map(fill) : (v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fill(x)])) : v))); // #845: también listas (beneficios)
   return matchItems.concat(out.map((x, i) => Object.assign({ slot: i, time: SLOTS[i] }, x))).map((x) => (x.img ? Object.assign(x, { img: fill(x.img) }) : x));
 }
 

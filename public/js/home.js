@@ -225,7 +225,7 @@
         } catch (_) {}
         try { const s = _el('fireHomeSub'), st = _el('fireHomeStreak'); const ms = _el('fireMiniSub'), mst = _el('fireMiniStreak'); if (s && ms) ms.textContent = (s.textContent || '').trim() || 'Reclamá tu premio de hoy'; if (st && mst) mst.textContent = (st.textContent || '0').trim() + ' d'; } catch (_) {}
     }
-    setInterval(() => { _fireMiniSync(); try { _casinoHomeSync(); } catch (_) {} }, 5000); // #988: + copia nivel/racha al bloque del casino
+    setInterval(_fireMiniSync, 5000);
     // #512: MENÚ BÁSICO — saludo + saldo, CARGAR, RETIRAR, chips de plataforma (fija la preferida) y "Entrar a jugar".
     // #636: usuario con logo en la franja del saldo del completo
     function _paintBsUser() { try { const u = VIP.state && VIP.state.currentUser && VIP.state.currentUser.username; const b = _el('bsUserName'); if (b) b.textContent = u || '—'; } catch (_) {} }
@@ -285,7 +285,7 @@
         const b = _el('navPlat'); if (!b) return;
         const p = _platChosen();
         const img = _el('navPlatLogo'), ico = _el('navPlatIco'), lbl = _el('navPlatLbl');
-        const logo = p && (p.logoUrl || (p.id === 'girox' ? '/images/soporte-1girox.png' : (p.id === 'ganamos' ? '/images/ganamos.png' : (p.id === 'picaroja' ? '/icons/icon-192x192.png' : (p.id === 'jugaygana' ? '/images/jugaygana.png' : '')))));
+        const logo = p && (p.logoUrl || (p.id === 'girox' ? '/images/soporte-1girox.png' : (p.id === 'ganamos' ? '/images/ganamos.png' : (p.id === 'jugaygana' ? '/images/jugaygana.png' : ''))));
         if (img && logo) { img.src = logo; img.hidden = false; if (ico) ico.hidden = true; } else { if (img) img.hidden = true; if (ico) ico.hidden = false; }
         if (lbl) lbl.textContent = 'JUGÁ AQUÍ'; // #623 (owner): dice JUGÁ AQUÍ; el logo muestra la elegida
         b.title = 'Elegí dónde jugar con tu saldo';
@@ -335,8 +335,7 @@
     let _fdJ = null;
     // #974: el extra por instalar puede ser un monto fijo ($5.000) o un % → un solo texto para las dos formas.
     const _fdExtraTxt = (j) => { if (!j) return ''; const m = Number(j.extraMonto) || 0; if (m > 0) return '$' + m.toLocaleString('es-AR'); const e = Number(j.extra) || 0; return e > 0 ? e + '%' : ''; };
-    const _fdCapTxt = (j) => { const c = Number(j && j.capArs) || 0; return c > 0 ? ' · hasta $' + c.toLocaleString('es-AR') : ''; }; // #983: el tope, siempre a la vista
-    const _FD_NOTE_INNER = (pct, extra, capTxt) => '<span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">' + pct + '%</span> automático</b><small class="fd-cap">' + (capTxt || '') + '</small></span>' +
+    const _FD_NOTE_INNER = (pct, extra) => '<span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">' + pct + '%</span> automático</b></span>' +
         '<span class="fd-app"' + (extra ? '' : ' hidden') + '>📲 Después, <b>+<span class="fd-pct-app">' + extra + '</span> EXTRA</b> instalando la app y activando las notificaciones</span>';
     function _fdNotesPaint() {
         _fdPromoLoad().then((j) => {
@@ -347,7 +346,6 @@
                 el.hidden = !show; if (!show) return;
                 el.querySelectorAll('.fd-pct').forEach((x) => { x.textContent = j.pct + '%'; });
                 el.querySelectorAll('.fd-pct-app').forEach((x) => { x.textContent = extra; }); // #839: el EXTRA, no la suma · #974 monto o %
-                el.querySelectorAll('.fd-cap').forEach((x) => { x.textContent = _fdCapTxt(j); }); // #983
                 el.querySelectorAll('.fd-app').forEach((x) => { x.hidden = !extra; });
             });
         }).catch(() => {});
@@ -372,7 +370,7 @@
         const extra = _fdExtraTxt(j); // #974
         // #839 (owner): "no es 150% si instalás: es 100% por la primera carga y el 50% EXTRA después de la carga, instalando la app y activando
         // las notificaciones (que exija esos 2 pasos)". Dos líneas claras; nunca la suma.
-        return '<p class="fd-note">' + _FD_NOTE_INNER(j.pct, extra, _fdCapTxt(j)) + '</p>';
+        return '<p class="fd-note">' + _FD_NOTE_INNER(j.pct, extra) + '</p>';
     }
     async function maybeFirstDepositPopup() {
         if (_fdShown) return; try { if (sessionStorage.getItem('vip_fd_seen')) return; } catch (_) {}
@@ -382,8 +380,7 @@
             const j = await _fdPromoLoad();
             if (!j || !j.show) return;
             const p = _el('fdPct'), pa = _el('fdPctApp'), ap = _el('fdApp'), tx = _el('fdTxt');
-            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (_fdExtraTxt(j) || '0%') + ' EXTRA'; // #839 · #974
-            try { document.querySelectorAll('#fdModal .fd-cap').forEach((x) => { x.textContent = _fdCapTxt(j); }); } catch (_) {} // #983 if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || '';
+            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (_fdExtraTxt(j) || '0%') + ' EXTRA'; // #839 · #974 if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || '';
             try { sessionStorage.setItem('vip_fd_seen', '1'); } catch (_) {}
             VIP.ui.showModal('fdModal');
         } catch (_) {}
@@ -2302,7 +2299,7 @@
     function casinoWithdraw() { try { if (VIP.withdraw && VIP.withdraw.openWithdrawModal) VIP.withdraw.openWithdrawModal(); else VIP.ui.showToast('Retiros no disponibles ahora', 'error'); } catch (_) {} }
 
     // ---- Carga rápida DENTRO del casino (#261): formato CARGA (no chat), descartable como el soporte ----
-    let _quickDismissed = false, _quickOpen = false, _chOpen = false; // #988: _chOpen = Carga rápida desplegada en el bloque de arriba del casino
+    let _quickDismissed = false, _quickOpen = false;
     function _setupCasinoQuick() {
         const ov = _el('casinoOverlay');
         if (!ov) return;
@@ -2450,25 +2447,17 @@
         toggleCasinoLoad(true);
     }
     let _cqCbuTries = 0;
-    function toggleCasinoLoad(force, inline) {
+    function toggleCasinoLoad(force) {
         const ov = _el('casinoOverlay'); if (!ov) return;
-        // #988: `inline` = el panel DESPLEGABLE del bloque de arriba del casino (#chLoadPanel, debajo de CARGÁ AQUÍ); sin `inline`, el flotante de la burbuja.
-        let p = inline ? _el('chLoadPanel') : _el('casinoLoadPanel');
-        if (!p && !inline) {
+        let p = _el('casinoLoadPanel');
+        if (!p) {
             ov.insertAdjacentHTML('beforeend', '<div id="casinoLoadPanel" class="casino-load" style="display:none"></div>');
             p = _el('casinoLoadPanel');
         }
-        if (!p) return;
-        if (inline) {
-            _chOpen = typeof force === 'boolean' ? force : !_chOpen;
-            try { [_el('chLoadBtn'), _el('chCtaBig')].forEach((b) => { if (b) b.setAttribute('aria-expanded', _chOpen ? 'true' : 'false'); }); } catch (_) {}
-            if (!_chOpen) { p.hidden = true; return; }
-        } else {
-            _quickOpen = typeof force === 'boolean' ? force : !_quickOpen;
-            // #737 (owner): la burbuja CARGA RÁPIDA sigue visible abajo aunque el panel esté abierto (sólo se esconde si la sacó con la ✕ chica).
-            try { const bb = _el('casinoSupportBubble'); if (bb) bb.style.display = _quickDismissed ? 'none' : ''; } catch (_) {}
-            if (!_quickOpen) { p.style.display = 'none'; return; }
-        }
+        _quickOpen = typeof force === 'boolean' ? force : !_quickOpen;
+        // #737 (owner): la burbuja CARGA RÁPIDA sigue visible abajo aunque el panel esté abierto (sólo se esconde si la sacó con la ✕ chica).
+        try { const bb = _el('casinoSupportBubble'); if (bb) bb.style.display = _quickDismissed ? 'none' : ''; } catch (_) {}
+        if (!_quickOpen) { p.style.display = 'none'; return; }
         const cbu = (VIP.autoload && VIP.autoload.getCbu && VIP.autoload.getCbu()) || null;
         const list = (_platforms && _platforms.platforms) || [];
         const pref = (_platforms && _platforms.preferredPlatform) || null;
@@ -2476,7 +2465,7 @@
         const row = (k, v) => v ? '<div class="cl-row"><small>' + k + '</small><b>' + _esc(v) + '</b><button type="button" class="cl-copy" onclick="VIP.ui.copyText(\'' + _esc(v) + '\')">Copiar</button></div>' : '';
         p.innerHTML =
             // #711 (owner): "–" minimiza (queda sólo el logo de PICA ROJA como burbuja movible); "✕" cierra y la burbuja vuelve a logo + texto.
-            '<div class="cl-head"><span>💳 Carga rápida</span><button type="button" class="cl-close" onclick="' + (inline ? 'VIP.home.casinoHomeLoad(false)' : 'VIP.home.casinoQuickClose()') + '" title="Cerrar">✕</button></div>' + // #723: sólo ✕ · #988: la ✕ del desplegable lo pliega
+            '<div class="cl-head"><span>💳 Carga rápida</span><button type="button" class="cl-close" onclick="VIP.home.casinoQuickClose()" title="Cerrar">✕</button></div>' + // #723: sólo ✕
             (cbu ? row('Alias', cbu.alias) + row('CBU', cbu.number) + row('Titular', cbu.titular) : (_cqCbuTries >= 3 ? '<div class="cl-meta">No pudimos traer los datos de la cuenta. Tocá "Ir a Soporte" y te los pasamos.</div>' : '<div class="cl-meta">cargando datos…</div>')) +
             // (#631: si los datos todavía no llegaron, se vuelve a pintar en 1,5 s)
             _fdNoteHtml() + // #626
@@ -2489,10 +2478,10 @@
             // #687 (owner): botón para ir DIRECTO a Soporte desde adentro del casino
             '<button type="button" class="cl-btn cl-sup" onclick="VIP.home.casinoSupport()">💬 Ir a Soporte</button>' +
             _igQuickBtnHtml(); // #722 (owner): "instalar después" vive acá, abajo de Soporte
-        if (inline) p.hidden = false; else p.style.display = '';
+        p.style.display = '';
         _fdNotesPaint();
         // #839: sin datos ⇒ se PIDEN (antes sólo se re-pintaba esperando que otra pantalla los cargara); hasta 3 intentos.
-        if (!cbu && _cqCbuTries < 3) { _cqCbuTries++; Promise.resolve(VIP.autoload && VIP.autoload.ensureCbu ? VIP.autoload.ensureCbu() : null).then((c) => setTimeout(() => { if (inline ? _chOpen : _quickOpen) toggleCasinoLoad(true, inline); }, c ? 0 : 1500)).catch(() => {}); }
+        if (!cbu && _cqCbuTries < 3) { _cqCbuTries++; Promise.resolve(VIP.autoload && VIP.autoload.ensureCbu ? VIP.autoload.ensureCbu() : null).then((c) => setTimeout(() => { if (_quickOpen) toggleCasinoLoad(true); }, c ? 0 : 1500)).catch(() => {}); }
         if (cbu) _cqCbuTries = 0;
     }
     // ---------------- CASINO: barra superior con las plataformas (#222) ----------------
@@ -2529,9 +2518,8 @@
             bar = _el('casinoTopBar');
         }
         try { if (VIP.sorteos && VIP.sorteos.paintCasino) VIP.sorteos.paintCasino(); } catch (_) {} // #935
-        // #937 (owner) abría el flotante de Carga rápida al iniciar en Girox directo. #988 lo reemplaza: el bloque de arriba (saldo · sorteos ·
-        // nivel/racha · CARGÁ AQUÍ · servicios) ya tiene la carga a la vista y la despliega ahí mismo al tocarla.
-        try { _casinoHomeEnsure(); } catch (_) {}
+        // #937 (owner): "en Girox directo, al iniciar, la Carga rápida abierta para cargar, siempre"
+        if (_curPref === 'girox') setTimeout(() => { try { toggleCasinoLoad(true); } catch (_) {} }, 450);
         // #700: el contador de historias nuevas copia el de la barra principal; sin historias cargadas el botón igual abre el visor.
         try { const src = _el('storiesBadge'), dst = _el('ctStoriesBadge'); if (src && dst) { dst.textContent = src.textContent; dst.style.display = src.style.display; } const nh = _el('navHistorias'), cs = _el('ctStories'); if (nh && cs) cs.classList.toggle('has-active', nh.classList.contains('has-active') || nh.classList.contains('has-new')); } catch (_) {}
         document.body.classList.add('casino-open'); // #700: los modales (Info, Perfil, historias…) van por encima del casino
@@ -2541,53 +2529,6 @@
     function switchPlatform(platformId) {
         openPlatform(platformId);
     }
-    // ===== #988 (owner, captura 2026-10-24): "cuando entrás a la plataforma que parezca que seguís en el menú completo: arriba saldo, sorteos,
-    // nivel/racha, cargá y servicios; abajo la plataforma con sus fotos, Slots/Inicio/Deportes y sus juegos como están". Bloque #casinoHome
-    // debajo de la barra del casino; el overlay scrollea entero y el iframe mide una pantalla (al bajar, la plataforma queda sola con la barra
-    // fija arriba). Sin primera carga (body.nodep) el cartel rojo "X% VIGENTE · APRETÁ AQUÍ" ocupa el LUGAR del saldo; con carga queda
-    // "CARGÁ AQUÍ" rectangular a mitad de tamaño. Los dos despliegan la Carga rápida AHÍ MISMO (#chLoadPanel, toggleCasinoLoad(force, true)).
-    // Nivel/racha y los 4 servicios se COPIAN del básico/completo (sin ids) y se sincronizan cada 5 s (_casinoHomeSync desde _fireMiniSync).
-    function _casinoHomeEnsure() {
-        const bar = _el('casinoTopBar'); if (!bar) return null;
-        let h = _el('casinoHome');
-        if (!h) {
-            const strip = (s) => String(s || '').replace(/\sid="[^"]*"/g, '');
-            const vm = _el('vipMiniBtn'), fm = _el('fireMiniBtn'), bv = _el('basicView');
-            const bal = ((document.querySelector('.js-play-bal') || {}).textContent || '$0').trim();
-            const md = '$' + (Number(_platforms && _platforms.minDepositArs) || 2000).toLocaleString('es-AR');
-            const svc = bv ? ((bv.querySelector('.bv-sec-t') || { outerHTML: '' }).outerHTML + (bv.querySelector('.bv-quick') || { outerHTML: '' }).outerHTML) : '';
-            bar.insertAdjacentHTML('afterend',
-                '<div id="casinoHome" class="casino-home">' +
-                '<div class="play-bal ch-bal"><span class="pb-k">🎰 Tu saldo para jugar</span><b class="js-play-bal">' + _esc(bal) + '</b><button type="button" class="pb-r" onclick="VIP.ui.syncBalance && VIP.ui.syncBalance()" title="Actualizar saldo" aria-label="Actualizar saldo">↻</button></div>' +
-                '<button type="button" class="ev-cta ch-cta-big" id="chCtaBig" onclick="VIP.home.casinoHomeLoad()" aria-expanded="false"><span class="ev-cta-b">⚡ CARGÁ AQUÍ</span><span class="ev-cta-t">Carga mínima <b class="md-amt">' + md + '</b> · se acredita sola</span></button>' +
-                '<button type="button" class="fit-link" onclick="VIP.home.openFitPhone()">📱 Ajustar la pantalla a mi teléfono ›</button>' +
-                '<div class="srt-cards" data-srt-cards hidden></div>' +
-                '<div class="status-row ch-status"><button type="button" class="vip-mini" id="chVip" onclick="VIP.home.openVipLevels()">' + strip(vm ? vm.innerHTML : '') + '</button><button type="button" class="fire-mini" id="chFire" onclick="var b=document.getElementById(\'fireBtn\'); if(b) b.click();">' + strip(fm ? fm.innerHTML : '') + '</button></div>' +
-                '<button type="button" class="ch-load" id="chLoadBtn" onclick="VIP.home.casinoHomeLoad()" aria-expanded="false"><b>⚡ CARGÁ AQUÍ</b><small>Carga mínima <b class="md-amt">' + md + '</b> · se acredita sola</small><i>▾</i></button>' +
-                '<div id="chLoadPanel" class="casino-load ch-inline" hidden></div>' +
-                strip(svc) +
-                '</div>');
-            h = _el('casinoHome');
-            try { window.addEventListener('resize', _casinoFrameFit); } catch (_) {}
-        }
-        try { _paintFirstLoad(document.body.classList.contains('nodep')); } catch (_) {}
-        try { if (VIP.sorteos && VIP.sorteos.paint) VIP.sorteos.paint(); } catch (_) {}
-        _casinoHomeSync(); _casinoFrameFit(); setTimeout(_casinoFrameFit, 400);
-        return h;
-    }
-    function _casinoHomeSync() {
-        if (!_el('casinoHome')) return;
-        const strip = (s) => String(s || '').replace(/\sid="[^"]*"/g, '');
-        try { const vm = _el('vipMiniBtn'), cv = _el('chVip'); if (vm && cv) { const x = strip(vm.innerHTML); if (cv.innerHTML !== x) cv.innerHTML = x; } } catch (_) {}
-        try { const fm = _el('fireMiniBtn'), cf = _el('chFire'); if (fm && cf) { const y = strip(fm.innerHTML); if (cf.innerHTML !== y) cf.innerHTML = y; } } catch (_) {}
-    }
-    // El iframe mide una pantalla menos la barra: bajando, la plataforma queda completa (la barra es sticky).
-    function _casinoFrameFit() {
-        const ov = _el('casinoOverlay'), bar = _el('casinoTopBar'), fr = _el('casinoFrame'), st = _el('casinoFrameStatus'); if (!ov || !fr || !_el('casinoHome')) return;
-        const hh = Math.max(320, ov.clientHeight - (bar ? bar.offsetHeight : 0));
-        fr.style.flex = '0 0 auto'; fr.style.height = hh + 'px'; if (st) { st.style.flex = '0 0 auto'; st.style.minHeight = hh + 'px'; }
-    }
-    function casinoHomeLoad(force) { toggleCasinoLoad(force, true); }
     try {
         const _origShowFrame = VIP.ui && VIP.ui._showCasinoFrame;
         if (typeof _origShowFrame === 'function') {
@@ -2639,14 +2580,12 @@
         const pct = _bonusLivePct(on); const label = pct > 0 ? '🎁 ' + pct + '% VIGENTE · APRETÁ AQUÍ' : '⚡ CARGÁ AQUÍ';
         const sub = (on ? '⚠️ Aviso importante: carga mínima ' : 'Carga mínima ') + '<b class="md-amt">' + md + '</b> · se acredita sola';
         try { const b = document.querySelector('#evCtaTop .ev-cta-b'), t = document.querySelector('#evCtaTop .ev-cta-t'), cta = _el('evCtaTop'); if (b && t) { b.textContent = label; t.innerHTML = sub; if (cta) cta.classList.toggle('ev-cta-live', pct > 0); } } catch (_) {}
-        // #988: el cartel grande (sin primera carga) y el CARGÁ AQUÍ rectangular (con carga) del bloque de arriba del casino
-        try { const cb = document.querySelector('#chCtaBig .ev-cta-b'), ct = document.querySelector('#chCtaBig .ev-cta-t'); if (cb && ct) { cb.textContent = label; ct.innerHTML = sub; } const lb = document.querySelector('#chLoadBtn > b'), ls = document.querySelector('#chLoadBtn > small'); if (lb) lb.textContent = pct > 0 ? '🎁 ' + pct + '% VIGENTE · CARGÁ AQUÍ' : '⚡ CARGÁ AQUÍ'; if (ls) ls.innerHTML = 'Carga mínima <b class="md-amt">' + md + '</b> · se acredita sola'; } catch (_) {}
         try { const bb = document.querySelector('#bvLoadBtn > span > b'), bt = document.querySelector('#bvLoadBtn .bv-min'), bl = _el('bvLoadBtn'); if (bb && bt) { bb.textContent = pct > 0 ? pct + '% VIGENTE · APRETÁ AQUÍ' : 'CARGÁ AQUÍ'; bt.innerHTML = 'Carga mínima <b class="md-amt">' + md + '</b>'; if (bl) bl.classList.toggle('ev-cta-live', pct > 0); } } catch (_) {} // #960: en el básico, subtítulo corto (se iba de cuadro)
         // #776 (BUG GRAVE, usuario real "al presionar Carga rápida se cuelga absolutamente todo"): acá se llamaba toggleCasinoLoad(true)
         // SIEMPRE; ese panel llama _fdNotesPaint → firstGuidePaint → _paintFirstLoad → toggleCasinoLoad… en bucle infinito por microtareas
         // (la promesa de la promo ya estaba resuelta) y la pestaña quedaba congelada. Ahora el panel abierto se repinta SÓLO si el estado
         // (con/sin primera carga) realmente cambió.
-        if (_pflLast !== on) { _pflLast = on; try { if (_quickOpen) toggleCasinoLoad(true); } catch (_) {} try { if (_chOpen) toggleCasinoLoad(true, true); } catch (_) {} } // #988: también el desplegable de arriba
+        if (_pflLast !== on) { _pflLast = on; try { if (_quickOpen) toggleCasinoLoad(true); } catch (_) {} }
     }
     let _pflLast = null; // #776
     // #742 (owner): bono reclamado desde una HISTORIA → "Adjuntar comprobante · Bono +X%" en el casino, el completo y el básico hasta
@@ -2877,7 +2816,7 @@
         }
     } catch (_) {}
 
-    VIP.home = { casinoHomeLoad, /* #988 */ supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+    VIP.home = { supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,
