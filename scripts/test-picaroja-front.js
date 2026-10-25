@@ -86,7 +86,8 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   if (shell.includes('prl-hero2') || shell.includes('jugaygana') || shell.includes('ganamos') || shell.includes('buffalo')) throw new Error('quedó algo de otras marcas o de las fotos');
   if (!body.classList.contains('prl-open') || !body.classList.contains('casino-open')) throw new Error('clases del body');
   if (!body.classList.contains('prl-appnav') || !mk('navMenu').innerHTML.includes('Menú') || !mk('navPerfil').innerHTML.includes('Deportes') || !els.navPrSlots || !els.navPrLive) throw new Error('la barra de la app no cambió a Menú · Slots · Inicio · En vivo · Deportes');
-  if (!mk('navInicio').innerHTML.includes('icon-192x192.png') || !mk('navPerfil').innerHTML.includes('cx="16.3"')) throw new Error('Inicio con el logo PICA ROJA y En vivo con la ruleta');
+  if (mk('navInicio').innerHTML.includes('icon-192x192.png') || !mk('navPerfil').innerHTML.includes('cx="16.3"')) throw new Error('Inicio como estaba (sin logo) y En vivo con la ruleta');
+  if (/class="[^"]*tn-menu[^"]*" id="navPrSlots"/.test(mk('navMenu').innerHTML)) throw new Error('el botón Slots no puede llevar la clase tn-menu (pin.css la esconde)');
   let homeMode = ''; H.setHomeMode = (m) => { homeMode = m; };
   if (!ctx.storiesPainted) throw new Error('no repintó el aro de historias');
   console.log('✔ página: barra + sorteo en la barra + hueco de Carga rápida + nav de la app (' + shell.length + ' chars)');
@@ -131,7 +132,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   H.toggleCasinoLoad(); if (panel.style.display === 'none' || chip.hidden !== true) throw new Error('el círculo no la volvió a abrir');
   H.toggleCasinoLoad(false);
   L.ql(); if (panel.style.display === 'none') throw new Error('ql() no abre'); H.toggleCasinoLoad(false);
-  L.backHome(); if (homeMode !== 'full' || body.classList.contains('prl-open') || mk('navMenu').innerHTML.includes('tn-lbl') || mk('navInicio').innerHTML.includes('icon-192x192.png') || !els.navPrSlots.removed) throw new Error('Volver tiene que cerrar la página, dejar el menú completo y devolver la barra de la app'); delete els.navPrSlots; delete els.navPrLive; L.open('inicio');
+  L.backHome(); if (homeMode !== 'full' || body.classList.contains('prl-open') || mk('navMenu').innerHTML.includes('tn-lbl') || !els.navPrSlots.removed) throw new Error('Volver tiene que cerrar la página, dejar el menú completo y devolver la barra de la app'); delete els.navPrSlots; delete els.navPrLive; L.open('inicio');
   console.log('✔ Carga rápida: círculo flotante abajo a la derecha · tocar ⇒ panel verde · ✕ ⇒ vuelve el círculo');
   // 7) sorteo en la barra: cerrado = píldora (marca oculta); abierto = cartel debajo con ✕; el MISMO estado en la barra de Girox y en la de la página
   const tb = (brandId) => { const t = new El('tb-' + brandId); const brand = new El(brandId + '-brand'), btn = new El(brandId + '-btn'), bar = new El(brandId + '-bar'); btn.querySelector = () => null;

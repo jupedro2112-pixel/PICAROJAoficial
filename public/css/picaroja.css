@@ -77,12 +77,15 @@ body.prl-appnav #prLobby .prl-qlchip { bottom: calc(var(--sab, env(safe-area-ins
 .prl-mnote { margin: 4px 14px 0; font: 600 10.5px var(--p-font); color: var(--p-muted); }
 /* #989 (owner): el logo y el texto PICA ROJA siempre visibles y centrados en la barra de la página (pin.css los esconde en pantallas chicas) */
 html .prl-cbar .casino-brand { display: flex !important; justify-content: center !important; }
-html .prl-cbar .casino-brand .cb-box { display: inline-flex !important; align-items: center; gap: 6px !important; padding: 3px 9px 3px 4px !important; border-radius: 999px !important; }
-html .prl-cbar .casino-brand img { display: block !important; width: 24px !important; height: 24px !important; border-radius: 7px; position: static !important; transform: none !important; }
-html .prl-cbar .casino-brand .cb-txt { display: flex !important; flex-direction: column; align-items: flex-start; line-height: 1; }
-html .prl-cbar .casino-brand b { display: block !important; font-size: 11px !important; letter-spacing: .8px !important; }
-html .prl-cbar .casino-brand small { display: block !important; font-size: 7px !important; }
-@media (max-width: 360px) { html .prl-cbar .casino-brand small { display: none !important; } html .prl-cbar .tn-btn .tn-lbl { font-size: 8px; } }
+html .prl-cbar .casino-brand .cb-box { display: inline-flex !important; align-items: center; gap: 5px !important; padding: 2px 7px 2px 3px !important; border-radius: 999px !important; max-width: 100%; }
+html .prl-cbar .casino-brand img { display: block !important; width: 22px !important; height: 22px !important; border-radius: 6px; position: static !important; transform: none !important; }
+html .prl-cbar .casino-brand .cb-txt { display: flex !important; flex-direction: column; align-items: flex-start; line-height: 1; min-width: 0; }
+html .prl-cbar .casino-brand b { display: block !important; font-size: 9.5px !important; letter-spacing: .3px !important; white-space: nowrap; overflow: visible !important; text-overflow: clip !important; }
+html .prl-cbar .casino-brand small { display: none !important; } /* (owner: "se corta PICA ROJA, achicalo") */
+html .prl-cbar .tn-btn { padding: 4px 4px !important; min-width: 0; }
+html .prl-cbar .tn-btn .tn-lbl { font-size: 8px !important; letter-spacing: 0 !important; }
+html .prl-cbar .casino-back { padding: 6px 8px !important; font-size: 12px !important; }
+@media (min-width: 420px) { html .prl-cbar .casino-brand small { display: block !important; font-size: 7px !important; } html .prl-cbar .casino-brand b { font-size: 11px !important; letter-spacing: .6px !important; } }
 /* buscador, secciones y tarjetas (estilo Stake: títulos con ícono y ›, "Ver más" con línea) */
 .prl-search { display: flex; align-items: center; gap: 8px; margin: 16px 14px 0; padding: 0 12px; background: var(--p-surface); border: 2px solid var(--p-border); border-radius: 999px; color: var(--p-muted); }
 .prl-search:focus-within { border-color: var(--p-red, #e60023); }
@@ -146,7 +149,6 @@ body.prl-appnav #bottomNav .tn-ico svg.prl-ic, body.prl-appnav #bottomNav .tn-ic
 body.prl-appnav #prlSportPop.prl-sportpop { z-index: 99996; }
 body.prl-appnav #bottomNav #navPrLive, body.prl-appnav #bottomNav #navPrSlots { flex: 1 1 0; } /* #989: 5 botones: Menú · Slots · Inicio · En vivo · Deportes */
 body.prl-appnav #bottomNav .tn-btn .tn-lbl { font-size: 9px; letter-spacing: 0; }
-body.prl-appnav #bottomNav #navInicio .prl-nav-logo img { width: 24px; height: 24px; border-radius: 7px; display: block; object-fit: cover; background: #fff; } /* #989: logo PICA ROJA en el Inicio del medio */
 body.has-install-bar .prl { bottom: 0; padding-bottom: calc(64px + var(--sab, 0px)); box-sizing: border-box; } /* #920: sin hueco entre el menú y la barra de instalar */
 body.has-install-bar .prl-nav { padding-bottom: 6px; }
 /* #922 selector chico de deportes (Digitain · Ultim8 · Caballos · TurfWin · Póker) */

@@ -120,6 +120,10 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Sorteo desplegado CORTO (owner, capturas: "cuando abrís cada sorteo que se vea anotarse y lo que se sortea; el resto Ver más que abra la ventana, si
   no la gente se pierde") — SW v670:** `paintView(key, body, null, { short: true })` (sólo en el desplegado de la página): bloque "Anotate" con los
   requisitos y el botón, "Lo que se sortea" con los 3 premios y un botón "Ver más: cómo se gana, tickets, puntos y ranking ›" que abre la ventana completa.
+- **Fix (owner, capturas: "al lado de Menú poné Slots; el Inicio sin el logo; se corta PICA ROJA, achicalo") — SW v671:** el botón Slots de abajo existía
+  pero NO se veía: copiaba la clase de #navMenu (`tn-menu`), que pin.css esconde con `display:none !important` (sólo `#navMenu` se muestra por id) ⇒
+  ahora usa la clase de Perfil. Inicio vuelve al rombo de siempre. La marca de la barra más chica (9,5 px, sin "OFICIAL" en teléfonos) y botones más
+  compactos para que entren Volver · Menú · PICA ROJA · Historias · Info · Perfil.
 
 ## Sesión 2026-10-24
 
