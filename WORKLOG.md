@@ -128,6 +128,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   que vuelva al básico") — SW v672:** `VIP.home.backFromPlay()` (básico / intermedio si es el menú elegido, si no el completo). Lo usan "‹ Volver" y el
   Inicio de abajo de la página (`backHome`) y "‹ Volver" del casino de Girox (`casinoBack`: cierra el casino y la página si estaba debajo). Antes el
   casino volvía a la pantalla de entrada del menú directo y el Inicio de la página volvía a abrir la página.
+- **Sorteos chicos (owner, captura: "achicalos, que predomine 100 % la página de apuestas: 2 cuadrados a la mitad, uno al lado del otro") — SW v673:**
+  `.prl-srt` en 2 columnas; cada recuadro vertical y compacto (foto arriba de 52 px, kicker, 1° premio en 13 px, los 3 premios en 2 líneas, estado,
+  botón "Inscribite, es gratis ›"). Mismo contenido, la mitad de alto.
 
 ## Sesión 2026-10-24
 

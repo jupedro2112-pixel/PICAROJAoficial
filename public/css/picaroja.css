@@ -29,28 +29,28 @@ body.prl-appnav #prLobby .prl-qlchip { bottom: calc(var(--sab, env(safe-area-ins
 #prLobby .casino-load .cl-close { background: rgba(255,255,255,.22) !important; color: #fff !important; width: 30px; height: 30px; border-radius: 50%; font-weight: 900; }
 #prLobby .casino-load .cl-row { border-bottom-color: color-mix(in srgb, #128c4a 25%, var(--p-border)); }
 #prLobby .casino-load .cl-row .cl-copy { background: var(--p-card) !important; border-color: #128c4a !important; color: #128c4a !important; }
-/* #989 SORTEOS al tope del Inicio: DOS recuadros a lo ancho, serios (foto del premio, 1° premio grande, los 3 premios, estado); el detalle se despliega debajo */
-.prl-srt { display: grid; gap: 10px; padding: 4px 12px 6px; }
+/* #989 SORTEOS al tope del Inicio (owner, captura: "achicalos, que predomine 100 % la página de apuestas: 2 cuadrados a la mitad, uno al lado del otro") */
+.prl-srt { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 12px 4px; }
 .prl-srt:empty { display: none; }
-.prl-sb { position: relative; display: grid; grid-template-columns: 92px 1fr; gap: 12px; align-items: center; width: 100%; padding: 12px; border: 0; border-radius: 16px; text-align: left; cursor: pointer; color: #fff; font-family: var(--p-font);
-  background: linear-gradient(135deg, #1a0d10 0%, #3a0a12 55%, #7a0f1f 100%); box-shadow: 0 8px 22px rgba(120,10,25,.28); }
-.prl-sb-mensual { background: linear-gradient(135deg, #0e1116 0%, #1c2230 55%, #2f3b52 100%); box-shadow: 0 8px 22px rgba(20,30,50,.3); }
-.prl-sb-pic { display: flex; align-items: center; justify-content: center; width: 92px; height: 72px; border-radius: 12px; background: rgba(255,255,255,.08); overflow: hidden; }
+.prl-sb { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; padding: 9px 10px 9px; border: 0; border-radius: 14px; text-align: left; cursor: pointer; color: #fff; font-family: var(--p-font);
+  background: linear-gradient(135deg, #1a0d10 0%, #3a0a12 55%, #7a0f1f 100%); box-shadow: 0 6px 16px rgba(120,10,25,.24); }
+.prl-sb-mensual { background: linear-gradient(135deg, #0e1116 0%, #1c2230 55%, #2f3b52 100%); box-shadow: 0 6px 16px rgba(20,30,50,.26); }
+.prl-sb-pic { display: flex; align-items: center; justify-content: center; width: 100%; height: 52px; border-radius: 10px; background: rgba(255,255,255,.08); overflow: hidden; }
 .prl-sb-pic img { width: 100%; height: 100%; object-fit: cover; }
-.prl-sb-pic svg { width: 44px; height: 44px; fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; opacity: .9; }
-.prl-sb-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-right: 4px; }
-.prl-sb-t small { font-size: 10px; font-weight: 900; letter-spacing: 1.4px; color: #f3d19c; }
-.prl-sb-ok { color: #7cf2a6; letter-spacing: .6px; }
-.prl-sb-t b { font-size: 17px; font-weight: 900; line-height: 1.15; letter-spacing: -.2px; }
-.prl-sb-pz { font-size: 11.5px; line-height: 1.3; color: rgba(255,255,255,.85); }
-.prl-sb-st { font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,.92); margin-top: 2px; }
-.prl-sb-live { display: inline-block; font-style: normal; font-size: 9.5px; font-weight: 900; letter-spacing: 1px; padding: 2px 6px; border-radius: 6px; background: #e6002a; color: #fff; margin-right: 4px; }
-.prl-sb > i { grid-column: 1 / -1; justify-self: end; font-style: normal; font-size: 12px; font-weight: 900; color: #fff; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); }
+.prl-sb-pic svg { width: 30px; height: 30px; fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; opacity: .9; }
+.prl-sb-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.prl-sb-t small { font-size: 8.5px; font-weight: 900; letter-spacing: 1.1px; color: #f3d19c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prl-sb-ok { color: #7cf2a6; letter-spacing: .4px; }
+.prl-sb-t b { font-size: 13px; font-weight: 900; line-height: 1.12; letter-spacing: -.2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prl-sb-pz { font-size: 9.5px; line-height: 1.25; color: rgba(255,255,255,.82); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prl-sb-st { font-size: 9.5px; font-weight: 700; color: rgba(255,255,255,.92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prl-sb-live { display: inline-block; font-style: normal; font-size: 8px; font-weight: 900; letter-spacing: .8px; padding: 1px 5px; border-radius: 5px; background: #e6002a; color: #fff; margin-right: 3px; }
+.prl-sb > i { margin-top: auto; align-self: stretch; text-align: center; font-style: normal; font-size: 10.5px; font-weight: 900; color: #fff; padding: 6px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prl-sb:active > i { background: rgba(255,255,255,.14); }
+@media (min-width: 520px) { .prl-sb-pic { height: 72px; } .prl-sb-t b { font-size: 15px; } }
 .prl-srt + .srt-inline { margin: 0 12px 10px; }
 .srt-more-btn { padding: 4px 12px 14px; }
 .srt-more-btn button { width: 100%; border: 0; border-radius: 999px; padding: 13px 14px; background: var(--srt-g2, #c8102e); color: #fff; font: 900 13.5px var(--p-font); cursor: pointer; box-shadow: 0 6px 16px var(--srt-sh, rgba(200,16,46,.3)); }
-@media (max-width: 360px) { .prl-sb { grid-template-columns: 76px 1fr; } .prl-sb-pic { width: 76px; height: 62px; } .prl-sb-t b { font-size: 15px; } }
 /* #989 TOP PARTIDOS (formato Stake: hora · escudos · equipos · cuotas 1 X 2). Tocar = Digitain logueado; cuotas de referencia */
 .prl-board { margin-top: 4px; }
 .prl-mrow { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 14px 6px; scrollbar-width: none; }
