@@ -3,9 +3,6 @@
 // barras de progreso, pasa sola, tocar a la derecha/izquierda avanza/retrocede, mantener
 // apretado pausa. Las historias vencen solas (horas configurables en el panel).
 (function () {
-    // #962 (gemela) · #989: ¿la persona juega en Pica Roja APP (la página propia) y no en 1girox? ⇒ nada de la web de Girox: juego/deportes directos.
-    function _doorBrand() { try { if (localStorage.getItem('vip_pr_disabled') === '1') return null; /* #989: apagada desde el panel */ const b = localStorage.getItem('vip_brand'); if (b === 'picaroja') return b; if (b === 'girox') return null; return localStorage.getItem('vip_pr_off') === '1' ? null : 'picaroja'; } catch (_) { return 'picaroja'; } }
-    function _noGirox() { try { return document.body.classList.contains('prl-open') || !!_doorBrand(); } catch (_) { return false; } }
     'use strict';
     window.VIP = window.VIP || {};
 
@@ -52,10 +49,6 @@
         const lbl = _el('storiesLbl');
         if (lbl) lbl.textContent = _items.length ? (unseen ? 'Historias' : 'Historias') : 'Historias';
         btn.title = _items.length ? (_items.length + ' historia' + (_items.length === 1 ? '' : 's') + ' activa' + (_items.length === 1 ? '' : 's')) : 'Sin historias por ahora';
-        // #931 (owner: "las historias no funcionan en PICA ROJA"): la barra de arriba de las páginas de marca (PICA ROJA / Ganamos / JUGAYGANA)
-        // y la del casino también muestran el aro rojo y el contador de nuevas (antes la de las páginas no tenía id y nunca se pintaba).
-        try { document.querySelectorAll('.casino-topbar .tn-stories').forEach((b) => { b.classList.toggle('has-active', _items.length > 0); b.classList.toggle('has-new', unseen > 0);
-            const bd = b.querySelector('.st-badge'); if (bd) { bd.textContent = unseen > 9 ? '9+' : String(unseen); bd.style.display = unseen > 0 ? '' : 'none'; } }); } catch (_) {}
     }
 
     function open(startIdx) {
@@ -120,14 +113,13 @@
             // #474 (owner): links internos "app:<sección>" → cierran la historia y abren esa parte de la app.
             const APP_LINKS = { instalar: () => { try { VIP.appTest.doInstall(); } catch (_) { VIP.appTest.showInstallHelp(); } }, /* #674 */ referidos: () => VIP.ui.openReferralModal(), cargar: () => { try { VIP.home.easyLoad(); } catch (_) { VIP.home.setHomeMode('mini'); } }, ruleta: () => VIP.roulette.open(), reembolso: () => VIP.refunds.showRefundModal(), verificar: () => VIP.home.openVerifyPhone(), soporte: () => VIP.home.setHomeMode('mini'), misiones: () => VIP.home.openMissions(),
                 // #827: historias automáticas — casino directo en Deportes / en los juegos, retirar y niveles VIP
-                // #962 (owner: "ninguna visual de Girox en las otras páginas"): fuera de Girox, Deportes = link directo de la casa y "juegos" = la página.
-                deportes: () => { if (_noGirox()) { try { VIP.lobby.sport('/sports-new'); return; } catch (_) {} } if (VIP.ui.casinoGoTo && VIP.ui.casinoGoTo('/sports')) return; try { VIP.ui._casinoGamePath = '/sports'; } catch (_) {} VIP.home.openPlatform('girox', { embed: true }); }, // #854: mismo ingreso que favoritos
-                juegos: () => { if (_noGirox()) { try { VIP.lobby.open('slots'); return; } catch (_) {} } VIP.home.openPlatform('girox', { embed: true }); },
+                deportes: () => { if (VIP.ui.casinoGoTo && VIP.ui.casinoGoTo('/sports')) return; try { VIP.ui._casinoGamePath = '/sports'; } catch (_) {} VIP.home.openPlatform('girox', { embed: true }); }, // #854: mismo ingreso que favoritos
+                juegos: () => VIP.home.openPlatform('girox', { embed: true }),
                 retirar: () => { try { VIP.home.casinoWithdraw(); } catch (_) { VIP.withdraw.openWithdrawModal(); } },
                 vip: () => VIP.home.openVipLevels() }; // #646: verificar (Perfil → teléfono) y soporte
             const appKey = /^app:(\w+)$/i.exec(s.linkUrl || '');
             // #827: "app:play:/play/<agg>/<juego>" → casino directo en ESE juego (slot de la semana).
-            const playPath = /^app:play:(\/play\/[\w.\/@-]+)$/i.exec(s.linkUrl || '');
+            const playPath = /^app:play:(\/play\/[\w.\/-]+)$/i.exec(s.linkUrl || '');
             // #742 (owner): historia con BONO → botón "Reclamar ahora +X%": reclama, cierra y va directo a Girox (carga rápida).
             if (s.bonusActive && Number(s.bonusPct) > 0) {
                 link.href = '#'; link.style.display = ''; link.classList.add('st-bonus');
@@ -140,16 +132,9 @@
                 // #854: Deportes con el casino YA abierto ⇒ directo adentro (la sesión ya está), sin cerrar ni volver a entrar.
                 if (k === 'deportes' && VIP.ui && VIP.ui.casinoGoTo && VIP.ui.casinoGoTo('/sports')) return;
                 let wait = 0; try { if (VIP.ui && VIP.ui._casinoOpen) { VIP.ui.closeCasinoFrame(); wait = 350; } } catch (_) {}
-                // #931: tocada ADENTRO de una página de marca (PICA ROJA…): Cargar = la Carga rápida de la página; lo que se abre como modal
-                // (reembolso, misiones, referidos, retirar) va arriba; el resto (soporte, ruleta, VIP…) se abría DETRÁS ⇒ primero se cierra la página.
-                if (!wait && document.body.classList.contains('prl-open')) {
-                    if (k === 'cargar') { try { VIP.home.toggleCasinoLoad(); return; } catch (_) {} }
-                    if (!['reembolso', 'misiones', 'referidos', 'retirar', 'deportes', 'juegos'].includes(k)) { try { VIP.lobby.close(); wait = 200; } catch (_) {} }
-                }
                 try { if (wait && !['cargar', 'soporte'].includes(k)) VIP.home.setHomeMode('full'); } catch (_) {}
                 setTimeout(() => { try { if (fn) fn(); } catch (e) { console.warn('[stories] app link', e); } }, wait); }; }
             else if (playPath) { link.href = '#'; link.textContent = s.linkLabel || 'Jugar ahora ›'; link.style.display = ''; link.onclick = (ev) => { ev.preventDefault(); close();
-                if (_noGirox()) { try { VIP.home.gamePlay(playPath[1].replace(/^\/play\//, ''), s.linkLabel ? String(s.linkLabel).replace(/[›»]/g, '').trim() : 'el juego'); return; } catch (_) {} } // #962: juego directo
                 if (VIP.ui && VIP.ui.casinoGoTo && VIP.ui.casinoGoTo(playPath[1])) return; // #854
                 let wait = 0; try { if (VIP.ui && VIP.ui._casinoOpen) { VIP.ui.closeCasinoFrame(); wait = 350; } } catch (_) {}
                 setTimeout(() => { try { VIP.ui._casinoGamePath = playPath[1]; VIP.home.openPlatform('girox', { embed: true }); } catch (e) { console.warn('[stories] play', e); } }, wait); }; }
@@ -280,5 +265,5 @@
         ring.title = _items.length + ' historia' + (_items.length === 1 ? '' : 's');
         ring.style.display = '';
     }
-    VIP.stories = { init, load, loadPublic, open, openById, claimBonus, close, next, prev, pause, resume, paint: _paintButton };
+    VIP.stories = { init, load, loadPublic, open, openById, claimBonus, close, next, prev, pause, resume };
 })();

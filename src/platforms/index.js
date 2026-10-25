@@ -32,10 +32,8 @@ const Config = require('../models/Config');
 const ADAPTERS = {
   girox: require('./girox'),
   ganamos: require('./ganamos'),
-  jugaygana: require('./jugaygana') // #378: esqueleto, "Próximamente" hasta tener API
-  // #986 tenía acá `picaroja: require('./picaroja')` (white-label con API propia). #989 (owner): "Pica Roja APP" es la PÁGINA PROPIA de la app sobre la
-  // MISMA cuenta de 1girox (public/js/lobby.js, home.js `_injectPR`): el server NO la lista como plataforma (la app siempre manda 'girox'). El
-  // adaptador src/platforms/picaroja.js queda por si algún día hay una API propia: volver a sumarlo acá y a DEFAULT_ITEMS.
+  jugaygana: require('./jugaygana'), // #378: esqueleto, "Próximamente" hasta tener API
+  picaroja: require('./picaroja')     // #986: plataforma propia (white-label de 1girox), conecta con PICAROJA_API_URL/KEY
 };
 
 const DEFAULT_ID = 'girox';
@@ -44,11 +42,13 @@ const CONFIG_KEY = 'platforms';
 // logoUrl (#232): imagen de la plataforma (landing y app). Ruta del repo ("/images/…") o https.
 // Ganamos arranca sin logo → se muestra un badge con el nombre hasta que el panel cargue uno.
 const DEFAULT_ITEMS = {
-  girox:   { enabled: true, name: '1girox',  emoji: '🎰', order: 1, externalUrl: '', logoUrl: '/images/soporte-1girox.png' }, // #989 (owner): se llama "1girox" (la otra es "Pica Roja APP")
+  girox:   { enabled: true, name: 'Girox',   emoji: '🎰', order: 1, externalUrl: '', logoUrl: '/images/soporte-1girox.png' },
   // #298 (owner): Ganamos HABILITADA y visible, pero sin API se muestra "Próximamente" y no se puede elegir (connected=false).
   ganamos: { enabled: true, name: 'Ganamos', emoji: '🎲', order: 2, externalUrl: 'https://www.ganamosvip.me', logoUrl: '/images/ganamos-net.png' }, // #350: logo real (pica violeta)
   // #378 (owner 2026-10-18): JUGAYGANA visible como "Próximamente" (sin API ni web pública todavía; la URL se carga en el panel).
-  jugaygana: { enabled: true, name: 'JUGAYGANA', emoji: '🃏', order: 3, externalUrl: '', logoUrl: '/images/jugaygana.png' }
+  jugaygana: { enabled: true, name: 'JUGAYGANA', emoji: '🃏', order: 3, externalUrl: '', logoUrl: '/images/jugaygana.png' },
+  // #986: PICA ROJA, la plataforma propia (white-label de 1girox). Sin API conectada la app la muestra como "Pronto" (igual que las otras).
+  picaroja: { enabled: true, name: 'PICA ROJA', emoji: '🔴', order: 4, externalUrl: '', logoUrl: '/icons/icon-192x192.png' }
 };
 
 const DEFAULT_SETTINGS = {

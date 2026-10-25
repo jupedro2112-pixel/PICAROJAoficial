@@ -1251,7 +1251,7 @@ app.get('/api/landing/info', async (req, res) => {
     let welcome = null;
     try { const fd = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig(); welcome = { pct: fd, capArs: await getFirstDepositCapArs(), extraFixedArs: ig && ig.enabled ? ig.fixedArs : 0, withApp: fd + (ig && ig.enabled && !(ig.fixedArs > 0) ? ig.pct : 0) }; } catch (_) {} // #983: tope
     let services = []; try { services = await _landingServices(); } catch (_) {} // #555
-    res.json({ picarojaApp: await _picarojaAppOn(), /* #989 */  registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
+    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 
@@ -1260,8 +1260,6 @@ app.get('/linkreferido', (req, res) => {
   const ref = String(req.query.ref || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 12).toUpperCase();
   res.redirect(302, '/?ref=' + encodeURIComponent(ref));
 });
-// #907/#989: picaroja.com/paginaoficial = la app con la plataforma Pica Roja APP abierta (antes del vanity /:code, así una campaña no la tapa).
-app.get(['/paginaoficial', '/paginaoficial/'], (req, res) => res.redirect(302, '/?pr=1'));
 app.get('/:code', async (req, res, next) => {
   const candidate = req.params.code || '';
   // Sólo procesar si parece un código/slug válido: 3-40 chars, letras/números/_/-
@@ -5202,76 +5200,6 @@ async function _landingSignupHandler(req, res) {
 app.post('/api/landing/signup', landingIpLimiter, _landingSignupHandler);
 // #797: píxel(es) de Meta que la landing tiene que cargar en el navegador para esta campaña (ids públicos por naturaleza; los
 // valores salen de META_PIXEL_ID_n / META_PIXEL_PUBLISHER_n en SSM). Sin coincidencia ⇒ [] y la landing no carga fbq.
-// #990 (owner: "¿por qué no le llega el píxel al publicista picarojaok?"): diagnóstico de los píxeles de Meta (admin general, sesión del panel):
-//   GET  /api/admin/meta-pixels                 → cada píxel (id enmascarado, si tiene token, alcance, si va por CAPI, últimos envíos de esta instancia)
-//   GET  /api/admin/meta-pixels?campaign=XXXX   → además, qué píxeles reciben los eventos de esa campaña (navegador y CAPI)
-//   POST /api/admin/meta-pixels/:n/test         → manda un evento de prueba "PicaRojaTest" a ese píxel y devuelve la respuesta de Meta (token/píxel OK o el error)
-// #990 (owner: "quiero arreglarlo desde el panel"): píxeles por publicista cargados en Configuración → "Píxeles de Meta por publicista".
-// Config['metaPixels'] = [{ id, label, pixelId, tokenEnc, tokenLast4, scope:[...], testCode, capiOnly, updatedAt, updatedBy }]. El token se guarda cifrado
-// con JWT_SECRET (como hgcash/1girox); rotar JWT_SECRET ⇒ recargarlos. Se descifran al arrancar y cada 5 min (o al guardar) y van al servicio.
-async function _metaPixelsLoad() {
-  try {
-    const list = (await getConfig('metaPixels', [])) || [];
-    const dec = list.map((p) => { let token = ''; try { token = p.tokenEnc ? (_credDecrypt(p.tokenEnc) || '') : ''; } catch (_) { token = ''; }
-      return { id: String(p.id), label: p.label || '', pixelId: String(p.pixelId || ''), token, scope: Array.isArray(p.scope) ? p.scope : [], testCode: p.testCode || '', capiOnly: !!p.capiOnly }; });
-    metaCapi.setConfigPixels(dec); return dec.length;
-  } catch (e) { logger.warn('[meta-pixels] no se pudieron cargar los del panel: ' + e.message); return 0; }
-}
-setInterval(() => { _metaPixelsLoad(); }, 5 * 60 * 1000);
-app.post('/api/admin/meta-pixels', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
-    const b = req.body || {};
-    const pixelId = String(b.pixelId || '').replace(/\D/g, ''); if (!/^\d{10,20}$/.test(pixelId)) return res.status(400).json({ error: 'El ID del píxel son 15 o 16 números (Administrador de eventos → el píxel → ID del conjunto de datos).' });
-    const scope = String(b.scope || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20); if (!scope.length) return res.status(400).json({ error: 'Poné a quién pertenece: el código de la campaña (ej. PICAROJAOK), el nombre del publicista, o * para todos.' });
-    const token = String(b.token || '').trim(); const list = (await getConfig('metaPixels', [])) || [];
-    const id = String(b.id || '').trim() || ('p' + Date.now().toString(36)); const cur = list.find((p) => String(p.id) === id) || null;
-    if (!token && !(cur && cur.tokenEnc)) return res.status(400).json({ error: 'Falta el token de la API de conversiones de ese píxel (Eventos → Configuración → API de conversiones → Generar token).' });
-    const next = { id, label: String(b.label || scope[0]).slice(0, 60), pixelId, scope, testCode: String(b.testEventCode || '').trim().slice(0, 40), capiOnly: !!b.capiOnly, updatedAt: new Date().toISOString(), updatedBy: req.user.username,
-      tokenEnc: token ? _credEncrypt(token) : cur.tokenEnc, tokenLast4: token ? token.slice(-4) : cur.tokenLast4 };
-    const out = cur ? list.map((p) => (String(p.id) === id ? next : p)) : list.concat([next]);
-    await Config.set('metaPixels', out, req.user.username); await _metaPixelsLoad();
-    logger.info('[meta-pixels] ' + (cur ? 'editado' : 'nuevo') + ' ' + id + ' (' + scope.join('/') + ') por ' + req.user.username);
-    res.json({ success: true, id });
-  } catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
-});
-app.delete('/api/admin/meta-pixels/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
-    const list = (await getConfig('metaPixels', [])) || []; const out = list.filter((p) => String(p.id) !== String(req.params.id));
-    if (out.length === list.length) return res.status(404).json({ error: 'No existe' });
-    await Config.set('metaPixels', out, req.user.username); await _metaPixelsLoad(); res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
-});
-app.get('/api/admin/meta-pixels', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
-    const mask = (id) => String(id || '').replace(/^(\d{4})\d+(\d{3})$/, '$1…$2');
-    const st = metaCapi.stats();
-    const list = metaCapi.listPixels().map((p) => ({ n: p.n, id: p.id || null, origen: p.source || 'ssm', etiqueta: p.label, pixel: mask(p.pixelId), pixelId: p.source === 'panel' ? p.pixelId : undefined, token: p.token ? 'sí' : 'NO (sólo navegador)', alcance: p.scope, soloCapi: p.capiOnly, testEventCode: p.testCode ? 'sí' : 'no',
-      recibePorCapi: p.token ? (p.scope.includes('*') ? 'todos los clientes' : 'clientes de ' + p.scope.join(', ')) : 'nada', ultimosEnvios: st[p.n] || null }));
-    const out = { pixels: list, nota: 'Ids enmascarados. Token = META_CAPI_ACCESS_TOKEN(_n) en SSM; alcance = META_PIXEL_PUBLISHER_n (códigos de campaña o nombre del publicista, o *). Los contadores son de esta instancia desde el último arranque.' };
-    const camp = String(req.query.campaign || '').trim().toUpperCase();
-    if (camp) {
-      const info = await metaCapi.resolveEventScope({}, { campaignCode: camp });
-      out.campania = { codigo: camp, publicista: info && info.publisher, navegador: await metaCapi.pixelIdsForCampaign(camp).then((a) => a.map(mask)), capi: metaCapi._capiDestinations(info).map((d) => '#' + d.n + ' ' + mask(d.pixelId)) };
-    }
-    res.json(out);
-  } catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
-});
-app.post('/api/admin/meta-pixels/:n/test', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
-    const r = await metaCapi.testPixel(parseInt(req.params.n, 10), String((req.body && req.body.testEventCode) || (req.query && req.query.testEventCode) || '').trim() || null);
-    logger.info('[meta-pixels] prueba #' + req.params.n + ' por ' + req.user.username + ': ' + (r.ok ? 'OK' : 'ERROR ' + JSON.stringify(r.error).slice(0, 200)));
-    res.json(r);
-  } catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
-});
-// GET también para probar desde la barra del navegador con la sesión del panel abierta.
-app.get('/api/admin/meta-pixels/:n/test', authMiddleware, adminMiddleware, async (req, res) => {
-  try { if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' }); res.json(await metaCapi.testPixel(parseInt(req.params.n, 10), String((req.query && req.query.testEventCode) || '').trim() || null)); }
-  catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
-});
 app.get('/api/meta-pixel-id', async (req, res) => {
   try {
     const raw = String((req.query && req.query.c) || '').trim();
@@ -5359,19 +5287,6 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
 // #670: + girox ("Girox directo": entra a jugar al toque, con carga rápida y retiro adentro)
 function _menusEnabledNorm(v) { const m = { basic: !(v && v.basic === false), easy: !(v && v.easy === false), full: !(v && v.full === false), girox: !(v && v.girox === false) }; return (m.basic || m.easy || m.full || m.girox) ? m : { basic: true, easy: true, full: true, girox: true }; }
 app.get('/api/public/menu-layout', async (req, res) => { try { const v = await getConfig('menuLayout', 1); const menus = _menusEnabledNorm(await getConfig('menusEnabled', null)); res.set('Cache-Control', 'no-store'); res.json({ layout: Number(v) === 2 ? 2 : 1, menus }); } catch (_) { res.json({ layout: 1, menus: { basic: true, easy: true, full: true } }); } });
-// #989 (owner: "un botón en el admin, en App → Plataformas, para deshabilitar Pica Roja si algo no funciona bien, porque hay gente jugando"):
-// interruptor de la plataforma propia. Config['picarojaAppEnabled'] (default true). Apagada ⇒ /api/platforms manda picarojaApp:false y la app NO la
-// ofrece: quien la tenía elegida pasa a 1girox solo (home.js `_injectPR` / `_prOff`). No toca cargas, retiros ni la cuenta: es la misma de 1girox.
-async function _picarojaAppOn() { try { return (await getConfig('picarojaAppEnabled', true)) !== false; } catch (_) { return true; } }
-app.get('/api/admin/picaroja-app', authMiddleware, adminMiddleware, async (req, res) => { try { res.json({ success: true, enabled: await _picarojaAppOn(), canEdit: req.user.role === 'admin' }); } catch (_) { res.status(500).json({ error: 'Error' }); } });
-app.post('/api/admin/picaroja-app', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
-    const on = !!(req.body && (req.body.enabled === true || req.body.enabled === 'true' || req.body.enabled === 1));
-    await Config.set('picarojaAppEnabled', on, req.user.username); logger.warn('[picaroja-app] ' + (on ? 'ENCENDIDA' : 'APAGADA') + ' por ' + req.user.username);
-    res.json({ success: true, enabled: on });
-  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
-});
 app.get('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => { try { res.json({ success: true, menus: _menusEnabledNorm(await getConfig('menusEnabled', null)) }); } catch (_) { res.status(500).json({ error: 'Error' }); } });
 app.post('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -6544,15 +6459,7 @@ async function platformSessionHandler(req, res) {
     // historias) el /auth/sso de 1girox va con `?token=` (lo acepta su página: guarda la sesión al instante) en vez del código de un solo
     // uso, que necesita dos consultas más antes de quedar logueado. Con el código, navegar al juego a los pocos segundos podía cortar el
     // login a mitad (el juego abría deslogueado en celulares lentos). Mismo origen y `embed` que el redirect_url que dio la API.
-    let _redir = session.redirectUrl, _gameReady = false, _directGame = false, _gameStep = 'sin juego';
-    // #945: 1girox no da el enlace si el jugador tiene un BONO activo y el juego no suma para él (`warn_forfeit`: su web pregunta y reintenta con
-    // `forfeit_bono=1`) o si no puede jugar (`blocked`: sin saldo / tope de saldo). Antes esto se tomaba como "no dio el juego" ⇒ caía en Girox.
-    let _forfeit = null, _blocked = null;
-    const _forfeitOk = !!(req.body && req.body.forfeit === true);
-    const _verdict = (jg) => { const d = jg && jg.data && (jg.data.warn_forfeit || jg.data.blocked) ? jg.data : jg; if (!d) return false;
-      if (d.warn_forfeit) { _forfeit = { amount: Number(d.bono_amount) || 0, message: String(d.message || '').slice(0, 240) }; _gameStep = 'pide perder el bono'; return true; }
-      if (d.blocked) { _blocked = { reason: String(d.reason || '').slice(0, 30), message: String(d.message || '').slice(0, 240) }; _gameStep = 'bloqueado: ' + _blocked.reason; return true; }
-      return false; }; // #859: qué paso falló (se muestra en la app)
+    let _redir = session.redirectUrl, _gameReady = false, _directGame = false, _gameStep = 'sin juego'; // #859: qué paso falló (se muestra en la app)
     // #861 (owner: "hace 1 h con lo mismo: que use el ingreso de autologin del menú de Girox"). BUG de #855/#857: el canje consumía el código de
     // ESTE ingreso y, si no salía el juego directo, se le pasaba al recuadro ese MISMO código ya usado ⇒ 1girox lo rechazaba y dejaba el
     // navegador DESLOGUEADO (manual 2.7). Ahora el intento del juego directo usa un ingreso APARTE; el recuadro, si no hay juego directo, abre
@@ -6563,13 +6470,9 @@ async function platformSessionHandler(req, res) {
       // ⇒ el juego directo queda APAGADO: el favorito abre Girox LOGUEADO (un solo ingreso, como el registro) + aviso "buscá X con la lupa".
       // `GIROX_DIRECT_GAME=1` lo vuelve a probar.
       // #866: la app pide el juego directo (`direct:true`) para abrirlo en PANTALLA COMPLETA (fuera del recuadro, donde el proveedor sí se ve).
-      const _directOn = process.env.GIROX_DIRECT_GAME === '1' || (req.body && req.body.direct === true);
-      const mm = _directOn ? /^\/play\/(\d{1,3})\/([\w.\-@]{1,80})$/.exec(game) : null; // #943: + '@' (Amigo Gaming: amigo_X@AMIGO)
-      // #923 (owner: "deportes 100% independientes, sin que se vea Girox"): los sportsbooks de 1girox se piden DIRECTO igual que un juego —
-      // Onyx = su juego 1140 (launcher onyx, el que abre su /sports-new) y GR8 = player/sports/gr8/launch (su /sports-2). Mismo canje de sesión.
-      const ms = _directOn ? /^\/sport\/(onyx|gr8|horses|turf|poker)$/.exec(game) : null; // #944: + Caballos (1002), TurfWin (1139) y Póker (3650) de 1girox
-      if (!mm && !ms && /^\/play\//.test(game)) _gameStep = 'abrí el juego desde Girox';
-      if (mm || ms) {
+      const mm = (process.env.GIROX_DIRECT_GAME === '1' || (req.body && req.body.direct === true)) ? /^\/play\/(\d{1,3})\/([\w.\-]{1,80})$/.exec(game) : null;
+      if (!mm && /^\/play\//.test(game)) _gameStep = 'abrí el juego desde Girox';
+      if (mm) {
         _gameStep = 'canje';
         // #862: el ORDEN importa — cada /session nuevo ANULA el anterior (manual 2.7). Se canjea el ingreso que ya se pidió (para pedir el juego)
         // y, si no sale directo, se pide UNO NUEVO al final para el recuadro: el último ingreso es siempre el que abre Girox (como el botón).
@@ -6584,39 +6487,23 @@ async function platformSessionHandler(req, res) {
             siteToken = (jx && (jx.token || (jx.data && jx.data.token))) || null;
             _gameStep = rx.ok && siteToken ? 'canje ok' : `canje rechazado (HTTP ${rx.status}${jx && jx.error ? ': ' + String(jx.error.code || jx.error.message || '').slice(0, 40) : ''})`;
           } catch (e) { _gameStep = 'canje: ' + e.message.slice(0, 60); } finally { clearTimeout(t); }
-          if (siteToken && ms) {
-            const site = String(process.env.GIROX_SITE_API_URL || 'https://admin.1girox.com/api').replace(/\/$/, '');
-            const url = ({ onyx: `${site}/games/1140?launcher_key=onyx`, gr8: `${site}/player/sports/gr8/launch`, horses: `${site}/games/1002?launcher_key=universal&aggregator_id=4`,
-              turf: `${site}/games/1139?launcher_key=onyx`, poker: `${site}/games/3650?launcher_key=onyx` })[ms[1]] + (_forfeitOk ? (ms[1] === 'gr8' ? '?' : '&') + 'forfeit_bono=1' : ''); // #944 · #945
-            const c3 = new AbortController(); const t3 = setTimeout(() => c3.abort(), 10000);
-            try {
-              const rg = await fetch(url, { headers: { Authorization: 'Bearer ' + siteToken, Accept: 'application/json' }, signal: c3.signal });
-              const jg = await rg.json().catch(() => null); const lu = jg && (jg.launch_url || jg.url || (jg.data && (jg.data.launch_url || jg.data.url)));
-              if (_verdict(jg)) { /* #945: la app pregunta / avisa */ }
-              else if (rg.ok && lu && /^https:\/\//.test(lu)) { _redir = lu; _directGame = true; _gameStep = 'deportes directo'; }
-              else _gameStep = `1girox no dio deportes (HTTP ${rg.status}${jg && (jg.message || jg.code) ? ': ' + String(jg.message || jg.code).slice(0, 60) : ''})`;
-            } catch (e) { _gameStep = 'pedir deportes: ' + e.message.slice(0, 60); } finally { clearTimeout(t3); }
-          } else if (siteToken) {
-            // #944: la app de JUGAYGANA manda el id interno y el launcher de 1girox (de su catálogo) ⇒ no hace falta buscarlo por nombre (más rápido y
-            // sin fallar cuando el nombre no aparece en la búsqueda).
-            const _gid = Number(req.body && req.body.gid), _lk = String((req.body && req.body.lk) || '');
-            const meta = (Number.isInteger(_gid) && _gid > 0 && /^[a-z0-9_]{1,40}$/.test(_lk)) ? { gid: _gid, lk: _lk } : await _gameLaunchMeta(mm[1], mm[2], String((req.body && req.body.gameName) || ''));
+          if (siteToken) {
+            const meta = await _gameLaunchMeta(mm[1], mm[2], String((req.body && req.body.gameName) || ''));
             if (!meta) _gameStep = 'juego no encontrado en el catálogo';
             else {
               const site = String(process.env.GIROX_SITE_API_URL || 'https://admin.1girox.com/api').replace(/\/$/, '');
-              const q = new URLSearchParams({ id: String(meta.gid), launcher_key: meta.lk, aggregator_id: mm[1] }); if (_forfeitOk) q.set('forfeit_bono', '1'); // #945
+              const q = new URLSearchParams({ id: String(meta.gid), launcher_key: meta.lk, aggregator_id: mm[1] });
               const c2 = new AbortController(); const t2 = setTimeout(() => c2.abort(), 10000);
               try {
                 const rg = await fetch(`${site}/games/${encodeURIComponent(mm[2])}?${q}`, { headers: { Authorization: 'Bearer ' + siteToken, Accept: 'application/json' }, signal: c2.signal });
                 const jg = await rg.json().catch(() => null); const lu = jg && (jg.launch_url || jg.url || (jg.data && (jg.data.launch_url || jg.data.url)));
-                if (_verdict(jg)) { /* #945 */ }
-                else if (rg.ok && lu && /^https:\/\//.test(lu)) { _redir = lu; _directGame = true; _gameStep = 'directo'; }
+                if (rg.ok && lu && /^https:\/\//.test(lu)) { _redir = lu; _directGame = true; _gameStep = 'directo'; }
                 else _gameStep = `1girox no dio el juego (HTTP ${rg.status}${jg && (jg.message || jg.code) ? ': ' + String(jg.message || jg.code).slice(0, 60) : ''})`;
               } catch (e) { _gameStep = 'pedir el juego: ' + e.message.slice(0, 60); } finally { clearTimeout(t2); }
             }
           }
         }
-        if (!_directGame && !_forfeit && !_blocked) { // #945: si 1girox pide confirmar el bono o bloquea, no hace falta un ingreso a Girox
+        if (!_directGame) {
           // El código de `session` ya se canjeó (o se intentó) ⇒ ingreso NUEVO para el recuadro = exactamente el del botón de Girox.
           const fresh = await girox.createSession(user.username);
           _redir = fresh && fresh.success && fresh.redirectUrl ? fresh.redirectUrl : session.redirectUrl;
@@ -6629,7 +6516,6 @@ async function platformSessionHandler(req, res) {
       redirectUrl: _redir,
       gameReady: _gameReady, // #855: la sesión de la web ya viene canjeada ⇒ el salto al juego puede ser corto
       directGame: _directGame, // #857: redirectUrl ES el juego (launch_url del proveedor): no hay que saltar a nada
-      forfeit: _forfeit, blocked: _blocked, // #945: bono que se perdería / motivo de bloqueo (la app pregunta o avisa; no se abre Girox)
       gameStep: _gameStep, // #859: diagnóstico visible
       platformUrl: girox.getPlayUrl()
     });
@@ -6681,7 +6567,6 @@ app.get('/api/platforms', authMiddleware, async (req, res) => {
         return { id: p.id, name: p.name, emoji: p.emoji, connected: p.connected, externalUrl: p.externalUrl || null, playUrl: play, logoUrl: p.logoUrl || '', isDefault: p.isDefault }; }),
       askMode: s.askMode, askTimeoutMin: s.askTimeoutMin, defaultPlatform: s.defaultPlatform, lastPlatform, preferredPlatform,
       choiceEnabled, minDeposit: minDep, withdrawMinArs: wdMin, withdrawOtp, // #299 / #379 / #382
-      picarojaApp: await _picarojaAppOn(), // #989: interruptor de la plataforma propia (panel → App → Plataformas)
       depositRolloverX: await getDepositRolloverX().catch(() => 1), bonusRolloverX: await _giftRolloverX().catch(() => 5), // #885: avisos de rollover en la app
       // #385: textos de los botones de abajo de la carga automática (COMANDOS). #266 homeBanner · #349 entryNews · #372 refundPromo ·
       // #373 supportIntro (nombre de turno #377). text === null ⇒ el comando se vació en COMANDOS → la app no lo muestra.
@@ -8116,35 +8001,6 @@ app.get('/api/admin/girox/health', authMiddleware, adminMiddleware, async (req, 
 //       cookies, doble carga)
 // Si al abrir este link A MANO, en el acto, también dice "El enlace expiró", entonces
 // es (a) y hay que reclamarle a 1girox.
-// #989: GET /api/admin/girox/test-game?username=XXXX&key=2/vswaysbufking[&gid=1519&lk=atomic]  (admin general, con la sesión del panel abierta)
-// Hace EXACTAMENTE los pasos del juego directo (ingreso → canje /sso/exchange → /games/{id} del sitio de 1girox) y devuelve cada paso con su HTTP y un
-// recorte de la respuesta (sin tokens). Si la app dice "No pudimos abrir X", acá se ve en qué paso corta y qué contestó 1girox.
-app.get('/api/admin/girox/test-game', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
-    const username = String(req.query.username || '').trim(); const key = String(req.query.key || '').trim();
-    const mm = /^(\d{1,3})\/([\w.\-@]{1,80})$/.exec(key); if (!username || !mm) return res.status(400).json({ error: 'Falta ?username= y ?key=<aggregator>/<game_id> (ej. 2/vswaysbufking)' });
-    const out = { username, key, pasos: [] }; const t0 = Date.now(); const paso = (n, extra) => out.pasos.push(Object.assign({ paso: n, ms: Date.now() - t0 }, extra));
-    const session = await girox.createSession(username);
-    if (!session.success) { paso('ingreso', { ok: false, error: session.error, code: session.code, http: session.httpStatus }); return res.json(out); }
-    const code = new URL(session.redirectUrl).searchParams.get('code'); paso('ingreso', { ok: true, conCodigo: !!code });
-    if (!code) return res.json(out);
-    const snip = (j) => { try { const c = JSON.parse(JSON.stringify(j || null)); if (c && typeof c === 'object') { delete c.token; if (c.data) delete c.data.token; } return JSON.stringify(c).slice(0, 400); } catch (_) { return String(j).slice(0, 400); } };
-    let siteToken = null;
-    try { const rx = await fetch(girox.getBaseUrl() + '/sso/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ code }) }); const jx = await rx.json().catch(() => null); siteToken = (jx && (jx.token || (jx.data && jx.data.token))) || null; paso('canje', { ok: rx.ok && !!siteToken, http: rx.status, respuesta: snip(jx) }); }
-    catch (e) { paso('canje', { ok: false, error: e.message }); return res.json(out); }
-    if (!siteToken) return res.json(out);
-    let gid = Number(req.query.gid), lk = String(req.query.lk || '');
-    if (!(Number.isInteger(gid) && gid > 0 && /^[a-z0-9_]{1,40}$/.test(lk))) { const meta = await _gameLaunchMeta(mm[1], mm[2], String(req.query.name || '')); paso('catálogo', { ok: !!meta, meta }); if (!meta) return res.json(out); gid = meta.gid; lk = meta.lk; } else paso('catálogo', { ok: true, meta: { gid, lk }, origen: 'query' });
-    const site = String(process.env.GIROX_SITE_API_URL || 'https://admin.1girox.com/api').replace(/\/$/, '');
-    const q = new URLSearchParams({ id: String(gid), launcher_key: lk, aggregator_id: mm[1] }); const url = `${site}/games/${encodeURIComponent(mm[2])}?${q}`;
-    try { const rg = await fetch(url, { headers: { Authorization: 'Bearer ' + siteToken, Accept: 'application/json' } }); const jg = await rg.json().catch(() => null); const lu = jg && (jg.launch_url || jg.url || (jg.data && (jg.data.launch_url || jg.data.url)));
-      paso('juego', { ok: rg.ok && !!lu, http: rg.status, url: url.replace(site, '<site>'), launchUrl: lu ? String(lu).slice(0, 120) + '…' : null, respuesta: lu ? undefined : snip(jg) }); }
-    catch (e) { paso('juego', { ok: false, error: e.message, url: url.replace(site, '<site>') }); }
-    out.resultado = out.pasos.every((p) => p.ok) ? '✅ el juego directo sale: si la app igual falla, es del lado del teléfono (ventana bloqueada) o del dato que manda la tarjeta (gid/lk)' : '✘ corta en el paso "' + (out.pasos.find((p) => !p.ok) || {}).paso + '": mirá http/respuesta';
-    res.json(out);
-  } catch (err) { res.status(500).json({ error: 'Error del servidor', detalle: err.message }); }
-});
 app.get('/api/admin/girox/test-sso', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' }); // #413: entra al casino COMO el jugador
@@ -10080,46 +9936,6 @@ function _vipLevelsPublic() {
 }
 
 // #304: avatar del perfil (la PWA guarda la clave del ícono; los de nivel se validan en la app por vipLevel).
-// ===== #908 (gemela) · #989 (owner): "Pica Roja APP" y "1girox" son la MISMA cuenta de 1girox: el saldo es siempre el real y se puede
-// cambiar de plataforma libremente ("que elija y cambie"). El server sólo anota la ACTIVA (User.activeBrand, default Pica Roja APP) para
-// "Mis cargas" del perfil y para el panel. Cargas, retiros, bonos y cierres no cambian (la app manda 'girox' como plataforma preferida).
-const _BRANDS = { picaroja: 'Pica Roja APP', girox: '1girox' };
-function _brandAt(u, when) { const h = (u && u.brandHistory) || []; let b = 'picaroja'; for (const x of h) { if (new Date(x.since) <= new Date(when)) b = x.brand; } return b; }
-app.get('/api/me/brand', authMiddleware, async (req, res) => {
-  try { const u = await User.findOne({ id: req.user.userId }).select('activeBrand').lean(); res.set('Cache-Control', 'no-store'); res.json({ brand: (u && u.activeBrand) || 'picaroja', names: _BRANDS }); }
-  catch (e) { res.json({ brand: 'picaroja', names: _BRANDS }); }
-});
-app.post('/api/me/brand', authMiddleware, async (req, res) => {
-  try {
-    const want = req.body && _BRANDS[req.body.brand] ? req.body.brand : null; if (!want) return res.status(400).json({ error: 'Plataforma inválida' });
-    const u = await User.findOne({ id: req.user.userId }).select('id username activeBrand brandHistory').lean(); if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
-    const cur = u.activeBrand || 'picaroja';
-    if (cur === want) return res.json({ success: true, brand: want });
-    await User.updateOne({ id: u.id }, { $set: { activeBrand: want }, $push: { brandHistory: { $each: [{ brand: want, since: new Date() }], $slice: -50 } } });
-    res.json({ success: true, brand: want });
-  } catch (e) { logger.error('[brand] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
-});
-// #913: el ADMIN cambia la plataforma activa de un cliente (no mueve fichas: es la misma cuenta). Queda en el historial.
-app.post('/api/admin/users/:id/brand', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el admin general' });
-    const want = req.body && _BRANDS[req.body.brand] ? req.body.brand : null; if (!want) return res.status(400).json({ error: 'Marca inválida' });
-    const r = await User.updateOne({ id: req.params.id }, { $set: { activeBrand: want }, $push: { brandHistory: { $each: [{ brand: want, since: new Date() }], $slice: -50 } } });
-    if (!r.matchedCount) return res.status(404).json({ error: 'Usuario no encontrado' });
-    logger.info(`[brand] ${req.user.username} pasó a ${req.params.id} a ${want}`);
-    res.json({ success: true, brand: want, brandName: _BRANDS[want] });
-  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
-});
-// Mis cargas (perfil): las cargas reales del cliente, sólo las de la plataforma activa (según en cuál estaba al momento de cada carga).
-app.get('/api/me/deposits', authMiddleware, async (req, res) => {
-  try {
-    const u = await User.findOne({ id: req.user.userId }).select('activeBrand brandHistory').lean();
-    const brand = (u && u.activeBrand) || 'picaroja';
-    const txs = await Transaction.find({ userId: req.user.userId, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } }).sort({ timestamp: -1 }).limit(60).select('amount bonus timestamp').lean();
-    const items = txs.map((t) => ({ amount: Math.round(t.amount || 0), bonus: Math.round(t.bonus || 0), at: t.timestamp, brand: _brandAt(u, t.timestamp) })).filter((t) => t.brand === brand).slice(0, 20);
-    res.set('Cache-Control', 'no-store'); res.json({ brand, brandName: _BRANDS[brand], items });
-  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
-});
 app.get('/api/me/avatar', authMiddleware, async (req, res) => {
   try { const u = await User.findOne({ id: req.user.userId }).select('avatar').lean(); res.json({ avatar: (u && u.avatar) || null }); }
   catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -12363,7 +12179,7 @@ app.get('/', async (req, res) => {
   // de campaña desde la cookie para que el flujo de registro sin SMS sea
   // determinístico aunque la URL ya sea / (limpiada) o esto sea una recarga.
   const campaignCode = await resolveCampaignFromCookie(req);
-  let rendered = renderIndexHtml({ campaignCode: campaignCode || '' });
+  const rendered = renderIndexHtml({ campaignCode: campaignCode || '' });
   if (!rendered) return res.status(500).send('Error loading page');
   res.setHeader('Content-Type', 'text/html');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -13087,9 +12903,9 @@ async function initializeData() {
   // después se cambia en Configuración → Registro de clientes.
   // #968 (owner): partidos del día en las historias automáticas ENCENDIDOS, y las campañas futuras del autopiloto de oct/nov se recrean con el
   // refuerzo (el autopiloto las vuelve a programar solo a los 5 min del arranque; sólo las 'scheduled' con fecha futura, nada enviado).
-  // F981: la explicación del sorteo guardada con el texto viejo pasa al nuevo (tickets + puntos con techo).
+  // #981: la explicación del sorteo guardada con el texto viejo pasa al nuevo (tickets + puntos con techo).
   try { if (!(await getConfig('mig981SorteosV2', null))) { const r = await Command.updateOne({ name: '/sys_sq_sorteo', response: /cada \{ptsper\} apostados con plata real = \{pts\} puntos/ }, [{ $set: { response: { $replaceOne: { input: '$response', find: "🧮 Cómo sumás puntos: cada {ptsper} apostados con plata real = {pts} puntos (los bonos no suman). Se actualiza cada 20 minutos y ves tu puesto en vivo, con los demás nombres tapados.", replacement: "🧮 Puntos (ranking, 2° y 3° premio): {puntos}. Los bonos no suman.\\n\\n🎟️ Tickets (1° premio): {tickets}. Cada ticket es un número a tu nombre que ves en \"Mis tickets\"; al cierre publicamos la huella del sorteo y el día del sorteo la semilla: cualquiera puede verificar el ganador.\\n\\nTodo se actualiza cada 20 minutos y ves tu puesto, tus puntos y tus tickets en vivo, con los demás nombres tapados." } } } }]).catch(() => null); await Config.set('mig981SorteosV2', new Date().toISOString(), 'startup-migration'); logger.info('[mig981] explicación del sorteo: ' + ((r && r.modifiedCount) || 0) + ' actualizada(s)'); } } catch (e) { logger.warn('[mig981] ' + e.message); }
-  // F979 (owner): bonos a las 19 h ⇒ las campañas futuras del autopiloto (programadas a las 20:00) se borran y el tick las rearma a las 19:00.
+  // #979 (owner): bonos a las 19 h ⇒ las campañas futuras del autopiloto (programadas a las 20:00) se borran y el tick las rearma a las 19:00.
   try { if (!(await getConfig('mig979Hora19', null))) { const r = await _autopilotClearFuture(); await Config.set('mig979Hora19', new Date().toISOString(), 'startup-migration'); logger.info('[mig979] autopiloto a las 19 h: ' + r + ' campañas futuras rearmadas'); } } catch (e) { logger.warn('[mig979] ' + e.message); }
   // #976 (owner 2026-10-24): rollover de la CARGA ×1 (antes ×3; el bono sigue ×5), retiro mínimo $5.000 (antes $10.000), textos guardados que decían
   // "×3" y una historia de 48 h para avisar a todos (sin push: el anillo la muestra; el deploy puede caer a cualquier hora).
@@ -21300,7 +21116,7 @@ app.post('/api/admin/datos-ia/usdt', authMiddleware, adminMiddleware, async (req
 // (instalaron, notificaciones, total registrados), todo en recuadros y con clave". CLAVE propia en Config['inicioPinHash'] (sha256; NUNCA en
 // el código: el repo es público). Sin clave creada ⇒ 428 y el panel pide crearla. Header `x-inicio-pin`.
 let _inicioPinCache = { at: 0, hash: undefined };
-// F982 (owner): "pongamos la misma clave a todo" ⇒ si no se creó una clave propia de INICIO, Principal (INICIO, Centro de avisos, Revisión semanal,
+// #982 (owner): "pongamos la misma clave a todo" ⇒ si no se creó una clave propia de INICIO, Principal (INICIO, Centro de avisos, Revisión semanal,
 // Sorteos) usa la CLAVE DE DATOS (Config['datosIaPinHash']). Una sola clave para todo lo que la pide; si algún día quieren separarlas, 🔑 en INICIO.
 async function _inicioPinHash() { if (_inicioPinCache.hash !== undefined && Date.now() - _inicioPinCache.at < 60000) return _inicioPinCache.hash; let h = null; try { h = (await getConfig('inicioPinHash', null)) || (await getConfig('datosIaPinHash', null)); } catch (_) {} _inicioPinCache = { at: Date.now(), hash: h || null }; return _inicioPinCache.hash; }
 app.get('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, res) => { res.json({ enabled: !!(await _inicioPinHash()), canEdit: req.user.role === 'admin' }); });
@@ -22361,10 +22177,10 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
       // #944: resumen de los dos sorteos con los números de la config (fechas, premios, puntos, SORTEO EXTRA, requisitos, cobro).
       const cfg = await _sorteosCfg(); const now = new Date(); const R = sorteosRules;
       const one = (s) => { const p = R.periodOf(s, now); const pr = (s.prizes || []).map((x) => x.pos + '° ' + x.name + (x.value ? ' (' + x.value + ')' : '')).join(' · ');
-        const cuando = p.status === 'soon' ? 'Empieza el ' + R.fmtDay(p.start) : (p.status === 'live' ? 'En curso hasta el ' + R.fmtDay(p.end) : 'Cerrado'); return s.emoji + ' ' + s.title.toUpperCase() + ': ' + cuando + '. El 1° premio se SORTEA entre los tickets de los anotados (más tickets, más chances; todos tienen alguna); el 2° y el 3° son para los dos anotados con más puntos. Premios: ' + pr + '.'; }; // F981
+        const cuando = p.status === 'soon' ? 'Empieza el ' + R.fmtDay(p.start) : (p.status === 'live' ? 'En curso hasta el ' + R.fmtDay(p.end) : 'Cerrado'); return s.emoji + ' ' + s.title.toUpperCase() + ': ' + cuando + '. El 1° premio se SORTEA entre los tickets de los anotados (más tickets, más chances; todos tienen alguna); el 2° y el 3° son para los dos anotados con más puntos. Premios: ' + pr + '.'; }; // #981
       const m = cfg.mensual, g = cfg.gran; const e = m.extra; const pm = R.periodOf(m, now);
       const req = cfg.requirements || {}; const reqs = [req.app && 'app instalada', req.notif && 'notificaciones activadas', req.telegram && 'unido a nuestro Telegram', req.phone && 'número de celular cargado en el Perfil', req.deposit && 'al menos una carga'].filter(Boolean).join(', ') || 'es gratis';
-      const rt = R.rulesText(m); // F981
+      const rt = R.rulesText(m); // #981
       Object.assign(vars, { puntos: rt.pts, tickets: rt.tickets, mensual: m.enabled ? one(m) : '', gran: g.enabled ? one(g) : '', pts: String(m.pts), ptsper: money(m.ptsPer), requisitos: reqs, pago: R.payWindow(pm.end).texto.replace(/ de d{4}$/, '') + ' (dentro de los primeros 10 días del mes siguiente al cierre)',
         extra: [m, g].filter((s) => s.enabled && s.extra && s.extra.enabled).map((s) => '🎁 ' + (s.extra.title || 'SORTEO EXTRA') + ' del ' + s.title + ': ' + s.extra.winners + ' premios de ' + money(s.extra.amount) + ' (' + money(s.extra.amount * s.extra.winners) + ') al azar entre ' + R.extraWho(s.extra, R.extraSpan(s.key)) + '. Con semilla publicada.').join('\n\n') + (m.extra && m.extra.enabled ? '\n\n' : '') }); // #969
     } else if (q.dynamic) {
@@ -25909,7 +25725,7 @@ app.post('/api/stories/:id/view', authMiddleware, async (req, res) => {
 // #971: interacción en las historias — toque en el botón y reacción (una por cliente, atómica por reactedBy).
 const STORY_REACTIONS = ['fire', 'heart', 'laugh', 'like'];
 app.post('/api/stories/:id/click', authMiddleware, async (req, res) => {
-  try { await Story.updateOne({ id: String(req.params.id), clickedBy: { $ne: String(req.user.userId) } }, { $inc: { clicks: 1 }, $addToSet: { clickedBy: String(req.user.userId) } }); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } // F979: un toque por cliente
+  try { await Story.updateOne({ id: String(req.params.id), clickedBy: { $ne: String(req.user.userId) } }, { $inc: { clicks: 1 }, $addToSet: { clickedBy: String(req.user.userId) } }); res.json({ ok: true }); } catch (_) { res.json({ ok: false }); } // #979: un toque por cliente
 });
 app.post('/api/stories/:id/react', authMiddleware, async (req, res) => {
   try {
@@ -25942,15 +25758,13 @@ const DEFAULT_FAV_GAMES = [
   { key: '2/vs20starlightx', name: 'Starlight Princess 1000', img: '/images/games/starlight-princess-1000.jpg', provider: 'Pragmatic Play' }
 ];
 const _favListOf = (u) => (u && u.favoriteGamesCustom === true) ? (u.favoriteGames || []) : DEFAULT_FAV_GAMES.map((g) => Object.assign({}, g));
-const _FAV_KEY_RE = /^\d{1,3}\/[\w.\-@]{1,80}$/; // #943: + '@' (los ids de Amigo Gaming son amigo_X@AMIGO; sin esto no abrían directo)
+const _FAV_KEY_RE = /^\d{1,3}\/[\w.\-]{1,80}$/;
 const _FAV_IMG_RE = /^(https:\/\/(admin\.1girox\.com|img-girox\.red777\.win)\/[\w.\-\/?=&%]{1,300}|\/images\/games\/[\w.\-]{1,80}\.(jpg|png|webp))$/;
 const _gameCatalogCache = new Map();
-async function _gameCatalog(q, page, providerId, sortArg) {
-  const pid = Number(providerId) > 0 ? Math.round(Number(providerId)) : null; // #907: filtro por proveedor (lo acepta el catálogo de 1girox)
-  const sort = sortArg === 'newest' ? 'newest' : 'popular'; // #918: NUEVO de JUGAYGANA = los últimos agregados en 1girox
-  const k = q + '|' + page + '|' + (pid || '') + '|' + sort; const hit = _gameCatalogCache.get(k);
+async function _gameCatalog(q, page) {
+  const k = q + '|' + page; const hit = _gameCatalogCache.get(k);
   if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.data;
-  const url = 'https://admin.1girox.com/api/games?sort=' + sort + '&page=' + page + (q ? '&search=' + encodeURIComponent(q) : '') + (pid ? '&provider_id=' + pid : '');
+  const url = 'https://admin.1girox.com/api/games?sort=popular&page=' + page + (q ? '&search=' + encodeURIComponent(q) : '');
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10000);
   try {
     const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
@@ -25959,11 +25773,9 @@ async function _gameCatalog(q, page, providerId, sortArg) {
     const games = ((j && j.games) || []).filter((g) => g && g.aggregator_id != null && g.game_id).map((g) => ({
       key: String(g.aggregator_id) + '/' + String(g.game_id), name: String(g.name || '').replace(/[™®]/g, '').trim().slice(0, 60),
       img: String(g.image_url || g.thumbnail || ''), provider: String(g.provider_name || g.provider || '').slice(0, 40), category: String(g.category || '').slice(0, 30),
-      gid: g.id != null ? Number(g.id) : null, lk: String(g.launcher_key || '').slice(0, 40), // #857: lo que usa la web de 1girox para abrir el juego
-      isNew: !!g.is_new, isJackpot: !!g.is_jackpot
+      gid: g.id != null ? Number(g.id) : null, lk: String(g.launcher_key || '').slice(0, 40) // #857: lo que usa la web de 1girox para abrir el juego
     })).filter((g) => _FAV_KEY_RE.test(g.key) && g.name).map((g) => (_FAV_IMG_RE.test(g.img) ? g : Object.assign(g, { img: '' })));
-    const providers = Array.isArray(j.providers) ? j.providers.filter((p) => p && p.id).map((p) => ({ id: Number(p.id), name: String(p.alias || p.name || '').slice(0, 40), slug: String(p.slug || '').slice(0, 40), count: Number(p.games_count) || 0, logo: /^\/img\/providers\/[\w.\-]{1,60}$/.test(String(p.logo || '')) ? 'https://1girox.com' + p.logo : '' })) : [];
-    const data = { games, total: Number(j.total) || games.length, hasMore: !!j.hasMore, providers };
+    const data = { games, total: Number(j.total) || games.length, hasMore: !!j.hasMore };
     _gameCatalogCache.set(k, { at: Date.now(), data }); if (_gameCatalogCache.size > 300) _gameCatalogCache.delete(_gameCatalogCache.keys().next().value);
     return data;
   } catch (_) { return null; } finally { clearTimeout(t); }
@@ -25985,7 +25797,7 @@ async function _gameLaunchMeta(agg, gameId, nameHint) {
 }
 // #869 (owner: "en el buscador las fotos de los juegos aparecen falladas"): las fotos del catálogo de 1girox se sirven POR ACÁ (mismo sitio que
 // la app ⇒ ningún teléfono/navegador las bloquea por venir de otro dominio). Sólo los hosts de fotos de 1girox; cache 1 día (Cloudflare la guarda).
-const _GAME_IMG_HOST = /^https:\/\/(admin\.1girox\.com\/game-img\/|img-girox\.red777\.win\/|1girox\.com\/img\/providers\/[\w.\-]+$|assets-usoft\.universalsoft\.net\/|platipusgaming\.cloud\/|cdn\.gmbl\.org\.uk\/|images\.bswbet\.org\/)/; // #909: + logos de proveedores · #948: + los otros servidores de portadas del catálogo de 1girox
+const _GAME_IMG_HOST = /^https:\/\/(admin\.1girox\.com\/game-img\/|img-girox\.red777\.win\/)/;
 app.get('/api/games/img', async (req, res) => {
   try {
     const u = String(req.query.u || '');
@@ -25993,17 +25805,9 @@ app.get('/api/games/img', async (req, res) => {
     const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10000);
     try {
       const r = await fetch(u, { signal: ctrl.signal, redirect: 'error', headers: { Accept: 'image/avif,image/webp,image/*' } }); // sin redirecciones (no seguir a otro host)
-      let type = String(r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-      if (!r.ok) return res.status(404).end();
+      const type = String(r.headers.get('content-type') || '').split(';')[0];
+      if (!r.ok || !/^image\/(png|jpe?g|webp|gif|avif)$/i.test(type)) return res.status(404).end();
       const buf = Buffer.from(await r.arrayBuffer()); if (buf.length > 1024 * 1024) return res.status(413).end();
-      // #957: img-girox.red777.win manda las portadas como application/octet-stream: el tipo se reconoce por el contenido (sólo imágenes).
-      if (!/^image\/(png|jpe?g|webp|gif|avif)$/.test(type)) {
-        const h = buf.subarray(0, 12);
-        type = (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) ? 'image/jpeg' : (h.toString('hex', 0, 4) === '89504e47') ? 'image/png'
-          : (h.toString('latin1', 0, 4) === 'RIFF' && h.toString('latin1', 8, 12) === 'WEBP') ? 'image/webp' : (h.toString('latin1', 0, 4) === 'GIF8') ? 'image/gif'
-          : (h.toString('latin1', 4, 12) === 'ftypavif') ? 'image/avif' : '';
-        if (!type) return res.status(404).end();
-      }
       res.set('Content-Type', type); res.set('Cache-Control', 'public, max-age=86400, immutable'); res.set('X-Content-Type-Options', 'nosniff');
       res.send(buf);
     } finally { clearTimeout(t); }
@@ -26011,44 +25815,11 @@ app.get('/api/games/img', async (req, res) => {
 });
 app.get('/api/games/catalog', authMiddleware, async (req, res) => {
   try {
-    const q = String(req.query.q || '').trim().slice(0, 40); const page = Math.max(1, Math.min(400, parseInt(req.query.page, 10) || 1)); // #907: hasta el final del catálogo
-    const d = await _gameCatalog(q, page, req.query.provider, req.query.sort);
+    const q = String(req.query.q || '').trim().slice(0, 40); const page = Math.max(1, Math.min(50, parseInt(req.query.page, 10) || 1));
+    const d = await _gameCatalog(q, page);
     if (!d) return res.status(503).json({ error: 'No pudimos traer los juegos de Girox. Probá de nuevo en un momento.' });
     res.set('Cache-Control', 'private, max-age=300'); res.json(d);
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
-});
-// ===== #907 (gemela) · #989: PLATAFORMA "Pica Roja APP" (picaroja.com/paginaoficial, public/js/lobby.js) — lobby propio con TODOS los juegos de
-// Girox (misma cuenta y saldo: es otra puerta a Girox, no otra plataforma del server). Secciones armadas desde el catálogo público de 1girox (sin
-// la Partner API: no gasta el cupo de 60/min); guardadas 10 min. Abrir un juego = el mismo ingreso logueado de los favoritos (/api/platform/session con direct).
-let _lobbyCache = { at: 0, data: null };
-const _LIVE_SLUG = /evolution|live|ezugi|vivo|playtech-live|xpg|vivogaming|tvbet/i;
-// #940 (gemela) · #989: TOP PARTIDOS de Pica Roja APP (datos públicos de ESPN, cache 60 s). Tocar un partido abre Digitain logueado.
-const sportsBoard = require('./src/services/sportsBoard');
-app.get('/api/sports/board', async (req, res) => {
-  try { res.set('Cache-Control', 'public, max-age=60'); res.json(await sportsBoard.board()); }
-  catch (e) { res.status(503).json({ live: [], top: [] }); }
-});
-app.get('/api/games/lobby', authMiddleware, async (req, res) => {
-  try {
-    res.set('Cache-Control', 'private, max-age=300');
-    if (_lobbyCache.data && Date.now() - _lobbyCache.at < 10 * 60 * 1000) return res.json(_lobbyCache.data);
-    const [p1, p2] = await Promise.all([_gameCatalog('', 1), _gameCatalog('', 2)]);
-    if (!p1) return res.status(503).json({ error: 'No pudimos traer los juegos de Girox. Probá de nuevo en un momento.' });
-    const bySlug = new Map();
-    for (const p of (p1.providers || [])) { const cur = bySlug.get(p.slug); if (!cur || p.count > cur.count) bySlug.set(p.slug, p); }
-    const provs = [...bySlug.values()].sort((a, b) => b.count - a.count);
-    const live = provs.filter((p) => _LIVE_SLUG.test(p.slug + ' ' + p.name)).slice(0, 6);
-    const top = provs.filter((p) => !_LIVE_SLUG.test(p.slug + ' ' + p.name)).slice(0, 8);
-    const fetchProv = async (p) => { const d = await _gameCatalog('', 1, p.id); return d && d.games.length ? { title: p.name, providerId: p.id, games: d.games.slice(0, 24) } : null; };
-    const [topSecs, liveSecs, lob1, lob2] = await Promise.all([Promise.all(top.map(fetchProv)), Promise.all(live.map(fetchProv)), _gameCatalog('lobby', 1), _gameCatalog('lobby', 2)]);
-    // #920 (owner): "Casino lobby" = los lobbies que tiene Girox (Live Casino Lobby, Blackjack Lobby, Evolution, Ezugi, VivoGaming…).
-    const lobbies = [...((lob1 && lob1.games) || []), ...((lob2 && lob2.games) || [])].filter((g, i, a) => /lobby/i.test(g.name) && a.findIndex((x) => x.key === g.key) === i).slice(0, 24);
-    const popular = [...(p1.games || []), ...((p2 && p2.games) || [])];
-    const data = { total: p1.total, popular: popular.slice(0, 36), nuevos: popular.filter((g) => g.isNew).slice(0, 24), providers: provs.slice(0, 60).map((p) => ({ id: p.id, name: p.name, count: p.count, logo: p.logo || '', live: _LIVE_SLUG.test(p.slug + ' ' + p.name) })),
-      sections: topSecs.filter(Boolean), live: liveSecs.filter(Boolean), lobbies,
-      sports: [{ key: 'sport/onyx', path: '/sports-new', title: 'Digitain', sub: 'Fútbol, básquet, tenis y más · en vivo y prepartido' }, { key: 'sport/gr8', path: '/sports', title: 'Ultim8', sub: 'Apuestas deportivas · en vivo y prepartido' }, { key: 'sport/horses', path: '/horses', title: 'Caballos', sub: 'Carreras de caballos en vivo' }, { key: 'sport/turf', path: '/horses-new', title: 'TurfWin', sub: 'Hípica · carreras del día' }, { key: 'sport/poker', path: '/poker', title: 'Póker', sub: 'Mesas de póker en vivo' }] /* #944 */ /* #935 (owner): cada casa con su nombre, no "Deportes" */ }; // #923: key = apertura directa
-    _lobbyCache = { at: Date.now(), data }; res.json(data);
-  } catch (e) { logger.warn('[lobby] ' + e.message); res.status(503).json({ error: 'No pudimos traer los juegos. Probá de nuevo.' }); }
 });
 app.get('/api/games/favorites', authMiddleware, async (req, res) => {
   try {
@@ -26599,7 +26370,7 @@ async function _journeyTick(force) {
   if (_journeyRunning || process.env.JOURNEY_DISABLED === '1') return null; _journeyRunning = true;
   try {
     const nc = await getNotifCenterConfig(); if (!nc.journey) return null;
-    const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (!force && (hourArt < 17 || hourArt >= 19)) return null; // F979: 17–19 h, justo antes del bono de las 19 (autopiloto / historia)
+    const now = new Date(); const hourArt = (now.getUTCHours() + 21) % 24; if (!force && (hourArt < 17 || hourArt >= 19)) return null; // #979: 17–19 h, justo antes del bono de las 19 (autopiloto / historia)
     const today = _schedArtKey(now); const last = await getConfig('journeyLast', null); if (!force && last && last.day === today) return null;
     if (!(await _cronClaim('journey', 15 * 60000))) return null; // una instancia por pasada
     const [firstPct, dailyPct, minDep, rolloverX, apCfg] = await Promise.all([getConfig('firstDepositBonusPct', 50), getDailyRefundPct(), getMinDepositArs().catch(() => 5000), _giftRolloverX().catch(() => 5), getAutopilotConfig()]);
@@ -26783,8 +26554,8 @@ app.post('/api/admin/inicio/weekly-review/run', authMiddleware, adminMiddleware,
 // tope de 92). Entran TODOS los clientes con una carga real en el período; sólo los ANOTADOS (SorteoEntry) pueden ganar.
 const SorteoEntry = require('./src/models/SorteoEntry');
 const SorteoScore = require('./src/models/SorteoScore');
-const SorteoTicket = require('./src/models/SorteoTicket');   // F981
-const SorteoCounter = require('./src/models/SorteoCounter'); // F981
+const SorteoTicket = require('./src/models/SorteoTicket');   // #981
+const SorteoCounter = require('./src/models/SorteoCounter'); // #981
 const sorteosRules = require('./src/services/sorteos');
 const SORTEO_KEYS = ['mensual', 'gran'];
 const SORTEO_REAL_DEP = { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, description: { $not: /PRUEBA/i } };
@@ -26797,7 +26568,7 @@ function _sorteoChecksOf(user, telegramDeclared, hasDeposit) {
   const toks = Array.isArray(user.fcmTokens) ? user.fcmTokens : [];
   const app = user.fcmTokenContext === 'standalone' || toks.some((t) => t && t.context === 'standalone');
   const notif = !!(user.fcmToken || toks.length);
-  const phone = /^\d{10}$/.test(String(user.phone || '').replace(/\D/g, '').slice(-10)); // F981: número de celular cargado (no hace falta verificado)
+  const phone = /^\d{10}$/.test(String(user.phone || '').replace(/\D/g, '').slice(-10)); // #981: número de celular cargado (no hace falta verificado)
   return { app, notif, telegram: !!telegramDeclared, phone, deposit: !!hasDeposit };
 }
 function _sorteoMissing(cfg, checks) { const r = cfg.requirements || {}; return ['app', 'notif', 'telegram', 'phone', 'deposit'].filter((k) => r[k] && !checks[k]); }
@@ -26815,7 +26586,7 @@ async function _sorteoStats(usernames, start, until) {
   }
   return out;
 }
-// F981: emisión de TICKETS (números correlativos por sorteo y período): reserva un bloque en el contador y los inserta. Nunca se quitan.
+// #981: emisión de TICKETS (números correlativos por sorteo y período): reserva un bloque en el contador y los inserta. Nunca se quitan.
 async function _sorteoIssueTickets(key, periodKey, userId, username, reasons, now) {
   const want = reasons.length; if (!want) return null;
   const c = await SorteoCounter.findOneAndUpdate({ key, periodKey }, { $inc: { next: want } }, { upsert: true, new: true }).lean();
@@ -26959,7 +26730,7 @@ async function _sorteoTick(opts) {
 setTimeout(() => { _sorteoTick().catch(() => {}); setInterval(() => { _sorteoTick().catch(() => {}); }, 60 * 60 * 1000); }, 3 * 60 * 1000); // #957: cada hora
 const _sorteoSort = { points: -1, wagered: -1, firstDepositAt: 1 };
 async function _sorteoRankOf(key, periodKey, sc) { if (!sc) return null; const better = await SorteoScore.countDocuments({ key, periodKey, $or: [{ points: { $gt: sc.points } }, { points: sc.points, wagered: { $gt: sc.wagered } }] }); return better + 1; }
-async function _sorteoWinners(key, periodKey, excludeUserId) { const f = { key, periodKey, eligible: true, points: { $gt: 0 } }; if (excludeUserId) f.userId = { $ne: excludeUserId }; return SorteoScore.find(f).sort(_sorteoSort).limit(2).lean(); } // F981: 2 por ranking (el 1° va por tickets)
+async function _sorteoWinners(key, periodKey, excludeUserId) { const f = { key, periodKey, eligible: true, points: { $gt: 0 } }; if (excludeUserId) f.userId = { $ne: excludeUserId }; return SorteoScore.find(f).sort(_sorteoSort).limit(2).lean(); } // #981: 2 por ranking (el 1° va por tickets)
 // #939: quiénes entran al SORTEO de $100.000 del mes: cargas >= minDeposits (y anotados sólo si requireJoin).
 function _sorteoExtraFilter(s, periodKey) { const f = { key: s.key || 'mensual', periodKey, deposits: { $gte: Number(s.extra.minDeposits) || 1 } }; if (s.extra.requireJoin) f.eligible = true; return f; }
 async function _sorteoTelegramUrl() { try { const c = (await getConfig('communityConfig')) || {}; return c.inviteUrl || c.channelUrl || c.url || (await getConfig('canalInformativoUrl', '')) || ''; } catch (_) { return ''; } }
@@ -26986,7 +26757,7 @@ app.get('/api/sorteos', authMiddleware, async (req, res) => {
       ]);
       const myRank = await _sorteoRankOf(key, p.periodKey, mine && mine.points > 0 ? mine : null);
       const rows = top.map((r, i) => ({ rank: i + 1, name: r.userId === user.id ? r.username : sorteosRules.mask(r.username), points: r.points, me: r.userId === user.id, joined: !!r.joined }));
-      // F981: si estoy fuera del top, mis vecinos (2 arriba y 2 abajo) para que se entienda dónde estoy
+      // #981: si estoy fuera del top, mis vecinos (2 arriba y 2 abajo) para que se entienda dónde estoy
       let near = [];
       if (mine && mine.points > 0 && !rows.some((r) => r.me)) {
         const around = await SorteoScore.find({ key, periodKey: p.periodKey, points: { $gt: 0 } }).sort(_sorteoSort).skip(Math.max(0, myRank - 3)).limit(5).select('userId username points joined').lean();
@@ -26998,15 +26769,15 @@ app.get('/api/sorteos', authMiddleware, async (req, res) => {
       const mids = sorteosRules.midDrawDates(s, p, now).map((md) => Object.assign({}, md, { draw: _sorteoDrawPublic(draws[_drawKey(key, p.periodKey, 'mid', md.date)], user.id) }));
       const mainDraw = _sorteoDrawPublic(draws[_drawKey(key, p.periodKey, 'main')], user.id);
       let winners = null, drawKey = key + ':' + p.periodKey, draw = null;
-      if (p.status === 'closed' && now >= p.publishAt) { const mainW = draws[_drawKey(key, p.periodKey, 'main')]; const exclude = mainW && mainW.winner ? mainW.winner.userId : null; winners = (await _sorteoWinners(key, p.periodKey, exclude)).map((w, i) => ({ pos: i + 2, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id })); } // F981: 2° y 3° por ranking
+      if (p.status === 'closed' && now >= p.publishAt) { const mainW = draws[_drawKey(key, p.periodKey, 'main')]; const exclude = mainW && mainW.winner ? mainW.winner.userId : null; winners = (await _sorteoWinners(key, p.periodKey, exclude)).map((w, i) => ({ pos: i + 2, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id })); } // #981: 2° y 3° por ranking
       if (key === 'mensual' && p.prevKey && now - p.start < 7 * sorteosRules.DAY) { const pm = draws[_drawKey(key, p.prevKey, 'main')]; const pw = await _sorteoWinners(key, p.prevKey, pm && pm.winner ? pm.winner.userId : null); if (pw.length) winners = pw.map((w, i) => ({ pos: i + 2, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id, period: p.prevKey })); drawKey = key + ':' + p.prevKey; }
       if (draws[drawKey]) draw = { at: draws[drawKey].at, seed: draws[drawKey].seed, amount: draws[drawKey].amount, winners: (draws[drawKey].winners || []).map((w) => ({ name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), me: w.userId === user.id })) };
       out.push({
         key, title: s.title, emoji: s.emoji, status: p.status, periodKey: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt,
         startsInMs: Math.max(0, p.start - now), endsInMs: Math.max(0, p.end - now), prizes: s.prizes, extra: s.extra && s.extra.enabled ? s.extra : null, // #969: en los dos
-        rules: { pts: s.pts, ptsPer: s.ptsPer, dayCapArs: s.dayCapArs || 0, dayDepositMin: s.dayDepositMin || 0, dayDepositPts: s.dayDepositPts || 0, weekActiveDays: s.weekActiveDays || 0, weekPts: s.weekPts || 0, missionWeekPct: s.missionWeekPct || 0, tickets: s.tickets, milestones: s.milestones, text: sorteosRules.rulesText(s) }, // F981
-        tickets: { total: tTotal, mine: tMine, list: tList.map((t) => ({ n: t.n, reason: t.reason, at: t.at })), chance: tTotal ? tMine / tTotal : 0 }, // F981
-        draws: { main: mainDraw, mid: mids }, near, // F981
+        rules: { pts: s.pts, ptsPer: s.ptsPer, dayCapArs: s.dayCapArs || 0, dayDepositMin: s.dayDepositMin || 0, dayDepositPts: s.dayDepositPts || 0, weekActiveDays: s.weekActiveDays || 0, weekPts: s.weekPts || 0, missionWeekPct: s.missionWeekPct || 0, tickets: s.tickets, milestones: s.milestones, text: sorteosRules.rulesText(s) }, // #981
+        tickets: { total: tTotal, mine: tMine, list: tList.map((t) => ({ n: t.n, reason: t.reason, at: t.at })), chance: tTotal ? tMine / tTotal : 0 }, // #981
+        draws: { main: mainDraw, mid: mids }, near, // #981
         counts: await (async () => { const c = { anotados, participantes, extraWinners: 0, extraElegibles: 0 }; if (s.extra && s.extra.enabled) { c.extraElegibles = await SorteoScore.countDocuments(_sorteoExtraFilter(s, p.periodKey)); c.extraWinners = sorteosRules.extraWinners(s.extra, c.extraElegibles); } return c; })(),
         me: { joined: !!ent, joinedAt: ent ? ent.joinedAt : null, checks, missing, canJoin: !ent && !missing.length, points: mine ? mine.points : 0, rank: myRank, wagered: mine ? mine.wagered : 0, eligible: !!(mine && mine.eligible), gapTo3, deposits: mine ? mine.deposits : 0, depositDays: mine ? mine.depositDays || 0 : 0, activeWeeks: mine ? mine.activeWeeks || 0 : 0, streakWeeks: mine ? mine.streakWeeks || 0 : 0, ticketsPlay: mine ? mine.ticketsPlay || 0 : 0, ticketsDays: mine ? mine.ticketsDays || 0 : 0, ticketsMilestones: mine ? mine.ticketsMilestones || 0 : 0, weekPts: mine ? mine.weekPts || 0 : 0, breakdown: mine ? { basePts: mine.basePts, dayPts: mine.dayPts, missionPts: mine.missionPts, realShare: mine.realShare, deposits: mine.deposits } : null },
         top: rows, winners, draw, terms: sorteosRules.terms(cfg, key, now)
@@ -27056,12 +26827,12 @@ app.get('/api/admin/sorteos', authMiddleware, adminMiddleware, async (req, res) 
           prev: p.prevKey ? { periodKey: p.prevKey, count: prev.length, winners: sorteosRules.extraWinners(s.extra, prev.length), candidates: prev, draw: draws[key + ':' + p.prevKey] || null, drawDay: p.start } : null };
       }
       const scByUser = new Map((await SorteoScore.find({ key, periodKey: p.periodKey, userId: { $in: entries.map((e) => e.userId) } }).select('userId points deposits depositTotal wagered eligible').lean()).map((x) => [x.userId, x]));
-      const [tTotal, tByReason, tLast, t7] = await Promise.all([SorteoTicket.countDocuments({ key, periodKey: p.periodKey }), SorteoTicket.aggregate([{ $match: { key, periodKey: p.periodKey } }, { $group: { _id: '$reason', n: { $sum: 1 } } }]), SorteoTicket.find({ key, periodKey: p.periodKey }).sort({ n: -1 }).limit(60).select('n username reason at').lean(), SorteoTicket.countDocuments({ key, periodKey: p.periodKey, at: { $gte: new Date(now.getTime() - 7 * sorteosRules.DAY) } })]); // F981
+      const [tTotal, tByReason, tLast, t7] = await Promise.all([SorteoTicket.countDocuments({ key, periodKey: p.periodKey }), SorteoTicket.aggregate([{ $match: { key, periodKey: p.periodKey } }, { $group: { _id: '$reason', n: { $sum: 1 } } }]), SorteoTicket.find({ key, periodKey: p.periodKey }).sort({ n: -1 }).limit(60).select('n username reason at').lean(), SorteoTicket.countDocuments({ key, periodKey: p.periodKey, at: { $gte: new Date(now.getTime() - 7 * sorteosRules.DAY) } })]); // #981
       const mids = sorteosRules.midDrawDates(s, p, now).map((md) => Object.assign({}, md, { draw: draws[_drawKey(key, p.periodKey, 'mid', md.date)] || null }));
       out[key] = {
         period: { key: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt, status: p.status },
-        tickets: { total: tTotal, last7: t7, byReason: Object.fromEntries(tByReason.map((r) => [r._id, r.n])), last: tLast }, // F981
-        mainDraw: draws[_drawKey(key, p.periodKey, 'main')] || null, prevMainDraw: p.prevKey ? (draws[_drawKey(key, p.prevKey, 'main')] || null) : null, midDraws: mids, // F981
+        tickets: { total: tTotal, last7: t7, byReason: Object.fromEntries(tByReason.map((r) => [r._id, r.n])), last: tLast }, // #981
+        mainDraw: draws[_drawKey(key, p.periodKey, 'main')] || null, prevMainDraw: p.prevKey ? (draws[_drawKey(key, p.prevKey, 'main')] || null) : null, midDraws: mids, // #981
         counts: { anotados: entries.length, participantes, anotadosConPuntos: ranking.filter((r) => r.joined).length, extraElegibles: elig, extraGanadores: sorteosRules.extraWinners(s.extra, elig) },
         anotados: entries.map((e) => { const sc = scByUser.get(e.userId); return { id: e.id, userId: e.userId, username: e.username, joinedAt: e.joinedAt, checks: e.checks, telegram: !!e.telegramDeclared, points: sc ? sc.points : 0, deposits: sc ? sc.deposits : 0, depositTotal: sc ? sc.depositTotal : 0, wagered: sc ? sc.wagered : 0, eligible: !!(sc && sc.eligible) }; }),
         ranking: ranking.map((r, i) => ({ rank: i + 1, userId: r.userId, username: r.username, points: r.points, basePts: r.basePts, dayPts: r.dayPts, weekPts: r.weekPts || 0, missionPts: r.missionPts, tickets: r.tickets || 0, activeWeeks: r.activeWeeks || 0, wagered: r.wagered, wageredCounted: r.wageredCounted || 0, realShare: r.realShare, deposits: r.deposits, depositTotal: r.depositTotal, depositDays: r.depositDays, missionWeeks: r.missionWeeks, joined: r.joined, eligible: r.eligible, updatedAt: r.updatedAt })),
@@ -27119,7 +26890,7 @@ app.post('/api/admin/sorteos/recalc', authMiddleware, adminMiddleware, async (re
 });
 // SORTEO de $100.000 del mensual (#939): verificable, entre TODOS los que cargaron >= minDeposits veces en el mes (semilla publicada + shuffle
 // determinista SHA-256 sobre la lista ordenada por id). Se sortea el día 1 el mes CERRADO (periodKey del mes anterior); el mes en curso sólo con early:true.
-// F981: tickets de un cliente (buscador del panel)
+// #981: tickets de un cliente (buscador del panel)
 app.get('/api/admin/sorteos/:key/tickets', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const key = String(req.params.key || ''); if (!SORTEO_KEYS.includes(key)) return res.status(404).json({ error: 'Sorteo inexistente' });
@@ -27129,7 +26900,7 @@ app.get('/api/admin/sorteos/:key/tickets', authMiddleware, adminMiddleware, asyn
     res.json({ success: true, periodKey, total: await SorteoTicket.countDocuments({ key, periodKey }), list });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
-// F981: sorteo del 1° premio / quincenal: 1) publicar la huella (commit) · 2) revelar la semilla y sacar el ganador (reveal)
+// #981: sorteo del 1° premio / quincenal: 1) publicar la huella (commit) · 2) revelar la semilla y sacar el ganador (reveal)
 app.post('/api/admin/sorteos/:key/draw/:step', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
@@ -27142,7 +26913,7 @@ app.post('/api/admin/sorteos/:key/draw/:step', authMiddleware, adminMiddleware, 
     res.json({ success: true, draw: d });
   } catch (e) { logger.error('[sorteos] draw/' + req.params.step + ': ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
-// F981: estadística mínima para PRINCIPAL → "¿están sirviendo los sorteos?" (bajo la clave de INICIO)
+// #981: estadística mínima para PRINCIPAL → "¿están sirviendo los sorteos?" (bajo la clave de INICIO)
 app.get('/api/admin/inicio/sorteos-stats', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const cfg = await _sorteosCfg(); const now = new Date(); const D = sorteosRules.DAY; const draws = (await getConfig('sorteoDraws', null)) || {}; const out = [];
@@ -29397,7 +29168,7 @@ app.post('/api/admin/cronograma-plans', authMiddleware, adminMiddleware, async (
 // por `hours` horas con el tope global de bonos y el rollover global. La audiencia se resuelve al salir cada tanda ⇒ los clientes
 // nuevos entran solos. Los textos nunca nombran la ruleta (guard isRouletteText).
 const arCalendar = require('./src/utils/arCalendar');
-const AUTOPILOT_DEFAULT = { enabled: false, time: '19:00', hours: 4, cap: 8, parts: 3, gapMin: 30, appOnly: true }; // F979 (owner): bonos a las 19 h
+const AUTOPILOT_DEFAULT = { enabled: false, time: '19:00', hours: 4, cap: 8, parts: 3, gapMin: 30, appOnly: true }; // #979 (owner): bonos a las 19 h
 // #821 (owner 2026-10-22): "que no sea ni editable ni que se lance: que automáticamente empiece a correr la estrategia" ⇒ SIEMPRE
 // encendido y con la configuración fija de abajo (sin panel para cambiarla). Sólo se apaga con la env AUTOPILOT_DISABLED=1 (emergencia).
 // #968: refuerzo de octubre-noviembre: 4 avisos más por cliente al mes, bonos válidos 2 h más y +10 puntos en los días comunes.
@@ -30539,8 +30310,10 @@ if (process.env.VERCEL) {
       `regalos=${girox.getGiftModeSummary()}`
     );
     // Pixels del Meta CAPI configurados (propio + partner opcional).
-    try { await _metaPixelsLoad(); } catch (_) {} // #990: píxeles del panel
-    console.log('[MetaCAPI] pixels: ' + (metaCapi.listPixels().map((p) => '#' + p.n + ' ' + p.label + ' ' + String(p.pixelId).slice(0, 4) + '… token=' + (p.token ? 'sí' : 'NO') + ' alcance=' + p.scope.join('/')).join(' · ') || 'ninguno')); // #990
+    console.log(
+      `[MetaCAPI] pixels: propio=${process.env.META_PIXEL_ID ? 'OK' : 'no'} · ` +
+      `partner(2º)=${process.env.META_PIXEL_ID_2 ? 'OK ' + String(process.env.META_PIXEL_ID_2).slice(0, 6) + '…' : 'no configurado'}`
+    );
 
     await initializeData();
     await setupRedisAdapter();

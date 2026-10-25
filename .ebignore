@@ -1,8 +1,0 @@
-# #809: lo que NO viaja a Elastic Beanstalk (el servidor no lo usa en producción).
-.git/
-node_modules/
-docs/
-landing/
-scripts/
-WORKLOG.md
-*.zip

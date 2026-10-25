@@ -59,7 +59,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - `src/platforms/` — **multi-plataforma (2026-10-16):** registro (`index.js`), adaptador girox
   (envoltura de giroxService), **esqueleto de Ganamos** (`ganamos.js`, mismo contrato, sin API
   hasta cargar `GANAMOS_API_URL`/`GANAMOS_API_KEY`), **de JUGAYGANA** (`jugaygana.js`, #378, ídem con `JUGAYGANA_*`;
-  logo en `public/images/jugaygana.png`) **y de PICA ROJA** (`picaroja.js`, #986, ídem con `PICAROJA_*`; **fuera del registro desde #989**: "Pica Roja APP" es la página propia, ver abajo). Las tres son white-label de 1girox:
+  logo en `public/images/jugaygana.png`) **y de PICA ROJA** (`picaroja.js`, #986, ídem con `PICAROJA_*`). Las tres son white-label de 1girox:
   misma Partner API, se conectan SOLO con credenciales (SSM). Checklist: `docs/PLATFORMS.md`.
 - `src/models/` — schemas Mongoose canónicos (fuente de verdad). `Story.js` (#361) = HISTORIAS de la app que
   publica el admin (panel → Historias; PWA `js/stories.js`, anillo arriba a la derecha al lado de Perfil; vencen por
@@ -336,19 +336,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **HISTORIAS CON BONO (#742, 2026-10-21):** una historia puede llevar `bonusPct` por `bonusHours` (+ push a todos). **#978:** la automática es SEMANAL (miércoles 12:30, +100 % por 3 h, `STORY_AUTO_BONUS`, `bonusDays=[3]`); ese día el autopiloto no manda campaña. El cliente que toca
   "Reclamar ahora" queda con `User.storyBonus` (pct, expiresAt) y `claimStoryBonusPercent` lo consume PRIMERO en `resolveAutoBonus` en su
   próxima carga. Un bono nuevo que deba aplicarse a la carga va a esa cadena (no a `creditUserBalance`); el cliente que no reclamó no ve nada.
-- **PÍXELES DE META (#797/#990):** por publicista en SSM `META_PIXEL_ID_n` + `META_CAPI_ACCESS_TOKEN_n` + `META_PIXEL_PUBLISHER_n` (n = 2..9; códigos de
-  campaña / nombre del publicista / `*`). Navegador (landing) = `pixelIdsForCampaign`; CAPI = `_capiDestinations(scope)` manda a cada píxel sólo los
-  eventos de SUS clientes. Sin token = sólo navegador. Diagnóstico: `GET /api/admin/meta-pixels[?campaign=]` y `/api/admin/meta-pixels/:n/test`.
 - **LINK DE RESULTADOS DEL PUBLICISTA (#805):** `Campaign.statsToken` ⇒ `/r/<token>` muestra números agregados de esa campaña sin login
   (sólo lectura). Generar uno nuevo invalida el anterior; desactivar = `statsToken:null`. Nunca agregar ahí datos de usuarios ni retiros.
-- **PLATAFORMA "PICA ROJA APP" (#989, 2026-10-25):** la 2ª plataforma que ve el cliente es la PÁGINA PROPIA `public/js/lobby.js` (`VIP.lobby`) con los juegos de
-  Girox sobre la MISMA cuenta de 1girox: el server nunca la ve (`_injectPR` en home.js la agrega al front, al server va `girox`; `User.activeBrand` sólo anota la
-  activa). Predeterminada y primera; "1girox" es la otra; se cambia libremente (sin bloqueo por saldo). Sin menú elegido se entra DIRECTO a la plataforma
-  (`_defaultPref()` = 'girox' ⇒ `_giroxDirect` abre la elegida). Arriba la barra del casino con el sorteo (píldora ⇄ cartel, `paintCasino` pinta todas las
-  `.casino-topbar`), la Carga rápida en `#prlQlDock` (abierta al entrar, ✕ ⇒ botón centrado), Top partidos (`/api/sports/board`, ESPN; tocar ⇒ Digitain directo:
-  1girox NO tiene API de apuestas), Proveedores rojo/blanco. CSS `css/picaroja.css`. Prueba `scripts/test-picaroja-front.js`. **Interruptor:** panel → App →
-  Plataformas → "Pica Roja APP" (`Config['picarojaAppEnabled']`; apagada ⇒ `picarojaApp:false` en `/api/platforms` ⇒ `_prOff()` manda a todos a 1girox). JUGAYGANA/Ganamos/BuffaloPlay de
-  la gemela NO se trajeron; el adaptador `src/platforms/picaroja.js` (#986) quedó fuera del registro.
 - **CASINO CON EL BLOQUE DEL MENÚ ARRIBA (#988):** dentro de la plataforma, debajo de la barra, va `#casinoHome` (saldo · sorteos · nivel/racha · CARGÁ AQUÍ ·
   servicios copiados del básico) y el overlay SCROLLEA (barra sticky, iframe de una pantalla). Sin 1ª carga el cartel rojo grande ocupa el lugar del saldo; con
   carga, CARGÁ AQUÍ rectangular; los dos despliegan la Carga rápida ahí mismo (`toggleCasinoLoad(force, true)`). Lo flotante del overlay va `position:fixed`.

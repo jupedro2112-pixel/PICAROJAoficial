@@ -2834,15 +2834,11 @@ async function loadUserInfo(userId) {
               '" style="font-size:12px;font-weight:800;color:' + (user.vipLevelInfo.color || '#ffd700') + ';">' +
               user.vipLevelInfo.emoji + ' ' + escapeHtml(user.vipLevelInfo.name) + '</span>'
             : '';
-        // #969 (owner: "un solo admin para cargar cada plataforma"): en qué plataforma está jugando el cliente (la carga va a esa; es la misma
-        // cuenta de 1girox). Se cambia con el botón de marca del cliente (#913).
-        const _BRN = { picaroja: 'Pica Roja APP', girox: '1girox' };
-        const brandTag = ' <span class="chat-brand" title="Plataforma activa del cliente" style="font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;background:var(--p-surface-2,#eef);border:1px solid var(--p-border,#ccd);">🎰 ' + escapeHtml(_BRN[user.activeBrand] || 'Pica Roja APP') + '</span>';
         if (user.acquisitionPublisher) {
-            elements.chatUsername.innerHTML = escapeHtml(user.username) + vipTag + brandTag +
+            elements.chatUsername.innerHTML = escapeHtml(user.username) + vipTag +
                 ' <span class="chat-publisher">(📣 ' + escapeHtml(user.acquisitionPublisher) + ')</span>';
         } else {
-            elements.chatUsername.innerHTML = escapeHtml(user.username) + vipTag + brandTag;
+            elements.chatUsername.innerHTML = escapeHtml(user.username) + vipTag;
         }
 
         // Mostrar estado de la app de notificaciones
@@ -4376,10 +4372,6 @@ function renderUsers(users) {
             ? `<button class="action-btn-small" title="Cambiar contraseña" onclick='openUserPasswordModal(${JSON.stringify(user.id)}, ${JSON.stringify(user.username)}, ${JSON.stringify(user.role)})'><span class="icon icon-key"></span></button>`
             : '';
 
-        // #913: cambiar la plataforma activa del cliente (Pica Roja APP / 1girox) sin tocar su saldo (es la misma cuenta de Girox).
-        const brandBtn = adminRole === 'admin' && !isAdminUser
-            ? `<button class="action-btn-small" title="Cambiar plataforma activa (Pica Roja APP / 1girox)" onclick='adminSetBrand(${JSON.stringify(user.id)}, ${JSON.stringify(user.username)})'>🏷️</button>`
-            : '';
         let blockBtn = '';
         if (canBlock) {
             if (user.isBlocked) {
@@ -4448,7 +4440,7 @@ function renderUsers(users) {
                     <span class="icon icon-comment"></span>
                 </button>
                 ${pwdBtn}
-                ${blockBtn}${brandBtn}
+                ${blockBtn}
                 ${accessLinkBtn}
             </td>
         </tr>
@@ -4872,20 +4864,6 @@ window.toggleFraudDetail = toggleFraudDetail;
 window.blockFromFraud = blockFromFraud;
 window.handleBlockUser = handleBlockUser;
 window.handleUnblockUser = handleUnblockUser;
-// #913: plataforma activa del cliente (misma cuenta de 1girox: no mueve fichas).
-async function adminSetBrand(userId, username) {
-    const opts = { '1': 'picaroja', '2': 'girox' };
-    const pick = prompt('Plataforma activa de ' + username + ' (el saldo NO cambia: es la misma cuenta de 1girox)\n\n1 = Pica Roja APP\n2 = 1girox\n\nEscribí el número:');
-    if (pick == null) return;
-    const brand = opts[String(pick).trim()]; if (!brand) { showToast('Opción inválida', 'error'); return; }
-    try {
-        const r = await authFetch('/api/admin/users/' + encodeURIComponent(userId) + '/brand', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brand }) });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) { showToast(d.error || 'No se pudo cambiar la plataforma', 'error'); return; }
-        showToast('✅ ' + username + ' ahora está en ' + d.brandName + ' (que cierre y abra la app)', 'success');
-    } catch (e) { showToast('Error de conexión', 'error'); }
-}
-window.adminSetBrand = adminSetBrand;
 window.handleToggleVerifyPhone = handleToggleVerifyPhone;
 window.handleToggleLoginNoPwd = handleToggleLoginNoPwd;
 
@@ -6748,7 +6726,6 @@ async function loadCBUConfig() {
     loadInstantCashbackCfg();
     // Cargar las plataformas de juego (multi-plataforma; guarda solo admin general)
     loadPlatformsCfg();
-    try { loadMetaPixels(); } catch (_) {} // #990
     // Cargar el estado de los niveles VIP (solo admin general)
     loadVipLevelsConfig();
     // Cargar los premios del fueguito (solo admin general)
@@ -7047,49 +7024,6 @@ async function savePlatformsCfg() {
 }
 window.loadPlatformsCfg = loadPlatformsCfg;
 window.savePlatformsCfg = savePlatformsCfg;
-// ===== #990: Configuración → "📣 Píxeles de Meta por publicista" (sólo admin general). GET/POST/DELETE /api/admin/meta-pixels, prueba /:n/test.
-async function loadMetaPixels() {
-    const box = document.getElementById('metaPixelsList'), form = document.getElementById('metaPixelsForm'), header = document.getElementById('metaPixelsHeader'); if (!box) return;
-    try {
-        const r = await authFetch('/api/admin/meta-pixels');
-        if (r.status === 403) { if (form) form.style.display = 'none'; if (header) header.style.display = 'none'; return; }
-        const j = await r.json(); const L = j.pixels || [];
-        if (!L.length) { box.innerHTML = '<div style="color:#aaa;">Todavía no hay píxeles cargados.</div>'; return; }
-        box.innerHTML = '<table style="width:100%;border-collapse:collapse;"><thead><tr style="color:#aaa;text-align:left;"><th style="padding:4px 6px;">Para</th><th style="padding:4px 6px;">Píxel</th><th style="padding:4px 6px;">Token</th><th style="padding:4px 6px;">Recibe por servidor</th><th style="padding:4px 6px;">Últimos envíos</th><th></th></tr></thead><tbody>' +
-            L.map((p) => { const u = p.ultimosEnvios; const last = u && u.last ? ((u.last.ok ? '✅ ' : '❌ ') + escapeHtml(u.last.event) + ' · ' + new Date(u.last.at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + (u.last.ok ? '' : ' · ' + escapeHtml(String(u.last.detail || '').slice(0, 90)))) : '—';
-                return '<tr style="border-top:1px solid rgba(255,255,255,.08);"><td style="padding:6px;"><b>' + escapeHtml((p.alcance || []).join(', ')) + '</b><br><small style="color:#888;">' + (p.origen === 'panel' ? 'cargado en el panel' : 'variable de Amazon #' + p.n) + '</small></td>' +
-                    '<td style="padding:6px;font-family:monospace;">' + escapeHtml(p.pixel) + '</td><td style="padding:6px;">' + (String(p.token).startsWith('sí') ? '✅ sí' : '❌ ' + escapeHtml(p.token)) + '</td><td style="padding:6px;">' + escapeHtml(p.recibePorCapi) + (u ? '<br><small style="color:#888;">' + u.ok + ' ok · ' + u.fail + ' con error</small>' : '') + '</td>' +
-                    '<td style="padding:6px;font-size:11.5px;">' + last + '</td><td style="padding:6px;white-space:nowrap;"><button class="action-btn-small" title="Probar contra Meta" onclick="testMetaPixel(' + JSON.stringify(String(p.n)) + ')">🧪 Probar</button>' +
-                    (p.origen === 'panel' ? ' <button class="action-btn-small" title="Editar" onclick="editMetaPixel(' + JSON.stringify(p.id) + ',' + JSON.stringify((p.alcance || []).join(', ')) + ',' + JSON.stringify(p.pixelId || '') + ',' + JSON.stringify(!!p.soloCapi) + ')">✏️</button> <button class="action-btn-small" title="Borrar" onclick="deleteMetaPixel(' + JSON.stringify(p.id) + ')">🗑️</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table>';
-    } catch (_) { box.innerHTML = '<div style="color:#ff6b6b;">No se pudo cargar.</div>'; }
-}
-function clearMetaPixelForm() { ['mpId', 'mpScope', 'mpPixel', 'mpToken', 'mpTest'].forEach((id) => { const e = document.getElementById(id); if (e) e.value = ''; }); const c = document.getElementById('mpCapiOnly'); if (c) c.checked = false; const m = document.getElementById('mpMsg'); if (m) m.textContent = ''; }
-function editMetaPixel(id, scope, pixelId, capiOnly) { document.getElementById('mpId').value = id; document.getElementById('mpScope').value = scope; document.getElementById('mpPixel').value = pixelId; document.getElementById('mpToken').value = ''; document.getElementById('mpCapiOnly').checked = !!capiOnly; const m = document.getElementById('mpMsg'); if (m) m.textContent = 'Editando: el token vacío = se mantiene el guardado.'; try { document.getElementById('mpScope').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {} }
-async function saveMetaPixel() {
-    const msg = document.getElementById('mpMsg');
-    const body = { id: document.getElementById('mpId').value.trim(), scope: document.getElementById('mpScope').value.trim(), pixelId: document.getElementById('mpPixel').value.trim(), token: document.getElementById('mpToken').value.trim(), testEventCode: document.getElementById('mpTest').value.trim(), capiOnly: document.getElementById('mpCapiOnly').checked };
-    try {
-        const r = await authFetch('/api/admin/meta-pixels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) { if (msg) { msg.style.color = '#ff6b6b'; msg.textContent = j.error || 'No se pudo guardar'; } return; }
-        if (msg) { msg.style.color = '#26e07f'; msg.textContent = '✓ Guardado. Ya recibe eventos (sin redeploy). Tocá 🧪 Probar para confirmar con Meta.'; }
-        clearMetaPixelForm(); loadMetaPixels();
-    } catch (_) { if (msg) { msg.style.color = '#ff6b6b'; msg.textContent = 'Error de conexión'; } }
-}
-async function testMetaPixel(n) {
-    try {
-        const r = await authFetch('/api/admin/meta-pixels/' + encodeURIComponent(n) + '/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-        const j = await r.json().catch(() => ({}));
-        if (j.ok) alert('✅ Meta aceptó el evento de prueba en el píxel ' + (j.pixelId || '') + '.\n\nRespuesta: ' + JSON.stringify(j.response) + (j.testEventCode ? '\n\nMiralo en Administrador de eventos → Probar eventos (código ' + j.testEventCode + ').' : '\n\nEn 1-2 minutos aparece como "PicaRojaTest" en el Administrador de eventos del publicista.'));
-        else alert('❌ Meta rechazó la prueba.\n\n' + (typeof j.error === 'string' ? j.error : JSON.stringify(j.error)) + (j.pista ? '\n\n👉 ' + j.pista : ''));
-        loadMetaPixels();
-    } catch (_) { alert('Error de conexión'); }
-}
-async function deleteMetaPixel(id) {
-    if (!confirm('¿Borrar este píxel? Deja de recibir eventos al instante.')) return;
-    try { const r = await authFetch('/api/admin/meta-pixels/' + encodeURIComponent(id), { method: 'DELETE' }); if (!r.ok) { showToast('No se pudo borrar', 'error'); return; } showToast('Píxel borrado', 'success'); loadMetaPixels(); } catch (_) { showToast('Error de conexión', 'error'); }
-}
-window.loadMetaPixels = loadMetaPixels; window.saveMetaPixel = saveMetaPixel; window.testMetaPixel = testMetaPixel; window.deleteMetaPixel = deleteMetaPixel; window.editMetaPixel = editMetaPixel; window.clearMetaPixelForm = clearMetaPixelForm;
 window.agentChoosePlatform = agentChoosePlatform;
 window.populateDepositPlatforms = populateDepositPlatforms;
 window.loadPlatformBanner = loadPlatformBanner;
@@ -16639,31 +16573,8 @@ window.resetVipLevelsTable = resetVipLevelsTable;
 
 
 // ═══ #296: tilde de plataformas ofrecidas (COMANDOS) — reusa /api/admin/platforms ═══
-// #989: interruptor de la plataforma propia "Pica Roja APP" (App → Plataformas). GET/POST /api/admin/picaroja-app (sólo admin general guarda).
-async function loadPicarojaApp() {
-    const st = document.getElementById('prAppState'), btn = document.getElementById('prAppBtn'); if (!st) return;
-    try {
-        const r = await authFetch('/api/admin/picaroja-app'); if (!r.ok) { st.textContent = '—'; return; }
-        const j = await r.json(); const on = j.enabled !== false;
-        st.textContent = on ? '🟢 ENCENDIDA (predeterminada)' : '🔴 APAGADA (todos a 1girox)'; st.style.color = on ? '#26e07f' : '#ff6b6b';
-        if (btn) { btn.style.display = j.canEdit === true ? '' : 'none'; btn.textContent = on ? '⛔ Apagar Pica Roja APP' : '✅ Encender Pica Roja APP'; btn.dataset.on = on ? '1' : '0'; }
-    } catch (_) { st.textContent = '—'; }
-}
-async function togglePicarojaApp() {
-    const btn = document.getElementById('prAppBtn'); const on = btn && btn.dataset.on === '1';
-    if (on && !confirm('¿Apagar Pica Roja APP?\n\nLa app deja de ofrecerla y todos entran a 1girox (quien la tenía elegida pasa solo). No se mueve plata: es la misma cuenta. Se puede volver a encender cuando quieras.')) return;
-    try {
-        const r = await authFetch('/api/admin/picaroja-app', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !on }) });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) { showToast(j.error || 'No se pudo cambiar', 'error'); return; }
-        showToast(j.enabled ? '✅ Pica Roja APP encendida: vuelve a ser la predeterminada' : '⛔ Pica Roja APP apagada: la app manda a todos a 1girox', 'success');
-        loadPicarojaApp();
-    } catch (_) { showToast('Error de conexión', 'error'); }
-}
-window.togglePicarojaApp = togglePicarojaApp;
 async function loadPlatToggles() {
     const row = document.getElementById('platTogglesRow'); if (!row) return;
-    try { loadPicarojaApp(); } catch (_) {} // #989
     try {
         const r = await authFetch('/api/admin/platforms'); const j = await r.json();
         if (!r.ok) { row.textContent = 'Sin permiso'; return; }

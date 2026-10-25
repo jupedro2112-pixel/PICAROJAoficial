@@ -930,13 +930,6 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                                 <button class="btn-primary btn-small" id="platTogglesSaveBtn" onclick="savePlatToggles()"><span class="icon icon-save"></span> Guardar</button>
                                 <span id="platTogglesMsg" style="font-size:11.5px;color:#888;">Sin tilde no aparece ni en Inicio ni en las cargas. El detalle (links, logos, pregunta al cargar) está en Configuración → Plataformas de juego.</span>
                             </div>
-                            <!-- #989: interruptor de la plataforma propia Pica Roja APP (la página con los juegos de Girox). Apagar = todos a 1girox. -->
-                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.08);border-radius:8px;" id="prAppRow">
-                                <label style="margin:0;" title="La página propia de PICA ROJA con todos los juegos de Girox (misma cuenta y saldo). Si algo falla, apagala: la app deja de ofrecerla y todos entran a 1girox.">♦️ <b>Pica Roja APP</b> (plataforma propia):</label>
-                                <b id="prAppState" style="font-size:13px;">Cargando…</b>
-                                <button class="btn-primary btn-small" id="prAppBtn" onclick="togglePicarojaApp()" style="display:none;">…</button>
-                                <span style="font-size:11.5px;color:#888;">Apagada: la app no la ofrece y quien la tenía elegida pasa solo a 1girox (misma cuenta: no se mueve plata). Encendida: vuelve a ser la predeterminada. La app lo toma en la próxima apertura.</span>
-                            </div>
                             <!-- #290: % automático en la PRIMERA carga (lo que promete la publicidad) -->
                             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
                                 <label style="margin:0;" title="La PRIMERA carga real de cada cliente (manual o automática) lleva este % de bono automático cuando no tiene otro bono pendiente, con el tope de abajo. 0 = apagado.">🥇 % automático en la PRIMERA carga (publicidad):</label>
@@ -1153,32 +1146,6 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                             <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
                                 <button class="btn-primary" id="platSaveBtn" onclick="savePlatformsCfg()">💾 Guardar plataformas</button>
                                 <span id="platMsg" style="font-size:12px;color:#aaa;"></span>
-                            </div>
-                        </div>
-                        <!-- #990: PÍXELES DE META POR PUBLICISTA (sólo admin general). Reemplaza tener que cargar META_PIXEL_ID_n en SSM. -->
-                        <div class="panel-subheader" style="margin-top: 24px;" id="metaPixelsHeader">
-                            <h3>📣 Píxeles de Meta por publicista</h3>
-                        </div>
-                        <div class="cbu-form" id="metaPixelsForm">
-                            <p style="color:#aaa;font-size:12px;line-height:1.5;margin:0 0 10px;">
-                                Cada publicista recibe en SU píxel los eventos de SUS clientes: PageView y registro en la landing (navegador) y registro, cargas (Purchase) y
-                                reembolsos desde el servidor (API de conversiones). Pedile al publicista: <b>ID del píxel</b> (Administrador de eventos → su píxel → ID del
-                                conjunto de datos) y el <b>token de la API de conversiones</b> (Eventos → Configuración → API de conversiones → Generar token). El token
-                                se guarda cifrado. "Probar" manda un evento <code>PicaRojaTest</code> y muestra lo que contesta Meta.
-                            </p>
-                            <div id="metaPixelsList" style="margin:0 0 10px;font-size:12.5px;">Cargando…</div>
-                            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-                                <input type="hidden" id="mpId">
-                                <div class="form-group" style="flex:1;min-width:170px;"><label>Publicista o campaña</label><input type="text" id="mpScope" placeholder="PICAROJAOK (o varios por coma, o *)" maxlength="200"></div>
-                                <div class="form-group" style="flex:1;min-width:170px;"><label>ID del píxel</label><input type="text" id="mpPixel" placeholder="15-16 números" maxlength="24" inputmode="numeric"></div>
-                                <div class="form-group" style="flex:2;min-width:220px;"><label>Token API de conversiones</label><input type="password" id="mpToken" placeholder="EAAB… (al editar, vacío = no cambiar)" autocomplete="new-password"></div>
-                                <div class="form-group" style="flex:0 0 150px;"><label>Código de prueba (opc.)</label><input type="text" id="mpTest" placeholder="TEST12345" maxlength="40"></div>
-                                <label style="display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:12px;"><input type="checkbox" id="mpCapiOnly"> Sólo servidor (no cargar en la landing)</label>
-                            </div>
-                            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                                <button class="btn-primary" id="mpSaveBtn" onclick="saveMetaPixel()">💾 Guardar píxel</button>
-                                <button class="btn-secondary" type="button" onclick="clearMetaPixelForm()">Limpiar</button>
-                                <span id="mpMsg" style="font-size:12px;color:#aaa;"></span>
                             </div>
                         </div>
                         <!-- Reembolso ACUMULATIVO de por vida (ESPEC-REEMBOLSO-1GIROX, solo admin general) -->

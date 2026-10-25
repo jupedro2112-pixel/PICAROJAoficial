@@ -234,4 +234,4 @@ function planDay(dayKey, matches, ctx) {
   return matchItems.concat(out.map((x, i) => Object.assign({ slot: i, time: SLOTS[i] }, x))).map((x) => (x.img ? Object.assign(x, { img: fill(x.img) }) : x));
 }
 
-module.exports = { topMatches, planDay, favoriteSlot, SLOTS, THEMES, ALTS, MATCH_TIME, LEAGUES, TEAM_W, short, decOdds: _decOdds }; // #989: ligas, pesos y cuotas también para src/services/sportsBoard.js (Top partidos de Pica Roja APP)
+module.exports = { topMatches, planDay, favoriteSlot, SLOTS, THEMES, ALTS, MATCH_TIME };
