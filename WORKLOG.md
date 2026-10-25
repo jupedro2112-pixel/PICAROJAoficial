@@ -8,6 +8,27 @@
 
 ## Sesión 2026-10-25
 
+### 990. 📣 Píxel de Meta por publicista: la CAPI manda a cada píxel los eventos de SUS clientes, y se carga desde el PANEL — admin SW v207
+**Pedido (owner):** "¿por qué no llega el píxel al publicista picarojaok? Está cargado en Amazon con su token" · "quiero arreglarlo desde el admin, cargar
+directo y que se arregle". (Aplicado SOLO este arreglo sobre el código de producción del 24/10; nada de Pica Roja.)
+**Verificado desde acá:** `GET https://picaroja.com/api/meta-pixel-id?c=PICAROJAOK` devuelve un píxel y la landing de Vercel tiene el `loadMetaPixel`
+(#797) ⇒ el píxel del NAVEGADOR (PageView + registro en la landing) estaba bien.
+**El error (código):** `_capiDestinations()` sólo armaba destinos con el píxel propio y el `_2`. Un píxel de publicista cargado como `_3`..`_9` con su token
+NUNCA recibía eventos server-side (registro desde la app, cargas = Purchase, reembolsos); y el `_2` recibía los eventos de TODOS los clientes.
+- **Dato del owner:** "el otro publicista, picaroja2026, está tomando bien los datos". Verificado: `/api/meta-pixel-id?c=PICAROJA2026` devuelve `[]`
+  (sin píxel de navegador) y aun así le llega todo ⇒ picaroja2026 es el `_2` de SSM (el único que recibía la CAPI). Por eso el `_2` queda EXACTAMENTE como
+  hoy (recibe todos los eventos, se tenga o no `META_PIXEL_PUBLISHER_2`): no se le cambia nada. El alcance rige para `_3`..`_9` y para los del panel.
+- **Fix (`src/services/metaCapiService.js`):** `listPixels()` (SSM n=1..9 + los del panel) y `_capiDestinations(scopeInfo)`: un píxel con token (salvo
+  el `_2`) recibe por CAPI sólo los eventos de los clientes de su alcance (`META_PIXEL_PUBLISHER_n` o el alcance cargado en el panel: códigos de campaña / nombre del publicista;
+  `*` o sin alcance = todo, como el partner de siempre; sin token = sólo navegador). `sendEvent` resuelve el publicista del cliente (`resolveEventScope`).
+  `pixelIdsForCampaign` (navegador de la landing) también toma los del panel. Contadores por píxel en memoria. Test `scripts/test-meta-pixels.js`.
+- **Panel (admin general) → Configuración → "📣 Píxeles de Meta por publicista":** lista (de Amazon y del panel: píxel enmascarado, token sí/no, qué recibe,
+  últimos envíos) + formulario (publicista o campaña · ID del píxel · token · código de prueba · sólo servidor) + 🧪 Probar (manda `PicaRojaTest` y muestra
+  la respuesta de Meta; código 190 = token inválido/vencido) + editar/borrar. `Config['metaPixels']` con el token cifrado (`_credEncrypt`, JWT_SECRET);
+  `_metaPixelsLoad()` al arrancar, cada 5 min y al guardar ⇒ `metaCapi.setConfigPixels()`. Sin redeploy después de cargar. Rutas: `GET/POST
+  /api/admin/meta-pixels`, `DELETE /:id`, `GET|POST /api/admin/meta-pixels/:n/test`, `GET /api/admin/meta-pixels?campaign=XXXX`.
+- Sólo cambian servidor y panel (la app del cliente sigue en v647).
+
 ### ⏪ main = lo que CORRE en producción (24/10, #982 + fallback ×1, app v647 · admin SW v206). Todo lo posterior quedó fuera.
 **Pedido (owner):** "revertí a lo último que subí, que quede igual igual así no se rompe nada". Se verificó contra picaroja.com (home.js, pin.css,
 landing, sorteos.js, index.html y admin-sw.js idénticos) que producción corre el commit `945cdee` (o `14edc06`, que sólo difiere en un fallback del

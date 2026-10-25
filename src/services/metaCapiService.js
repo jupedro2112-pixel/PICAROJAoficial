@@ -29,17 +29,42 @@ try { logger = require('../utils/logger') || console; } catch (e) { /* fallback 
 const GRAPH_API_VERSION = 'v22.0';
 let _missingConfigLogged = false;
 
-// Destinos del CAPI: el pixel propio + un 2º OPCIONAL (partner). Se lee en cada
-// envío (las env de SSM cargan en el bootstrap async, después del require).
-function _capiDestinations() {
-  const dests = [];
-  if (process.env.META_PIXEL_ID && process.env.META_CAPI_ACCESS_TOKEN) {
-    dests.push({ label: 'propio', pixelId: process.env.META_PIXEL_ID, token: process.env.META_CAPI_ACCESS_TOKEN, testCode: process.env.META_TEST_EVENT_CODE });
+// Píxeles configurados (env/SSM, se leen en cada envío porque SSM carga en el bootstrap async, después del require):
+//   n=1: META_PIXEL_ID + META_CAPI_ACCESS_TOKEN (+ META_TEST_EVENT_CODE) = el propio, recibe TODO.
+//   n=2..9: META_PIXEL_ID_n + META_CAPI_ACCESS_TOKEN_n (+ META_TEST_EVENT_CODE_n) y META_PIXEL_PUBLISHER_n (códigos de campaña, nombres de
+//   publicista o '*', por coma). #990 (owner: "no le llega el píxel al publicista picarojaok, está cargado con su token"): hasta acá la CAPI
+//   sólo mandaba al propio y al _2 (y el _2 recibía los eventos de TODOS los clientes); los _3.._9 sólo servían para el navegador de la landing.
+//   Ahora un píxel con token recibe por CAPI los eventos de SUS clientes (los de las campañas/publicistas de META_PIXEL_PUBLISHER_n, o todos
+//   con '*'); sin META_PIXEL_PUBLISHER_n sigue recibiendo todo (el "partner" de siempre). Sin token = sólo navegador.
+// #990: píxeles cargados desde el PANEL (Configuración → Píxeles de Meta por publicista). El server los lee de Config['metaPixels'] (token cifrado),
+// los descifra y los deja acá con setConfigPixels(); valen igual que los de SSM. Cada uno: { id, label, pixelId, token, scope[], testCode, capiOnly }.
+let _cfgPixels = [];
+function setConfigPixels(list) { _cfgPixels = Array.isArray(list) ? list.filter((p) => p && p.pixelId) : []; }
+function listPixels() {
+  const out = [];
+  if (process.env.META_PIXEL_ID) out.push({ n: 1, label: 'propio', pixelId: String(process.env.META_PIXEL_ID), token: process.env.META_CAPI_ACCESS_TOKEN || '', testCode: process.env.META_TEST_EVENT_CODE || '', scope: ['*'], capiOnly: false });
+  for (let i = 2; i <= 9; i++) {
+    const pid = String(process.env['META_PIXEL_ID_' + i] || '').trim(); if (!pid) continue;
+    const scope = _parsePixelScope(process.env['META_PIXEL_PUBLISHER_' + i]);
+    out.push({ n: i, label: i === 2 ? ('partner (recibe todo' + (scope.length ? '; navegador: ' + scope.join('/') : '') + ')') : (scope.length ? ('publicista ' + scope.join('/')) : 'partner'), pixelId: pid, token: String(process.env['META_CAPI_ACCESS_TOKEN_' + i] || ''), testCode: String(process.env['META_TEST_EVENT_CODE_' + i] || ''),
+      scope: scope.length ? scope : ['*'], capiOnly: /^(1|true|on|yes)$/i.test(String(process.env['META_PIXEL_CAPIONLY_' + i] || '')), source: 'ssm' });
   }
-  if (process.env.META_PIXEL_ID_2 && process.env.META_CAPI_ACCESS_TOKEN_2) {
-    dests.push({ label: 'partner', pixelId: process.env.META_PIXEL_ID_2, token: process.env.META_CAPI_ACCESS_TOKEN_2, testCode: process.env.META_TEST_EVENT_CODE_2 });
-  }
-  return dests;
+  _cfgPixels.forEach((p) => { const scope = Array.isArray(p.scope) && p.scope.length ? p.scope : ['*'];
+    out.push({ n: 'c' + p.id, id: p.id, label: p.label || ('publicista ' + scope.join('/')), pixelId: String(p.pixelId), token: String(p.token || ''), testCode: String(p.testCode || ''), scope, capiOnly: !!p.capiOnly, source: 'panel' }); });
+  return out;
+}
+function _scopeMatches(scope, info) {
+  if (!scope || !scope.length || scope.includes('*')) return true;
+  if (!info) return false;
+  const code = info.campaignCode ? String(info.campaignCode).trim().toUpperCase() : '', pub = info.publisher ? String(info.publisher).trim().toLowerCase() : '';
+  return scope.some((s) => (code && s.toUpperCase() === code) || (pub && s.toLowerCase() === pub));
+}
+// Destinos de la CAPI para un evento: los píxeles con token cuyo alcance incluye al cliente del evento (info = { publisher, campaignCode } o null).
+// Sin `info` (p. ej. isConfigured) devuelve todos los que tienen token.
+// ⚠️ El `_2` de SSM se mantiene EXACTAMENTE como siempre: recibe TODOS los eventos aunque tenga META_PIXEL_PUBLISHER_2 (owner 2026-10-25: "el otro
+// publicista, picaroja2026, está tomando bien los datos": es ese y no hay que cambiarle nada). El alcance rige para _3.._9 y para los del panel.
+function _capiDestinations(info) {
+  return listPixels().filter((p) => p.token && (info === undefined || (p.source === 'ssm' && p.n === 2) || _scopeMatches(p.scope, info)));
 }
 
 // ---- Resolución del "dueño" de un evento (publicista + campaña) — #197 (réplica
@@ -78,17 +103,15 @@ async function pixelIdsForCampaign(campaignCode) {
   const code = String(campaignCode || '').trim().toUpperCase();
   if (!code) return [];
   const publisher = await _publisherOfCampaign(code);
-  const pubLower = publisher ? String(publisher).trim().toLowerCase() : null;
+  const info = { publisher, campaignCode: code };
+  // #990: los de SSM (n ≥ 2 con META_PIXEL_PUBLISHER_n) y los del panel; nunca el propio (n=1) ni los "sólo CAPI". Un píxel de SSM sin alcance
+  // (partner) tampoco va al navegador (como antes: sólo recibe por CAPI).
   const ids = [];
-  for (let i = 2; i <= 9; i++) {
-    const pid = String(process.env['META_PIXEL_ID_' + i] || '').trim();
-    if (!pid) continue;
-    if (/^(1|true|on|yes)$/i.test(String(process.env['META_PIXEL_CAPIONLY_' + i] || ''))) continue;
-    const scope = _parsePixelScope(process.env['META_PIXEL_PUBLISHER_' + i]);
-    if (!scope.length) continue;
-    const ok = scope.some((s) => s === '*' || s.toUpperCase() === code || (pubLower && s.toLowerCase() === pubLower));
-    if (ok) ids.push(pid);
-  }
+  listPixels().forEach((p) => {
+    if (p.n === 1 || p.capiOnly) return;
+    if (p.source === 'ssm' && !_parsePixelScope(process.env['META_PIXEL_PUBLISHER_' + p.n]).length) return;
+    if (_scopeMatches(p.scope, info) && !ids.includes(p.pixelId)) ids.push(p.pixelId);
+  });
   return ids;
 }
 async function resolveEventScope(userInfo, opts) {
@@ -227,8 +250,12 @@ function parseCookies(cookieHeader) {
 //   customData      — { value, currency, content_name, ... } pasado tal cual a Meta
 //   options         — { eventId, eventSourceUrl, actionSource, testEventCode, req }
 async function sendEvent(eventName, userInfo, customData, options) {
-  const dests = _capiDestinations();
+  const opts0 = options || {};
+  // #990: a qué publicista/campaña pertenece el cliente del evento (para los píxeles con alcance). Si no se puede saber, sólo los píxeles sin alcance.
+  let scopeInfo = null; try { scopeInfo = await resolveEventScope(userInfo || {}, { publisher: opts0.publisher, campaignCode: opts0.campaignCode }); } catch (_) { scopeInfo = null; }
+  const dests = _capiDestinations(scopeInfo);
   if (!dests.length) {
+    if (_capiDestinations().length) return { sent: false, reason: 'no_pixel_for_scope', scope: scopeInfo }; // hay píxeles, pero ninguno para este cliente
     if (!_missingConfigLogged) {
       _missingConfigLogged = true;
       logger.warn('[MetaCAPI] META_PIXEL_ID o META_CAPI_ACCESS_TOKEN no configurados — eventos server-side deshabilitados');
@@ -274,17 +301,42 @@ async function sendEvent(eventName, userInfo, customData, options) {
         params: { access_token: d.token },
         timeout: 5000
       });
-      return { dest: d.label, sent: true, data: response.data };
+      _noteResult(d.n, eventName, true, response.data);
+      return { dest: d.label, n: d.n, sent: true, data: response.data };
     } catch (err) {
       const detail = err.response && err.response.data ? JSON.stringify(err.response.data) : err.message;
-      logger.warn(`[MetaCAPI] Error enviando evento ${eventName} a pixel ${d.label}: ${detail}`);
-      return { dest: d.label, sent: false, error: detail };
+      logger.warn(`[MetaCAPI] Error enviando evento ${eventName} a pixel ${d.label} (#${d.n}): ${detail}`);
+      _noteResult(d.n, eventName, false, detail);
+      return { dest: d.label, n: d.n, sent: false, error: detail };
     }
   }));
 
   return { sent: results.some((r) => r.sent), eventId: event.event_id, results };
 }
 
+// #990: último resultado por píxel (en memoria de la instancia) para el diagnóstico del panel: GET /api/admin/meta-pixels.
+const _lastByPixel = new Map();
+function _noteResult(n, eventName, ok, detail) {
+  const prev = _lastByPixel.get(n) || { ok: 0, fail: 0 };
+  prev[ok ? 'ok' : 'fail']++; prev.last = { at: new Date().toISOString(), event: eventName, ok, detail: typeof detail === 'string' ? detail.slice(0, 300) : detail };
+  _lastByPixel.set(n, prev);
+}
+function stats() { const o = {}; _lastByPixel.forEach((v, k) => { o[k] = v; }); return o; }
+// #990: envío de PRUEBA a un píxel puntual (panel): un evento con nombre propio para ver si Meta lo acepta (token válido, píxel correcto).
+async function testPixel(n, testEventCode) {
+  const p = listPixels().find((x) => String(x.n) === String(n)); if (!p) return { ok: false, error: 'no hay píxel ' + n };
+  if (!p.token) return { ok: false, error: 'el píxel ' + n + ' no tiene token: sólo navegador. ' + (p.source === 'panel' ? 'Cargale el token en el panel.' : 'Falta META_CAPI_ACCESS_TOKEN' + (n === 1 ? '' : '_' + n) + ' en SSM.') };
+  const event = { event_name: 'PicaRojaTest', event_time: Math.floor(Date.now() / 1000), event_id: 'test_' + Date.now(), action_source: 'website', user_data: { client_user_agent: 'picaroja-panel-test', external_id: [sha256('picaroja-test')] }, custom_data: { source: 'panel' } };
+  const payload = { data: [event] }; const tc = testEventCode || p.testCode; if (tc) payload.test_event_code = tc;
+  try {
+    const r = await axios.post(`https://graph.facebook.com/${GRAPH_API_VERSION}/${p.pixelId}/events`, payload, { params: { access_token: p.token }, timeout: 8000 });
+    return { ok: true, n: p.n, pixelId: p.pixelId, testEventCode: tc || null, response: r.data };
+  } catch (err) {
+    const data = err.response && err.response.data; const e = data && data.error;
+    return { ok: false, n: p.n, pixelId: p.pixelId, http: err.response && err.response.status, error: e ? { message: e.message, type: e.type, code: e.code, subcode: e.error_subcode, fbtrace_id: e.fbtrace_id } : err.message,
+      pista: e && e.code === 190 ? 'Token inválido o vencido: generar uno nuevo en Eventos → Configuración → API de conversiones del PÍXEL del publicista y cargarlo en SSM.' : (e && /permission|not have|does not exist/i.test(e.message || '') ? 'El token no es de este píxel (o el ID del píxel está mal): el token tiene que crearse en el mismo conjunto de datos/píxel.' : null) };
+  }
+}
 // Fire-and-forget. Útil para no bloquear el response del endpoint.
 function track(eventName, userInfo, customData, options) {
   return sendEvent(eventName, userInfo, customData, options).catch((e) => {
@@ -337,6 +389,7 @@ function valueCategory(amount) {
 }
 
 module.exports = {
+  listPixels, setConfigPixels, stats, testPixel, _capiDestinations, _scopeMatches, // #990
   resolveEventScope,
   pixelIdsForCampaign, // #797
   isConfigured,
