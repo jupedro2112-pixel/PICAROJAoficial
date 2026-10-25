@@ -56,7 +56,9 @@ VIP.lobby = (function () {
             // #989 (owner): "a la Carga rápida ponele una ✕; si la cierran que vaya y quede arriba, debajo del perfil, centrada". El panel (el mismo
             // de adentro del casino, toggleCasinoLoad) vive en este hueco: abierto se ve entero; cerrado queda el botón centrado que lo vuelve a abrir.
             '<div class="prl-pr-bal" id="prlPrBal"></div>' + // #989: el usuario/saldo debajo del menú superior
-            '<div class="prl-qldock" id="prlQlDock"><button type="button" class="prl-qlchip" id="prlQlChip" onclick="VIP.lobby.load()"><img src="' + SK.bar + '" alt="">CARGA RÁPIDA ▾</button></div>' +
+            // #989 (owner): "un CÍRCULO de Carga rápida cuando la gente entra a jugar; abierto, que se vea y se diferencie de la página (si no se pierde todo del
+            // mismo color)": cerrado = círculo verde con el logo + "CARGA RÁPIDA" debajo, centrado; abierto = el panel verde (picaroja.css .prl-qldock .casino-load).
+            '<div class="prl-qldock" id="prlQlDock"><button type="button" class="prl-qlchip" id="prlQlChip" onclick="VIP.lobby.load()" aria-label="Carga rápida"><span class="prl-qlc"><img src="' + SK.bar + '" alt=""><i>⚡</i></span><small>CARGA RÁPIDA</small></button></div>' +
             '<main class="prl-main" id="prlMain"></main>' +
             '<button type="button" class="prl-top-btn" id="prlUp" hidden onclick="VIP.lobby.top()" aria-label="Volver arriba">' + ico('up') + '</button>' +
             // #989 (owner): Menú a la izquierda · En vivo · Inicio · Deportes en la punta (+ Slots). Igual que la barra de la app cuando está (#prNav).
@@ -268,8 +270,7 @@ VIP.lobby = (function () {
         clearInterval(_balTimer); _balTimer = setInterval(_paintBal, 5000);
         const m = $('prlMain'); if (m && !m._prlScroll) { m._prlScroll = true; m.addEventListener('scroll', _onScroll, { passive: true }); }
         if (!_data) _load();
-        // #989: la Carga rápida abierta al entrar (con ✕); si la cerró en esta sesión queda sólo el botón centrado de arriba.
-        try { if (!sessionStorage.getItem('vip_prl_ql_closed')) setTimeout(() => { try { const lb = $('prLobby'); if (lb && !lb.hidden) VIP.home.toggleCasinoLoad(true); } catch (_) {} }, 600); } catch (_) {}
+        // #989 (owner): al entrar a jugar se ve el CÍRCULO de Carga rápida (cerrada); tocarlo abre el panel ahí mismo, con ✕ para volver al círculo.
     }
     // F988 (owner: "el menú inferior de PICA ROJA va a ser el de la app: a la izquierda Slots, Inicio que vaya a Inicio y en vez de Perfil, Deportes con
     // los proveedores"): con la página abierta, la barra de abajo de la APP (#bottomNav, menú opción 2) pasa por encima y sus botones cambian; al

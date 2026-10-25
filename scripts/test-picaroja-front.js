@@ -101,16 +101,18 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   L.back(); must(mk('prlMain').innerHTML, 'Top partidos');
   L.play('2/vs20olympx', { dataset: { name: 'Gates of Olympus', gid: '11', lk: 'pragmatic' } }); if (!gamePlayed.pop().startsWith('2/vs20olympx|Gates')) throw new Error('play');
   console.log('✔ vistas: En vivo · Slots (carga al bajar) · Juegos nuevos · Volver · abrir juego');
-  // 6) Carga rápida: abierta al entrar en el hueco de arriba (el botón centrado se esconde); ✕ ⇒ se cierra, vuelve el botón y no se reabre sola
-  H.toggleCasinoLoad(true); // (lo mismo que hace open() a los 600 ms; acá sin try/catch para ver el error)
-  const dock = mk('prlQlDock'), chip = mk('prlQlChip'), panel = mk('casinoLoadPanel');
+  // 6) Carga rápida: al entrar se ve el CÍRCULO (cerrada); tocarlo abre el panel en el hueco de arriba (el círculo se esconde); ✕ ⇒ vuelve el círculo
+  const dock = mk('prlQlDock'), chip = mk('prlQlChip');
+  must(shell, 'class="prl-qlc"', 'CARGA RÁPIDA'); if (chip.hidden) throw new Error('al entrar tiene que verse el círculo');
+  if (els.casinoLoadPanel && els.casinoLoadPanel.style.display !== 'none' && els.casinoLoadPanel.innerHTML) throw new Error('la Carga rápida no tiene que abrirse sola al entrar');
+  H.toggleCasinoLoad(true); const panel = mk('casinoLoadPanel');
   if (panel.parentNode !== dock && !dock.innerHTML.includes('id="casinoLoadPanel"')) throw new Error('el panel no está en el hueco de arriba');
-  if (panel.style.display === 'none' || chip.hidden !== true) throw new Error('la Carga rápida tenía que estar abierta al entrar (chip oculto)');
+  if (panel.style.display === 'none' || chip.hidden !== true) throw new Error('abierta: panel visible y círculo oculto');
   must(panel.innerHTML, 'Carga rápida', 'pica.roja', 'VIP.home.casinoQuickClose()');
-  H.toggleCasinoLoad(false); if (panel.style.display !== 'none' || chip.hidden !== false || sess.vip_prl_ql_closed !== '1') throw new Error('al cerrar: panel ' + panel.style.display + ' chip ' + chip.hidden + ' sess ' + sess.vip_prl_ql_closed);
-  L.close(); L.open('inicio'); if (panel.style.display !== 'none') throw new Error('se volvió a abrir sola después de cerrarla');
-  H.toggleCasinoLoad(); if (panel.style.display === 'none' || chip.hidden !== true) throw new Error('el botón de arriba no la volvió a abrir');
-  console.log('✔ Carga rápida: abierta al entrar · ✕ ⇒ botón centrado arriba · no se reabre sola · el botón la abre');
+  H.toggleCasinoLoad(false); if (panel.style.display !== 'none' || chip.hidden !== false) throw new Error('al cerrar: panel ' + panel.style.display + ' chip ' + chip.hidden);
+  H.toggleCasinoLoad(); if (panel.style.display === 'none' || chip.hidden !== true) throw new Error('el círculo no la volvió a abrir');
+  H.toggleCasinoLoad(false);
+  console.log('✔ Carga rápida: círculo al entrar · tocar ⇒ panel verde arriba · ✕ ⇒ vuelve el círculo');
   // 7) sorteo en la barra: cerrado = píldora (marca oculta); abierto = cartel debajo con ✕; el MISMO estado en la barra de Girox y en la de la página
   const tb = (brandId) => { const t = new El('tb-' + brandId); const brand = new El(brandId + '-brand'), btn = new El(brandId + '-btn'), bar = new El(brandId + '-bar'); btn.querySelector = () => null;
     t.querySelector = (sel) => sel.includes(':not') ? brand : sel.includes('casino-srt-bar') ? bar : btn; return { t, brand, btn, bar }; };

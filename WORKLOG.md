@@ -59,6 +59,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Ajuste de la captura (owner) — SW v653:** el usuario/saldo (`#prlPrBal`) va pegado debajo de la barra, antes de la Carga rápida; el botón Menú salió de
   la barra de arriba (`casinoBarHtml({ noMenu })`) y pasó ABAJO a la izquierda (`_prNav`: navMenu = Menú → `casinoFullMenu`); entre Inicio y Deportes se
   agrega "En vivo" (`#navPrLive`, Casino en vivo); Deportes en la punta. La barra propia (`.prl-nav`, sin #bottomNav) sigue el mismo orden (+ Slots).
+- **Carga rápida como CÍRCULO (owner: "un círculo de carga rápida cuando entren a jugar; abierto que se vea y se diferencie de la página") — SW v654:**
+  al entrar ya NO se abre sola: se ve el círculo verde (logo + rayo, "CARGA RÁPIDA" debajo) centrado bajo el saldo; tocarlo abre el panel AHÍ, con cabecera
+  verde, cuerpo con tinte verde, borde y sombra (`.prl-qldock .casino-load`, sólo en la página; el panel del casino de Girox no cambia); ✕ ⇒ vuelve el círculo.
 
 ## Sesión 2026-10-24
 

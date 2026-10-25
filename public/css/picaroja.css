@@ -14,10 +14,22 @@ body.prl-open { overflow: hidden; }
 /* #989 (owner): la Carga rápida ABIERTA al entrar, con ✕; cerrada queda un botón centrado arriba, debajo de la barra (no tapa nada) */
 .prl-qldock { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; padding: 6px 12px 0; }
 .prl-qldock:empty { display: none; }
-.prl-qlchip { display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 999px; padding: 8px 16px; background: linear-gradient(135deg, #128c4a, #25d366); color: #fff; font: 800 12.5px var(--p-font); letter-spacing: .4px; box-shadow: 0 4px 12px rgba(18,140,74,.3); cursor: pointer; }
-.prl-qlchip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; background: #0d0d1a; }
+/* cerrado: CÍRCULO verde con el logo y el rayo, "CARGA RÁPIDA" debajo */
+.prl-qlchip { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 6px 0; color: #128c4a; font: 900 10px var(--p-font); letter-spacing: .8px; cursor: pointer; }
+.prl-qlc { position: relative; display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(135deg, #128c4a, #25d366); box-shadow: 0 6px 18px rgba(18,140,74,.38), 0 0 0 4px color-mix(in srgb, #25d366 22%, transparent); }
+.prl-qlc img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #0d0d1a; }
+.prl-qlc i { position: absolute; right: -2px; bottom: -2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #128c4a; font-style: normal; font-size: 13px; line-height: 22px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+.prl-qlchip:active .prl-qlc { transform: scale(.96); }
 .prl-qlchip[hidden] { display: none !important; }
-.prl-qldock .casino-load { position: static !important; width: 100%; max-width: 520px; margin: 0; bottom: auto !important; right: auto !important; left: auto !important; z-index: 1; }
+html[data-theme="dark"] .prl-qlchip { color: #4ade80; }
+/* abierto: el panel se DIFERENCIA de la página: cabecera verde, cuerpo con tinte verde, borde y sombra */
+.prl-qldock .casino-load { position: static !important; width: 100%; max-width: 520px; margin: 0; bottom: auto !important; right: auto !important; left: auto !important; z-index: 1;
+  background: color-mix(in srgb, #25d366 12%, var(--p-card)) !important; border: 2px solid #128c4a !important; border-radius: 18px !important; box-shadow: 0 10px 30px rgba(18,140,74,.25) !important; padding: 0 12px 12px !important; overflow: hidden; }
+.prl-qldock .casino-load .cl-head { margin: 0 -12px 8px; padding: 10px 12px; background: linear-gradient(135deg, #128c4a, #25d366); color: #fff; display: flex; align-items: center; justify-content: space-between; font: 900 14px var(--p-font); letter-spacing: .3px; }
+.prl-qldock .casino-load .cl-head span { color: #fff; }
+.prl-qldock .casino-load .cl-close { background: rgba(255,255,255,.22) !important; color: #fff !important; width: 30px; height: 30px; border-radius: 50%; font-weight: 900; }
+.prl-qldock .casino-load .cl-row { border-bottom-color: color-mix(in srgb, #128c4a 25%, var(--p-border)); }
+.prl-qldock .casino-load .cl-row .cl-copy { background: var(--p-card) !important; border-color: #128c4a !important; color: #128c4a !important; }
 /* #989 TOP PARTIDOS (formato Stake: hora · escudos · equipos · cuotas 1 X 2). Tocar = Digitain logueado; cuotas de referencia */
 .prl-board { margin-top: 4px; }
 .prl-mrow { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 14px 6px; scrollbar-width: none; }
