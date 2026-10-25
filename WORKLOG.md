@@ -105,6 +105,8 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   completo (cargas), en el básico y en Cambiar menú") — SW v664:** `_injectPR` ya no saca las "Pronto": Pica Roja APP (principal, etiqueta "Principal") ·
   1girox · Ganamos (Pronto) · JUGAYGANA (Pronto). Selectores en 4 columnas (`#basicPlats`, `#platformsButtons` y el nuevo `#mcPlats` dentro de
   Cambiar menú, `_mcPaint`, elegir = `basicPick` ⇒ `setPreferred`). Colores por marca en picaroja.css. La pantalla de ingreso también muestra las 4.
+- **Selector de menús (owner, captura: "achicalo más, centrado y deslizable si hace falta") — SW v665:** `.mc-card` más chica (380 px, letras y
+  recuadros compactos), centrada, con alto máximo 86 vh y scroll interno (picaroja.css). Así entra con la fila de plataformas y "Dejar fijo".
 
 ## Sesión 2026-10-24
 

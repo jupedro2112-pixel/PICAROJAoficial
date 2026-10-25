@@ -217,6 +217,21 @@ html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-play-sub { disp
 html body #platformsButtons .plat-play-btn .plat-reco { font-size: 6.5px !important; padding: 1px 4px !important; }
 html body #platformsButtons .plat-check { width: 14px !important; height: 14px !important; font-size: 9px !important; top: 4px !important; right: 4px !important; }
 html body #basicPlats .bv-chip[class*="plat-"] b, html body #mcPlats .bv-chip[class*="plat-"] b, html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-play-name { font-size: 8.5px !important; letter-spacing: -.1px !important; text-transform: uppercase; max-width: 100%; overflow-wrap: anywhere; }
+/* #989 (owner, captura): el selector "¿Cómo querés ver la app?" más chico, centrado y con scroll si no entra */
+.menu-chooser.open { align-items: center !important; padding: 12px !important; }
+.mc-card { max-width: 380px !important; max-height: min(86vh, calc(100dvh - 24px)) !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; gap: 7px !important; padding: 12px 12px 10px !important; border-radius: 20px !important; scrollbar-width: none; }
+.mc-card::-webkit-scrollbar { display: none; }
+.mc-kicker { font-size: 9px !important; letter-spacing: 1.6px !important; }
+.mc-card h2 { font-size: 17px !important; line-height: 1.15 !important; }
+.mc-sub { font-size: 11px !important; line-height: 1.3 !important; margin: 0 !important; }
+.mc-opt { padding: 9px 10px !important; gap: 9px !important; border-radius: 13px !important; }
+.mc-ico { font-size: 22px !important; }
+.mc-opt .mc-ico svg { width: 22px !important; height: 22px !important; }
+.mc-txt { gap: 1px !important; }
+.mc-txt b { font-size: 12.5px !important; letter-spacing: .3px !important; }
+.mc-txt small { font-size: 10.5px !important; line-height: 1.25 !important; }
+.mc-tag { top: -8px !important; right: 10px !important; font-size: 8px !important; padding: 2px 7px !important; }
+#menuPinBtn, .mc-pin { padding: 8px 10px !important; font-size: 11px !important; }
 .mc-plats-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 10px 0 6px; } .mc-plats-h b { font: 900 13px var(--p-font); } .mc-plats-h small { font: 600 10.5px var(--p-font); color: var(--p-muted); }
 .mc-plats { margin-bottom: 12px; }
 /* #908 Mis cargas en el perfil (por plataforma) */
