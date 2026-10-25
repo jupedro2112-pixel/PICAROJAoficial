@@ -350,7 +350,7 @@ VIP.lobby = (function () {
             Object.keys(_NAV_SWAP).forEach((id) => { const b = $(id); if (!b) return; const x = _NAV_SWAP[id]; _navSaved[id] = { html: b.innerHTML, on: b.getAttribute('onclick') };
                 b.innerHTML = '<span class="tn-ico">' + ico(x.ico) + '</span><span class="tn-lbl">' + x.lbl + '</span>'; b.setAttribute('onclick', x.on); });
             // #989 (owner): Inicio en el medio con el LOGO de PICA ROJA, mismo formato (el botón rojo grande de la app)
-            const ini = $('navInicio'); if (ini) { _navSaved.navInicio = { on: ini.getAttribute('onclick') }; ini.setAttribute('onclick', 'VIP.lobby.close(true);VIP.home.goHome()'); } // (owner: Inicio como estaba, sin el logo)
+            const ini = $('navInicio'); if (ini) { _navSaved.navInicio = { on: ini.getAttribute('onclick') }; ini.setAttribute('onclick', 'VIP.lobby.backHome()'); } // Inicio = salir al menú (completo o el elegido); con el menú directo goHome volvería a abrir la página
             // Slots al lado de Menú. OJO: con la clase de #navMenu (`tn-menu`) pin.css lo ESCONDE (display:none !important, sólo #navMenu se ve): va con la de Perfil.
             const mn = $('navMenu'), pf0 = $('navPerfil'); if (mn && !$('navPrSlots')) mn.insertAdjacentHTML('afterend', _navExtra('navPrSlots', (pf0 && pf0.className) || 'tn-btn', "VIP.lobby.go('slots')", 'slots', 'Slots', 'Todos los slots'));
             const pf = $('navPerfil'); if (pf && !$('navPrLive')) pf.insertAdjacentHTML('beforebegin', _navExtra('navPrLive', pf.className, "VIP.lobby.go('vivo')", 'roulette', 'En vivo', 'Casino en vivo')); // Casino en vivo (ruleta) al lado de Deportes
@@ -362,7 +362,7 @@ VIP.lobby = (function () {
         }
     }
     // #989 (owner): "‹ Volver" = cerrar la página e ir al MENÚ COMPLETO (no a la pantalla de entrada del menú directo).
-    function backHome() { close(); try { VIP.home.setHomeMode('full'); } catch (_) {} try { window.scrollTo({ top: 0 }); } catch (_) {} }
+    function backHome() { close(); try { if (VIP.home.backFromPlay) VIP.home.backFromPlay(); else VIP.home.setHomeMode('full'); } catch (_) {} try { window.scrollTo({ top: 0 }); } catch (_) {} }
     function close() {
         try { _prNav(false); } catch (_) {} // F988
         const el = $('prLobby'); if (el) el.hidden = true; document.body.classList.remove('prl-open'); clearInterval(_balTimer);

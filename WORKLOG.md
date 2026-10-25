@@ -124,6 +124,10 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   pero NO se veía: copiaba la clase de #navMenu (`tn-menu`), que pin.css esconde con `display:none !important` (sólo `#navMenu` se muestra por id) ⇒
   ahora usa la clase de Perfil. Inicio vuelve al rombo de siempre. La marca de la barra más chica (9,5 px, sin "OFICIAL" en teléfonos) y botones más
   compactos para que entren Volver · Menú · PICA ROJA · Historias · Info · Perfil.
+- **Volver (owner: "desde /landing o la página van a Pica Roja APP; Volver ⇒ Inicio del menú completo; si eligen Girox lo mismo; si cambió al básico,
+  que vuelva al básico") — SW v672:** `VIP.home.backFromPlay()` (básico / intermedio si es el menú elegido, si no el completo). Lo usan "‹ Volver" y el
+  Inicio de abajo de la página (`backHome`) y "‹ Volver" del casino de Girox (`casinoBack`: cierra el casino y la página si estaba debajo). Antes el
+  casino volvía a la pantalla de entrada del menú directo y el Inicio de la página volvía a abrir la página.
 
 ## Sesión 2026-10-24
 
