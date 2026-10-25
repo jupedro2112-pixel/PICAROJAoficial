@@ -48,6 +48,8 @@ body.prl-appnav #prLobby .prl-qlchip { bottom: calc(var(--sab, env(safe-area-ins
 .prl-sb > i { grid-column: 1 / -1; justify-self: end; font-style: normal; font-size: 12px; font-weight: 900; color: #fff; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); }
 .prl-sb:active > i { background: rgba(255,255,255,.14); }
 .prl-srt + .srt-inline { margin: 0 12px 10px; }
+.srt-more-btn { padding: 4px 12px 14px; }
+.srt-more-btn button { width: 100%; border: 0; border-radius: 999px; padding: 13px 14px; background: var(--srt-g2, #c8102e); color: #fff; font: 900 13.5px var(--p-font); cursor: pointer; box-shadow: 0 6px 16px var(--srt-sh, rgba(200,16,46,.3)); }
 @media (max-width: 360px) { .prl-sb { grid-template-columns: 76px 1fr; } .prl-sb-pic { width: 76px; height: 62px; } .prl-sb-t b { font-size: 15px; } }
 /* #989 TOP PARTIDOS (formato Stake: hora · escudos · equipos · cuotas 1 X 2). Tocar = Digitain logueado; cuotas de referencia */
 .prl-board { margin-top: 4px; }

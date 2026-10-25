@@ -27,7 +27,7 @@
         try {
             const r = await fetch(VIP.config.API_URL + '/api/sorteos', { headers: { 'Authorization': 'Bearer ' + tok } });
             if (!r.ok) return; _data = await r.json(); paintCards(); if (_open) paintView(_open);
-            if (_inline && _inlineKey && _inlineView === 'main') paintView(_inlineKey, _el('srtInlineBody'), null); // #928
+            if (_inline && _inlineKey && _inlineView === 'main') paintView(_inlineKey, _el('srtInlineBody'), null, { short: true }); // #928 · #989 corto
         } catch (_) {} finally { _loading = false; }
     }
     // ---- Tarjetas (básico / intermedio) y banner (Girox directo)
@@ -91,7 +91,7 @@
         p.innerHTML = '<button type="button" class="srt-inline-x srt-inline-x-float" onclick="VIP.sorteos.closeInline()" aria-label="Cerrar">✕ Cerrar</button><div class="srt-inline-body" id="srtInlineBody"><div class="srt-note">Cargando…</div></div>';
         host.insertAdjacentElement('afterend', p); _inline = p; _inlineKey = key; _inlineView = 'main';
         try { host.querySelectorAll('.srt-ban').forEach((b) => b.classList.remove('on')); const btns = host.querySelectorAll('.srt-ban'); const idx = ['gran', 'mensual'].indexOf(key); if (btns[idx]) btns[idx].classList.add('on'); } catch (_) {}
-        if (_data) paintView(key, _el('srtInlineBody'), null); load();
+        if (_data) paintView(key, _el('srtInlineBody'), null, { short: true }); load();
         clearInterval(_tick); _tick = setInterval(tickCd, 1000);
         try { setTimeout(() => { p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60); } catch (_) {}
     }
@@ -203,11 +203,14 @@
         const lbl = s.status === 'soon' ? '⏳ Empieza en <b data-cd-short="' + until + '">' + esc(cdShort(s.startsInMs)) + '</b>' : (s.status === 'live' ? '<em class="srt-live">● EN VIVO</em> · termina en <b data-cd-short="' + until + '">' + esc(cdShort(s.endsInMs)) + '</b>' : '🔒 Cerrado · ganadores el ' + esc(fday(s.publishAt)));
         return '<div class="srt-strip"><span>' + lbl + '</span><small>Del ' + esc(fday(s.start)) + ' al ' + esc(fday(s.end)) + '</small></div>';
     }
-    function paintView(key, bodyEl, titleEl) {
+    function paintView(key, bodyEl, titleEl, opts) {
         const s = get(key); const b = bodyEl || _el('srtBody'), t = titleEl === undefined ? _el('srtTitle') : titleEl; if (!b) return;
         if (!s) { b.innerHTML = '<div class="srt-note">' + (_data && _data.enabled === false ? 'Por ahora no hay sorteos activos.' : 'Este sorteo no está disponible.') + '</div>'; return; }
         if (t) t.textContent = s.emoji + ' ' + s.title;
         const rt = (s.rules && s.rules.text) || {};
+        // #989 (owner, capturas: "cuando abrís cada sorteo que se vea anotarse y lo que se sortea; el resto es Ver más y abre la ventana, si no la gente
+        // se pierde"): modo CORTO (desplegado en Pica Roja APP) = anotarse + premios + botón "Ver más" que abre la ventana completa.
+        if (opts && opts.short) { b.innerHTML = joinBlock(s, true) + hero(s) + '<div class="srt-more-btn"><button type="button" onclick="VIP.sorteos.open(\'' + esc(key) + '\')">Ver más: cómo se gana, tickets, puntos y ranking ›</button></div>'; return; }
         let h = strip(s);                 // 1) inicio, chico
         h += joinBlock(s, true);          // 2) anotarse, compacto
         h += hero(s);                     // 3) premios y cómo se gana cada uno

@@ -117,6 +117,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Barra de arriba (owner, captura: "al lado de Volver poné Menú de vuelta, y el logo con el texto PICA ROJA centrado") — SW v669:** vuelve el Menú en la
   barra de la página y el logo + "PICA ROJA · OFICIAL" quedan siempre visibles y centrados (picaroja.css pisa las reglas de pin.css que los escondían en
   pantallas chicas: se veía una mancha). Abajo sigue Menú · Slots · Inicio(logo) · En vivo(ruleta) · Deportes.
+- **Sorteo desplegado CORTO (owner, capturas: "cuando abrís cada sorteo que se vea anotarse y lo que se sortea; el resto Ver más que abra la ventana, si
+  no la gente se pierde") — SW v670:** `paintView(key, body, null, { short: true })` (sólo en el desplegado de la página): bloque "Anotate" con los
+  requisitos y el botón, "Lo que se sortea" con los 3 premios y un botón "Ver más: cómo se gana, tickets, puntos y ranking ›" que abre la ventana completa.
 
 ## Sesión 2026-10-24
 
