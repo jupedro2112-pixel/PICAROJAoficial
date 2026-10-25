@@ -79,6 +79,16 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Owner: "abajo En vivo es casino, poné Ruleta; al lado de Menú poné Slots y abrí todos los slots" — SW v659:** en la barra de arriba, pegado a Menú, un
   botón Slots (`.prl-tn-slots` ⇒ `go('slots')`, todo el catálogo). En la barra propia de abajo, "En vivo" pasa a "Ruleta" (vista `ruleta`: todas las ruletas
   de girox-live.json + lobbies + en vivo, filtradas por nombre; botón "Ver todo el casino en vivo"). El casino en vivo entero sigue en Inicio, proveedores y ☰.
+- **"No pudimos abrir Buffalo King Megaways" desde Pica Roja APP (owner, captura) — SW v660:** es el camino del juego directo (`favPlay` ⇒ `/api/platform/session`
+  direct) cuando 1girox no devuelve `launch_url`; la app escondía el motivo (#927). Revisado de punta a punta: la tarjeta manda key/gid/lk correctos (verificado
+  contra el catálogo real: Buffalo King Megaways = 2/vswaysbufking, id 1519, launcher `atomic`; los json de datos tienen gid/lk en el orden correcto) y el
+  server hace lo mismo que con un favorito. Como no se puede reproducir desde Tails (hace falta una sesión real), se agregó: (1) el cartel muestra el motivo
+  de 1girox entre paréntesis (`_lastStep`); (2) sonda del panel `GET /api/admin/girox/test-game?username=&key=2/vswaysbufking` (admin general, sesión del
+  panel): hace ingreso → canje → /games/{id} y devuelve cada paso con HTTP y respuesta recortada. Pendiente: que el owner pase el motivo o la salida de la sonda.
+- **Sorteos en el Inicio (owner: "el sorteo ponelo abajo del usuario, más lugar, un recuadro por sorteo, que se vea qué se sortea antes de expandir"):** las
+  dos tarjetas de sorteos.js (`[data-srt-cards]`, Gran Sorteo | Sorteo mensual con el premio) al tope del Inicio de la página, más altas (`.prl-srt`); la
+  píldora del sorteo salió de la barra de la página (en el casino de Girox sigue igual).
+- **Proveedores (owner: "dejalos como antes pero con fondo negro, más profesional"):** vuelven los logos con sus colores + nombre en blanco, sobre negro.
 
 ## Sesión 2026-10-24
 

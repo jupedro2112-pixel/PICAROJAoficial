@@ -1291,7 +1291,9 @@
         // #945 (owner: "toqué para apostar y me mandó a Girox"): tampoco desde las páginas de marca (JUGAYGANA, Ganamos, PICA ROJA).
         // #946 (owner: "hacé que no conecte en nada"): NUNCA se abre la web de Girox por un juego o deporte que no salió directo (tampoco desde el
         // Inicio de PICA ROJA): se avisa y se reintenta.
-        try { VIP.ui.showToast('No pudimos abrir ' + name + ' en este momento. Tocalo de nuevo en unos segundos.', 'error'); } catch (_) {}
+        // #989 (owner: "aparece 'no pudimos abrir' desde Pica Roja APP, revisá por qué falla"): el motivo de 1girox va en el cartel, corto, para saber
+        // en qué paso corta (antes sólo en la consola, #927).
+        try { VIP.ui.showToast('No pudimos abrir ' + name + ' en este momento. Tocalo de nuevo en unos segundos.' + (_lastStep ? ' (' + String(_lastStep).slice(0, 70) + ')' : ''), 'error'); } catch (_) {}
     }
     // Selector: catálogo de Girox con buscador (los más jugados primero) y ⭐ para marcar.
     let _favCat = [], _favQ = '', _favPage = 1, _favMore = false, _favQT = null, _favReq = 0;

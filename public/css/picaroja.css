@@ -29,6 +29,14 @@ body.prl-appnav #prLobby .prl-qlchip { bottom: calc(var(--sab, env(safe-area-ins
 #prLobby .casino-load .cl-close { background: rgba(255,255,255,.22) !important; color: #fff !important; width: 30px; height: 30px; border-radius: 50%; font-weight: 900; }
 #prLobby .casino-load .cl-row { border-bottom-color: color-mix(in srgb, #128c4a 25%, var(--p-border)); }
 #prLobby .casino-load .cl-row .cl-copy { background: var(--p-card) !important; border-color: #128c4a !important; color: #128c4a !important; }
+/* #989 SORTEOS al tope del Inicio: dos recuadros (Gran Sorteo | Sorteo mensual) más altos, con el premio grande */
+.prl-srt { padding: 2px 12px 8px; }
+.prl-srt[hidden] { display: none !important; }
+.prl-srt .srt-ban { min-height: 92px; padding: 12px 12px; border-radius: 16px; }
+.prl-srt .srt-ban .srt-ban-img { font-size: 40px; }
+.prl-srt .srt-ban .srt-ban-img.pic { width: 74px; height: 56px; }
+.prl-srt .srt-ban .srt-ban-t b { font-size: 14.5px; }
+.prl-srt .srt-ban .srt-ban-t small { font-size: 11.5px; }
 /* #989 TOP PARTIDOS (formato Stake: hora · escudos · equipos · cuotas 1 X 2). Tocar = Digitain logueado; cuotas de referencia */
 .prl-board { margin-top: 4px; }
 .prl-mrow { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 14px 6px; scrollbar-width: none; }
@@ -92,8 +100,10 @@ span.prl-st { cursor: default; }
 .prl-pvs::-webkit-scrollbar { display: none; }
 .prl-pv { flex: 0 0 140px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; transition: transform .2s ease; }
 .prl-pv:hover { transform: translateY(-3px); }
-.prl-pvb { display: flex; align-items: center; justify-content: center; height: 64px; border-radius: 12px; background: linear-gradient(135deg, var(--p-red, #e60023), #b0001f); padding: 8px 12px; box-shadow: 0 4px 12px rgba(230,0,35,.22); }
-.prl-pvb b { font: 800 14.5px/1.15 var(--p-font); color: #fff; text-align: center; letter-spacing: .2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+/* #989 (owner): como antes (logo con sus colores + nombre) pero con fondo NEGRO */
+.prl-pvb { display: flex; align-items: center; justify-content: center; gap: 9px; height: 64px; border-radius: 12px; background: #111318; border: 1px solid #262a33; padding: 8px 12px; box-shadow: 0 4px 12px rgba(0,0,0,.22); }
+.prl-pvb img { width: 30px; height: 30px; flex: none; object-fit: contain; border-radius: 6px; }
+.prl-pvb b { font: 800 14px/1.15 var(--p-font); color: #fff; text-align: left; letter-spacing: .2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .prl-pv small { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 600 12px var(--p-font); color: var(--prl-mut); }
 .prl-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--prl-ok); }
 /* barra propia de abajo (sólo sin #bottomNav, menú opción 1) */

@@ -79,7 +79,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   // 2) la página: barra con píldora del sorteo + cartel, hueco de la Carga rápida, saldo, main, nav propia
   L.open('inicio');
   const shell = body.innerHTML; clean(shell); balanced(shell);
-  must(shell, 'prl-tn-slots', "VIP.lobby.go('slots')", "VIP.lobby.go('ruleta')", 'id="prLobby"', 'casino-topbar prl-cbar', 'class="casino-brand casino-srt"', 'class="casino-srt-bar"', 'VIP.sorteos.casinoBar(true)', 'id="prlQlChip"', 'id="prlPrBal"', 'id="prlMain"', 'class="prl-nav"', 'PICA ROJA', 'VIP.lobby.backHome()', 'title="Elegir menú"');
+  must(shell, 'prl-tn-slots', "VIP.lobby.go('slots')", "VIP.lobby.go('ruleta')", 'id="prLobby"', 'casino-topbar prl-cbar', 'id="prlQlChip"', 'id="prlPrBal"', 'id="prlMain"', 'class="prl-nav"', 'PICA ROJA', 'VIP.lobby.backHome()', 'title="Elegir menú"');
   if (shell.includes('prl-hero2') || shell.includes('jugaygana') || shell.includes('ganamos') || shell.includes('buffalo')) throw new Error('quedó algo de otras marcas o de las fotos');
   if (!body.classList.contains('prl-open') || !body.classList.contains('casino-open')) throw new Error('clases del body');
   if (!body.classList.contains('prl-appnav') || !mk('navMenu').innerHTML.includes('Slots') || !mk('navPerfil').innerHTML.includes('Deportes')) throw new Error('la barra de la app no cambió a Slots · Inicio · Deportes');
@@ -92,7 +92,8 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   must(main, 'Top partidos', 'Barcelona', 'Real Madrid', '1.63', '5.40', "VIP.lobby.sport('/sports-new')", "VIP.lobby.sportMatch('Barcelona', 'Real Madrid')", 'prl-mlive', 'Inter', 'Hoy 16:00', 'Mañana 12:00', 'Apostar ›', 'Cuotas de referencia',
     'Proveedores', 'prl-pvb', 'KA Gaming', '1.001 juegos', 'Casino lobby', '/images/picaroja/lobby/3_101.webp', 'id="prlQ"', 'Populares', 'Gates of Olympus', 'Nuevos', 'NUEVO', 'En vivo · Evolution', 'Ver los 8.137 juegos', 'VIP.lobby.extraAll()');
   if (main.includes('prl-hero2') || main.includes('prl-hc')) throw new Error('siguen las fotos de arriba');
-  if (/prl-pvb"><img/.test(main)) throw new Error('los proveedores van sin logo (quedaban círculos blancos)');
+  if (!/prl-pvb"><img/.test(main)) throw new Error('los proveedores van con logo (fondo negro)');
+  must(main, 'data-srt-cards'); if (main.indexOf('data-srt-cards') > main.indexOf('Top partidos')) throw new Error('los recuadros del sorteo van arriba de Top partidos');
   if (main.indexOf('Top partidos') > main.indexOf('Proveedores')) throw new Error('Top partidos tiene que ir arriba de Proveedores');
   console.log('✔ inicio: Top partidos arriba · Proveedores · lobby · populares · nuevos (' + main.length + ' chars)');
   // 4) cuotas / partido ⇒ Digitain directo (sport/onyx) logueado; deportes desde el menú
@@ -124,7 +125,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   // 7) sorteo en la barra: cerrado = píldora (marca oculta); abierto = cartel debajo con ✕; el MISMO estado en la barra de Girox y en la de la página
   const tb = (brandId) => { const t = new El('tb-' + brandId); const brand = new El(brandId + '-brand'), btn = new El(brandId + '-btn'), bar = new El(brandId + '-bar'); btn.querySelector = () => null;
     t.querySelector = (sel) => sel.includes(':not') ? brand : sel.includes('casino-srt-bar') ? bar : btn; return { t, brand, btn, bar }; };
-  const g = tb('girox'), p = tb('pr'); ctx.document.querySelectorAll = (sel) => sel === '.casino-topbar' ? [g.t, p.t] : [];
+  const g = tb('girox'), p = tb('pr'); ctx.document.querySelectorAll = (sel) => sel === '.casino-topbar' ? [g.t, p.t] : []; // (barras falsas: en la página real ya no hay píldora)
   await S.load(); S.paintCasino();
   [g, p].forEach((x) => { if (x.brand.hidden !== true || x.btn.hidden !== false || x.bar.hidden !== true) throw new Error('cerrado: marca oculta + píldora visible + sin cartel (' + x.t.id + ')'); });
   S.casinoBar(true);

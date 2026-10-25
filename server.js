@@ -8046,6 +8046,35 @@ app.get('/api/admin/girox/health', authMiddleware, adminMiddleware, async (req, 
 //       cookies, doble carga)
 // Si al abrir este link A MANO, en el acto, también dice "El enlace expiró", entonces
 // es (a) y hay que reclamarle a 1girox.
+// #989: GET /api/admin/girox/test-game?username=XXXX&key=2/vswaysbufking[&gid=1519&lk=atomic]  (admin general, con la sesión del panel abierta)
+// Hace EXACTAMENTE los pasos del juego directo (ingreso → canje /sso/exchange → /games/{id} del sitio de 1girox) y devuelve cada paso con su HTTP y un
+// recorte de la respuesta (sin tokens). Si la app dice "No pudimos abrir X", acá se ve en qué paso corta y qué contestó 1girox.
+app.get('/api/admin/girox/test-game', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
+    const username = String(req.query.username || '').trim(); const key = String(req.query.key || '').trim();
+    const mm = /^(\d{1,3})\/([\w.\-@]{1,80})$/.exec(key); if (!username || !mm) return res.status(400).json({ error: 'Falta ?username= y ?key=<aggregator>/<game_id> (ej. 2/vswaysbufking)' });
+    const out = { username, key, pasos: [] }; const t0 = Date.now(); const paso = (n, extra) => out.pasos.push(Object.assign({ paso: n, ms: Date.now() - t0 }, extra));
+    const session = await girox.createSession(username);
+    if (!session.success) { paso('ingreso', { ok: false, error: session.error, code: session.code, http: session.httpStatus }); return res.json(out); }
+    const code = new URL(session.redirectUrl).searchParams.get('code'); paso('ingreso', { ok: true, conCodigo: !!code });
+    if (!code) return res.json(out);
+    const snip = (j) => { try { const c = JSON.parse(JSON.stringify(j || null)); if (c && typeof c === 'object') { delete c.token; if (c.data) delete c.data.token; } return JSON.stringify(c).slice(0, 400); } catch (_) { return String(j).slice(0, 400); } };
+    let siteToken = null;
+    try { const rx = await fetch(girox.getBaseUrl() + '/sso/exchange', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ code }) }); const jx = await rx.json().catch(() => null); siteToken = (jx && (jx.token || (jx.data && jx.data.token))) || null; paso('canje', { ok: rx.ok && !!siteToken, http: rx.status, respuesta: snip(jx) }); }
+    catch (e) { paso('canje', { ok: false, error: e.message }); return res.json(out); }
+    if (!siteToken) return res.json(out);
+    let gid = Number(req.query.gid), lk = String(req.query.lk || '');
+    if (!(Number.isInteger(gid) && gid > 0 && /^[a-z0-9_]{1,40}$/.test(lk))) { const meta = await _gameLaunchMeta(mm[1], mm[2], String(req.query.name || '')); paso('catálogo', { ok: !!meta, meta }); if (!meta) return res.json(out); gid = meta.gid; lk = meta.lk; } else paso('catálogo', { ok: true, meta: { gid, lk }, origen: 'query' });
+    const site = String(process.env.GIROX_SITE_API_URL || 'https://admin.1girox.com/api').replace(/\/$/, '');
+    const q = new URLSearchParams({ id: String(gid), launcher_key: lk, aggregator_id: mm[1] }); const url = `${site}/games/${encodeURIComponent(mm[2])}?${q}`;
+    try { const rg = await fetch(url, { headers: { Authorization: 'Bearer ' + siteToken, Accept: 'application/json' } }); const jg = await rg.json().catch(() => null); const lu = jg && (jg.launch_url || jg.url || (jg.data && (jg.data.launch_url || jg.data.url)));
+      paso('juego', { ok: rg.ok && !!lu, http: rg.status, url: url.replace(site, '<site>'), launchUrl: lu ? String(lu).slice(0, 120) + '…' : null, respuesta: lu ? undefined : snip(jg) }); }
+    catch (e) { paso('juego', { ok: false, error: e.message, url: url.replace(site, '<site>') }); }
+    out.resultado = out.pasos.every((p) => p.ok) ? '✅ el juego directo sale: si la app igual falla, es del lado del teléfono (ventana bloqueada) o del dato que manda la tarjeta (gid/lk)' : '✘ corta en el paso "' + (out.pasos.find((p) => !p.ok) || {}).paso + '": mirá http/respuesta';
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: 'Error del servidor', detalle: err.message }); }
+});
 app.get('/api/admin/girox/test-sso', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' }); // #413: entra al casino COMO el jugador

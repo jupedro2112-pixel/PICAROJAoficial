@@ -48,7 +48,7 @@ VIP.lobby = (function () {
         // #989 (owner, captura final: "así quiero que inicie; el Volver es ir al menú completo; lo demás igual que antes"): la barra completa con Menú;
         // "‹ Volver" cierra la página y deja la app en el menú COMPLETO (backHome).
         let bar = (VIP.home && VIP.home.casinoBarHtml) ? VIP.home.casinoBarHtml({ back: 'VIP.lobby.backHome()', menu: 'VIP.home.casinoFullMenu()', logo: SK.bar, name: SK.name, idSuffix: 1 }) : '<div class="casino-topbar-row"><button type="button" class="casino-back" onclick="VIP.lobby.close()">‹ Volver</button><span class="casino-brand"><span class="cb-box"><b>PICA ROJA</b></span></span></div>';
-        bar = bar.replace(/<\/div>\s*$/, pill + '</div>') + '<div class="casino-srt-bar" hidden></div>';
+        void pill; // #989 (owner): el sorteo ya no va en la barra: son DOS recuadros debajo del usuario, al tope del Inicio (más lugar, se ve el premio)
         // #989 (owner: "al lado de Menú poné Slots y abrí todos los slots"): botón Slots en la barra de arriba, pegado a Menú ⇒ todo el catálogo.
         bar = bar.replace('<span class="tn-lbl">Menú</span></button>', '<span class="tn-lbl">Menú</span></button><button type="button" class="tn-btn prl-tn-slots" onclick="VIP.lobby.go(\'slots\')" title="Todos los slots"><span class="tn-ico">' + ico('slots') + '</span><span class="tn-lbl">Slots</span></button>');
         document.body.insertAdjacentHTML('beforeend',
@@ -142,12 +142,10 @@ VIP.lobby = (function () {
             (L.length ? '<div class="prl-mrow">' + L.map(_match).join('') + '</div><p class="prl-mnote">Cuotas de referencia · tocá y apostás en Deportes con tu saldo</p>'
                 : (_board ? '' : '<div class="prl-mrow"><div class="prl-m prl-msk"></div><div class="prl-m prl-msk"></div></div>')) + '</section>';
     }
-    // #909: proveedores como Stake · #989 (owner): "fondo rojo del mismo color de PICA ROJA y el proveedor en blanco, sin colores": recuadro rojo con el
-    // NOMBRE en blanco. Sin el logo de 1girox: muchos son un ícono con fondo lleno y en blanco quedaban como un círculo (owner: "hay proveedores con
-    // un círculo en blanco, corregilo").
+    // #909: proveedores como Stake · #989 (owner): "dejalos como estaban antes (logo + nombre) pero con fondo NEGRO en vez de blanco, queda más profesional".
     function _provTile(p) {
         return '<button type="button" class="prl-pv" onclick="' + (p.on || 'VIP.lobby.all(' + Number(p.id) + ', \'' + jsq(p.name) + '\')') + '" aria-label="' + esc(p.name) + '">' +
-            '<span class="prl-pvb"><b>' + esc(p.name) + '</b></span>' +
+            '<span class="prl-pvb">' + (p.logo ? '<img loading="lazy" src="/api/games/img?u=' + encodeURIComponent(p.logo) + '" alt="" onerror="this.remove()">' : '') + '<b>' + esc(p.name) + '</b></span>' +
             '<small><i class="prl-dot"></i>' + Number(p.count || 0).toLocaleString('es-AR') + ' juegos</small></button>';
     }
     function _providers(list) {
@@ -241,11 +239,15 @@ VIP.lobby = (function () {
         }
         _liveOr();
         const _pvAll = (_data.providers || []).concat(_liveTiles().filter((t) => !(_data.providers || []).some((p) => String(p.name).toLowerCase() === t.name.toLowerCase()))); // F971
-        m.innerHTML = _hero() + _providers(_pvAll) + _row('grid', 'Casino lobby', _lobbies()) + _search() + // #925: Proveedores arriba
-            _row('fire', 'Populares', _data.popular) + _row('star', 'Nuevos', _data.nuevos, null, 'VIP.lobby.extraAll()') +
+        // #989 (owner): "el sorteo ponelo abajo del usuario y dale más lugar apenas entra la gente: sorteo 1 un recuadro y sorteo 2 otro, que se vea
+        // qué tipo de sorteo es antes de expandir": las dos tarjetas de sorteos.js (Gran Sorteo | Sorteo mensual, con el premio) al tope del Inicio.
+        m.innerHTML = '<div class="srt-cards prl-srt" data-srt-cards hidden></div>' + _hero() + _providers(_pvAll) + _row('grid', 'Casino lobby', _lobbies()) + _search() + // #925: Proveedores arriba
+            '';
+        m.innerHTML += _row('fire', 'Populares', _data.popular) + _row('star', 'Nuevos', _data.nuevos, null, 'VIP.lobby.extraAll()') +
             (_data.live && _data.live[0] ? _row('live', 'En vivo · ' + _data.live[0].title, _data.live[0].games, _data.live[0].providerId) : '') +
             (_data.sections || []).map((s) => _row('slots', s.title, s.games, s.providerId)).join('') +
             '<div class="prl-more"><button type="button" onclick="VIP.lobby.go(\'slots\')">Ver los ' + Number(_data.total || 0).toLocaleString('es-AR') + ' juegos</button></div>';
+        try { if (VIP.sorteos && VIP.sorteos.paint) VIP.sorteos.paint(); } catch (_) {} // #989: pinta los dos recuadros del sorteo
         if (_q) search(_q);
     }
     async function _moreAll() {
