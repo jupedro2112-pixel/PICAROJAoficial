@@ -36,6 +36,10 @@ let _missingConfigLogged = false;
 //   sólo mandaba al propio y al _2 (y el _2 recibía los eventos de TODOS los clientes); los _3.._9 sólo servían para el navegador de la landing.
 //   Ahora un píxel con token recibe por CAPI los eventos de SUS clientes (los de las campañas/publicistas de META_PIXEL_PUBLISHER_n, o todos
 //   con '*'); sin META_PIXEL_PUBLISHER_n sigue recibiendo todo (el "partner" de siempre). Sin token = sólo navegador.
+// #990: píxeles cargados desde el PANEL (Configuración → Píxeles de Meta por publicista). El server los lee de Config['metaPixels'] (token cifrado),
+// los descifra y los deja acá con setConfigPixels(); valen igual que los de SSM. Cada uno: { id, label, pixelId, token, scope[], testCode, capiOnly }.
+let _cfgPixels = [];
+function setConfigPixels(list) { _cfgPixels = Array.isArray(list) ? list.filter((p) => p && p.pixelId) : []; }
 function listPixels() {
   const out = [];
   if (process.env.META_PIXEL_ID) out.push({ n: 1, label: 'propio', pixelId: String(process.env.META_PIXEL_ID), token: process.env.META_CAPI_ACCESS_TOKEN || '', testCode: process.env.META_TEST_EVENT_CODE || '', scope: ['*'], capiOnly: false });
@@ -43,8 +47,10 @@ function listPixels() {
     const pid = String(process.env['META_PIXEL_ID_' + i] || '').trim(); if (!pid) continue;
     const scope = _parsePixelScope(process.env['META_PIXEL_PUBLISHER_' + i]);
     out.push({ n: i, label: scope.length ? ('publicista ' + scope.join('/')) : 'partner', pixelId: pid, token: String(process.env['META_CAPI_ACCESS_TOKEN_' + i] || ''), testCode: String(process.env['META_TEST_EVENT_CODE_' + i] || ''),
-      scope: scope.length ? scope : ['*'], capiOnly: /^(1|true|on|yes)$/i.test(String(process.env['META_PIXEL_CAPIONLY_' + i] || '')) });
+      scope: scope.length ? scope : ['*'], capiOnly: /^(1|true|on|yes)$/i.test(String(process.env['META_PIXEL_CAPIONLY_' + i] || '')), source: 'ssm' });
   }
+  _cfgPixels.forEach((p) => { const scope = Array.isArray(p.scope) && p.scope.length ? p.scope : ['*'];
+    out.push({ n: 'c' + p.id, id: p.id, label: p.label || ('publicista ' + scope.join('/')), pixelId: String(p.pixelId), token: String(p.token || ''), testCode: String(p.testCode || ''), scope, capiOnly: !!p.capiOnly, source: 'panel' }); });
   return out;
 }
 function _scopeMatches(scope, info) {
@@ -95,17 +101,15 @@ async function pixelIdsForCampaign(campaignCode) {
   const code = String(campaignCode || '').trim().toUpperCase();
   if (!code) return [];
   const publisher = await _publisherOfCampaign(code);
-  const pubLower = publisher ? String(publisher).trim().toLowerCase() : null;
+  const info = { publisher, campaignCode: code };
+  // #990: los de SSM (n ≥ 2 con META_PIXEL_PUBLISHER_n) y los del panel; nunca el propio (n=1) ni los "sólo CAPI". Un píxel de SSM sin alcance
+  // (partner) tampoco va al navegador (como antes: sólo recibe por CAPI).
   const ids = [];
-  for (let i = 2; i <= 9; i++) {
-    const pid = String(process.env['META_PIXEL_ID_' + i] || '').trim();
-    if (!pid) continue;
-    if (/^(1|true|on|yes)$/i.test(String(process.env['META_PIXEL_CAPIONLY_' + i] || ''))) continue;
-    const scope = _parsePixelScope(process.env['META_PIXEL_PUBLISHER_' + i]);
-    if (!scope.length) continue;
-    const ok = scope.some((s) => s === '*' || s.toUpperCase() === code || (pubLower && s.toLowerCase() === pubLower));
-    if (ok) ids.push(pid);
-  }
+  listPixels().forEach((p) => {
+    if (p.n === 1 || p.capiOnly) return;
+    if (p.source === 'ssm' && !_parsePixelScope(process.env['META_PIXEL_PUBLISHER_' + p.n]).length) return;
+    if (_scopeMatches(p.scope, info) && !ids.includes(p.pixelId)) ids.push(p.pixelId);
+  });
   return ids;
 }
 async function resolveEventScope(userInfo, opts) {
@@ -318,8 +322,8 @@ function _noteResult(n, eventName, ok, detail) {
 function stats() { const o = {}; _lastByPixel.forEach((v, k) => { o[k] = v; }); return o; }
 // #990: envío de PRUEBA a un píxel puntual (panel): un evento con nombre propio para ver si Meta lo acepta (token válido, píxel correcto).
 async function testPixel(n, testEventCode) {
-  const p = listPixels().find((x) => x.n === Number(n)); if (!p) return { ok: false, error: 'no hay píxel ' + n };
-  if (!p.token) return { ok: false, error: 'el píxel ' + n + ' no tiene META_CAPI_ACCESS_TOKEN' + (n === 1 ? '' : '_' + n) + ': sólo navegador' };
+  const p = listPixels().find((x) => String(x.n) === String(n)); if (!p) return { ok: false, error: 'no hay píxel ' + n };
+  if (!p.token) return { ok: false, error: 'el píxel ' + n + ' no tiene token: sólo navegador. ' + (p.source === 'panel' ? 'Cargale el token en el panel.' : 'Falta META_CAPI_ACCESS_TOKEN' + (n === 1 ? '' : '_' + n) + ' en SSM.') };
   const event = { event_name: 'PicaRojaTest', event_time: Math.floor(Date.now() / 1000), event_id: 'test_' + Date.now(), action_source: 'website', user_data: { client_user_agent: 'picaroja-panel-test', external_id: [sha256('picaroja-test')] }, custom_data: { source: 'panel' } };
   const payload = { data: [event] }; const tc = testEventCode || p.testCode; if (tc) payload.test_event_code = tc;
   try {
@@ -383,7 +387,7 @@ function valueCategory(amount) {
 }
 
 module.exports = {
-  listPixels, stats, testPixel, _capiDestinations, _scopeMatches, // #990
+  listPixels, setConfigPixels, stats, testPixel, _capiDestinations, _scopeMatches, // #990
   resolveEventScope,
   pixelIdsForCampaign, // #797
   isConfigured,

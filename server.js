@@ -5206,12 +5206,49 @@ app.post('/api/landing/signup', landingIpLimiter, _landingSignupHandler);
 //   GET  /api/admin/meta-pixels                 → cada píxel (id enmascarado, si tiene token, alcance, si va por CAPI, últimos envíos de esta instancia)
 //   GET  /api/admin/meta-pixels?campaign=XXXX   → además, qué píxeles reciben los eventos de esa campaña (navegador y CAPI)
 //   POST /api/admin/meta-pixels/:n/test         → manda un evento de prueba "PicaRojaTest" a ese píxel y devuelve la respuesta de Meta (token/píxel OK o el error)
+// #990 (owner: "quiero arreglarlo desde el panel"): píxeles por publicista cargados en Configuración → "Píxeles de Meta por publicista".
+// Config['metaPixels'] = [{ id, label, pixelId, tokenEnc, tokenLast4, scope:[...], testCode, capiOnly, updatedAt, updatedBy }]. El token se guarda cifrado
+// con JWT_SECRET (como hgcash/1girox); rotar JWT_SECRET ⇒ recargarlos. Se descifran al arrancar y cada 5 min (o al guardar) y van al servicio.
+async function _metaPixelsLoad() {
+  try {
+    const list = (await getConfig('metaPixels', [])) || [];
+    const dec = list.map((p) => { let token = ''; try { token = p.tokenEnc ? (_credDecrypt(p.tokenEnc) || '') : ''; } catch (_) { token = ''; }
+      return { id: String(p.id), label: p.label || '', pixelId: String(p.pixelId || ''), token, scope: Array.isArray(p.scope) ? p.scope : [], testCode: p.testCode || '', capiOnly: !!p.capiOnly }; });
+    metaCapi.setConfigPixels(dec); return dec.length;
+  } catch (e) { logger.warn('[meta-pixels] no se pudieron cargar los del panel: ' + e.message); return 0; }
+}
+setInterval(() => { _metaPixelsLoad(); }, 5 * 60 * 1000);
+app.post('/api/admin/meta-pixels', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const b = req.body || {};
+    const pixelId = String(b.pixelId || '').replace(/\D/g, ''); if (!/^\d{10,20}$/.test(pixelId)) return res.status(400).json({ error: 'El ID del píxel son 15 o 16 números (Administrador de eventos → el píxel → ID del conjunto de datos).' });
+    const scope = String(b.scope || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20); if (!scope.length) return res.status(400).json({ error: 'Poné a quién pertenece: el código de la campaña (ej. PICAROJAOK), el nombre del publicista, o * para todos.' });
+    const token = String(b.token || '').trim(); const list = (await getConfig('metaPixels', [])) || [];
+    const id = String(b.id || '').trim() || ('p' + Date.now().toString(36)); const cur = list.find((p) => String(p.id) === id) || null;
+    if (!token && !(cur && cur.tokenEnc)) return res.status(400).json({ error: 'Falta el token de la API de conversiones de ese píxel (Eventos → Configuración → API de conversiones → Generar token).' });
+    const next = { id, label: String(b.label || scope[0]).slice(0, 60), pixelId, scope, testCode: String(b.testEventCode || '').trim().slice(0, 40), capiOnly: !!b.capiOnly, updatedAt: new Date().toISOString(), updatedBy: req.user.username,
+      tokenEnc: token ? _credEncrypt(token) : cur.tokenEnc, tokenLast4: token ? token.slice(-4) : cur.tokenLast4 };
+    const out = cur ? list.map((p) => (String(p.id) === id ? next : p)) : list.concat([next]);
+    await Config.set('metaPixels', out, req.user.username); await _metaPixelsLoad();
+    logger.info('[meta-pixels] ' + (cur ? 'editado' : 'nuevo') + ' ' + id + ' (' + scope.join('/') + ') por ' + req.user.username);
+    res.json({ success: true, id });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
+});
+app.delete('/api/admin/meta-pixels/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const list = (await getConfig('metaPixels', [])) || []; const out = list.filter((p) => String(p.id) !== String(req.params.id));
+    if (out.length === list.length) return res.status(404).json({ error: 'No existe' });
+    await Config.set('metaPixels', out, req.user.username); await _metaPixelsLoad(); res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.get('/api/admin/meta-pixels', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
     const mask = (id) => String(id || '').replace(/^(\d{4})\d+(\d{3})$/, '$1…$2');
     const st = metaCapi.stats();
-    const list = metaCapi.listPixels().map((p) => ({ n: p.n, etiqueta: p.label, pixel: mask(p.pixelId), token: p.token ? 'sí' : 'NO (sólo navegador)', alcance: p.scope, soloCapi: p.capiOnly, testEventCode: p.testCode ? 'sí' : 'no',
+    const list = metaCapi.listPixels().map((p) => ({ n: p.n, id: p.id || null, origen: p.source || 'ssm', etiqueta: p.label, pixel: mask(p.pixelId), pixelId: p.source === 'panel' ? p.pixelId : undefined, token: p.token ? 'sí' : 'NO (sólo navegador)', alcance: p.scope, soloCapi: p.capiOnly, testEventCode: p.testCode ? 'sí' : 'no',
       recibePorCapi: p.token ? (p.scope.includes('*') ? 'todos los clientes' : 'clientes de ' + p.scope.join(', ')) : 'nada', ultimosEnvios: st[p.n] || null }));
     const out = { pixels: list, nota: 'Ids enmascarados. Token = META_CAPI_ACCESS_TOKEN(_n) en SSM; alcance = META_PIXEL_PUBLISHER_n (códigos de campaña o nombre del publicista, o *). Los contadores son de esta instancia desde el último arranque.' };
     const camp = String(req.query.campaign || '').trim().toUpperCase();
@@ -30502,6 +30539,7 @@ if (process.env.VERCEL) {
       `regalos=${girox.getGiftModeSummary()}`
     );
     // Pixels del Meta CAPI configurados (propio + partner opcional).
+    try { await _metaPixelsLoad(); } catch (_) {} // #990: píxeles del panel
     console.log('[MetaCAPI] pixels: ' + (metaCapi.listPixels().map((p) => '#' + p.n + ' ' + p.label + ' ' + String(p.pixelId).slice(0, 4) + '… token=' + (p.token ? 'sí' : 'NO') + ' alcance=' + p.scope.join('/')).join(' · ') || 'ninguno')); // #990
 
     await initializeData();

@@ -1155,6 +1155,32 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                                 <span id="platMsg" style="font-size:12px;color:#aaa;"></span>
                             </div>
                         </div>
+                        <!-- #990: PÍXELES DE META POR PUBLICISTA (sólo admin general). Reemplaza tener que cargar META_PIXEL_ID_n en SSM. -->
+                        <div class="panel-subheader" style="margin-top: 24px;" id="metaPixelsHeader">
+                            <h3>📣 Píxeles de Meta por publicista</h3>
+                        </div>
+                        <div class="cbu-form" id="metaPixelsForm">
+                            <p style="color:#aaa;font-size:12px;line-height:1.5;margin:0 0 10px;">
+                                Cada publicista recibe en SU píxel los eventos de SUS clientes: PageView y registro en la landing (navegador) y registro, cargas (Purchase) y
+                                reembolsos desde el servidor (API de conversiones). Pedile al publicista: <b>ID del píxel</b> (Administrador de eventos → su píxel → ID del
+                                conjunto de datos) y el <b>token de la API de conversiones</b> (Eventos → Configuración → API de conversiones → Generar token). El token
+                                se guarda cifrado. "Probar" manda un evento <code>PicaRojaTest</code> y muestra lo que contesta Meta.
+                            </p>
+                            <div id="metaPixelsList" style="margin:0 0 10px;font-size:12.5px;">Cargando…</div>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                                <input type="hidden" id="mpId">
+                                <div class="form-group" style="flex:1;min-width:170px;"><label>Publicista o campaña</label><input type="text" id="mpScope" placeholder="PICAROJAOK (o varios por coma, o *)" maxlength="200"></div>
+                                <div class="form-group" style="flex:1;min-width:170px;"><label>ID del píxel</label><input type="text" id="mpPixel" placeholder="15-16 números" maxlength="24" inputmode="numeric"></div>
+                                <div class="form-group" style="flex:2;min-width:220px;"><label>Token API de conversiones</label><input type="password" id="mpToken" placeholder="EAAB… (al editar, vacío = no cambiar)" autocomplete="new-password"></div>
+                                <div class="form-group" style="flex:0 0 150px;"><label>Código de prueba (opc.)</label><input type="text" id="mpTest" placeholder="TEST12345" maxlength="40"></div>
+                                <label style="display:flex;align-items:center;gap:6px;margin:0 0 10px;font-size:12px;"><input type="checkbox" id="mpCapiOnly"> Sólo servidor (no cargar en la landing)</label>
+                            </div>
+                            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                                <button class="btn-primary" id="mpSaveBtn" onclick="saveMetaPixel()">💾 Guardar píxel</button>
+                                <button class="btn-secondary" type="button" onclick="clearMetaPixelForm()">Limpiar</button>
+                                <span id="mpMsg" style="font-size:12px;color:#aaa;"></span>
+                            </div>
+                        </div>
                         <!-- Reembolso ACUMULATIVO de por vida (ESPEC-REEMBOLSO-1GIROX, solo admin general) -->
                         <div class="panel-subheader" style="margin-top: 24px;" id="cashbackHeader">
                             <h3>💸 Reembolso acumulativo (de por vida)</h3>
