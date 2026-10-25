@@ -8,6 +8,26 @@
 
 ## Sesión 2026-10-25
 
+### 990. 📣 Píxel de Meta por publicista: la CAPI ahora manda a cada píxel los eventos de SUS clientes + diagnóstico desde el panel
+**Pedido (owner):** "¿podés ver por qué no llega el píxel al publicista picarojaok? Tenés cargado en Amazon el píxel del publicista y el token." · "Decime
+dónde está el error y, si está mal configurado desde el admin, el paso a paso".
+**Verificado desde acá:** `GET https://picaroja.com/api/meta-pixel-id?c=PICAROJAOK` devuelve un píxel y la landing de Vercel (`grupospicaroja.com/picarojaok`)
+tiene el `loadMetaPixel` (#797) ⇒ el píxel del NAVEGADOR (PageView + CompleteRegistration) está bien.
+**El error (código):** `_capiDestinations()` sólo armaba destinos con `META_PIXEL_ID`/`META_CAPI_ACCESS_TOKEN` (propio) y `_2` (partner). Un píxel de
+publicista cargado como `_3`..`_9` con su `META_CAPI_ACCESS_TOKEN_n` NUNCA recibía eventos server-side (registro desde la app, cargas = Purchase,
+reembolsos…); y el `_2` recibía los eventos de TODOS los clientes, no sólo los del publicista. Desde la app (no la landing) el registro y las cargas son
+sólo CAPI ⇒ para el publicista "no llega nada".
+- **Fix (`metaCapiService.js`):** `listPixels()` (n=1..9 con token/alcance/testCode/capiOnly) y `_capiDestinations(scopeInfo)`: píxel con token +
+  `META_PIXEL_PUBLISHER_n` ⇒ recibe por CAPI SÓLO los eventos de clientes de esas campañas/publicistas (`resolveEventScope` por `acquisitionCampaign`/
+  `giroxOwnerCampaign`); con `*` o sin alcance ⇒ todo (el partner de siempre); sin token ⇒ sólo navegador. `sendEvent` resuelve el alcance del cliente
+  antes de enviar. Contadores por píxel en memoria (`stats()`), log de arranque con todos los píxeles. Test `scripts/test-meta-pixels.js` (axios simulado).
+- **Diagnóstico (admin general, sesión del panel):** `GET /api/admin/meta-pixels` (cada píxel: id enmascarado, token sí/NO, alcance, qué recibe por
+  CAPI, últimos envíos), `GET /api/admin/meta-pixels?campaign=PICAROJAOK` (quién recibe esa campaña en navegador y CAPI) y
+  `GET|POST /api/admin/meta-pixels/:n/test` (manda "PicaRojaTest" a ese píxel y devuelve la respuesta de Meta; code 190 = token inválido/vencido).
+- **Configuración correcta en SSM (`/picaroja/prod/`):** por publicista un número n libre (2..9): `META_PIXEL_ID_n` = ID del píxel del publicista,
+  `META_CAPI_ACCESS_TOKEN_n` = token de la API de conversiones de ESE píxel (Eventos → Configuración → API de conversiones → generar token),
+  `META_PIXEL_PUBLISHER_n` = código de campaña (PICAROJAOK) o nombre del publicista, `META_TEST_EVENT_CODE_n` opcional. Después: redeploy (SSM carga al arrancar).
+
 ### 989. ♦️ PLATAFORMA "Pica Roja APP": la página propia con los juegos de Girox, elegir y cambiar con 1girox, entrada directa — SW v651 · admin SW v208
 **Pedidos (owner, en orden):** "armemos Pica Roja al extremo: detectá en la otra terminal y agarrá sólo lo de Pica Roja y activalo" · "habilitando la
 plataforma Pica Roja quiero que la gente pueda jugar en ambas, que elija y cambie, Pica Roja o Girox; la default Pica Roja" · "afinarla bien completa de

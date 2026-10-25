@@ -5202,6 +5202,39 @@ async function _landingSignupHandler(req, res) {
 app.post('/api/landing/signup', landingIpLimiter, _landingSignupHandler);
 // #797: píxel(es) de Meta que la landing tiene que cargar en el navegador para esta campaña (ids públicos por naturaleza; los
 // valores salen de META_PIXEL_ID_n / META_PIXEL_PUBLISHER_n en SSM). Sin coincidencia ⇒ [] y la landing no carga fbq.
+// #990 (owner: "¿por qué no le llega el píxel al publicista picarojaok?"): diagnóstico de los píxeles de Meta (admin general, sesión del panel):
+//   GET  /api/admin/meta-pixels                 → cada píxel (id enmascarado, si tiene token, alcance, si va por CAPI, últimos envíos de esta instancia)
+//   GET  /api/admin/meta-pixels?campaign=XXXX   → además, qué píxeles reciben los eventos de esa campaña (navegador y CAPI)
+//   POST /api/admin/meta-pixels/:n/test         → manda un evento de prueba "PicaRojaTest" a ese píxel y devuelve la respuesta de Meta (token/píxel OK o el error)
+app.get('/api/admin/meta-pixels', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const mask = (id) => String(id || '').replace(/^(\d{4})\d+(\d{3})$/, '$1…$2');
+    const st = metaCapi.stats();
+    const list = metaCapi.listPixels().map((p) => ({ n: p.n, etiqueta: p.label, pixel: mask(p.pixelId), token: p.token ? 'sí' : 'NO (sólo navegador)', alcance: p.scope, soloCapi: p.capiOnly, testEventCode: p.testCode ? 'sí' : 'no',
+      recibePorCapi: p.token ? (p.scope.includes('*') ? 'todos los clientes' : 'clientes de ' + p.scope.join(', ')) : 'nada', ultimosEnvios: st[p.n] || null }));
+    const out = { pixels: list, nota: 'Ids enmascarados. Token = META_CAPI_ACCESS_TOKEN(_n) en SSM; alcance = META_PIXEL_PUBLISHER_n (códigos de campaña o nombre del publicista, o *). Los contadores son de esta instancia desde el último arranque.' };
+    const camp = String(req.query.campaign || '').trim().toUpperCase();
+    if (camp) {
+      const info = await metaCapi.resolveEventScope({}, { campaignCode: camp });
+      out.campania = { codigo: camp, publicista: info && info.publisher, navegador: await metaCapi.pixelIdsForCampaign(camp).then((a) => a.map(mask)), capi: metaCapi._capiDestinations(info).map((d) => '#' + d.n + ' ' + mask(d.pixelId)) };
+    }
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
+});
+app.post('/api/admin/meta-pixels/:n/test', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const r = await metaCapi.testPixel(parseInt(req.params.n, 10), String((req.body && req.body.testEventCode) || (req.query && req.query.testEventCode) || '').trim() || null);
+    logger.info('[meta-pixels] prueba #' + req.params.n + ' por ' + req.user.username + ': ' + (r.ok ? 'OK' : 'ERROR ' + JSON.stringify(r.error).slice(0, 200)));
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
+});
+// GET también para probar desde la barra del navegador con la sesión del panel abierta.
+app.get('/api/admin/meta-pixels/:n/test', authMiddleware, adminMiddleware, async (req, res) => {
+  try { if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' }); res.json(await metaCapi.testPixel(parseInt(req.params.n, 10), String((req.query && req.query.testEventCode) || '').trim() || null)); }
+  catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
+});
 app.get('/api/meta-pixel-id', async (req, res) => {
   try {
     const raw = String((req.query && req.query.c) || '').trim();
@@ -30469,10 +30502,7 @@ if (process.env.VERCEL) {
       `regalos=${girox.getGiftModeSummary()}`
     );
     // Pixels del Meta CAPI configurados (propio + partner opcional).
-    console.log(
-      `[MetaCAPI] pixels: propio=${process.env.META_PIXEL_ID ? 'OK' : 'no'} · ` +
-      `partner(2º)=${process.env.META_PIXEL_ID_2 ? 'OK ' + String(process.env.META_PIXEL_ID_2).slice(0, 6) + '…' : 'no configurado'}`
-    );
+    console.log('[MetaCAPI] pixels: ' + (metaCapi.listPixels().map((p) => '#' + p.n + ' ' + p.label + ' ' + String(p.pixelId).slice(0, 4) + '… token=' + (p.token ? 'sí' : 'NO') + ' alcance=' + p.scope.join('/')).join(' · ') || 'ninguno')); // #990
 
     await initializeData();
     await setupRedisAdapter();

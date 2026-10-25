@@ -1360,6 +1360,9 @@ DailyRouletteSpin / Message. Panel → "🧠 Datos IA" (pestañas Análisis · C
 - **Qué:** POST JSON firmado (`X-Webhook-Event/Id/Timestamp/Signature`, HMAC-SHA256 de `"{ts}.{body}"`) a hasta 10 destinos
   (`Config['outboundWebhooks'].destinations[]`, secreto cifrado con `_credEncrypt`). Eventos `registro` y `primera_carga` siempre;
   `carga` y `retiro` opcionales por destino; alcance `all` o lista de publicistas/códigos (resuelto por `metaCapi.resolveEventScope`).
+  **CAPI por publicista (#990):** `metaCapi.listPixels()` + `_capiDestinations(scopeInfo)`: cada píxel con `META_CAPI_ACCESS_TOKEN_n` recibe por CAPI
+  sólo los eventos de los clientes de `META_PIXEL_PUBLISHER_n` (o todo con `*` / sin alcance). Diagnóstico: `GET /api/admin/meta-pixels[?campaign=]`,
+  `GET /api/admin/meta-pixels/:n/test`. Test `scripts/test-meta-pixels.js`.
   **Píxel en el navegador de la landing (#797):** `GET /api/meta-pixel-id?c=<campaña>` → `metaCapi.pixelIdsForCampaign` (env/SSM
   `META_PIXEL_ID_n` + `META_PIXEL_PUBLISHER_n` con códigos/publicistas/`*`; `META_PIXEL_CAPIONLY_n=1` = sólo CAPI). La landing carga
   `fbq` con esos ids y el registro dispara `CompleteRegistration` con `eventID = metaEventId` (= `event_id` de la CAPI) para deduplicar.

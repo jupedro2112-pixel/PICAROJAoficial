@@ -336,6 +336,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **HISTORIAS CON BONO (#742, 2026-10-21):** una historia puede llevar `bonusPct` por `bonusHours` (+ push a todos). **#978:** la automática es SEMANAL (miércoles 12:30, +100 % por 3 h, `STORY_AUTO_BONUS`, `bonusDays=[3]`); ese día el autopiloto no manda campaña. El cliente que toca
   "Reclamar ahora" queda con `User.storyBonus` (pct, expiresAt) y `claimStoryBonusPercent` lo consume PRIMERO en `resolveAutoBonus` en su
   próxima carga. Un bono nuevo que deba aplicarse a la carga va a esa cadena (no a `creditUserBalance`); el cliente que no reclamó no ve nada.
+- **PÍXELES DE META (#797/#990):** por publicista en SSM `META_PIXEL_ID_n` + `META_CAPI_ACCESS_TOKEN_n` + `META_PIXEL_PUBLISHER_n` (n = 2..9; códigos de
+  campaña / nombre del publicista / `*`). Navegador (landing) = `pixelIdsForCampaign`; CAPI = `_capiDestinations(scope)` manda a cada píxel sólo los
+  eventos de SUS clientes. Sin token = sólo navegador. Diagnóstico: `GET /api/admin/meta-pixels[?campaign=]` y `/api/admin/meta-pixels/:n/test`.
 - **LINK DE RESULTADOS DEL PUBLICISTA (#805):** `Campaign.statsToken` ⇒ `/r/<token>` muestra números agregados de esa campaña sin login
   (sólo lectura). Generar uno nuevo invalida el anterior; desactivar = `statsToken:null`. Nunca agregar ahí datos de usuarios ni retiros.
 - **PLATAFORMA "PICA ROJA APP" (#989, 2026-10-25):** la 2ª plataforma que ve el cliente es la PÁGINA PROPIA `public/js/lobby.js` (`VIP.lobby`) con los juegos de
