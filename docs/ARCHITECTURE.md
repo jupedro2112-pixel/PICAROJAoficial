@@ -1464,6 +1464,33 @@ plata ni sueldos). Foto: `storyImage` (SVG, `GET /api/stories/:id/auto.svg?v=STO
 `POST /api/admin/stories-autopilot/republish-today`): apaga las vigentes (no las personales), borra `sa-<hoy|ayer>-*` y publica las de hoy ya.
 
 
+## Plataforma "Pica Roja APP" (#989, 2026-10-25)
+La segunda "plataforma" que ve el cliente NO es otra cuenta ni otra API: es la **página propia de la app** (`public/js/lobby.js`, `VIP.lobby`) con los juegos
+de Girox, sobre la MISMA cuenta de 1girox. Viene de la gemela FABRIOCTUBRE (sus #907–#988, sólo la parte de PICA ROJA).
+- **Front:** `home.js` `_injectPR` agrega `{ id:'picaroja', name:'Pica Roja APP', door:true }` primera en `/api/platforms` y filtra las `connected:false`
+  (quedan Pica Roja APP y 1girox). `DOORS`/`BRANDS`/`_localBrand()` (`localStorage vip_brand`, `vip_pr_off`): la elegida en ESTE teléfono; predeterminada
+  Pica Roja APP. `setPreferred('picaroja')` ⇒ al server `girox`. `openPlatform('picaroja')` ⇒ `VIP.lobby.open()`; `openPlatform('girox')` sin `checked`
+  con Pica Roja APP elegida ⇒ también la página (los ingresos internos: fotos del Inicio, historias, básico); sólo la persona eligiendo 1girox (`checked`)
+  abre el casino de Girox. `_giroxDirect()` (menú directo) abre la plataforma elegida ⇒ entrada directa a la página.
+- **Server:** `GET /api/games/lobby` (`_gameCatalog(q, page, providerId, sort)` con `providers`; lobbies = búsqueda "lobby"; sports fijos), `GET /api/games/catalog`
+  (`provider`, `sort`, hasta la página 400), `GET /api/games/img` (+ logos de proveedores y otros hosts de portadas; tipo por contenido), `GET /api/sports/board`
+  (`src/services/sportsBoard.js`, ESPN, cache 60 s), `GET/POST /api/me/brand` (`User.activeBrand`, sin bloqueo), `GET /api/me/deposits` (cargas de la activa
+  según `brandHistory`), `POST /api/admin/users/:id/brand`, `GET /paginaoficial` ⇒ `/?pr=1`. `platformSessionHandler`: `game` `/sport/(onyx|gr8|horses|turf|poker)`
+  = sportsbooks de 1girox con link directo; `gid`/`lk` del catálogo evitan la búsqueda por nombre; `forfeit`/`blocked` (#945) cuando hay bono activo.
+- **La página (orden):** barra del casino (`casinoBarHtml`, con la píldora del sorteo `.casino-brand.casino-srt` y el cartel `.casino-srt-bar`: sorteos.js
+  `paintCasino` pinta todas las `.casino-topbar` con el estado `vip_srt_casino_bar`) → `#prlQlDock` (Carga rápida = `#casinoLoadPanel` de `toggleCasinoLoad`,
+  que cuando la página está abierta se cuelga ahí; `#prlQlChip` centrado cuando está cerrada; `sessionStorage vip_prl_ql_closed`) → `#prlPrBal` (clon de la
+  tira de saldo del Inicio) → `#prlMain`: Top partidos (`_hero`, `/api/sports/board`; tocar ⇒ `sport('/sports-new')` = Digitain directo) · Proveedores
+  (rojo/blanco) · Casino lobby · buscador · Populares · Nuevos (título ⇒ `extraAll`) · En vivo · secciones por proveedor · "Ver los N juegos". Vistas:
+  `inicio` · `slots`/`all` (carga al bajar, `_moreAll`) · `vivo` (`girox-live.json`) · `lobbies` · `list` (nuevos / proveedor en vivo) · menú ☰ (`menu`, con
+  "Jugar en 1girox" y "Volver a la app"). Barra de abajo: la de la app con Slots · Inicio · Deportes (`_prNav`; `body.prl-appnav`), o la propia `.prl-nav`.
+- **Estilos:** `public/css/picaroja.css` (tokens `--p-*` ⇒ sigue el modo claro/oscuro; selector de plataforma de 2 columnas; `.prl-pvb` rojo con logo
+  `filter: brightness(0) invert(1)`; `:root:has(#prLobby:not([hidden]))` pone el sorteo en rojo).
+- **Trampas:** la página está en z-index 99990 (el casino de Girox 99999; modales con `body.casino-open` arriba). Un botón nuevo de la página que abra algo
+  que NO es modal (soporte, menú) tiene que cerrarla antes (`VIP.lobby.close()`), si no queda detrás. Nunca abrir la web de Girox por un juego que no salió
+  directo (#946): se avisa y se reintenta. 1girox no tiene API de apuestas: las cuotas son de referencia y la apuesta se hace en Digitain.
+- **Prueba:** `node scripts/test-picaroja-front.js`.
+
 ## Casino con el bloque del menú arriba (#988, 2026-10-24)
 
 Al abrir la plataforma (`VIP.ui._showCasinoFrame` → `renderCasinoTabs` en home.js), debajo de `#casinoTopBar` se inserta UNA vez `#casinoHome`

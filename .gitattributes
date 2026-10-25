@@ -1,0 +1,7 @@
+# #809: zip liviano para subir a mano (sin historial de git ni archivos que el servidor no usa)
+docs export-ignore
+landing export-ignore
+scripts export-ignore
+WORKLOG.md export-ignore
+.ebignore export-ignore
+.gitattributes export-ignore

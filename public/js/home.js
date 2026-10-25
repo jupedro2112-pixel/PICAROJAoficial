@@ -79,7 +79,10 @@
     // #980 (owner): "completo hasta la primera carga, Girox directo después": el flag se guarda al saber que ya cargó (promo de 1ª carga / carga acreditada).
     const HAS_DEP_KEY = 'vip_has_dep';
     function _hasDeposit() { try { return localStorage.getItem(HAS_DEP_KEY) === '1'; } catch (_) { return false; } }
-    function _defaultPref() { return (_hasDeposit() || !_menuOn('full')) && _menuOn('girox') ? 'girox' : (_menuOn('full') ? 'full' : 'girox'); }
+    // #989 (owner): "cuando abren directo, la gente de /landing o de la app, que entre directamente a esa plataforma (Pica Roja APP) y pueda elegir
+    // jugar; si quiere cambiar a Girox después seguimos con el menú viejo" ⇒ sin menú elegido se arranca en el menú DIRECTO (que abre la plataforma
+    // elegida: Pica Roja APP por defecto). El completo y los demás siguen desde "Menú". (#980 "completo hasta la 1ª carga" quedó sin efecto.)
+    function _defaultPref() { return _menuOn('girox') ? 'girox' : (_menuOn('full') ? 'full' : _firstMenuOn()); }
     function _userPickedMenu() { try { return localStorage.getItem(MENU_USER_KEY) === '1' && !!localStorage.getItem(MENU_PREF_KEY); } catch (_) { return false; } }
     function isMenuFixed() { try { return localStorage.getItem(MENU_FIXED_KEY) === '1'; } catch (_) { return false; } }
     let _homeMode = 'play';
@@ -175,8 +178,12 @@
     // adjuntar + Retirar). Se usa al elegir el menú, al entrar con ese menú fijo y al tocar Inicio.
     function _giroxDirect() {
         try { if (VIP.ui && VIP.ui._casinoOpen) return; } catch (_) {}
+        // #957 (gemela): entrando por /paginaoficial (?pr=1) o con la página de Pica Roja APP ya abierta no se abre nada encima.
+        try { if (/[?&]pr=1\b/.test(location.search) || document.body.classList.contains('prl-open')) return; } catch (_) {}
         // #672 (owner): abre Girox porque es la plataforma seleccionada; cuando haya otras con API, abre la preferida del cliente.
-        setTimeout(() => { try { const list = (_platforms && _platforms.platforms) || []; const pref = _platforms && _platforms.preferredPlatform; const pp = list.find((x) => x.id === pref && x.connected); openPlatform(pp ? pp.id : 'girox', { embed: true }); } catch (_) {} }, 350);
+        // #963 (gemela) · #989 (owner: "la gente de /landing o de la app que entre directo a esa plataforma"): la plataforma elegida en ESTE teléfono
+        // (Pica Roja APP por defecto) manda aunque /api/platforms todavía no haya respondido: se abre SU página; 1girox sólo si la eligió.
+        setTimeout(() => { try { const lb = _localBrand(); if (_isDoor(lb)) { if (!document.body.classList.contains('prl-open')) VIP.lobby.open('inicio'); return; } const list = (_platforms && _platforms.platforms) || []; const pref = _platforms && _platforms.preferredPlatform; const pp = list.find((x) => x.id === pref && x.connected); openPlatform(pp ? pp.id : 'girox', { embed: true }); } catch (_) {} }, 350);
     }
     function _afterPref(pref) { _curPref = pref; if (pref === 'girox') _giroxDirect(); }
     // "Inicio" de la barra: menú fácil o completo según lo que eligió la persona.
@@ -236,7 +243,7 @@
         const box = _el('basicPlats'); if (!box) return;
         const defId = (_platforms && _platforms.defaultPlatform) || 'girox'; const pref = (_platforms && _platforms.preferredPlatform) || null;
         const soon = (p) => p.connected === false && p.id !== defId && p.id !== 'girox';
-        box.innerHTML = _withPicaroja(_entryList()).map((p) => { const on = pref ? pref === p.id : p.id === defId; return '<button type="button" class="bv-chip plat-' + _esc(p.id) + (on ? ' on' : '') + (soon(p) ? ' soon' : '') + '" onclick="VIP.home.basicPick(\'' + _esc(p.id) + '\',' + (soon(p) ? 'true' : 'false') + ')">' + (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '') + '<b>' + _esc(/^jugaygana$/i.test(p.name || '') ? 'Jugaygana' : (p.name || p.id)) + '</b>' + (soon(p) ? '<small>Pronto</small>' : (on ? '<small>✓</small>' : '')) + '</button>'; }).join('');
+        box.innerHTML = _entryList().map((p) => { const on = pref ? pref === p.id : p.id === defId; return '<button type="button" class="bv-chip plat-' + _esc(p.id) + (on ? ' on' : '') + (soon(p) ? ' soon' : '') + '" onclick="VIP.home.basicPick(\'' + _esc(p.id) + '\',' + (soon(p) ? 'true' : 'false') + ')">' + (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '') + '<b>' + _esc(p.name || p.id) + '</b>' + (p.id === 'picaroja' ? '<span class="plat-reco">Recomendado</span>' : '') + '<span class="bv-check">' + (on ? '✓' : '') + '</span>' + (soon(p) ? '<small>Pronto</small>' : '') + '</button>'; }).join(''); // #922: como el completo
     }
     async function basicPick(id, isSoon) {
         if (isSoon) { try { VIP.ui.showToast('Pronto: esta plataforma se habilita en breve', 'info'); } catch (_) {} return; }
@@ -288,10 +295,16 @@
         const logo = p && (p.logoUrl || (p.id === 'girox' ? '/images/soporte-1girox.png' : (p.id === 'ganamos' ? '/images/ganamos.png' : (p.id === 'picaroja' ? '/icons/icon-192x192.png' : (p.id === 'jugaygana' ? '/images/jugaygana.png' : '')))));
         if (img && logo) { img.src = logo; img.hidden = false; if (ico) ico.hidden = true; } else { if (img) img.hidden = true; if (ico) ico.hidden = false; }
         if (lbl) lbl.textContent = 'JUGÁ AQUÍ'; // #623 (owner): dice JUGÁ AQUÍ; el logo muestra la elegida
-        b.title = 'Elegí dónde jugar con tu saldo';
+        b.title = p ? ('Jugá en ' + p.name) : 'Elegí dónde jugar con tu saldo';
+        b.dataset.plat = (p && p.id) || ''; // #920: el CSS le da el color de la marca al logo
     }
-    // #623 (owner): al tocar JUGÁ AQUÍ siempre abre el selector de plataformas (Girox · Ganamos · Jugaygana) para que elija.
-    function platTap() { easyPlay(); }
+    // #623: JUGÁ AQUÍ con el logo de la elegida · #920 (owner): "si cambio a Ganamos, que figure su logo y abra Ganamos; lo mismo con PICA ROJA,
+    // sin mezclar": abre DIRECTO la plataforma elegida (su página); sin ninguna elegida, el selector.
+    function platTap() {
+        const p = (_platforms && _platforms.preferredPlatform) ? _platChosen() : null;
+        if (p && p.id) { openPlatform(p.id, { embed: true }); return; }
+        easyPlay();
+    }
     // #504: ESTRATEGIA — bono de segunda carga vigente + misiones de la semana (progreso real). Se consulta al pintar el Inicio (cache 90 s).
     let _stAt = 0, _stData = null;
     const _m$ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
@@ -416,12 +429,11 @@
         const only = MENU_ORDER.filter(_menuOn); if (only.length === 1) { setMenuPref(only[0], { quiet: true, auto: true }); return; } // #635: un solo menú activo → directo
         const pref = getMenuPref();
         if (pref === 'easy' && _homeMode !== 'easy') setHomeMode('easy', { persist: false });
-        if (_isInstalledApp() && _menuOn('girox') && _hasDeposit()) { setMenuPref('girox', { quiet: true, auto: true }); return; } // #937: app instalada ⇒ Girox directo siempre · #980: desde la 1ª carga
         if (isMenuFixed() && pref) { setHomeMode(_modeFor(pref)); _afterPref(pref); return; } // #559: preseleccionado → entra directo · #670
         if (pref && _userPickedMenu()) { setHomeMode(_modeFor(pref)); _afterPref(pref); return; } // #836: el menú que eligió la persona
         // #733 (owner): "el menú seleccionado para todos (landing o común) cuando abran la app sea el de Girox, y después lo pueden cambiar
         // desde Menú; la idea es que todos entren directo a cargar". Sin menú fijo → Girox directo, sin selector (si ese menú está activo).
-        if (_menuOn(_defaultPref())) { setMenuPref(_defaultPref(), { quiet: true, auto: true }); return; } // #980: completo hasta la 1ª carga, Girox después
+        if (_menuOn(_defaultPref())) { setMenuPref(_defaultPref(), { quiet: true, auto: true }); return; } // #989: directo a la plataforma (Pica Roja APP)
         setTimeout(openMenuChooser, 350);
     }
     // #559 (owner): "Dejar preseleccionado para el ingreso" al lado de Cambiar menú. Guarda el menú actual como preferencia
@@ -431,7 +443,7 @@
         const b = _el('menuPinBtn'), t = _el('menuPinTxt'); if (!b || !t) return;
         const on = isMenuFixed() && getMenuPref() === _prefOfMode();
         b.classList.toggle('on', on);
-        const nm = _homeMode === 'basic' ? 'básico' : (_homeMode === 'easy' ? 'intermedio' : (_curPref === 'girox' ? 'Girox directo' : 'completo')); // #670
+        const nm = _homeMode === 'basic' ? 'básico' : (_homeMode === 'easy' ? 'intermedio' : (_curPref === 'girox' ? (_brandName() + ' directo') : 'completo')); // #670 · #917: con el nombre de la plataforma elegida
         t.textContent = on ? ('✓ Menú ' + nm + ' fijo para el ingreso · tocá para deshacer') : ('Dejar fijo el menú ' + nm + ' para el ingreso');
     }
     function toggleMenuPin() {
@@ -620,6 +632,19 @@
             VIP.state.notifLevel = j.level; _pfAvisosHint(j.level); try { VIP.ui.showToast('Listo, guardado ✓'); } catch (_) {}
         } catch (_) { try { VIP.ui.showToast('No se pudo guardar, probá de nuevo', 'error'); } catch (__) {} paintPfAvisos(); }
     }
+    // F908 (owner): "en el perfil, las cargas de esa plataforma, no todas".
+    async function _pfDeposits() {
+        let box = _el('pfDeposits');
+        if (!box) { const anchor = _el('pfUserBox'); if (!anchor || !anchor.parentNode) return; anchor.insertAdjacentHTML('afterend', '<details class="pf-deps" id="pfDeposits"><summary>🧾 Mis cargas</summary><div class="pf-deps-l">Cargando…</div></details>'); box = _el('pfDeposits'); }
+        try {
+            const r = await fetch(VIP.config.API_URL + '/api/me/deposits', { headers: { 'Authorization': 'Bearer ' + VIP.state.currentToken } }); const d = await r.json();
+            if (!r.ok) return;
+            const sm = box.querySelector('summary'); if (sm) sm.textContent = '🧾 Mis cargas en ' + (d.brandName || 'PICA ROJA');
+            const l = box.querySelector('.pf-deps-l'); if (!l) return;
+            const m = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+            l.innerHTML = (d.items || []).length ? d.items.map((t) => '<div class="pf-dep"><span>' + new Date(t.at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + '</span><b>' + m(t.amount) + '</b>' + (t.bonus ? '<em>+' + m(t.bonus) + ' bono</em>' : '') + '</div>').join('') : '<div class="pf-dep-empty">Todavía no tenés cargas en ' + _esc(d.brandName || 'PICA ROJA') + '.</div>';
+        } catch (_) {}
+    }
     function openProfile() {
         paintPfPhone(); paintPfNotif(); paintPfAvisos(); // #645 · #971
         _pfShown = true; // #393
@@ -627,6 +652,7 @@
         _pfPaint();
         try { _paintAvatar(); } catch (_) {} // #304
         try { VIP.ui.showModal('profileModal'); } catch (_) { const m = _el('profileModal'); if (m) m.classList.remove('hidden'); }
+        try { _pfDeposits(); } catch (_) {} // #908
     }
     function profileTogglePw() { _pfShown = !_pfShown; _pfPaint(); }
     function profileCopy(which) {
@@ -647,7 +673,7 @@
         try { if (localStorage.getItem('vip_nodep') === '1') document.body.classList.add('nodep'); } catch (_) {} // #731
         try { const cl = localStorage.getItem('vip_menu_layout'); if (cl) _setMenuLayout(Number(cl)); } catch (_) {} // #638: menú 1/2 del caché, sin esperar al server
         _applyMenusEnabled(); _applyMenuLayout(); // #635: menús activos (cacheados al instante, refrescados del server)
-        const m = _modeFor(((_userPickedMenu() || isMenuFixed()) && !(_isInstalledApp() && _menuOn('girox') && _hasDeposit())) || !_menuOn('girox') ? getMenuPref() : _defaultPref()); // #512 · #836 · #937 · #980: completo hasta la 1ª carga
+        const m = _modeFor((_userPickedMenu() || isMenuFixed()) ? getMenuPref() : _defaultPref()); // #512 · #836 · #989: sin elección, directo a la plataforma
         try { sessionStorage.removeItem(HOME_MODE_KEY); } catch (_) {}
         _bindEntryFrame();
         setHomeMode(m, { persist: false });
@@ -812,16 +838,15 @@
     // Antes de que responda /api/platforms (Tor es lento) se muestran Girox y Ganamos fijos con sus
     // webs públicas; después se re-renderiza con la lista real (misma URL ⇒ no se recarga el iframe).
     const ENTRY_FALLBACK = [
-        { id: 'girox', name: 'Girox', playUrl: 'https://1girox.com', connected: true, logoUrl: '/images/soporte-1girox.png' },
-        { id: 'ganamos', name: 'Ganamos', playUrl: 'https://www.ganamosvip.me', connected: false, logoUrl: '/images/ganamos-net.png' },
-        { id: 'jugaygana', name: 'JUGAYGANA', playUrl: '', connected: false, logoUrl: '/images/jugaygana.png' } // #378
+        { id: 'picaroja', name: 'Pica Roja APP', playUrl: '', connected: true, door: true, logoUrl: '/icons/icon-96x96.png' }, // #989: la página propia (misma cuenta de 1girox)
+        { id: 'girox', name: '1girox', playUrl: 'https://1girox.com', connected: true, logoUrl: '/images/soporte-1girox.png' }
     ];
     let _entryPlat = null, _entryUrl = '', _entryTimer = null, _entryBound = false;
     function _entryList() { const l = (_platforms && _platforms.platforms) || []; return l.length ? l : ENTRY_FALLBACK; }
     // #949 (owner): "agregá un recuadro al final con el logo de Pica Roja y PICA ROJA como plataforma, Pronto" (sólo visual: no es una
     // plataforma del server; tocarla dice Pronto como Ganamos/Jugaygana).
-    const PICAROJA_SOON = { id: 'picaroja', name: 'PICA ROJA', logoUrl: '/icons/icon-192x192.png', connected: false };
-    function _withPicaroja(list) { return (list || []).some((p) => p && p.id === 'picaroja') ? list : (list || []).concat([PICAROJA_SOON]); }
+    // fusión: acá PICA ROJA es una marca REAL (puerta, _injectPR), no "Pronto" como en la gemela (G949) ⇒ no se agrega el chip de Próximamente.
+    function _withPicaroja(list) { return list || []; }
     // ---------------- #304: AVATAR DEL PERFIL ----------------
     // (owner: "una personita tipo avatar en el nombre, que se pueda abrir y ajustar con diferentes íconos; según el
     //  nivel: nivel 1 avatar común, al avanzar el ícono del nivel que le corresponda"). La clave se guarda en el
@@ -953,7 +978,7 @@
         const one = list.length === 1 ? list[0] : null;
         const names = list.map((p) => p.name);
         const why = _el('infoCardWhyTitle');
-        if (why) why.textContent = one ? ('¿Por qué elegir ' + one.name + '?') : ('¿Por qué elegir ' + names.concat(['PICA ROJA']).join(' o ') + '?'); // #949: + PICA ROJA
+        if (why) why.textContent = one ? ('¿Por qué elegir ' + one.name + '?') : ('¿Por qué elegir ' + names.join(' o ') + '?');
         // #710 (owner): la tarjeta "La plataforma que quieras" (Girox, Ganamos y Jugaygana, todas originales) se ve SIEMPRE en Info; texto fijo en el HTML.
         // #407 (owner): título "La plataforma que quieras"; jugaygana en minúscula ACÁ (sólo en Info); lista "A, B y C".
         const _infoName = (n) => (/^jugaygana$/i.test(String(n || '')) ? 'Jugaygana' : String(n || '')); // #431: J mayúscula
@@ -980,12 +1005,12 @@
             const soon = isSoon(p);
             return '<button type="button" class="ev-tab plat-' + _esc(p.id) + (p.id === _entryPlat ? ' active' : '') + (soon ? ' soon' : '') + '" onclick="VIP.home.entrySwitch(\'' + _esc(p.id) + '\')"' + (soon ? ' title="Próximamente"' : '') + '>' +
             (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '') + '<span class="ev-name">' + _esc(/^jugaygana$/i.test(p.name || '') ? 'Jugaygana' : p.name) + '</span>' + // #523: logo y nombre en línea
-            (p.id === 'girox' ? '<span class="ev-reco">Recomendado</span>' : '') +
+            (p.id === 'picaroja' ? '<span class="ev-reco">Recomendado</span>' : '') + // #989: la predeterminada es Pica Roja APP
             (soon ? '<span class="ev-soon">Pronto</span>' : '') + // #511: sutil
             '</button>';
         }).join('');
     }
-    function entrySwitch(id) { _entryPlat = id; renderEntryTabs(); _entryLoad(); } // #300: la pestaña siempre abre la página (Ganamos se ve con 'Próximamente')
+    async function entrySwitch(id) { if (!(await _brandGuard(id))) return; if (BRANDS[id]) { try { await setPreferred(id); } catch (_) {} } _entryPlat = id; renderEntryTabs(); _entryLoad(); if (_isDoor(id)) { try { VIP.lobby.open('inicio'); } catch (_) {} } } // #907 · #908 // #300: la pestaña siempre abre la página (Ganamos se ve con 'Próximamente')
     // #278: el modo logo de #277 se descartó (owner: "quedó mal") → la web se carga al entrar, como en #267.
     // ---------------- #312: carrusel de fotos ilustrativas de Girox en el Inicio ----------------
     // #327 (owner): fotos nuevas (grillas de juegos: Sugar Rush, Jokers, Fire Joker, Starburst, Crazy Time…); las anteriores se borraron.
@@ -1004,6 +1029,8 @@
     // casino normal. Un juego nuevo: agregar acá el par. Se navega DESPUÉS del SSO (ui.js, `_casinoGamePath`).
     const GAME_PLAY = { 'jokers-jewels': '/play/2/vs5joker', 'gates-of-olympus-1000': '/play/2/vs20olympx', 'sugar-rush-1000': '/play/2/vs20sugarrushx', 'sweet-bonanza-2500': '/play/2/vs20swbon2500', 'jokers-jewels-hold-spin': '/play/2/vs5jokjewhs', 'mines': '/play/4/mines_prod2_100hp', 'zeus-rush-fever': '/play/4/zeusrushfeverdeluxe96_rubyplay', 'buffalo-king-untamed': '/play/2/vswaysbkingasc', 'big-bass-bonanza': '/play/2/vs10bbbonanza', 'starlight-princess-1000': '/play/2/vs20starlightx' };
     function playGame(id) {
+        // #964: con link de juego ⇒ el mismo ingreso directo que los favoritos (el juego del proveedor aparte, sin la web de Girox).
+        if (GAME_PLAY[id]) { favPlay(GAME_PLAY[id].replace(/^\/play\//, ''), ((ENTRY_GAMES.find((g) => g[0] === id) || [])[1]) || 'el juego'); return; }
         try { VIP.ui._casinoGamePath = GAME_PLAY[id] || null; VIP.ui._casinoGameName = ((ENTRY_GAMES.find((g) => g[0] === id) || [])[1]) || ''; } catch (_) {}
         try { VIP.ui.showToast(GAME_PLAY[id] ? '🎰 Abriendo ' + ((ENTRY_GAMES.find((g) => g[0] === id) || [])[1] || 'el juego') + '…' : '🎰 Abriendo el casino…', 'info'); } catch (_) {}
         openPlatform('girox', { embed: true });
@@ -1192,25 +1219,79 @@
     // mostrar dentro del recuadro (pantalla negra) ⇒ el juego se abre en PANTALLA COMPLETA (ventana propia), logueado y directo al slot:
     // la ventana se abre YA en el toque (si no, el navegador la bloquea) y se le pone la dirección del juego cuando llega del server.
     // Si 1girox no da el juego, se cierra esa ventana y se abre Girox logueado en el recuadro, como siempre.
-    async function favPlay(key) {
+    // #923 (owner): "cuando carga un juego, que cargue con el logo de la plataforma: Ganamos como Ganamos, PICA ROJA como PICA ROJA".
+    const _LOAD_SKIN = { picaroja: { bg: 'radial-gradient(circle at 50% 35%, #3a0010 0, #0f212e 60%)', logo: '/icons/icon-192x192.png', h: 84, sp: '#e6002a', tx: '#fff', name: 'PICA ROJA' } };
+    function _gameLoadingScreen(win, name) {
+        // #968 (owner: "que la gente no vea que es de otra plataforma"): la carga NUNCA muestra Girox: siempre la marca de la app (PICA ROJA).
+        const k = _LOAD_SKIN.picaroja; const o = location.origin;
+        win.document.title = name + ' · ' + k.name;
+        win.document.body.style.cssText = 'margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:' + k.bg + ';color:' + k.tx + ';font:700 15px system-ui,Arial,sans-serif';
+        win.document.body.innerHTML = '<style>@keyframes s{to{transform:rotate(360deg)}}</style><img src="' + o + k.logo + '" alt="" style="max-width:220px;height:' + k.h + 'px;object-fit:contain">' +
+            '<div style="width:42px;height:42px;border-radius:50%;border:4px solid rgba(255,255,255,.15);border-top-color:' + k.sp + ';animation:s .8s linear infinite"></div><div style="opacity:.85">Abriendo ' + _esc(name) + '…</div>';
+    }
+    let _lastStep = '';
+    // #927: marca desde donde se abre un juego (página abierta, o la elegida); Girox = la de siempre.
+    function _openingBrand() { try { const lob = _el('prLobby'); if (lob && !lob.hidden && VIP.lobby && VIP.lobby.skin) return VIP.lobby.skin(); } catch (_) {} const b = _localBrand(); return _isDoor(b) ? b : null; }
+    const _BRAND_BAR = { picaroja: { name: 'PICA ROJA', logo: '/icons/icon-192x192.png' } };
+    function brandOf(id) { return _BRAND_BAR[id] || null; }
+    // #945: cartel propio (sin Girox) "si entrás a este juego perdés tu bono": resuelve true = entrar igual (1girox lo quita), false = no entrar.
+    function _forfeitAsk(name, f) {
+        return new Promise((resolve) => {
+            const amt = Number(f && f.amount) || 0;
+            const el = document.createElement('div');
+            el.className = 'ffk-ov';
+            el.innerHTML = '<div class="ffk-card" role="dialog" aria-label="Bono activo"><div class="ffk-ico">🎁</div><h3>Tenés un bono activo' + (amt > 0 ? ' de $' + amt.toLocaleString('es-AR') : '') + '</h3>' +
+                '<p>' + _esc(name) + ' no suma para el bono: si entrás igual, <b>el bono se pierde</b>.</p>' +
+                '<p class="ffk-s">Si querés conservarlo, jugá a otro juego.</p>' +
+                '<button type="button" class="ffk-go">Entrar igual</button><button type="button" class="ffk-no">Mejor no</button></div>';
+            const done = (v) => { try { el.remove(); } catch (_) {} resolve(v); };
+            el.querySelector('.ffk-go').onclick = () => done(true);
+            el.querySelector('.ffk-no').onclick = () => done(false);
+            el.onclick = (e) => { if (e.target === el) done(false); };
+            document.body.appendChild(el);
+        });
+    }
+    async function favPlay(key, nameArg, meta) { // #944: meta = { gid, lk } (id interno y launcher de 1girox: abre sin buscar el juego) // #907: también la Página exclusiva PICA ROJA (cualquier juego del catálogo, con su nombre)
         const f = (_favs || []).find((x) => x.key === key) || (_favCat || []).find((x) => x.key === key);
-        const name = (f && f.name) || 'el juego';
+        const name = nameArg || (f && f.name) || 'el juego';
         favClosePicker();
         let win = null; try { win = window.open('about:blank', '_blank'); } catch (_) { win = null; }
-        try { if (win && win.document) { win.document.title = name; win.document.body.style.cssText = 'margin:0;background:#0b0b10;color:#fff;font:700 16px system-ui;display:flex;align-items:center;justify-content:center;height:100vh'; win.document.body.textContent = '🎰 Abriendo ' + name + '…'; } } catch (_) {}
+        try { if (win && win.document) _gameLoadingScreen(win, name); } catch (_) {} // #923: pantalla de carga con el logo de la plataforma
         try { VIP.ui.showToast('🎰 Abriendo ' + name + '…', 'info'); } catch (_) {}
-        let url = null;
+        let url = null, d = {};
+        const _req = async (forfeit) => {
+            const r = await fetch(VIP.config.API_URL + '/api/platform/session', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + VIP.state.currentToken }, body: JSON.stringify({ platform: 'girox', game: /^sport\//.test(key) ? '/' + key : '/play/' + key, gameName: name, direct: true, gid: meta && meta.gid, lk: meta && meta.lk, forfeit: forfeit === true }) }); // #923/#944/#945
+            const j = await r.json().catch(() => ({})); j._ok = r.ok; j._status = r.status; return j;
+        };
         try {
-            const r = await fetch(VIP.config.API_URL + '/api/platform/session', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + VIP.state.currentToken }, body: JSON.stringify({ platform: 'girox', game: '/play/' + key, gameName: name, direct: true }) });
-            const d = await r.json().catch(() => ({}));
-            if (r.ok && d.success && d.directGame && d.redirectUrl) url = d.redirectUrl;
-        } catch (_) {}
+            d = await _req(false);
+            // #945: el jugador tiene un BONO activo y este juego no suma para él ⇒ 1girox pide confirmar (lo mismo que pregunta su web).
+            if (d && d.forfeit) {
+                const ok = await _forfeitAsk(name, d.forfeit);
+                if (!ok) { try { if (win && !win.closed) win.close(); } catch (_) {} return; }
+                d = await _req(true);
+            }
+            if (d._ok && d.success && d.directGame && d.redirectUrl) url = d.redirectUrl;
+            else _lastStep = (d && d.gameStep) || (d._ok ? 'sin juego directo' : 'HTTP ' + d._status); // #926: motivo de 1girox
+        } catch (_) { _lastStep = 'sin conexión'; }
+        // #945: 1girox no deja jugar (sin saldo / tope de saldo): se avisa su motivo, sin abrir nada más.
+        if (!url && d && d.blocked) {
+            try { if (win && !win.closed) win.close(); } catch (_) {}
+            try { VIP.ui.showToast(d.blocked.message || (d.blocked.reason === 'max_balance' ? 'Alcanzaste el tope de saldo: hacé un retiro para seguir jugando.' : 'No tenés saldo para jugar a este juego: cargá y volvé a entrar.'), 'error'); } catch (_) {}
+            return;
+        }
         if (url && win && !win.closed) { try { win.location.href = url; return; } catch (_) {} }
         if (url && !win) { try { location.href = url; return; } catch (_) {} } // sin ventanas (algunas apps instaladas): en la misma pantalla
         try { if (win && !win.closed) win.close(); } catch (_) {}
-        // Sin juego directo: Girox logueado en el recuadro (un ingreso nuevo, el último ⇒ válido) + aviso para buscarlo.
-        let wait = 0; try { if (VIP.ui && VIP.ui._casinoOpen) { VIP.ui.closeCasinoFrame(); wait = 300; } } catch (_) {}
-        setTimeout(() => { try { VIP.ui._casinoGamePath = '/play/' + key; VIP.ui._casinoGameName = name; } catch (_) {} openPlatform('girox', { embed: true }); }, wait);
+        // #926 (owner: "desde las plataformas aparece Girox"): se avisa POR QUÉ no abrió directo (para corregirlo juego por juego).
+        try { console.warn('[juego directo]', key, _lastStep); } catch (_) {} // #927 (owner): el motivo NO se muestra al cliente
+        try { VIP.ui._openBrand = _openingBrand(); } catch (_) {} // #927: la pantalla del casino muestra la marca desde donde se abrió
+        // #944 (owner: "que en JUGAYGANA no aparezca nada más que JUGAYGANA, ni un logo de Girox"): en el sitio JUGAYGANA NO se cae en la web de
+        // Girox; se avisa y se puede reintentar (el juego directo es el mismo ingreso que los favoritos de PICA ROJA).
+        // #945 (owner: "toqué para apostar y me mandó a Girox"): tampoco desde las páginas de marca (JUGAYGANA, Ganamos, PICA ROJA).
+        // #946 (owner: "hacé que no conecte en nada"): NUNCA se abre la web de Girox por un juego o deporte que no salió directo (tampoco desde el
+        // Inicio de PICA ROJA): se avisa y se reintenta.
+        try { VIP.ui.showToast('No pudimos abrir ' + name + ' en este momento. Tocalo de nuevo en unos segundos.', 'error'); } catch (_) {}
     }
     // Selector: catálogo de Girox con buscador (los más jugados primero) y ⭐ para marcar.
     let _favCat = [], _favQ = '', _favPage = 1, _favMore = false, _favQT = null, _favReq = 0;
@@ -1312,7 +1393,7 @@
         const f = _el('entryFrame'); if (!f) return;
         const p = _entryList().find((x) => x.id === _entryPlat) || {};
         // #312: Girox = carrusel de fotos (no se carga su web); las demás siguen embebidas.
-        if ((p.id || _entryPlat) === 'girox') {
+        if ((p.id || _entryPlat) === 'girox' || _isDoor(p.id || _entryPlat)) { // #907: PICA ROJA = mismas fotos (la página se abre aparte)
             clearTimeout(_entryTimer); _entryStatus(null);
             if (f.getAttribute('src') && f.getAttribute('src') !== 'about:blank') f.src = 'about:blank';
             f.style.display = 'none'; _entryUrl = null;
@@ -1470,7 +1551,7 @@
     function _platName(pid) {
         const list = (_platforms && _platforms.platforms) || [];
         const p = list.find((x) => x.id === pid);
-        return p ? p.name : (pid === 'ganamos' ? 'Ganamos' : (pid === 'jugaygana' ? 'JUGAYGANA' : 'Girox'));
+        return p ? p.name : (pid === 'picaroja' ? 'Pica Roja APP' : (pid === 'ganamos' ? 'Ganamos' : (pid === 'jugaygana' ? 'JUGAYGANA' : '1girox')));
     }
     function showPlayNow(opts) {
         const o = opts || {};
@@ -2132,6 +2213,52 @@
     }
 
     // ---------------- PLATAFORMAS ----------------
+    // #907 (gemela) · #989 (owner: "habilitando la plataforma Pica Roja APP quiero que la gente pueda jugar en ambas, que elija y cambie, Pica Roja
+    // o 1girox; la default Pica Roja"): "Pica Roja APP" = la página propia (lobby.js) con los juegos de Girox. Es una PUERTA de la app a la MISMA
+    // cuenta de 1girox: el server no la conoce como plataforma (cargas, retiros, bonos y cierres siguen yendo a 'girox'). Es la predeterminada
+    // salvo que la persona elija 1girox (localStorage vip_pr_off = '1'); al elegirla, al server se le guarda 'girox'. Se cambia libremente
+    // (misma cuenta y mismo saldo): el server sólo anota la activa (User.activeBrand) para "Mis cargas" del perfil.
+    const PR_OFF_KEY = 'vip_pr_off';
+    const DOORS = { picaroja: { name: 'Pica Roja APP', emoji: '♦️', logoUrl: '/icons/icon-96x96.png' } };
+    const BRANDS = { picaroja: 1, girox: 1 };
+    const _isDoor = (id) => !!DOORS[id];
+    function _localBrand() { try { const b = localStorage.getItem('vip_brand'); if (BRANDS[b]) return b; return localStorage.getItem(PR_OFF_KEY) === '1' ? 'girox' : 'picaroja'; } catch (_) { return 'picaroja'; } }
+    function _setLocalBrand(b) { try { localStorage.setItem('vip_brand', b); if (b === 'girox') localStorage.setItem(PR_OFF_KEY, '1'); else localStorage.removeItem(PR_OFF_KEY); } catch (_) {} }
+    // #908 (gemela): la plataforma ACTIVA la guarda el server (misma cuenta: no mueve fichas). #989: sin bloqueo por saldo.
+    let _brand = null;
+    async function _syncBrand() {
+        try { const r = await fetch(VIP.config.API_URL + '/api/me/brand', { headers: { 'Authorization': 'Bearer ' + VIP.state.currentToken } }); const d = await r.json(); if (d && d.brand) { _brand = d.brand; _setLocalBrand(d.brand); } } catch (_) {}
+    }
+    // Anota en el server la plataforma elegida. Siempre devuelve true (se puede cambiar libremente); si el server no responde, igual se sigue.
+    async function _brandGuard(id) {
+        if (!BRANDS[id]) return true;
+        if ((_brand || 'picaroja') === id) return true;
+        try {
+            const r = await fetch(VIP.config.API_URL + '/api/me/brand', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + VIP.state.currentToken }, body: JSON.stringify({ brand: id }) });
+            if (r.ok) _brand = id;
+        } catch (_) {}
+        return true;
+    }
+    // #917 (gemela): "Menú <plataforma> directo": nombre de la plataforma elegida.
+    function _brandName() { const id = (_platforms && _platforms.preferredPlatform) || _localBrand() || 'girox'; const p = ((_platforms && _platforms.platforms) || []).find((x) => x.id === id); return (p && p.name) || (DOORS[id] && DOORS[id].name) || '1girox'; }
+    function _paintBrandLabels() {
+        const n = _brandName();
+        try { document.querySelectorAll('.mc-brand').forEach((e) => { e.textContent = n; }); document.querySelectorAll('.mc-brand-up').forEach((e) => { e.textContent = n.toUpperCase(); }); } catch (_) {}
+    }
+    const _BRAND_NAMES = { picaroja: 'Pica Roja APP', girox: '1girox' };
+    function _injectPR() {
+        if (!_platforms) return;
+        let list = Array.isArray(_platforms.platforms) ? _platforms.platforms : (_platforms.platforms = []);
+        // #989: sólo las que se pueden jugar: Pica Roja APP (puerta) y las conectadas (1girox). Las "Pronto" (Ganamos, JUGAYGANA sin API) no se ofrecen.
+        list = list.filter((p) => p && (p.id === 'picaroja' || p.connected !== false));
+        const pr = list.find((p) => p.id === 'picaroja'); const door = { id: 'picaroja', name: DOORS.picaroja.name, emoji: '♦️', connected: true, door: true, logoUrl: DOORS.picaroja.logoUrl, exclusive: true, playUrl: '', externalUrl: '' };
+        if (pr) Object.assign(pr, door); else list.unshift(door);
+        list.sort((x, y) => (x.id === 'picaroja' ? -1 : y.id === 'picaroja' ? 1 : 0)); // Pica Roja APP primera
+        _platforms.platforms = list;
+        const lb = _localBrand();
+        if (_isDoor(lb)) { _platforms.preferredPlatform = lb; _platforms.defaultPlatform = lb; }
+        setTimeout(_paintBrandLabels, 0); // #917
+    }
     async function loadPlatforms(force) {
         if (!force && _platforms && (Date.now() - _platformsAt) < 60000) return _platforms;
         if (!VIP.state || !VIP.state.currentToken) return null;
@@ -2139,6 +2266,8 @@
             const r = await fetch(VIP.config.API_URL + '/api/platforms', { headers: { 'Authorization': 'Bearer ' + VIP.state.currentToken } });
             if (!r.ok) return _platforms;
             _platforms = await r.json();
+            try { await _syncBrand(); } catch (_) {} // #908
+            try { _injectPR(); } catch (_) {} // #907
             try { _paintPlatNav(); } catch (_) {} // #620
             _platformsAt = Date.now();
         } catch (_) {}
@@ -2160,7 +2289,7 @@
             logo +
             '<span class="plat-play-name">' + label + '</span>' +
             // #255 (owner): Girox lleva un "Recomendado" chiquito en rojo; #286: DEBAJO del nombre (antes flotaba arriba).
-            (p.id === 'girox' ? '<span class="plat-reco">Recomendado</span>' : '') +
+            (p.id === 'picaroja' ? '<span class="plat-reco">Recomendado</span>' : '') +
             (soon ? '<span class="plat-soon-badge">Pronto</span>' : '') + // #353 (owner): se entiende sin tocar · #511: sutil
             // #271: sin "Entrar" acá (verlas = Inicio). Tocar la fija la suelta (vuelve el cartel al cargar).
             '<span class="plat-play-sub">' + (soon ? 'Pronto' : (isPref ? 'Fija · tus cargas van acá' : 'Tocá para dejarla fija')) + '</span>' +
@@ -2172,21 +2301,44 @@
         setPreferred(platformId);
     }
 
+    // #922 (owner): "que aparezca seleccionado cuando se elige y apenas se elige se cambie en el menú la plataforma": un solo repintado
+    // para todo lo que muestra la elegida (tarjetas del completo, fichas del básico, pestañas, JUGÁ AQUÍ y "Menú X directo").
+    function _repaintChosen() {
+        try { renderPlatforms(); } catch (_) {} try { _basicPaint(); } catch (_) {} try { renderEntryTabs(); } catch (_) {}
+        try { _paintPlatNav(); } catch (_) {} try { _paintBrandLabels(); } catch (_) {}
+    }
     async function setPreferred(platformId) {
+        if (!(await _brandGuard(platformId))) return; // #908/#989: anota la plataforma elegida en el server (se cambia libremente)
+        // #907: PICA ROJA se guarda en el teléfono; al server va 'girox' (misma cuenta). Elegir otra apaga la predeterminada PICA ROJA.
+        if (BRANDS[platformId]) _setLocalBrand(platformId); else _setLocalBrand('girox');
+        if (_isDoor(platformId)) { // #907: Pica Roja APP → al server va 'girox' (misma cuenta)
+            if (_platforms) { _platforms.preferredPlatform = platformId; _platforms.defaultPlatform = platformId; } _repaintChosen(); // #922: al instante
+            try { await fetch(VIP.config.API_URL + '/api/platforms/preferred', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + VIP.state.currentToken }, body: JSON.stringify({ platform: 'girox' }) }); } catch (_) {}
+            if (_platforms) { _platforms.preferredPlatform = platformId; _platforms.defaultPlatform = platformId; }
+            try { _paintBrandLabels(); } catch (_) {} // #917
+            try { _paintPlatNav(); } catch (_) {} // #920
+            _repaintChosen();
+            try { VIP.ui.showToast('✅ Elegiste ' + ((DOORS[platformId] && DOORS[platformId].name) || platformId), 'success'); } catch (_) {}
+            return;
+        }
+        if (_platforms && _isDoor(_platforms.defaultPlatform)) _platforms.defaultPlatform = 'girox';
+        const _prevPref = _platforms ? _platforms.preferredPlatform : null;
+        if (_platforms && platformId) { _platforms.preferredPlatform = platformId; _repaintChosen(); } // #922: se marca al instante
         try {
             const r = await fetch(VIP.config.API_URL + '/api/platforms/preferred', {
                 method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + VIP.state.currentToken },
                 body: JSON.stringify({ platform: platformId })
             });
             const d = await r.json().catch(() => ({}));
-            if (!r.ok) { VIP.ui.showToast(d.error || 'No se pudo guardar', 'error'); return; }
+            if (!r.ok) { if (_platforms) _platforms.preferredPlatform = _prevPref; _repaintChosen(); VIP.ui.showToast(d.error || 'No se pudo guardar', 'error'); return; }
             if (_platforms) _platforms.preferredPlatform = d.preferredPlatform || null;
-            renderPlatforms();
+            _repaintChosen();
             VIP.ui.showToast(d.preferredPlatform ? ('Listo: tus cargas van directo a ' + (d.label || '')) : 'Listo: te preguntamos dónde jugar en cada carga', 'success');
         } catch (_) { VIP.ui.showToast('Error de conexión', 'error'); }
     }
 
     function renderPlatforms() {
+        try { _paintPlatNav(); } catch (_) {} // #920: JUGÁ AQUÍ con el logo de la elegida, siempre al día
         const box = _el('platformsButtons');
         if (!box) return;
         const list = (_platforms && _platforms.platforms) || [];
@@ -2245,6 +2397,13 @@
         try { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; } catch (_) { return false; }
     }
     function openPlatform(platformId, opts) {
+        // #908/#989: si la PERSONA elige la otra plataforma (sin opts: los ingresos internos pasan `embed`), queda elegida y se abre.
+        if (!opts && BRANDS[platformId] && (_brand || 'picaroja') !== platformId) { _brandGuard(platformId).then(() => { setPreferred(platformId).catch(() => {}); openPlatform(platformId, { checked: true }); }); return; }
+        // #964 (owner: "ninguna visual de Girox en las otras páginas, revisá de punta a punta"): un ingreso INTERNO a Girox (Jugar, fotos del
+        // Inicio, historias, menú básico/fácil) con una marca puerta activa en este teléfono abre la página de ESA marca. Sólo la persona eligiendo
+        // Girox (`checked`, tras `_brandGuard`) o el modo prueba abren la web de Girox.
+        if (platformId === 'girox' && !(opts && (opts.checked || opts.test)) && _isDoor(_localBrand())) { try { VIP.ui._casinoGamePath = null; VIP.ui._casinoGameName = null; } catch (_) {} platformId = _localBrand(); }
+        if (_isDoor(platformId)) { try { VIP.lobby.open('inicio'); } catch (_) {} return; } // #907: la página de Pica Roja APP
         const test = !!(opts && opts.test);
         // #695 (owner): "en Entrar a la página no figura el chat de carga rápida" → el casino con sesión se abre SIEMPRE ADENTRO
         // (overlay con Carga rápida, Retirar e Ir a Soporte), también en navegador. La pestaña aparte (/jugar.html) queda sólo
@@ -2291,14 +2450,14 @@
                 const j = await r.json(); if (!r.ok || !j.token) return;
                 c = { u, t: j.token, at: Date.now() }; try { sessionStorage.setItem('vip_install_tok2', JSON.stringify(c)); } catch (_) {}
             }
-            const pref = _menuOn('girox') ? 'girox' : getMenuPref(), fixed = isMenuFixed(); // #937: la app instalada arranca en Girox
+            const pref = (_userPickedMenu() ? getMenuPref() : null) || _defaultPref(), fixed = isMenuFixed(); // #989: la app instalada arranca como la web (directo a la plataforma, o el menú que eligió)
             const href = '/manifest.json?a=' + encodeURIComponent(c.t) + '&u=' + encodeURIComponent(u) + (pref ? '&menu=' + pref + (fixed ? '&fixed=1' : '') + (_userPickedMenu() ? '&picked=1' : '') : ''); // #980
             const l = document.querySelector('link[rel="manifest"]'); if (l && l.getAttribute('href') !== href) l.setAttribute('href', href);
         } catch (_) {}
     }
     // #670: Retirar desde la Carga rápida del casino. El modal de retiro vive en la página; CSS lo pone por encima del casino.
     // #687: salir del casino y abrir el chat de Soporte (modo mini)
-    function casinoSupport() { try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80); }
+    function casinoSupport() { try { if (VIP.lobby) VIP.lobby.close(); } catch (_) {} try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80); }
     function casinoWithdraw() { try { if (VIP.withdraw && VIP.withdraw.openWithdrawModal) VIP.withdraw.openWithdrawModal(); else VIP.ui.showToast('Retiros no disponibles ahora', 'error'); } catch (_) {} }
 
     // ---- Carga rápida DENTRO del casino (#261): formato CARGA (no chat), descartable como el soporte ----
@@ -2451,13 +2610,16 @@
     }
     let _cqCbuTries = 0;
     function toggleCasinoLoad(force, inline) {
-        const ov = _el('casinoOverlay'); if (!ov) return;
+        // #914 (gemela): también sobre la página PICA ROJA (#prLobby) cuando no hay un juego de Girox abierto encima.
+        const _co = _el('casinoOverlay'); const _lob = _el('prLobby');
+        const onLobby = !!(_lob && !_lob.hidden && !(VIP.ui && VIP.ui._casinoOpen));
+        const ov = onLobby ? (_el('prlQlDock') || _lob) : _co; if (!ov) return; // #989: en Pica Roja APP el panel va en el hueco de arriba (debajo de la barra)
         // #988: `inline` = el panel DESPLEGABLE del bloque de arriba del casino (#chLoadPanel, debajo de CARGÁ AQUÍ); sin `inline`, el flotante de la burbuja.
         let p = inline ? _el('chLoadPanel') : _el('casinoLoadPanel');
         if (!p && !inline) {
             ov.insertAdjacentHTML('beforeend', '<div id="casinoLoadPanel" class="casino-load" style="display:none"></div>');
             p = _el('casinoLoadPanel');
-        }
+        } else if (p && !inline && p.parentNode !== ov) ov.appendChild(p); // #914: el flotante se muda a la página o al casino, el que esté arriba
         if (!p) return;
         if (inline) {
             _chOpen = typeof force === 'boolean' ? force : !_chOpen;
@@ -2467,6 +2629,8 @@
             _quickOpen = typeof force === 'boolean' ? force : !_quickOpen;
             // #737 (owner): la burbuja CARGA RÁPIDA sigue visible abajo aunque el panel esté abierto (sólo se esconde si la sacó con la ✕ chica).
             try { const bb = _el('casinoSupportBubble'); if (bb) bb.style.display = _quickDismissed ? 'none' : ''; } catch (_) {}
+            // #989: en Pica Roja APP, cerrado ⇒ queda el botón "CARGA RÁPIDA" centrado arriba (y no se vuelve a abrir sola en esta sesión)
+            try { const ch = _el('prlQlChip'); if (ch) ch.hidden = onLobby && _quickOpen; if (onLobby && !_quickOpen && typeof force === 'boolean') sessionStorage.setItem('vip_prl_ql_closed', '1'); } catch (_) {}
             if (!_quickOpen) { p.style.display = 'none'; return; }
         }
         const cbu = (VIP.autoload && VIP.autoload.getCbu && VIP.autoload.getCbu()) || null;
@@ -2501,34 +2665,38 @@
     // Se inyecta en el overlay del casino (VIP.ui._showCasinoFrame) sin tocar su HTML.
     // #633 (owner 2026-10-20): ADENTRO del casino NO se cambia de plataforma ("si elige Girox, que aparezca Girox; para cambiar, saliendo").
     // La barra de arriba queda con "‹ Volver" y el nombre de la plataforma en la que está; las pestañas (#222) se eliminaron.
+    // #914: la barra de arriba del casino (Volver · Menú · marca · Historias · Info · Perfil) también la usan las páginas de las marcas
+    // (lobby.js): o = { back, menu, logo, name, idSuffix }.
+    function casinoBarHtml(o) {
+        o = o || {};
+        return                   '<div class="casino-topbar-row">' +
+                    '<button type="button" class="casino-back" onclick="' + (o.back || 'VIP.ui.closeCasinoFrame()') + '">‹ Volver</button>' +
+                    // #700/#701 (owner): accesos en UNA sola línea con el mismo formato de la barra principal (ícono + etiqueta chica):
+                    // Historias · Menú · Info · Perfil. Sin el texto "Estás en Girox · para cambiar, salí" (#701: le sacaba lugar al juego).
+                    // #703/#707 (owner): orden Volver · Menú · [PICA ROJA OFICIAL con el logo, bien centrado] · Historias · Info · Perfil
+                    '<button type="button" class="tn-btn" onclick="' + (o.menu || 'VIP.home.casinoFullMenu()') + '" title="Elegir menú"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span><span class="tn-lbl">Menú</span></button>' +
+                    '<span class="casino-brand" aria-label="' + _esc(o.name || 'PICA ROJA') + ' oficial"><span class="cb-box"><img src="' + _esc(o.logo || '/icons/icon-192x192.png') + '" alt=""><span class="cb-txt"><b>' + _esc(o.name || 'PICA ROJA') + '</b><small>OFICIAL</small></span></span></span>' +
+                    '<button type="button" class="tn-btn tn-stories" ' + (o.idSuffix ? '' : 'id="ctStories"') + ' onclick="VIP.stories.open()" title="Historias"><span class="tn-ico st-ring"><span class="st-core">▶</span><span class="st-badge" ' + (o.idSuffix ? '' : 'id="ctStoriesBadge"') + ' style="display:none">1</span></span><span class="tn-lbl">Historias</span></button>' +
+                    '<button type="button" class="tn-btn" onclick="VIP.home.casinoInfo()" title="Información del servicio"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5.5M12 7.6v.2"/></svg></span><span class="tn-lbl">Info</span></button>' +
+                    (o.noProfile ? '' : '<button type="button" class="tn-btn" onclick="VIP.home.openProfile()" title="Tu perfil"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c.8-4 3.9-6 7.5-6s6.7 2 7.5 6"/></svg></span><span class="tn-lbl">Perfil</span></button>') + // F988: sin Perfil en Girox, Ganamos y JUGAYGANA
+                  '</div>';
+    }
     function renderCasinoTabs() {
         const overlay = _el('casinoOverlay');
         if (!overlay) return;
         let bar = _el('casinoTopBar');
         if (!bar) {
             overlay.insertAdjacentHTML('afterbegin',
-                '<div id="casinoTopBar" class="casino-topbar">' +
-                  '<div class="casino-topbar-row">' +
-                    '<button type="button" class="casino-back" onclick="VIP.ui.closeCasinoFrame()">‹ Volver</button>' +
-                    // #700/#701 (owner): accesos en UNA sola línea con el mismo formato de la barra principal (ícono + etiqueta chica):
-                    // Historias · Menú · Info · Perfil. Sin el texto "Estás en Girox · para cambiar, salí" (#701: le sacaba lugar al juego).
-                    // #703/#707 (owner): orden Volver · Menú · [PICA ROJA OFICIAL con el logo, bien centrado] · Historias · Info · Perfil
-                    '<button type="button" class="tn-btn" onclick="VIP.home.casinoFullMenu()" title="Elegir menú"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span><span class="tn-lbl">Menú</span></button>' +
-                    // #917 (owner 2026-10-24): "acá adentro de Girox poné Sorteo mensual (NOVEDAD) con ese tamaño, sacá PICA ROJA y que se pueda
-                    // expandir desde ahí adentro": el pill del medio abre la pantalla del sorteo (js/sorteos.js pinta el subtítulo).
-                    // #935 (owner, captura de la gemela): con el sorteo ABIERTO va un banner DEBAJO de la barra y en el medio queda PICA ROJA; si lo
-                    // cierran (–), queda la píldora "Sorteo mensual" en el medio, que lo vuelve a abrir. sorteos.js (paintCasino) maneja los dos.
-                    '<span class="casino-brand" id="casinoBrand" aria-label="PICA ROJA oficial"><span class="cb-box"><img src="/icons/icon-192x192.png" alt=""><span class="cb-txt"><b>PICA ROJA</b><small>OFICIAL</small></span></span></span>' +
-                    '<button type="button" class="casino-brand casino-srt" id="casinoSrtBtn" hidden onclick="VIP.sorteos.casinoBar(true)" aria-label="Sorteo mensual"><span class="cb-box"><span class="cb-ico" data-srt-brand-ico>🏆</span><span class="cb-txt"><b data-srt-brand-title>Sorteo mensual</b><small data-srt-brand-sub>NOVEDAD</small></span></span></button>' +
-                    '<button type="button" class="tn-btn tn-stories" id="ctStories" onclick="VIP.stories.open()" title="Historias"><span class="tn-ico st-ring"><span class="st-core">▶</span><span class="st-badge" id="ctStoriesBadge" style="display:none">1</span></span><span class="tn-lbl">Historias</span></button>' +
-                    '<button type="button" class="tn-btn" onclick="VIP.home.casinoInfo()" title="Información del servicio"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5.5M12 7.6v.2"/></svg></span><span class="tn-lbl">Info</span></button>' +
-                    '<button type="button" class="tn-btn" onclick="VIP.home.openProfile()" title="Tu perfil"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c.8-4 3.9-6 7.5-6s6.7 2 7.5 6"/></svg></span><span class="tn-lbl">Perfil</span></button>' +
-                  '</div>' +
-                  '<div id="casinoSrtBar" class="casino-srt-bar" hidden></div>' + // #935: banner del sorteo debajo de la barra
+                '<div id="casinoTopBar" class="casino-topbar">' + casinoBarHtml({ noProfile: true }) + // F988: en el casino de Girox sin Perfil
                 '</div>');
             bar = _el('casinoTopBar');
         }
-        try { if (VIP.sorteos && VIP.sorteos.paintCasino) VIP.sorteos.paintCasino(); } catch (_) {} // #935
+        // #927 (owner): si el juego se abrió desde una página (PICA ROJA / Ganamos / JUGAYGANA), arriba va ESA marca (logo y nombre)
+        try { const bb = brandOf(VIP.ui._openBrand) || brandOf('picaroja'); const box = bar.querySelector('.casino-brand'); if (box) { const im = box.querySelector('img'); const nb = box.querySelector('.cb-txt b'); if (im) im.src = bb.logo; if (nb) nb.textContent = bb.name; box.setAttribute('aria-label', bb.name + ' oficial'); } } catch (_) {}
+        // G917/G935 (gemela): el sorteo en la barra de Girox — píldora 'Sorteo mensual' al lado de la marca y banner debajo (sorteos.js paintCasino).
+        try { const cb = bar.querySelector('.casino-brand'); if (cb && !_el('casinoBrand')) { cb.id = 'casinoBrand'; cb.insertAdjacentHTML('afterend', '<button type="button" class="casino-brand casino-srt" id="casinoSrtBtn" hidden onclick="VIP.sorteos.casinoBar(true)" aria-label="Sorteo mensual"><span class="cb-box"><span class="cb-ico" data-srt-brand-ico>🏆</span><span class="cb-txt"><b data-srt-brand-title>Sorteo mensual</b><small data-srt-brand-sub>NOVEDAD</small></span></span></button>'); }
+              if (!_el('casinoSrtBar')) bar.insertAdjacentHTML('beforeend', '<div id="casinoSrtBar" class="casino-srt-bar" hidden></div>'); } catch (_) {}
+        try { if (VIP.sorteos && VIP.sorteos.paintCasino) VIP.sorteos.paintCasino(); } catch (_) {} // G935
         // #937 (owner) abría el flotante de Carga rápida al iniciar en Girox directo. #988 lo reemplaza: el bloque de arriba (saldo · sorteos ·
         // nivel/racha · CARGÁ AQUÍ · servicios) ya tiene la carga a la vista y la despliega ahí mismo al tocarla.
         try { _casinoHomeEnsure(); } catch (_) {}
@@ -2601,7 +2769,8 @@
         const _origCloseFrame = VIP.ui && VIP.ui.closeCasinoFrame;
         if (typeof _origCloseFrame === 'function') {
             VIP.ui.closeCasinoFrame = function () {
-                try { document.body.classList.remove('casino-open'); } catch (_) {}
+                try { if (!document.body.classList.contains('prl-open')) document.body.classList.remove('casino-open'); } catch (_) {} // #914: la página de la marca sigue abierta debajo
+                try { VIP.ui._openBrand = null; } catch (_) {} // #927
                 return _origCloseFrame.apply(this, arguments);
             };
         }
@@ -2609,7 +2778,7 @@
     // #700 (owner): accesos desde la barra del casino. "Menú completo" cierra el casino y pasa al menú completo (sin quedar fijo
     // si la persona entró por Girox directo: #678 sigue valiendo, se guarda 'full' como cualquier otra elección del selector).
     // #704 (owner): "que de ahí pueda elegir desde Menú el menú correspondiente" → cierra el casino y abre el SELECTOR de menús.
-    function casinoFullMenu() { try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { openMenuChooser(); } catch (_) {} }, 120); }
+    function casinoFullMenu() { try { if (VIP.lobby) VIP.lobby.close(); } catch (_) {} try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { openMenuChooser(); } catch (_) {} }, 120); }
     // #708 (owner): carga de PRUEBA (sólo testers, sólo entorno de prueba): POST /api/test/deposit → mismo camino que una carga manual.
     async function testDeposit() {
         let amt = prompt('Monto de la carga de prueba (pesos):', '5000'); if (amt == null) return;
@@ -2881,6 +3050,10 @@
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,
+        brandOf, // #927
+        brandActive: () => _brand, // #969: marca activa según el server (null = todavía no se sabe)
+        casinoBarHtml, // #914
+        gamePlay: favPlay, // #907
         notifCtaGo: notifCtaGo, notifCtaClose: notifCtaClose, // #892
         get platformsData() { return _platforms; } };
     VIP.home.installManifestSync = installManifestSync; // #826

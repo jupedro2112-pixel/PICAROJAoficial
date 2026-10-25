@@ -4,7 +4,54 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-10-24**
+> **Última actualización: 2026-10-25**
+
+## Sesión 2026-10-25
+
+### 989. ♦️ PLATAFORMA "Pica Roja APP": la página propia con los juegos de Girox, elegir y cambiar con 1girox, entrada directa — SW v651 · admin SW v208
+**Pedidos (owner, en orden):** "armemos Pica Roja al extremo: detectá en la otra terminal y agarrá sólo lo de Pica Roja y activalo" · "habilitando la
+plataforma Pica Roja quiero que la gente pueda jugar en ambas, que elija y cambie, Pica Roja o Girox; la default Pica Roja" · "afinarla bien completa de
+punta a punta" · (captura) "dejala así pero con los proveedores estilo Stake: fondo rojo del color de Pica Roja, el proveedor en blanco, sin colores, y que
+no se tape la marca" · "le ponemos plataforma 1girox o Pica Roja APP" · (2 capturas) "si cierran lo del sorteo que se ponga en el menú superior donde está el
+logo de Pica Roja, centrado; si lo expanden que se baje; la onda es que no moleste" · "las fotos del casino: algo más profesional, sencillo y estático, sin
+deslizante" · "a la Carga rápida ponele una ✕: si la cierran que vaya y quede arriba, debajo del perfil, centrada" · "la gente de /landing o de la app que
+entre directo a esa plataforma y pueda elegir jugar; si quiere cambiar a Girox después seguimos con el menú viejo" · "quiero vender como app Pica Roja de
+cargas y de casino, completa" · (captura de Stake) "dentro de Pica Roja este formato de apuestas, que si tienen saldo apuesten directo; sacamos las fotos de
+arriba y dejamos Top partidos" · "analizá bien todo porque te pedí muchas cosas y no quiero que se rompa nada".
+**De dónde salió:** la sesión gemela (`fabrioctubre-da`, repo FABRIOCTUBRE, rama `fusion-gemela-985` = nuestro #985 + sus páginas de marca #907–#989;
+sus #990–#995 los revirtió el owner y NO se trajeron). Allá "PICA ROJA" no es una white-label con API: es una PÁGINA de la app sobre la misma cuenta de
+1girox. Se aplicó el diff de esa rama con `git apply --3way` (7 choques resueltos a mano en home.js / index.html / sorteos.js) y después se PODÓ todo lo
+de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `marcas.css`, dominios de marca F979–F981/F989, bloqueo por saldo #908/#923,
+"fijar PICA ROJA" F988). Quedó sólo PICA ROJA.
+- **Qué es:** `public/js/lobby.js` (`VIP.lobby`) = la plataforma "Pica Roja APP": lobby propio con TODOS los juegos de Girox (`GET /api/games/lobby`,
+  catálogo público de 1girox, cache 10 min, sin gastar la Partner API), Slots (todo el catálogo, carga al bajar), Casino en vivo (`public/data/girox-live.json`,
+  9 proveedores), Deportes (Digitain · Ultim8 · Caballos · TurfWin · Póker con link DIRECTO logueado, `/sport/*` en `platformSessionHandler`), Casino lobby,
+  buscador, "Juegos nuevos" (`public/data/picaroja-extra.json`). Cada juego = `VIP.home.gamePlay` (= favPlay: `/api/platform/session` direct ⇒ el juego del
+  proveedor en pantalla completa, logueado; con bono activo 1girox pide confirmar (#945 `forfeit`) o bloquea). `picaroja.com/paginaoficial` ⇒ `/?pr=1`.
+- **Misma cuenta:** al server SIEMPRE va `girox` (`_injectPR` la agrega en el front; `setPreferred('picaroja')` guarda 'girox'). Cargas, retiros, bonos,
+  reembolsos y cierres NO cambian. `User.activeBrand` ('picaroja' | 'girox', `GET/POST /api/me/brand`) sólo anota la activa para "Mis cargas en …" del
+  perfil (`GET /api/me/deposits`) y el panel (etiqueta en el chat + botón 🏷️ `POST /api/admin/users/:id/brand`). **Sin bloqueo por saldo** (el #908 de la
+  gemela se descartó: owner "que elija y cambie"). El adaptador `src/platforms/picaroja.js` (#986) salió del registro: Pica Roja APP es la página, no una API.
+- **Nombres y orden:** "Pica Roja APP" (primera, predeterminada, "Recomendado") y "1girox" (registro `src/platforms/index.js`); Ganamos/JUGAYGANA sin API ya no
+  se ofrecen ("Pronto" fuera: `_injectPR` filtra `connected:false`, también en la pantalla de ingreso). Selectores de 2 columnas (`css/picaroja.css`).
+- **Entrada directa:** sin menú elegido, `_defaultPref()` = menú DIRECTO ('girox'), que con Pica Roja APP elegida abre su página (`_giroxDirect` →
+  `VIP.lobby.open`). Vale para la web, la landing y la app instalada (manifest `menu=`). Quien elija 1girox entra al casino de Girox de siempre; el menú
+  completo/básico/intermedio siguen desde "Menú". (#937/#980 "completo hasta la 1ª carga" quedaron sin efecto.)
+- **La página, arriba → abajo:** la MISMA barra que el casino de Girox (`casinoBarHtml`: Volver · Menú · PICA ROJA · Historias · Info · Perfil); el
+  SORTEO como en Girox: cerrado = píldora en el medio de la barra (la marca se esconde), tocarla ⇒ cartel "Anotate, es gratis ›" debajo con ✕ (sorteos.js
+  `paintCasino` ahora pinta TODAS las `.casino-topbar`, un solo estado `vip_srt_casino_bar`; `brandBar`/`[data-srt-bbar]` de la gemela quedaron sin uso);
+  **Carga rápida** (el mismo panel `#casinoLoadPanel` de `toggleCasinoLoad`) ABIERTA al entrar en el hueco `#prlQlDock` debajo de la barra, con ✕ ⇒ queda
+  el botón "CARGA RÁPIDA" centrado ahí (y no se reabre sola en la sesión, `sessionStorage vip_prl_ql_closed`); SIN burbuja flotante (nada tapa los juegos);
+  tira de saldo del Inicio; **Top partidos** (formato Stake: hora/en vivo, escudos, equipos, cuotas 1 · X · 2; `GET /api/sports/board`,
+  `src/services/sportsBoard.js` sobre el scoreboard público de ESPN, cache 60 s; `storyAutopilot` exporta `LEAGUES/TEAM_W/short/decOdds`); Proveedores
+  (fondo rojo PICA ROJA, logo en blanco por `filter`, nombre en blanco); Casino lobby; buscador; Populares; Nuevos; En vivo; proveedores principales;
+  "Ver los N juegos". Abajo, la barra de la APP con Slots · Inicio · Deportes (`_prNav`, `body.prl-appnav`); sin `#bottomNav`, la propia.
+  ⚠️ **Apuestas:** 1girox NO expone una API de apuestas ⇒ la apuesta no se cierra en nuestra tarjeta: tocar el partido o una cuota abre Digitain logueado
+  con su saldo y apuesta ahí; las cuotas son de referencia ("Cuotas de referencia · tocá y apostás en Deportes con tu saldo"). Se le explicó al owner.
+- **Probado:** `node scripts/test-picaroja-front.js` (DOM simulado: plataformas y predeterminada, barra + sorteo píldora⇄cartel en las dos barras a la vez,
+  inicio con Top partidos arriba y sin fotos, proveedores, lobby, populares, nuevos, deportes directos, En vivo, Slots con carga al bajar, Juegos nuevos,
+  Carga rápida abierta/✕/botón/no se reabre) + `test-sorteos-front.js`, `test-sorteos-rules.js` y el humo de #988 siguen OK; `node --check` en todo.
+  No se pudo abrir en un navegador real (Tails sin node_modules): revisar en el teléfono el alto de la Carga rápida abierta sobre la página y los escudos de ESPN.
 
 ## Sesión 2026-10-24
 

@@ -1,0 +1,189 @@
+/* ===== #989 PLATAFORMA "Pica Roja APP" (public/js/lobby.js) + selector de plataforma (Pica Roja APP · 1girox).
+   Se carga DESPUÉS de pin.css. Viene de la gemela FABRIOCTUBRE (su marcas.css, sólo la parte de PICA ROJA: #907–#988).
+   La página sigue el modo claro/oscuro de la app: todos los colores son tokens --p-* (pin.css) mapeados a --prl-*. ===== */
+.prl { --prl-bg: var(--p-bg); --prl-deep: var(--p-surface); --prl-card: var(--p-card); --prl-line: var(--p-border); --prl-tx: var(--p-text); --prl-mut: var(--p-muted); --prl-acc: var(--p-red, #e60023); --prl-ok: #1fbf4a;
+  position: fixed; inset: 0; z-index: 99990; background: var(--prl-bg); color: var(--prl-tx); display: flex; flex-direction: column; font-family: var(--p-font); }
+.prl[hidden] { display: none !important; }
+body.prl-open { overflow: hidden; }
+.prl-ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.prl .prl-cbar { flex: 0 0 auto; padding-top: max(4px, var(--sat, env(safe-area-inset-top, 0px))) !important; } /* #914: la misma barra que el casino de Girox */
+.prl-main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 10px 0 22px; }
+.prl button:focus-visible { outline: 2px solid var(--p-red, #e60023); outline-offset: 2px; }
+/* saldo (la tira del Inicio, clonada) */
+.prl-pr-bal { padding: 8px 12px 0; } .prl-pr-bal:empty { display: none; }
+/* #989 (owner): la Carga rápida ABIERTA al entrar, con ✕; cerrada queda un botón centrado arriba, debajo de la barra (no tapa nada) */
+.prl-qldock { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; padding: 6px 12px 0; }
+.prl-qldock:empty { display: none; }
+.prl-qlchip { display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 999px; padding: 8px 16px; background: linear-gradient(135deg, #128c4a, #25d366); color: #fff; font: 800 12.5px var(--p-font); letter-spacing: .4px; box-shadow: 0 4px 12px rgba(18,140,74,.3); cursor: pointer; }
+.prl-qlchip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; background: #0d0d1a; }
+.prl-qlchip[hidden] { display: none !important; }
+.prl-qldock .casino-load { position: static !important; width: 100%; max-width: 520px; margin: 0; bottom: auto !important; right: auto !important; left: auto !important; z-index: 1; }
+/* #989 TOP PARTIDOS (formato Stake: hora · escudos · equipos · cuotas 1 X 2). Tocar = Digitain logueado; cuotas de referencia */
+.prl-board { margin-top: 4px; }
+.prl-mrow { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 14px 6px; scrollbar-width: none; }
+.prl-mrow::-webkit-scrollbar { display: none; }
+.prl-m { flex: 0 0 min(78vw, 300px); scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 10px; border: 1px solid var(--p-border); border-radius: 14px; background: var(--p-card); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+.prl-msk { min-height: 128px; background: linear-gradient(90deg, var(--p-surface), var(--p-card), var(--p-surface)); }
+.prl-mh { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 700 11px var(--p-font); color: var(--p-muted); }
+.prl-mh em { font-style: normal; padding: 2px 7px; border-radius: 6px; background: var(--p-surface); color: var(--p-text); }
+.prl-mh em.prl-mlive { background: rgba(230,0,35,.12); color: var(--p-red, #e60023); }
+.prl-mh span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prl-mteams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; border: 0; background: none; padding: 2px 0; cursor: pointer; color: var(--p-text); font-family: var(--p-font); }
+.prl-mt { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.prl-mt img, .prl-mt i { width: 30px; height: 30px; object-fit: contain; display: block; }
+.prl-mt i { border-radius: 50%; background: var(--p-surface); }
+.prl-mt b { font-size: 12px; font-weight: 800; line-height: 1.15; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prl-mvs { font: 800 11px var(--p-font); color: var(--p-muted); }
+.prl-msc { font: 900 18px var(--p-font); color: var(--p-text); font-variant-numeric: tabular-nums; }
+.prl-modds { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.prl-mo { display: flex; flex-direction: column; align-items: center; gap: 1px; border: 1px solid var(--p-border); border-radius: 10px; background: var(--p-surface); color: var(--p-text); padding: 7px 4px; cursor: pointer; font-family: var(--p-font); }
+.prl-mo small { font-size: 10px; font-weight: 700; color: var(--p-muted); }
+.prl-mo b { font-size: 14px; font-weight: 900; color: var(--p-red, #e60023); font-variant-numeric: tabular-nums; }
+.prl-mo:active { background: var(--p-red, #e60023); } .prl-mo:active b, .prl-mo:active small { color: #fff; }
+.prl-mo-go b { color: #fff; } .prl-mo-go { background: var(--p-red, #e60023); border-color: var(--p-red, #e60023); }
+.prl-mnote { margin: 4px 14px 0; font: 600 10.5px var(--p-font); color: var(--p-muted); }
+/* buscador, secciones y tarjetas (estilo Stake: títulos con ícono y ›, "Ver más" con línea) */
+.prl-search { display: flex; align-items: center; gap: 8px; margin: 16px 14px 0; padding: 0 12px; background: var(--p-surface); border: 2px solid var(--p-border); border-radius: 999px; color: var(--p-muted); }
+.prl-search:focus-within { border-color: var(--p-red, #e60023); }
+.prl-search input { flex: 1; border: 0; background: transparent; color: var(--prl-tx); padding: 11px 0; font: 600 14px var(--p-font); outline: none; min-width: 0; }
+.prl-search input::placeholder { color: var(--p-muted); }
+.prl-sec { margin-top: 20px; }
+.prl-sh { display: flex; align-items: center; justify-content: space-between; padding: 0 14px 10px; gap: 10px; }
+.prl-st { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--prl-tx); padding: 0; cursor: pointer; font: inherit; }
+span.prl-st { cursor: default; }
+.prl-st .prl-ic { color: var(--p-red, #e60023); }
+.prl-st h3 { margin: 0; font: 700 17px var(--p-font); color: var(--prl-tx); }
+.prl-chev { font: 700 20px/1 var(--p-font); color: var(--prl-mut); margin-left: 2px; }
+.prl-st:hover .prl-chev { color: var(--p-red, #e60023); }
+.prl-back { border: 0; background: var(--p-red, #e60023); color: #fff; font: 700 12.5px var(--p-font); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.prl-g { border: 0; background: none; padding: 0; cursor: pointer; transition: transform .2s ease; min-width: 0; }
+.prl-g:hover { transform: translateY(-4px); }
+.prl-gi { position: relative; display: block; width: 100%; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--p-surface); box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+.prl-gi img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+.prl-gi i { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 8px; text-align: center; font: 700 12px/1.25 var(--p-font); color: var(--p-muted); font-style: normal; }
+.prl-new { position: absolute; z-index: 2; top: 6px; left: 6px; background: var(--p-red, #e60023); color: #fff; font: 800 9px var(--p-font); letter-spacing: .6px; padding: 3px 6px; border-radius: 4px; font-style: normal; }
+/* #911: de a 4 por fila (más chicas, se ven más); 8 por pantalla ancha */
+.prl-grid, .prl-g3 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 8px; padding: 2px 14px 4px; }
+@media (min-width: 720px) { .prl-grid, .prl-g3 { grid-template-columns: repeat(8, 1fr); } }
+.prl-grid .prl-gi { border-radius: 8px; }
+.prl-grid .prl-gi i { font-size: 10px; padding: 4px; }
+.prl-hid { display: none !important; }
+.prl-more { display: flex; align-items: center; gap: 12px; margin: 14px 14px 0; }
+.prl-more::before, .prl-more::after { content: ""; flex: 1; height: 2px; background: var(--p-border); }
+.prl-more button { border: 0; background: none; color: var(--p-red, #e60023); font: 700 14px var(--p-font); cursor: pointer; padding: 4px 2px; }
+.prl-note { padding: 18px 14px; text-align: center; color: var(--prl-mut); font: 600 13px var(--p-font); }
+.prl-backbar { padding: 8px 12px 0; }
+.prl-backbtn { border: 0; border-radius: 999px; padding: 8px 14px; font: 800 13px var(--p-font); cursor: pointer; background: var(--p-surface); border: 1px solid var(--p-border); color: var(--prl-tx); }
+/* #909/#989 PROVEEDORES estilo Stake (owner): fondo ROJO PICA ROJA, logo en blanco (silueta, sin colores) y nombre en blanco */
+.prl-pvs { display: flex; gap: 10px; overflow-x: auto; padding: 2px 14px 4px; scrollbar-width: none; }
+.prl-pvs::-webkit-scrollbar { display: none; }
+.prl-pv { flex: 0 0 140px; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; transition: transform .2s ease; }
+.prl-pv:hover { transform: translateY(-3px); }
+.prl-pvb { display: flex; align-items: center; justify-content: center; gap: 8px; height: 64px; border-radius: 12px; background: linear-gradient(135deg, var(--p-red, #e60023), #b0001f); padding: 8px 12px; box-shadow: 0 4px 12px rgba(230,0,35,.22); }
+.prl-pvb img { width: 28px; height: 28px; flex: none; object-fit: contain; filter: brightness(0) invert(1); opacity: .95; }
+.prl-pvb b { font: 800 14px/1.15 var(--p-font); color: #fff; text-align: left; letter-spacing: .2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.prl-pv small { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 600 12px var(--p-font); color: var(--prl-mut); }
+.prl-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--prl-ok); }
+/* barra propia de abajo (sólo sin #bottomNav, menú opción 1) */
+.prl-nav { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; background: var(--p-card); border-top: 1px solid var(--p-border); box-shadow: 0 -4px 14px rgba(0,0,0,.08);
+  padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 6px) max(6px, env(safe-area-inset-left, 0px)); }
+.prl-nav button { border: 0; background: none; color: var(--prl-mut); font: 600 11px var(--p-font); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; border-radius: 8px; cursor: pointer; }
+.prl-nav button .prl-ic { width: 22px; height: 22px; }
+.prl-nav button.on { color: var(--p-red, #e60023); background: color-mix(in srgb, var(--p-red, #e60023) 10%, transparent); }
+.prl-nav .prl-home { position: relative; margin-top: -18px; gap: 4px; color: var(--prl-tx); }
+.prl-nav .prl-home img { width: 52px; height: 52px; padding: 11px 13px 13px; border-radius: 50%; background: var(--p-red, #e60023); box-shadow: 0 6px 16px rgba(230,0,35,.35), 0 0 0 4px var(--p-card); box-sizing: border-box; }
+.prl-nav .prl-home span { font-size: 12px; font-weight: 800; }
+.prl-nav .prl-home.on { background: none; }
+.prl-top-btn { position: absolute; right: 16px; bottom: calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 86px); z-index: 3; width: 56px; height: 44px; border: 0; border-radius: 999px; background: var(--p-red, #e60023); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.35); cursor: pointer; }
+.prl-top-btn[hidden] { display: none; }
+/* F988: con la página abierta la barra de abajo de la APP (#bottomNav) va por encima, con Slots · Inicio · Deportes; la propia se esconde */
+body.prl-appnav #bottomNav.bottom-nav { z-index: 99995 !important; }
+body.prl-appnav #prLobby .prl-nav { display: none !important; }
+body.prl-appnav #prLobby .prl-main { padding-bottom: calc(68px + var(--sab, 0px)); }
+body.prl-appnav #bottomNav .tn-ico svg.prl-ic, body.prl-appnav #bottomNav .tn-ico .prl-ic { width: 20px; height: 20px; }
+body.prl-appnav #prlSportPop.prl-sportpop { z-index: 99996; }
+body.has-install-bar .prl { bottom: 0; padding-bottom: calc(64px + var(--sab, 0px)); box-sizing: border-box; } /* #920: sin hueco entre el menú y la barra de instalar */
+body.has-install-bar .prl-nav { padding-bottom: 6px; }
+/* #922 selector chico de deportes (Digitain · Ultim8 · Caballos · TurfWin · Póker) */
+.prl-sportpop { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 20; min-width: 150px; border-radius: 12px; background: var(--p-card); border: 1px solid var(--p-border); box-shadow: 0 10px 24px rgba(0,0,0,.25); overflow: hidden; }
+.prl-sportpop-center { position: absolute !important; left: 50% !important; top: 40% !important; bottom: auto !important; transform: translate(-50%, -50%) !important; min-width: 200px; z-index: 30; }
+.prl-sportpop-l { display: flex; flex-direction: column; }
+.prl-sportpop-i { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--p-text); padding: 11px 14px; font: 800 13px var(--p-font); cursor: pointer; text-align: left; white-space: nowrap; }
+.prl-sportpop-i + .prl-sportpop-i { border-top: 1px solid var(--p-border); }
+.prl-sportpop-i .prl-ic { color: var(--p-red, #e60023); }
+/* #909 menú de cuenta (☰ de la barra): saldo, nivel y rango, deportes, soporte, perfil, sorteos, historias, info, 1girox, volver */
+.prl-drawer { position: absolute; inset: 0; z-index: 5; background: rgba(5,12,18,.5); display: flex; justify-content: flex-end; }
+.prl-drawer[hidden] { display: none; }
+.prl-dr { width: min(88vw, 360px); height: 100%; overflow-y: auto; background: var(--p-bg); box-shadow: -8px 0 24px rgba(0,0,0,.3); padding: calc(var(--sat, env(safe-area-inset-top, 0px)) + 12px) 14px calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 16px); display: flex; flex-direction: column; gap: 12px; }
+.prl-dr-head { display: flex; align-items: center; gap: 10px; }
+.prl-dr-head div { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.prl-dr-head b { font: 800 16px var(--p-font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prl-dr-head small, .prl-dr-card small { font: 600 11px var(--p-font); color: var(--prl-mut); letter-spacing: .4px; text-transform: uppercase; }
+.prl-logo { width: 26px; height: 30px; }
+.prl-x { border: 0; background: transparent; color: var(--prl-mut); width: 32px; height: 32px; border-radius: 8px; font-size: 15px; cursor: pointer; }
+.prl-dr-card { background: var(--p-card); border: 1px solid var(--p-border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.prl-dr-bal { font: 800 26px var(--p-font); font-variant-numeric: tabular-nums; }
+.prl-dr-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+.prl-load { border: 0; border-radius: 10px; background: var(--p-red, #e60023); color: #fff; font: 700 14px var(--p-font); padding: 11px; cursor: pointer; }
+.prl-ghost { border: 0; border-radius: 10px; background: var(--p-surface); border: 1px solid var(--p-border); color: var(--prl-tx); font: 700 14px var(--p-font); padding: 11px; cursor: pointer; }
+.prl-dr-lvl { font: 800 19px var(--p-font); }
+.prl-dr-sub { font: 600 12.5px var(--p-font); color: var(--prl-mut); }
+.prl-bar { height: 8px; border-radius: 999px; background: var(--p-border); overflow: hidden; }
+.prl-bar i { display: block; height: 100%; background: var(--p-red, #e60023); border-radius: 999px; }
+.prl-dr-list { display: flex; flex-direction: column; background: var(--p-card); border: 1px solid var(--p-border); border-radius: 12px; overflow: hidden; }
+.prl-dr-cap { display: block; padding: 10px 14px 4px; font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; opacity: .6; }
+.prl-mi { display: flex; align-items: center; gap: 10px; border: 0; background: none; color: var(--prl-tx); padding: 14px; font: 700 14px var(--p-font); cursor: pointer; text-align: left; }
+.prl-mi + .prl-mi { border-top: 1px solid var(--p-border); }
+.prl-mi .prl-ic { color: var(--p-red, #e60023); }
+.prl-mi span { flex: 1; }
+/* la Carga rápida (mismo panel que adentro del casino) cuando está sobre la página */
+.prl .casino-load { bottom: calc(76px + var(--sab, env(safe-area-inset-bottom, 0px))) !important; z-index: 9; }
+
+/* ===== #920/#989 SELECTOR DE PLATAFORMA (completo y básico): Pica Roja APP (rojo y blanco) · 1girox (negro y verde), 2 por fila ===== */
+html body .plat-play-btn.plat-picaroja, html body .bv-chip.plat-picaroja { --pb-bg: #ffffff; --pb-bd: #e6002a; --pb-tx: #e6002a; --pb-sub: #9f1239; --pb-on: linear-gradient(135deg, #e6002a, #b0001f); --pb-ontx: #fff; }
+html body .plat-play-btn.plat-girox, html body .bv-chip.plat-girox { --pb-bg: #0b0f0c; --pb-bd: #16a34a; --pb-tx: #22c55e; --pb-sub: #86efac; --pb-on: linear-gradient(135deg, #052e16, #15803d); --pb-ontx: #fff; }
+html body .plat-play-btn.plat-picaroja, html body .plat-play-btn.plat-girox, html body .bv-chip.plat-picaroja, html body .bv-chip.plat-girox {
+  background: var(--pb-bg) !important; border: 2px solid var(--pb-bd) !important; color: var(--pb-tx) !important; box-shadow: 0 4px 12px rgba(0,0,0,.12) !important; }
+html body .plat-play-btn.is-pref.plat-picaroja, html body .plat-play-btn.is-pref.plat-girox, html body .bv-chip.on.plat-picaroja, html body .bv-chip.on.plat-girox {
+  background: var(--pb-on) !important; color: var(--pb-ontx) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--pb-bd) 35%, transparent), 0 6px 16px rgba(0,0,0,.2) !important; }
+html body .plat-play-btn[class*="plat-"] .plat-play-name, html body .bv-chip[class*="plat-"] b {
+  color: inherit !important; font-size: 12px !important; font-weight: 900 !important; letter-spacing: .2px !important; line-height: 1.1 !important;
+  white-space: normal !important; overflow: visible !important; text-overflow: clip !important; text-align: center !important; word-break: normal !important; }
+html body .plat-play-btn[class*="plat-"] .plat-play-sub { color: var(--pb-sub) !important; opacity: .9; font-size: 10px !important; white-space: normal !important; }
+html body .plat-play-btn.is-pref[class*="plat-"] .plat-play-sub { color: inherit !important; }
+html body .plat-play-btn[class*="plat-"] .plat-logo, html body .bv-chip[class*="plat-"] img { width: 34px !important; height: 34px !important; border-radius: 50% !important; object-fit: cover !important; background: #000 !important; border: 2px solid var(--pb-bd) !important; }
+html body .plat-play-btn.plat-picaroja .plat-logo, html body .bv-chip.plat-picaroja img { background: #fff !important; }
+html body .plat-play-btn[class*="plat-"] .plat-check { border-color: currentColor !important; color: inherit !important; }
+html body .plat-play-btn .plat-reco, html body .bv-chip .plat-reco { background: #e6002a !important; color: #fff !important; }
+#navPlat #navPlatLogo { border-radius: 8px; object-fit: cover; }
+#navPlat[data-plat="picaroja"] #navPlatLogo { box-shadow: 0 0 0 2px #e6002a; }
+#navPlat[data-plat="girox"] #navPlatLogo { box-shadow: 0 0 0 2px #16a34a; }
+/* #921/#989: las 2 plataformas en UNA línea, cuadradas */
+#basicPlats { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+#basicPlats .bv-chip { position: relative; aspect-ratio: 2 / 1; min-width: 0 !important; width: auto !important; padding: 8px 6px !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 5px !important; border-radius: 14px !important; }
+#basicPlats .bv-check { position: absolute; top: 6px; right: 6px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; background: #fff; color: #111; font: 900 10px/12px var(--p-font); text-align: center; box-sizing: border-box; }
+html body #basicPlats .bv-chip .plat-reco { display: block; font-size: 8px !important; font-weight: 900; padding: 1px 6px !important; border-radius: 6px; text-transform: uppercase; letter-spacing: .3px; }
+#platformsButtons { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+#platformsButtons .plat-play-wrap { min-width: 0 !important; width: auto !important; }
+html body #platformsButtons .plat-play-btn[class*="plat-"] { aspect-ratio: 2 / 1; width: 100% !important; min-width: 0 !important; padding: 8px 6px !important; gap: 4px !important; border-radius: 14px !important; justify-content: center !important; }
+html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-play-sub { display: none !important; }
+html body #platformsButtons .plat-play-btn .plat-reco { font-size: 8px !important; padding: 1px 6px !important; }
+html body #platformsButtons .plat-check { width: 16px !important; height: 16px !important; font-size: 10px !important; top: 6px !important; right: 6px !important; }
+html body #basicPlats .bv-chip[class*="plat-"] b, html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-play-name { font-size: 11px !important; text-transform: uppercase; max-width: 100%; overflow-wrap: anywhere; }
+/* #908 Mis cargas en el perfil (por plataforma) */
+.pf-deps { margin: 10px 0 4px; border: 1px solid var(--p-border); border-radius: 12px; background: var(--p-surface); }
+.pf-deps summary { cursor: pointer; padding: 9px 12px; font: 800 13px var(--p-font); color: var(--p-text); }
+.pf-deps-l { padding: 0 12px 10px; display: grid; gap: 4px; max-height: 240px; overflow-y: auto; }
+.pf-dep { display: flex; gap: 8px; align-items: baseline; font: 600 12.5px var(--p-font); color: var(--p-muted); }
+.pf-dep b { color: var(--p-text); margin-left: auto; font-variant-numeric: tabular-nums; }
+.pf-dep em { font-style: normal; color: #16a34a; font-size: 11.5px; }
+.pf-dep-empty { font: 600 12.5px var(--p-font); color: var(--p-muted); padding: 4px 0; }
+/* #945 aviso "perdés el bono" al abrir un juego que no suma para el bono (encima de todo) */
+.ffk-ov { position: fixed; inset: 0; z-index: 100010; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ffk-card { width: 100%; max-width: 340px; background: var(--p-bg, #fff); color: var(--p-text, #111); border-radius: 18px; padding: 20px 18px 14px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,.3); }
+.ffk-ico { font-size: 38px; line-height: 1; } .ffk-card h3 { margin: 8px 0 6px; font: 900 18px var(--p-font); }
+.ffk-card p { margin: 0 0 8px; font: 500 13.5px/1.4 var(--p-font); color: var(--p-muted, #555); } .ffk-card p b { color: var(--p-text, #111); } .ffk-s { font-size: 12px !important; }
+.ffk-go { display: block; width: 100%; border: 0; border-radius: 999px; padding: 12px; background: var(--p-red, #e60023); color: #fff; font: 800 15px var(--p-font); cursor: pointer; }
+.ffk-no { display: block; width: 100%; margin-top: 6px; border: 0; background: none; color: var(--p-muted, #666); font: 700 13px var(--p-font); padding: 8px; cursor: pointer; }
+/* el sorteo con los colores de PICA ROJA mientras la página está abierta (la barra del casino de Girox usa el violeta de siempre) */
+:root:has(#prLobby:not([hidden])) { --srt-g: #6d0a14; --srt-g2: #c8102e; --srt-g3: #ff4d5e; --srt-soft: #fff0f1; --srt-line: #ffc2c8; --srt-ink: #fff; --srt-lite: #ffd0d5; --srt-sh: rgba(200,16,46,.35); }
