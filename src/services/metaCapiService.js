@@ -46,7 +46,7 @@ function listPixels() {
   for (let i = 2; i <= 9; i++) {
     const pid = String(process.env['META_PIXEL_ID_' + i] || '').trim(); if (!pid) continue;
     const scope = _parsePixelScope(process.env['META_PIXEL_PUBLISHER_' + i]);
-    out.push({ n: i, label: i === 2 ? ('partner (recibe todo' + (scope.length ? '; navegador: ' + scope.join('/') : '') + ')') : (scope.length ? ('publicista ' + scope.join('/')) : 'partner'), pixelId: pid, token: String(process.env['META_CAPI_ACCESS_TOKEN_' + i] || ''), testCode: String(process.env['META_TEST_EVENT_CODE_' + i] || ''),
+    out.push({ n: i, label: scope.length ? ('publicista ' + scope.join('/')) : 'partner (recibe todo)', pixelId: pid, token: String(process.env['META_CAPI_ACCESS_TOKEN_' + i] || ''), testCode: String(process.env['META_TEST_EVENT_CODE_' + i] || ''),
       scope: scope.length ? scope : ['*'], capiOnly: /^(1|true|on|yes)$/i.test(String(process.env['META_PIXEL_CAPIONLY_' + i] || '')), source: 'ssm' });
   }
   _cfgPixels.forEach((p) => { const scope = Array.isArray(p.scope) && p.scope.length ? p.scope : ['*'];
@@ -61,10 +61,10 @@ function _scopeMatches(scope, info) {
 }
 // Destinos de la CAPI para un evento: los píxeles con token cuyo alcance incluye al cliente del evento (info = { publisher, campaignCode } o null).
 // Sin `info` (p. ej. isConfigured) devuelve todos los que tienen token.
-// ⚠️ El `_2` de SSM se mantiene EXACTAMENTE como siempre: recibe TODOS los eventos aunque tenga META_PIXEL_PUBLISHER_2 (owner 2026-10-25: "el otro
-// publicista, picaroja2026, está tomando bien los datos": es ese y no hay que cambiarle nada). El alcance rige para _3.._9 y para los del panel.
+// El alcance rige para TODOS los píxeles con alcance, incluido el `_2` de SSM (el panel mostró que el `_2` es picarojaok, con token válido y envíos OK:
+// hasta ahora recibía los eventos de TODOS los clientes; owner: "son dos pautas distintas, no mezclar"). Sin META_PIXEL_PUBLISHER_n = recibe todo.
 function _capiDestinations(info) {
-  return listPixels().filter((p) => p.token && (info === undefined || (p.source === 'ssm' && p.n === 2) || _scopeMatches(p.scope, info)));
+  return listPixels().filter((p) => p.token && (info === undefined || _scopeMatches(p.scope, info)));
 }
 
 // ---- Resolución del "dueño" de un evento (publicista + campaña) — #197 (réplica

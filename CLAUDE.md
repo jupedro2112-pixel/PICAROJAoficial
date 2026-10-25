@@ -337,7 +337,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   próxima carga. Un bono nuevo que deba aplicarse a la carga va a esa cadena (no a `creditUserBalance`); el cliente que no reclamó no ve nada.
 - **PÍXELES DE META (#797/#990):** por publicista en SSM `META_PIXEL_ID_n` + `META_CAPI_ACCESS_TOKEN_n` + `META_PIXEL_PUBLISHER_n` (n = 2..9; códigos de
   campaña / nombre del publicista / `*`). Navegador (landing) = `pixelIdsForCampaign`; CAPI = `_capiDestinations(scope)` manda a cada píxel sólo los
-  eventos de SUS clientes, SALVO el `_2` de SSM que recibe TODO (es picaroja2026, funciona así: no tocarlo). Sin token = sólo navegador. También se cargan
+  eventos de SUS clientes (el `_2` de SSM es picarojaok; sin `META_PIXEL_PUBLISHER_n` = recibe todo). picaroja2026 es OTRA pauta con su propio píxel, fuera
+  de este server: no mezclar. Sin token = sólo navegador. También se cargan
   desde el panel (Configuración → Píxeles de Meta por publicista, `Config['metaPixels']`, token cifrado). Diagnóstico: `GET /api/admin/meta-pixels[?campaign=]` y `/api/admin/meta-pixels/:n/test`.
 - **LINK DE RESULTADOS DEL PUBLICISTA (#805):** `Campaign.statsToken` ⇒ `/r/<token>` muestra números agregados de esa campaña sin login
   (sólo lectura). Generar uno nuevo invalida el anterior; desactivar = `statsToken:null`. Nunca agregar ahí datos de usuarios ni retiros.

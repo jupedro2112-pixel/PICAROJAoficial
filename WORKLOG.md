@@ -15,11 +15,13 @@ directo y que se arregle". (Aplicado SOLO este arreglo sobre el código de produ
 (#797) ⇒ el píxel del NAVEGADOR (PageView + registro en la landing) estaba bien.
 **El error (código):** `_capiDestinations()` sólo armaba destinos con el píxel propio y el `_2`. Un píxel de publicista cargado como `_3`..`_9` con su token
 NUNCA recibía eventos server-side (registro desde la app, cargas = Purchase, reembolsos); y el `_2` recibía los eventos de TODOS los clientes.
-- **Dato del owner:** "el otro publicista, picaroja2026, está tomando bien los datos". Verificado: `/api/meta-pixel-id?c=PICAROJA2026` devuelve `[]`
-  (sin píxel de navegador) y aun así le llega todo ⇒ picaroja2026 es el `_2` de SSM (el único que recibía la CAPI). Por eso el `_2` queda EXACTAMENTE como
-  hoy (recibe todos los eventos, se tenga o no `META_PIXEL_PUBLISHER_2`): no se le cambia nada. El alcance rige para `_3`..`_9` y para los del panel.
-- **Fix (`src/services/metaCapiService.js`):** `listPixels()` (SSM n=1..9 + los del panel) y `_capiDestinations(scopeInfo)`: un píxel con token (salvo
-  el `_2`) recibe por CAPI sólo los eventos de los clientes de su alcance (`META_PIXEL_PUBLISHER_n` o el alcance cargado en el panel: códigos de campaña / nombre del publicista;
+- **Lo que mostró el panel (captura del owner tras el deploy):** el `_2` de SSM ES picarojaok (píxel 3626…255, token válido, "3 ok · 0 con error",
+  último `CompleteRegistration` 25/10 07:09) ⇒ la CAPI SÍ le llegaba, pero con los eventos de TODOS los clientes (el `_2` era el "partner" sin alcance).
+  picaroja2026 no está en este server (`/api/meta-pixel-id?c=PICAROJA2026` = `[]`): es otra pauta con su propio píxel, no se toca ni se mezcla. Por eso el
+  alcance rige también para el `_2`: picarojaok recibe sólo sus clientes. El owner cargó además picarojaok en el panel (duplicado del mismo píxel): se le
+  pidió borrarlo para no mandar cada evento dos veces.
+- **Fix (`src/services/metaCapiService.js`):** `listPixels()` (SSM n=1..9 + los del panel) y `_capiDestinations(scopeInfo)`: un píxel con token recibe
+  por CAPI sólo los eventos de los clientes de su alcance (`META_PIXEL_PUBLISHER_n` o el alcance cargado en el panel: códigos de campaña / nombre del publicista;
   `*` o sin alcance = todo, como el partner de siempre; sin token = sólo navegador). `sendEvent` resuelve el publicista del cliente (`resolveEventScope`).
   `pixelIdsForCampaign` (navegador de la landing) también toma los del panel. Contadores por píxel en memoria. Test `scripts/test-meta-pixels.js`.
 - **Panel (admin general) → Configuración → "📣 Píxeles de Meta por publicista":** lista (de Amazon y del panel: píxel enmascarado, token sí/no, qué recibe,
