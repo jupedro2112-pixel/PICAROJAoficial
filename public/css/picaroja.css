@@ -184,6 +184,10 @@ body.has-install-bar .prl-nav { padding-bottom: 6px; }
 .prl-mi .prl-ic { color: var(--p-red, #e60023); }
 .prl-mi span { flex: 1; }
 
+/* #989 (owner): en el casino de 1girox NO va el bloque del menú de #988: la página ocupa todo (el overlay deja de scrollear) */
+#casinoOverlay { overflow-y: hidden !important; }
+#casinoOverlay #casinoFrame { flex: 1 1 auto !important; height: auto !important; }
+#casinoHome { display: none !important; }
 /* ===== #920/#989 SELECTOR DE PLATAFORMA (completo y básico): Pica Roja APP (rojo y blanco) · 1girox (negro y verde), 2 por fila ===== */
 html body .plat-play-btn.plat-picaroja, html body .bv-chip.plat-picaroja { --pb-bg: #ffffff; --pb-bd: #e6002a; --pb-tx: #e6002a; --pb-sub: #9f1239; --pb-on: linear-gradient(135deg, #e6002a, #b0001f); --pb-ontx: #fff; }
 html body .plat-play-btn.plat-girox, html body .bv-chip.plat-girox { --pb-bg: #0b0f0c; --pb-bd: #16a34a; --pb-tx: #22c55e; --pb-sub: #86efac; --pb-on: linear-gradient(135deg, #052e16, #15803d); --pb-ontx: #fff; }

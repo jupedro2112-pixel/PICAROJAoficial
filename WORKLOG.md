@@ -134,6 +134,10 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Los 4 lobbies fijos (owner, captura: "estos son los juegos que quiero en Casino en vivo, buscalos y poné esos solos") — SW v674:** `LIVE4` en lobby.js =
   Blackjack Lobby (Evolution, 7/10517_ifg) · Live Casino Lobby (Pragmatic, 3/101) · Game Show Lobby (Evolution, 7/10511_ifg) · Live Casino Lobby (Vivo Gaming,
   9/13452), con gid/lk del catálogo real (ya no se eligen por nombre). Portadas propias para los 3 primeros; Vivo usa la de Girox.
+- **Casino de 1girox sin el bloque de #988 (owner, captura: "si elijo el menú de Girox eso no va: sólo la página y la Carga rápida; menú superior sí, el
+  inferior no") — SW v675:** `renderCasinoTabs` ya no llama `_casinoHomeEnsure` (se saca `#casinoHome` si existiera y picaroja.css lo esconde); el iframe
+  vuelve a ocupar todo (`#casinoOverlay` sin scroll) y la Carga rápida es la burbuja flotante de siempre, abierta al entrar (#937). La barra de arriba con
+  el sorteo sigue igual. El código de #988 queda en home.js por si se vuelve a querer.
 
 ## Sesión 2026-10-24
 

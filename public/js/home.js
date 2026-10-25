@@ -2729,9 +2729,11 @@
         try { const cb = bar.querySelector('.casino-brand'); if (cb && !_el('casinoBrand')) { cb.id = 'casinoBrand'; cb.insertAdjacentHTML('afterend', '<button type="button" class="casino-brand casino-srt" id="casinoSrtBtn" hidden onclick="VIP.sorteos.casinoBar(true)" aria-label="Sorteo mensual"><span class="cb-box"><span class="cb-ico" data-srt-brand-ico>🏆</span><span class="cb-txt"><b data-srt-brand-title>Sorteo mensual</b><small data-srt-brand-sub>NOVEDAD</small></span></span></button>'); }
               if (!_el('casinoSrtBar')) bar.insertAdjacentHTML('beforeend', '<div id="casinoSrtBar" class="casino-srt-bar" hidden></div>'); } catch (_) {}
         try { if (VIP.sorteos && VIP.sorteos.paintCasino) VIP.sorteos.paintCasino(); } catch (_) {} // G935
-        // #937 (owner) abría el flotante de Carga rápida al iniciar en Girox directo. #988 lo reemplaza: el bloque de arriba (saldo · sorteos ·
-        // nivel/racha · CARGÁ AQUÍ · servicios) ya tiene la carga a la vista y la despliega ahí mismo al tocarla.
-        try { _casinoHomeEnsure(); } catch (_) {}
+        // #988 ponía arriba del casino el bloque del menú (saldo · sorteos · nivel/racha · CARGÁ AQUÍ · servicios). #989 (owner, captura: "si elijo el
+        // menú de Girox eso no va: sólo la página y la Carga rápida; el menú superior sí, el inferior no") ⇒ sin el bloque: el casino ocupa todo y la
+        // Carga rápida es la burbuja de siempre, abierta al entrar (#937). _casinoHomeEnsure queda para quien lo quiera volver a activar.
+        try { const h = _el('casinoHome'); if (h) h.remove(); } catch (_) {}
+        setTimeout(() => { try { toggleCasinoLoad(true); } catch (_) {} }, 450);
         // #700: el contador de historias nuevas copia el de la barra principal; sin historias cargadas el botón igual abre el visor.
         try { const src = _el('storiesBadge'), dst = _el('ctStoriesBadge'); if (src && dst) { dst.textContent = src.textContent; dst.style.display = src.style.display; } const nh = _el('navHistorias'), cs = _el('ctStories'); if (nh && cs) cs.classList.toggle('has-active', nh.classList.contains('has-active') || nh.classList.contains('has-new')); } catch (_) {}
         document.body.classList.add('casino-open'); // #700: los modales (Info, Perfil, historias…) van por encima del casino
