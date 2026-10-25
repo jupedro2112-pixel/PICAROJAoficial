@@ -82,7 +82,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   L.open('inicio');
   const shell = body.innerHTML; clean(shell); balanced(shell);
   must(shell, "VIP.lobby.go('slots')", "VIP.lobby.go('vivo')", 'id="prLobby"', 'casino-topbar prl-cbar', 'id="prlQlChip"', 'id="prlPrBal"', 'id="prlMain"', 'class="prl-nav"', 'PICA ROJA', 'VIP.lobby.backHome()');
-  if (shell.includes('title="Elegir menú"') || shell.includes('prl-tn-slots')) throw new Error('Menú y Slots van abajo, no en la barra de arriba');
+  if (!shell.includes('title="Elegir menú"') || shell.includes('prl-tn-slots')) throw new Error('arriba: Volver · Menú · PICA ROJA · Historias · Info · Perfil (Slots sólo abajo)');
   if (shell.includes('prl-hero2') || shell.includes('jugaygana') || shell.includes('ganamos') || shell.includes('buffalo')) throw new Error('quedó algo de otras marcas o de las fotos');
   if (!body.classList.contains('prl-open') || !body.classList.contains('casino-open')) throw new Error('clases del body');
   if (!body.classList.contains('prl-appnav') || !mk('navMenu').innerHTML.includes('Menú') || !mk('navPerfil').innerHTML.includes('Deportes') || !els.navPrSlots || !els.navPrLive) throw new Error('la barra de la app no cambió a Menú · Slots · Inicio · En vivo · Deportes');

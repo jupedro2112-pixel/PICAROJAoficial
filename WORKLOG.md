@@ -114,6 +114,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Botón de los recuadros del sorteo (owner): "Inscribite, es gratis ›"** (anotado: "Ya estás inscripto ✓ · Ver detalle ›") — SW v667.
 - **Barra de abajo (owner: "Menú, Slots, Inicio en el medio con el logo PICA ROJA pero mismo formato, En vivo con logo de ruleta y Deportes") — SW v668:**
   `_prNav` también reemplaza el ícono de `#navInicio` por el logo (`.prl-nav-logo`, se restaura al cerrar) y "En vivo" lleva el ícono `roulette` (también en la barra propia).
+- **Barra de arriba (owner, captura: "al lado de Volver poné Menú de vuelta, y el logo con el texto PICA ROJA centrado") — SW v669:** vuelve el Menú en la
+  barra de la página y el logo + "PICA ROJA · OFICIAL" quedan siempre visibles y centrados (picaroja.css pisa las reglas de pin.css que los escondían en
+  pantallas chicas: se veía una mancha). Abajo sigue Menú · Slots · Inicio(logo) · En vivo(ruleta) · Deportes.
 
 ## Sesión 2026-10-24
 

@@ -48,8 +48,8 @@ VIP.lobby = (function () {
         const pill = '<button type="button" class="casino-brand casino-srt" hidden onclick="VIP.sorteos.casinoBar(true)" aria-label="Sorteo"><span class="cb-box"><span class="cb-ico" data-srt-brand-ico>🏆</span><span class="cb-txt"><b data-srt-brand-title>Sorteo mensual</b><small data-srt-brand-sub>NOVEDAD</small></span></span></button>';
         // #989 (owner, captura final: "así quiero que inicie; el Volver es ir al menú completo; lo demás igual que antes"): la barra completa con Menú;
         // "‹ Volver" cierra la página y deja la app en el menú COMPLETO (backHome).
-        // #989 (owner: "bajá Slots, Menú a la izquierda, después Casino en vivo y Deportes del otro lado"): arriba sin Menú ni Slots (van abajo).
-        let bar = (VIP.home && VIP.home.casinoBarHtml) ? VIP.home.casinoBarHtml({ back: 'VIP.lobby.backHome()', noMenu: true, logo: SK.bar, name: SK.name, idSuffix: 1 }) : '<div class="casino-topbar-row"><button type="button" class="casino-back" onclick="VIP.lobby.close()">‹ Volver</button><span class="casino-brand"><span class="cb-box"><b>PICA ROJA</b></span></span></div>';
+        // #989 (owner, captura): arriba Volver · Menú · [logo + PICA ROJA centrado] · Historias · Info · Perfil (igual que el casino de Girox).
+        let bar = (VIP.home && VIP.home.casinoBarHtml) ? VIP.home.casinoBarHtml({ back: 'VIP.lobby.backHome()', menu: 'VIP.home.casinoFullMenu()', logo: SK.bar, name: SK.name, idSuffix: 1 }) : '<div class="casino-topbar-row"><button type="button" class="casino-back" onclick="VIP.lobby.close()">‹ Volver</button><span class="casino-brand"><span class="cb-box"><b>PICA ROJA</b></span></span></div>';
         void pill; // #989 (owner): el sorteo ya no va en la barra: son DOS recuadros debajo del usuario, al tope del Inicio (más lugar, se ve el premio)
         document.body.insertAdjacentHTML('beforeend',
             '<div id="prLobby" class="prl" data-skin="picaroja" hidden role="dialog" aria-label="' + SK.name + '">' +
