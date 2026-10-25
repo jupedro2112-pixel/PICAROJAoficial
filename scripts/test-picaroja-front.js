@@ -48,7 +48,7 @@ const ctx = { console, Date, Math, Number, String, JSON, Object, Array, RegExp, 
   fetch: async (url, opts) => { fetchLog.push(url); const j = url.includes('/api/games/lobby') ? LOBBY : url.includes('/api/sports/board') ? BOARD : url.includes('picaroja-extra') ? { games: [['2/vs20new', 'Nuevo Slot', 'https://admin.1girox.com/game-img/n.webp', 13, 'pragmatic']] }
       : url.includes('girox-live') ? { providers: [{ name: 'Evolution', games: [['7/1', 'Ruleta', '', 2, 'evo']] }, { name: 'Ezugi', games: [['7/2', 'Ezugi Lobby', '', 4, 'ez']] }] } : url.includes('/api/games/catalog') ? { games: LOBBY.popular, hasMore: false }
       : url.includes('/api/sorteos') ? SORT : url.includes('/api/platforms') ? { platforms: [{ id: 'girox', name: '1girox', connected: true, logoUrl: '/images/soporte-1girox.png' }, { id: 'ganamos', name: 'Ganamos', connected: false }, { id: 'jugaygana', name: 'JUGAYGANA', connected: false }], defaultPlatform: 'girox', preferredPlatform: null, minDepositArs: 2000, picarojaApp: ctx.__prApp !== false }
-      : url.includes('/api/me/brand') ? { brand: 'picaroja' } : {}; return { ok: true, status: 200, json: async () => j }; } };
+      : url.includes('/api/me/brand') ? { brand: 'picaroja' } : url.includes('/api/games/favorites') ? { favorites: [{ key: '2/vs20olympx', name: 'Gates of Olympus 1000', img: '/images/games/gates-of-olympus-1000.jpg', provider: 'Pragmatic Play' }, { key: '4/mines_prod2_100hp', name: 'Mines', img: '/images/games/mines.jpg', provider: 'Spribe' }], isDefault: true } : {}; return { ok: true, status: 200, json: async () => j }; } };
 ctx.window = ctx; ctx.self = ctx; ctx.gamePlayed = []; const gamePlayed = ctx.gamePlayed;
 ctx.VIP = { state: { currentToken: 'tok', currentUser: { username: 'alex' } }, config: { API_URL: 'https://picaroja.com' }, ui: { showToast() {} }, stories: { paint() { ctx.storiesPainted = true; } }, withdraw: { openWithdrawModal() {} }, autoload: { getCbu: () => ({ alias: 'pica.roja', number: '000', titular: 'PICA' }) } };
 vm.createContext(ctx);
@@ -120,7 +120,8 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   L.go('slots'); must(mk('prlMain').innerHTML, 'Slots · todos los juegos', 'id="prlAll"'); await new Promise((r) => setImmediate(r)); must(mk('prlAll').innerHTML, 'Gates of Olympus');
   L.extraAll(); await new Promise((r) => setImmediate(r)); must(mk('prlMain').innerHTML, 'Juegos nuevos', 'Nuevo Slot');
   L.back(); must(mk('prlMain').innerHTML, 'Top partidos');
-  L.play('2/vs20olympx', { dataset: { name: 'Gates of Olympus', gid: '11', lk: 'pragmatic' } }); if (!gamePlayed.pop().startsWith('2/vs20olympx|Gates')) throw new Error('play');
+  L.play('2/vs20olympx', { dataset: { name: 'Gates of Olympus', gid: '11', lk: 'pragmatic' } }); if (gamePlayed.pop() !== '2/vs20olympx|Gates of Olympus') throw new Error('play tiene que llamar a gamePlay(key, nombre) como un favorito');
+  L.go('inicio'); for (let i = 0; i < 4; i++) await tick(); const mi = mk('prlMain').innerHTML; must(mi, 'id="prlFavs"', 'Favoritos', 'mines_prod2_100hp'); if (mi.indexOf('Favoritos') > mi.indexOf('Populares')) throw new Error('Favoritos va antes que Populares');
   console.log('✔ vistas: En vivo · Slots (carga al bajar) · Juegos nuevos · Volver · abrir juego');
   // 6) Carga rápida: al entrar se ve el CÍRCULO (cerrada); tocarlo abre el panel en el hueco de arriba (el círculo se esconde); ✕ ⇒ vuelve el círculo
   const chip = mk('prlQlChip');

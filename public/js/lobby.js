@@ -181,6 +181,18 @@ VIP.lobby = (function () {
     // #989 (owner, captura: "en Casino en vivo poné los 4 lobbies de Girox, mismo formato y tamaño que abajo, debajo de Deportes/Proveedores; sacá
     // todo lo demás de esa sección y después los más jugados"): la sección "Casino lobby" (8+ lobbies y Ver más) se reemplaza por "Casino en vivo" =
     // SÓLO los 4 lobbies que muestra Girox (Vivo Gaming · Pragmatic Live · Game Shows de Evolution · Ezugi), en una fila de 4 como el resto.
+    // #989 (owner: "tomá los links de todos los juegos de favoritos y ponelos dentro de Pica Roja"): la misma lista de GET /api/games/favorites (la del
+    // cliente o la de siempre), como primera fila de juegos; cada uno abre con VIP.home.gamePlay = el camino de los favoritos.
+    let _favs = null, _favsP = null;
+    function _favsLoad() {
+        if (!_favsP) _favsP = fetch(VIP.config.API_URL + '/api/games/favorites', { headers: auth() }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+            .then((d) => { _favs = ((d && d.favorites) || []).map((g) => ({ key: g.key, name: g.name, img: g.img, provider: g.provider })); return _favs; });
+        return _favsP;
+    }
+    function _favRow() {
+        if (!_favs) { _favsLoad().then(() => { const b = $('prlFavs'); if (b && b.isConnected && _favs && _favs.length) b.outerHTML = _favRow(); }); return '<div id="prlFavs"></div>'; }
+        return _favs.length ? _row('star', 'Favoritos', _favs, null, "VIP.lobby.go('slots')").replace('<section class="prl-sec">', '<section class="prl-sec" id="prlFavs">') : '<div id="prlFavs"></div>';
+    }
     // #989 (owner, captura): ESTOS cuatro y en este orden — Blackjack Lobby (Evolution) · Live Casino Lobby (Pragmatic) · Game Show Lobby (Evolution) ·
     // Live Casino Lobby (Vivo Gaming). Claves verificadas en el catálogo real de 1girox el 2026-10-25.
     const LIVE4 = [
@@ -283,7 +295,7 @@ VIP.lobby = (function () {
         // qué tipo de sorteo es antes de expandir": las dos tarjetas de sorteos.js (Gran Sorteo | Sorteo mensual, con el premio) al tope del Inicio.
         // orden (owner): sorteos · Top partidos · Proveedores · Casino en vivo (los 4 lobbies) · Populares (los más jugados) · buscador · Nuevos · En vivo · proveedores
         m.innerHTML = '<div class="prl-srt" id="prlSrt">' + _srtBoxes() + '</div>' + _hero() + _providers(_pvAll) + _live4();
-        m.innerHTML += _row('fire', 'Populares', _data.popular) + _search() + _row('star', 'Nuevos', _data.nuevos, null, 'VIP.lobby.extraAll()') +
+        m.innerHTML += _favRow() + _row('fire', 'Populares', _data.popular) + _search() + _row('star', 'Nuevos', _data.nuevos, null, 'VIP.lobby.extraAll()') +
             (_data.live && _data.live[0] ? _row('live', 'En vivo · ' + _data.live[0].title, _data.live[0].games, _data.live[0].providerId) : '') +
             (_data.sections || []).map((s) => _row('slots', s.title, s.games, s.providerId)).join('') +
             '<div class="prl-more"><button type="button" onclick="VIP.lobby.go(\'slots\')">Ver los ' + Number(_data.total || 0).toLocaleString('es-AR') + ' juegos</button></div>';
@@ -391,10 +403,12 @@ VIP.lobby = (function () {
             } catch (_) { box.innerHTML = '<div class="prl-note">Sin conexión.</div>'; }
         }, 350);
     }
+    // #989 (owner: "¿por qué no abren los juegos? que entren de la MISMA manera que los favoritos"): se llama a favPlay igual que un favorito, sólo con la
+    // clave del juego y su nombre (sin gid/lk: el server lo resuelve en el catálogo como con los favoritos). Verificado: el catálogo da el mismo id para
+    // la tarjeta y para la búsqueda, así que el pedido a 1girox es idéntico al de un favorito.
     function play(key, btn) {
         const name = (btn && btn.dataset && btn.dataset.name) || 'el juego';
-        const ds = (btn && btn.dataset) || {}; // #944: id interno + launcher (si la tarjeta los tiene)
-        if (VIP.home && VIP.home.gamePlay) VIP.home.gamePlay(key, name, ds.gid ? { gid: Number(ds.gid), lk: ds.lk || '' } : null);
+        if (VIP.home && VIP.home.gamePlay) VIP.home.gamePlay(key, name);
     }
     // #962 (owner: "deportes que entre directo al link, sin pasar por Girox"): cada casa se abre con SU link directo (el mismo ingreso que los
     // favoritos: /api/platform/session ⇒ URL del proveedor). Si 1girox no da el link, favPlay avisa y se reintenta: nunca se cae en la web de Girox.

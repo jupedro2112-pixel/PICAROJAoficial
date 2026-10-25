@@ -138,6 +138,11 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   inferior no") — SW v675:** `renderCasinoTabs` ya no llama `_casinoHomeEnsure` (se saca `#casinoHome` si existiera y picaroja.css lo esconde); el iframe
   vuelve a ocupar todo (`#casinoOverlay` sin scroll) y la Carga rápida es la burbuja flotante de siempre, abierta al entrar (#937). La barra de arriba con
   el sorteo sigue igual. El código de #988 queda en home.js por si se vuelve a querer.
+- **Juegos "como los favoritos" (owner: "¿por qué no abren los juegos? tomá los links de los favoritos y ponelos en Pica Roja para que entren igual") —
+  SW v676:** verificado contra el catálogo real que el id interno de cada juego es el mismo en el listado (tarjetas) y en la búsqueda (favoritos):
+  el pedido a 1girox era idéntico. Igual, `play()` ahora llama `gamePlay(key, nombre)` sin gid/lk (exactamente el camino de un favorito) y el Inicio
+  suma la fila **Favoritos** (`GET /api/games/favorites`, la lista del cliente o la de siempre) antes de Populares. El motivo real del "No pudimos abrir"
+  sigue pendiente de la captura con el paréntesis (v660+) o de la sonda `/api/admin/girox/test-game`.
 
 ## Sesión 2026-10-24
 
