@@ -70,6 +70,10 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   plata (misma cuenta). Encendida de vuelta: vuelve a ser la predeterminada. La app lo toma en la próxima apertura (cache de /api/platforms 60 s).
 - **Círculo movible abajo a la derecha (owner) — SW v656:** `#prlQlChip` ya no va centrado arriba: flota abajo a la derecha (sobre la barra), se arrastra
   (`_dragQl`, posición en `localStorage vip_prl_ql_pos`) y el panel verde abre ahí mismo (`#prLobby .casino-load`, fijo abajo a la derecha como en Girox).
+- **Captura final del owner ("así quiero que inicie, con ese círculo; el Volver es ir al menú completo; lo demás igual que antes") — SW v657:** se deshizo el
+  movimiento del Menú (vuelve a la barra de arriba) y el botón "En vivo" extra; abajo queda Slots · Inicio · Deportes como en la captura; el usuario/saldo
+  sigue pegado a la barra; el círculo flota abajo a la derecha; "‹ Volver" = `VIP.lobby.backHome()` (cierra la página y deja el menú COMPLETO).
+  ⚠️ El commit 6ced500 se subió con una aserción vieja en la prueba (el `tail` tapaba el exit code): corregida acá; la prueba vuelve a pasar entera.
 
 ## Sesión 2026-10-24
 
