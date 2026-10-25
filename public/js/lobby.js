@@ -153,6 +153,30 @@ VIP.lobby = (function () {
     }
     // #920 (owner): "una sección Casino lobby con los mismos lobbies que tiene Girox". Salen del catálogo de 1girox (búsqueda "lobby").
     function _lobbies() { return ((_data && _data.lobbies) || []); }
+    // #989 (owner, captura: "dale más seriedad: que se note bien el sorteo del auto, el iPhone, que hay 3 premios; y que el detalle se vea
+    // directamente ahí, no en otra pantalla"): DOS recuadros a lo ancho (Gran Sorteo · Sorteo mensual) con la foto del premio, el 1° premio grande,
+    // los 3 premios y el estado; tocar despliega el detalle DEBAJO (sorteos.js openInline). La ventana completa queda para el menú completo.
+    const SRT_PIC = { gran: '/images/sorteos/peugeot-208-sq.jpg' };
+    const SRT_KICK = { gran: 'GRAN SORTEO', mensual: 'SORTEO MENSUAL' };
+    function _srtBoxes() {
+        const L = (VIP.sorteos && VIP.sorteos.list) ? VIP.sorteos.list() : []; if (!L.length) return '';
+        const ord = ['gran', 'mensual'].map((k) => L.find((x) => x.key === k)).filter(Boolean).concat(L.filter((x) => !['gran', 'mensual'].includes(x.key)));
+        const cdS = (ms) => { const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), mi = Math.floor((ms % 3600000) / 60000); return d > 0 ? d + ' d ' + h + ' h' : (h > 0 ? h + ' h ' + mi + ' min' : mi + ' min'); };
+        return ord.map((s) => {
+            const pr = s.prizes || []; const p1 = pr[0] || {}; const picUrl = (typeof p1.img === 'string' && /^(\/|https?:)/.test(p1.img)) ? p1.img : (SRT_PIC[s.key] || '');
+            const st = s.status === 'live' ? '<em class="prl-sb-live">EN CURSO</em> cierra en ' + cdS(s.endsInMs || 0) : (s.status === 'soon' ? 'Empieza en ' + cdS(s.startsInMs || 0) : 'Cerrado');
+            const joined = s.me && s.me.joined;
+            return '<button type="button" class="prl-sb prl-sb-' + esc(s.key) + '" onclick="VIP.lobby.srtOpen(\'' + esc(s.key) + '\')">' +
+                '<span class="prl-sb-pic">' + (picUrl ? '<img src="' + esc(picUrl) + '" alt="" loading="lazy">' : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10 6h4"/><circle cx="12" cy="17.5" r="1"/></svg>') + '</span>' +
+                '<span class="prl-sb-t"><small>' + (SRT_KICK[s.key] || esc(s.title).toUpperCase()) + (joined ? ' · <b class="prl-sb-ok">ANOTADO ✓</b>' : '') + '</small>' +
+                '<b>' + esc(p1.name || s.title) + '</b>' +
+                (pr.length > 1 ? '<span class="prl-sb-pz">' + pr.length + ' premios: ' + pr.map((p) => p.pos + '° ' + esc(p.name)).join(' · ') + '</span>' : '') +
+                '<span class="prl-sb-st">' + st + '</span></span>' +
+                '<i>Ver detalle y participar ›</i></button>';
+        }).join('');
+    }
+    function _paintSrt() { const b = $('prlSrt'); if (b && b.isConnected && _view === 'inicio') b.innerHTML = _srtBoxes(); }
+    function srtOpen(key) { const host = $('prlSrt'); if (!host) return; try { VIP.sorteos.openInline(key, host); } catch (_) { try { VIP.sorteos.open(key); } catch (__) {} } }
     // #989 (owner: "de entrada en el Inicio poné Casino en vivo con los 4 lobbies de Girox"): los 4 lobbies que muestra Girox (Vivo Gaming · Pragmatic
     // Live · Game Shows de Evolution · Ezugi), grandes, 2×2; si alguno no está en el catálogo se completa con los siguientes lobbies.
     function _live4() {
@@ -249,13 +273,13 @@ VIP.lobby = (function () {
         const _pvAll = (_data.providers || []).concat(_liveTiles().filter((t) => !(_data.providers || []).some((p) => String(p.name).toLowerCase() === t.name.toLowerCase()))); // F971
         // #989 (owner): "el sorteo ponelo abajo del usuario y dale más lugar apenas entra la gente: sorteo 1 un recuadro y sorteo 2 otro, que se vea
         // qué tipo de sorteo es antes de expandir": las dos tarjetas de sorteos.js (Gran Sorteo | Sorteo mensual, con el premio) al tope del Inicio.
-        m.innerHTML = '<div class="srt-cards prl-srt" data-srt-cards hidden></div>' + _live4() + _hero() + _providers(_pvAll) + _row('grid', 'Casino lobby', _lobbies()) + _search() + // #925: Proveedores arriba
+        m.innerHTML = '<div class="prl-srt" id="prlSrt">' + _srtBoxes() + '</div>' + _live4() + _hero() + _providers(_pvAll) + _row('grid', 'Casino lobby', _lobbies()) + _search() + // #925: Proveedores arriba
             '';
         m.innerHTML += _row('fire', 'Populares', _data.popular) + _row('star', 'Nuevos', _data.nuevos, null, 'VIP.lobby.extraAll()') +
             (_data.live && _data.live[0] ? _row('live', 'En vivo · ' + _data.live[0].title, _data.live[0].games, _data.live[0].providerId) : '') +
             (_data.sections || []).map((s) => _row('slots', s.title, s.games, s.providerId)).join('') +
             '<div class="prl-more"><button type="button" onclick="VIP.lobby.go(\'slots\')">Ver los ' + Number(_data.total || 0).toLocaleString('es-AR') + ' juegos</button></div>';
-        try { if (VIP.sorteos && VIP.sorteos.paint) VIP.sorteos.paint(); } catch (_) {} // #989: pinta los dos recuadros del sorteo
+        try { if (VIP.sorteos && VIP.sorteos.load) Promise.resolve(VIP.sorteos.load()).then(_paintSrt); } catch (_) {} // #989: recuadros con los datos del sorteo
         if (_q) search(_q);
     }
     async function _moreAll() {
@@ -410,5 +434,5 @@ VIP.lobby = (function () {
             let n = 0; const t = setInterval(() => { n++; if (VIP.state && VIP.state.currentToken && VIP.config) { clearInterval(t); try { VIP.home.openPlatform('picaroja'); } catch (_) { open('inicio'); } try { history.replaceState(null, '', location.pathname); } catch (_) {} } else if (n > 60) clearInterval(t); }, 500);
         }
     } catch (_) {}
-    return { liveProv, sportOf: (p) => SPORT_KEYS[p] || null, open, close, backHome, go, all, more, menu, withdraw, profile, top, search, play, sport, sportMatch, load, ql, support, extraAll, listMore, back, sportsMenu, sportPick, skin: () => 'picaroja' };
+    return { liveProv, sportOf: (p) => SPORT_KEYS[p] || null, open, close, backHome, srtOpen, go, all, more, menu, withdraw, profile, top, search, play, sport, sportMatch, load, ql, support, extraAll, listMore, back, sportsMenu, sportPick, skin: () => 'picaroja' };
 })();

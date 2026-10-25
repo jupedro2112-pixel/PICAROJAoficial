@@ -96,6 +96,15 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Barra de abajo (owner: "bajá Slots, Menú a la izquierda, después Casino en vivo y Deportes del otro lado") — SW v662:** con la página abierta la barra
   de la app queda Menú · Slots · Inicio · En vivo · Deportes (`_prNav`: navMenu = Menú, `#navPrSlots` después, `#navPrLive` antes de navPerfil = Deportes;
   se quitan al cerrar). Arriba ya no van Menú ni Slots (`casinoBarHtml({ noMenu })`). La barra propia (sin #bottomNav) tiene el mismo orden.
+- **Sorteos serios y desplegados ahí (owner, captura: "dale más seriedad, que se note el auto, el iPhone, que hay 3 premios; que el detalle se vea
+  directamente ahí y no en otra pantalla") — SW v663:** la página ya no usa las dos mitades `.srt-ban` (quedaban angostas, con texto cortado y emojis):
+  `_srtBoxes()` arma DOS recuadros a lo ancho con `VIP.sorteos.list()` (foto del 1° premio o la del Peugeot del repo, 1° premio grande, "3 premios: 1° …
+  · 2° … · 3° …", estado con cuenta regresiva, "ANOTADO ✓", botón "Ver detalle y participar ›"); tocar ⇒ `VIP.sorteos.openInline(key, #prlSrt)` despliega
+  el detalle DEBAJO, dentro de la página (la ventana completa `#srtModal` queda para el menú completo). sorteos.js exporta `openInline` y `list`.
+- **4 plataformas en una fila (owner: "agregá JUGAYGANA y Ganamos próximamente, todo en una fila; Pica Roja principal; que elijan la plataforma en el
+  completo (cargas), en el básico y en Cambiar menú") — SW v664:** `_injectPR` ya no saca las "Pronto": Pica Roja APP (principal, etiqueta "Principal") ·
+  1girox · Ganamos (Pronto) · JUGAYGANA (Pronto). Selectores en 4 columnas (`#basicPlats`, `#platformsButtons` y el nuevo `#mcPlats` dentro de
+  Cambiar menú, `_mcPaint`, elegir = `basicPick` ⇒ `setPreferred`). Colores por marca en picaroja.css. La pantalla de ingreso también muestra las 4.
 
 ## Sesión 2026-10-24
 

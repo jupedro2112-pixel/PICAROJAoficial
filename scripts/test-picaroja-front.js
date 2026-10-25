@@ -22,6 +22,7 @@ El.prototype.appendChild = function (c) { if (c.parentNode && c.parentNode !== t
 El.prototype.contains = function (c) { return this.children.includes(c); };
 El.prototype.querySelector = function () { return null; }; El.prototype.querySelectorAll = function () { return []; };
 El.prototype.addEventListener = function () {}; El.prototype.remove = function () { this.removed = true; }; El.prototype.scrollTo = function () {}; El.prototype.closest = function () { return null; };
+El.prototype.insertAdjacentElement = function (w, el) { el.previousElementSibling = this; el.parentNode = this.parentNode; this.nextEl = el; return el; }; El.prototype.scrollIntoView = function () {};
 const mk = (id) => (els[id] = els[id] || new El(id));
 function register(h) { for (const m of String(h).matchAll(/ id="([^"]+)"/g)) { const e = mk(m[1]); if (/<[^>]+ id="/.test(h)) { const tag = new RegExp('<([a-z]+)[^>]* id="' + m[1] + '"[^>]*?( hidden)?[^>]*>').exec(h); if (tag && tag[2]) e.hidden = true; } } }
 const body = mk('body'); const bottomNav = mk('bottomNav'); mk('navMenu').innerHTML = '<span>Menú</span>'; mk('navPerfil').innerHTML = '<span>Perfil</span>'; mk('navInicio').setAttribute('onclick', 'VIP.home.goHome()');
@@ -43,7 +44,7 @@ const ctx = { console, Date, Math, Number, String, JSON, Object, Array, RegExp, 
   location: { search: '', pathname: '/', origin: 'https://picaroja.com', hostname: 'picaroja.com' }, history: { replaceState() {} },
   localStorage: { _: {}, getItem(k) { return this._[k] == null ? null : this._[k]; }, setItem(k, v) { this._[k] = String(v); }, removeItem(k) { delete this._[k]; } },
   sessionStorage: { getItem: (k) => (sess[k] == null ? null : sess[k]), setItem: (k, v) => { sess[k] = String(v); }, removeItem: (k) => { delete sess[k]; } },
-  document: { body, getElementById: (id) => els[id] || null, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} },
+  document: { body, getElementById: (id) => els[id] || null, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {}, createElement: () => { const e = new El(''); Object.defineProperty(e, 'id', { get() { return e._id || ''; }, set(v) { e._id = v; els[v] = e; } }); return e; }, documentElement: { classList: { add() {}, remove() {} } } },
   fetch: async (url, opts) => { fetchLog.push(url); const j = url.includes('/api/games/lobby') ? LOBBY : url.includes('/api/sports/board') ? BOARD : url.includes('picaroja-extra') ? { games: [['2/vs20new', 'Nuevo Slot', 'https://admin.1girox.com/game-img/n.webp', 13, 'pragmatic']] }
       : url.includes('girox-live') ? { providers: [{ name: 'Evolution', games: [['7/1', 'Ruleta', '', 2, 'evo']] }, { name: 'Ezugi', games: [['7/2', 'Ezugi Lobby', '', 4, 'ez']] }] } : url.includes('/api/games/catalog') ? { games: LOBBY.popular, hasMore: false }
       : url.includes('/api/sorteos') ? SORT : url.includes('/api/platforms') ? { platforms: [{ id: 'girox', name: '1girox', connected: true, logoUrl: '/images/soporte-1girox.png' }, { id: 'ganamos', name: 'Ganamos', connected: false }, { id: 'jugaygana', name: 'JUGAYGANA', connected: false }], defaultPlatform: 'girox', preferredPlatform: null, minDepositArs: 2000, picarojaApp: ctx.__prApp !== false }
@@ -65,7 +66,8 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   const L = ctx.VIP.lobby, H = ctx.VIP.home, S = ctx.VIP.sorteos;
   // 1) plataformas: Pica Roja APP primera y predeterminada; 1girox; sin "Pronto" (Ganamos/JUGAYGANA sin API)
   await H.loadPlatforms(true); const P = H._test.platforms();
-  if (P.platforms.map((p) => p.id).join(',') !== 'picaroja,girox') throw new Error('lista de plataformas: ' + P.platforms.map((p) => p.id).join(','));
+  if (P.platforms.map((p) => p.id).join(',') !== 'picaroja,girox,ganamos,jugaygana') throw new Error('lista de plataformas (Pica Roja APP · 1girox · Ganamos Pronto · JUGAYGANA Pronto): ' + P.platforms.map((p) => p.id).join(','));
+  if (P.platforms[2].connected !== false) throw new Error('Ganamos tiene que seguir como Pronto');
   if (P.platforms[0].name !== 'Pica Roja APP' || P.platforms[1].name !== '1girox') throw new Error('nombres: ' + P.platforms.map((p) => p.name).join(' / '));
   if (P.preferredPlatform !== 'picaroja' || P.defaultPlatform !== 'picaroja') throw new Error('predeterminada: ' + P.preferredPlatform + '/' + P.defaultPlatform);
   if (H._test.localBrand() !== 'picaroja') throw new Error('marca local: ' + H._test.localBrand());
@@ -73,7 +75,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   console.log('✔ plataformas: Pica Roja APP (predeterminada) · 1girox · menú directo');
   // 1b) interruptor del panel: picarojaApp:false ⇒ sin Pica Roja APP, todo a 1girox; de vuelta true ⇒ vuelve
   ctx.__prApp = false; await H.loadPlatforms(true); const P2 = H._test.platforms();
-  if (P2.platforms.map((p) => p.id).join(',') !== 'girox' || H._test.localBrand() !== 'girox' || ctx.localStorage.getItem('vip_pr_disabled') !== '1') throw new Error('apagada: ' + P2.platforms.map((p) => p.id).join(',') + ' · marca ' + H._test.localBrand());
+  if (P2.platforms.map((p) => p.id).join(',') !== 'girox,ganamos,jugaygana' || H._test.localBrand() !== 'girox' || ctx.localStorage.getItem('vip_pr_disabled') !== '1') throw new Error('apagada: ' + P2.platforms.map((p) => p.id).join(',') + ' · marca ' + H._test.localBrand());
   ctx.__prApp = true; await H.loadPlatforms(true); if (H._test.platforms().platforms[0].id !== 'picaroja' || H._test.localBrand() !== 'picaroja') throw new Error('encendida de vuelta');
   console.log('✔ interruptor del panel: apagada ⇒ sólo 1girox · encendida ⇒ vuelve Pica Roja APP');
   // 2) la página: barra con píldora del sorteo + cartel, hueco de la Carga rápida, saldo, main, nav propia
@@ -94,7 +96,12 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
     'Proveedores', 'prl-pvb', 'KA Gaming', '1.001 juegos', 'Casino lobby', '/images/picaroja/lobby/3_101.webp', 'id="prlQ"', 'Populares', 'Gates of Olympus', 'Nuevos', 'NUEVO', 'En vivo · Evolution', 'Ver los 8.137 juegos', 'VIP.lobby.extraAll()');
   if (main.includes('prl-hero2') || main.includes('prl-hc')) throw new Error('siguen las fotos de arriba');
   if (!/prl-pvb"><img/.test(main)) throw new Error('los proveedores van con logo (fondo negro)');
-  must(main, 'data-srt-cards', 'prl-live4', 'Casino en vivo'); if (main.indexOf('data-srt-cards') > main.indexOf('prl-live4') || main.indexOf('prl-live4') > main.indexOf('Top partidos')) throw new Error('orden: sorteos · Casino en vivo (4 lobbies) · Top partidos');
+  must(main, 'id="prlSrt"', 'prl-live4', 'Casino en vivo'); if (main.indexOf('id="prlSrt"') > main.indexOf('prl-live4') || main.indexOf('prl-live4') > main.indexOf('Top partidos')) throw new Error('orden: sorteos · Casino en vivo (4 lobbies) · Top partidos');
+  const srt = mk('prlSrt').innerHTML || (main.slice(main.indexOf('id="prlSrt"'), main.indexOf('prl-live4')));
+  must(srt, 'GRAN SORTEO', 'Peugeot 208 0 km', 'peugeot-208', '3 premios', 'Viaje al Caribe', 'USD 2.000', 'Empieza en', 'SORTEO MENSUAL', 'iPhone 18 Pro Max', 'EN CURSO', 'Ver detalle y participar', "VIP.lobby.srtOpen('gran')");
+  if (/🚗|📱/.test(srt)) throw new Error('sin emojis en los recuadros del sorteo');
+  L.srtOpen('gran'); if (!els.srtInline || !mk('srtInlineBody').innerHTML.includes('Gran Sorteo')) throw new Error('el detalle del sorteo tiene que desplegarse DEBAJO, en la página'); if (els.srtModal && els.srtModal.hidden === false) throw new Error('no tiene que abrir la ventana completa');
+  ctx.VIP.sorteos.closeInline();
   if (main.indexOf('Top partidos') > main.indexOf('Proveedores')) throw new Error('Top partidos tiene que ir arriba de Proveedores');
   console.log('✔ inicio: Top partidos arriba · Proveedores · lobby · populares · nuevos (' + main.length + ' chars)');
   // 4) cuotas / partido ⇒ Digitain directo (sport/onyx) logueado; deportes desde el menú

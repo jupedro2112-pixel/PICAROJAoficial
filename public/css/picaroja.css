@@ -29,14 +29,26 @@ body.prl-appnav #prLobby .prl-qlchip { bottom: calc(var(--sab, env(safe-area-ins
 #prLobby .casino-load .cl-close { background: rgba(255,255,255,.22) !important; color: #fff !important; width: 30px; height: 30px; border-radius: 50%; font-weight: 900; }
 #prLobby .casino-load .cl-row { border-bottom-color: color-mix(in srgb, #128c4a 25%, var(--p-border)); }
 #prLobby .casino-load .cl-row .cl-copy { background: var(--p-card) !important; border-color: #128c4a !important; color: #128c4a !important; }
-/* #989 SORTEOS al tope del Inicio: dos recuadros (Gran Sorteo | Sorteo mensual) más altos, con el premio grande */
-.prl-srt { padding: 2px 12px 8px; }
-.prl-srt[hidden] { display: none !important; }
-.prl-srt .srt-ban { min-height: 92px; padding: 12px 12px; border-radius: 16px; }
-.prl-srt .srt-ban .srt-ban-img { font-size: 40px; }
-.prl-srt .srt-ban .srt-ban-img.pic { width: 74px; height: 56px; }
-.prl-srt .srt-ban .srt-ban-t b { font-size: 14.5px; }
-.prl-srt .srt-ban .srt-ban-t small { font-size: 11.5px; }
+/* #989 SORTEOS al tope del Inicio: DOS recuadros a lo ancho, serios (foto del premio, 1° premio grande, los 3 premios, estado); el detalle se despliega debajo */
+.prl-srt { display: grid; gap: 10px; padding: 4px 12px 6px; }
+.prl-srt:empty { display: none; }
+.prl-sb { position: relative; display: grid; grid-template-columns: 92px 1fr; gap: 12px; align-items: center; width: 100%; padding: 12px; border: 0; border-radius: 16px; text-align: left; cursor: pointer; color: #fff; font-family: var(--p-font);
+  background: linear-gradient(135deg, #1a0d10 0%, #3a0a12 55%, #7a0f1f 100%); box-shadow: 0 8px 22px rgba(120,10,25,.28); }
+.prl-sb-mensual { background: linear-gradient(135deg, #0e1116 0%, #1c2230 55%, #2f3b52 100%); box-shadow: 0 8px 22px rgba(20,30,50,.3); }
+.prl-sb-pic { display: flex; align-items: center; justify-content: center; width: 92px; height: 72px; border-radius: 12px; background: rgba(255,255,255,.08); overflow: hidden; }
+.prl-sb-pic img { width: 100%; height: 100%; object-fit: cover; }
+.prl-sb-pic svg { width: 44px; height: 44px; fill: none; stroke: #fff; stroke-width: 1.6; stroke-linecap: round; opacity: .9; }
+.prl-sb-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-right: 4px; }
+.prl-sb-t small { font-size: 10px; font-weight: 900; letter-spacing: 1.4px; color: #f3d19c; }
+.prl-sb-ok { color: #7cf2a6; letter-spacing: .6px; }
+.prl-sb-t b { font-size: 17px; font-weight: 900; line-height: 1.15; letter-spacing: -.2px; }
+.prl-sb-pz { font-size: 11.5px; line-height: 1.3; color: rgba(255,255,255,.85); }
+.prl-sb-st { font-size: 11.5px; font-weight: 700; color: rgba(255,255,255,.92); margin-top: 2px; }
+.prl-sb-live { display: inline-block; font-style: normal; font-size: 9.5px; font-weight: 900; letter-spacing: 1px; padding: 2px 6px; border-radius: 6px; background: #e6002a; color: #fff; margin-right: 4px; }
+.prl-sb > i { grid-column: 1 / -1; justify-self: end; font-style: normal; font-size: 12px; font-weight: 900; color: #fff; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); }
+.prl-sb:active > i { background: rgba(255,255,255,.14); }
+.prl-srt + .srt-inline { margin: 0 12px 10px; }
+@media (max-width: 360px) { .prl-sb { grid-template-columns: 76px 1fr; } .prl-sb-pic { width: 76px; height: 62px; } .prl-sb-t b { font-size: 15px; } }
 /* #989 CASINO EN VIVO de entrada: los 4 lobbies de Girox en 2×2, grandes */
 .prl-live4-sec { margin-top: 6px; }
 .prl-live4 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 14px; }
@@ -185,18 +197,28 @@ html body .plat-play-btn .plat-reco, html body .bv-chip .plat-reco { background:
 #navPlat #navPlatLogo { border-radius: 8px; object-fit: cover; }
 #navPlat[data-plat="picaroja"] #navPlatLogo { box-shadow: 0 0 0 2px #e6002a; }
 #navPlat[data-plat="girox"] #navPlatLogo { box-shadow: 0 0 0 2px #16a34a; }
-/* #921/#989: las 2 plataformas en UNA línea, cuadradas */
-#basicPlats { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
-#basicPlats .bv-chip { position: relative; aspect-ratio: 2 / 1; min-width: 0 !important; width: auto !important; padding: 8px 6px !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 5px !important; border-radius: 14px !important; }
-#basicPlats .bv-check { position: absolute; top: 6px; right: 6px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; background: #fff; color: #111; font: 900 10px/12px var(--p-font); text-align: center; box-sizing: border-box; }
-html body #basicPlats .bv-chip .plat-reco { display: block; font-size: 8px !important; font-weight: 900; padding: 1px 6px !important; border-radius: 6px; text-transform: uppercase; letter-spacing: .3px; }
-#platformsButtons { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
+/* #921/#989 (owner): las 4 plataformas en UNA fila (Pica Roja APP · 1girox · Ganamos Pronto · JUGAYGANA Pronto), cuadradas y chicas; también en Cambiar menú (#mcPlats) */
+html body .plat-play-btn.plat-ganamos, html body .bv-chip.plat-ganamos { --pb-bg: linear-gradient(135deg, #3b0a6e, #8b00c9); --pb-bd: #c457da; --pb-tx: #fff; --pb-sub: #e9d5ff; --pb-on: linear-gradient(135deg, #5b13a8, #b14dff); --pb-ontx: #fff; background: var(--pb-bg) !important; border: 2px solid var(--pb-bd) !important; color: var(--pb-tx) !important; }
+html body .plat-play-btn.plat-jugaygana, html body .bv-chip.plat-jugaygana { --pb-bg: #0b0b0b; --pb-bd: #f2ce00; --pb-tx: #f2ce00; --pb-sub: #fde68a; --pb-on: linear-gradient(135deg, #111, #2a2400); --pb-ontx: #f2ce00; background: var(--pb-bg) !important; border: 2px solid var(--pb-bd) !important; color: var(--pb-tx) !important; }
+html body .plat-play-btn.is-pref.plat-ganamos, html body .bv-chip.on.plat-ganamos, html body .plat-play-btn.is-pref.plat-jugaygana, html body .bv-chip.on.plat-jugaygana { background: var(--pb-on) !important; color: var(--pb-ontx) !important; }
+html body .bv-chip.soon, html body .plat-play-btn.soon { opacity: .75; }
+#basicPlats, #mcPlats { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px !important; }
+#basicPlats .bv-chip, #mcPlats .bv-chip { position: relative; aspect-ratio: 1 / 1; min-width: 0 !important; width: auto !important; padding: 6px 3px !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 4px !important; border-radius: 12px !important; }
+#basicPlats .bv-check, #mcPlats .bv-check { position: absolute; top: 5px; right: 5px; width: 15px; height: 15px; border-radius: 50%; border: 2px solid currentColor; background: #fff; color: #111; font: 900 10px/11px var(--p-font); text-align: center; box-sizing: border-box; }
+html body #basicPlats .bv-chip[class*="plat-"] img, html body #mcPlats .bv-chip[class*="plat-"] img { width: 26px !important; height: 26px !important; }
+html body #basicPlats .bv-chip.plat-jugaygana img, html body #mcPlats .bv-chip.plat-jugaygana img { width: 26px !important; height: 26px !important; border-radius: 50% !important; object-fit: cover !important; }
+html body #basicPlats .bv-chip .plat-reco, html body #mcPlats .bv-chip .plat-reco { display: block; font-size: 6.5px !important; font-weight: 900; padding: 1px 4px !important; border-radius: 6px; text-transform: uppercase; letter-spacing: .2px; }
+#basicPlats .bv-chip small, #mcPlats .bv-chip small { font-size: 8.5px !important; line-height: 1 !important; }
+#platformsButtons { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px !important; }
 #platformsButtons .plat-play-wrap { min-width: 0 !important; width: auto !important; }
-html body #platformsButtons .plat-play-btn[class*="plat-"] { aspect-ratio: 2 / 1; width: 100% !important; min-width: 0 !important; padding: 8px 6px !important; gap: 4px !important; border-radius: 14px !important; justify-content: center !important; }
+html body #platformsButtons .plat-play-btn[class*="plat-"] { aspect-ratio: 1 / 1; width: 100% !important; min-width: 0 !important; padding: 6px 3px !important; gap: 3px !important; border-radius: 12px !important; justify-content: center !important; }
+html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-logo { width: 26px !important; height: 26px !important; }
 html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-play-sub { display: none !important; }
-html body #platformsButtons .plat-play-btn .plat-reco { font-size: 8px !important; padding: 1px 6px !important; }
-html body #platformsButtons .plat-check { width: 16px !important; height: 16px !important; font-size: 10px !important; top: 6px !important; right: 6px !important; }
-html body #basicPlats .bv-chip[class*="plat-"] b, html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-play-name { font-size: 11px !important; text-transform: uppercase; max-width: 100%; overflow-wrap: anywhere; }
+html body #platformsButtons .plat-play-btn .plat-reco { font-size: 6.5px !important; padding: 1px 4px !important; }
+html body #platformsButtons .plat-check { width: 14px !important; height: 14px !important; font-size: 9px !important; top: 4px !important; right: 4px !important; }
+html body #basicPlats .bv-chip[class*="plat-"] b, html body #mcPlats .bv-chip[class*="plat-"] b, html body #platformsButtons .plat-play-btn[class*="plat-"] .plat-play-name { font-size: 8.5px !important; letter-spacing: -.1px !important; text-transform: uppercase; max-width: 100%; overflow-wrap: anywhere; }
+.mc-plats-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 10px 0 6px; } .mc-plats-h b { font: 900 13px var(--p-font); } .mc-plats-h small { font: 600 10.5px var(--p-font); color: var(--p-muted); }
+.mc-plats { margin-bottom: 12px; }
 /* #908 Mis cargas en el perfil (por plataforma) */
 .pf-deps { margin: 10px 0 4px; border: 1px solid var(--p-border); border-radius: 12px; background: var(--p-surface); }
 .pf-deps summary { cursor: pointer; padding: 9px 12px; font: 800 13px var(--p-font); color: var(--p-text); }

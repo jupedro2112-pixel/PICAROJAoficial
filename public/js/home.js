@@ -248,7 +248,15 @@
     async function basicPick(id, isSoon) {
         if (isSoon) { try { VIP.ui.showToast('Pronto: esta plataforma se habilita en breve', 'info'); } catch (_) {} return; }
         try { await setPreferred(id); } catch (_) {}
-        _basicPaint();
+        _basicPaint(); try { _mcPaint(); } catch (_) {}
+    }
+    // #989 (owner: "que en el completo en cargas, en el básico y también en Cambiar menú puedan elegir la plataforma"): las mismas fichas del básico
+    // adentro del selector de menús (#mcPlats). Elegir = setPreferred (no abre nada: después tocan el menú que quieran).
+    function _mcPaint() {
+        const box = _el('mcPlats'); if (!box) return;
+        const defId = (_platforms && _platforms.defaultPlatform) || 'girox'; const pref = (_platforms && _platforms.preferredPlatform) || null;
+        const soon = (p) => p.connected === false && p.id !== defId && p.id !== 'girox';
+        box.innerHTML = _entryList().map((p) => { const on = pref ? pref === p.id : p.id === defId; return '<button type="button" class="bv-chip plat-' + _esc(p.id) + (on ? ' on' : '') + (soon(p) ? ' soon' : '') + '" onclick="VIP.home.basicPick(\'' + _esc(p.id) + '\',' + (soon(p) ? 'true' : 'false') + ')">' + (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '') + '<b>' + _esc(p.name || p.id) + '</b>' + (p.id === 'picaroja' ? '<span class="plat-reco">Principal</span>' : '') + '<span class="bv-check">' + (on ? '✓' : '') + '</span>' + (soon(p) ? '<small>Pronto</small>' : '') + '</button>'; }).join('');
     }
     // #516: paneles desplegables del básico (uno abierto a la vez); al abrir CARGAR se cargan CBU/alias y mínimos
     let _bvCbu = null;
@@ -405,6 +413,7 @@
     function fdGo() { fdClose(); try { easyLoad(); } catch (_) { setHomeMode('full'); } }
     function openMenuChooser() {
         const m = _el('menuChooser'); if (!m) return;
+        try { _mcPaint(); } catch (_) {} // #989: elegir plataforma también acá
         // #795 (owner): el recuadro marcado es el menú ACTUAL (antes el CSS marcaba siempre "Menú completo").
         try {
             let cur = null; try { cur = localStorage.getItem('vip_menu_pref'); } catch (_) {}
@@ -2255,13 +2264,13 @@
         if (!_platforms) return;
         try { if (_platforms.picarojaApp === false) localStorage.setItem('vip_pr_disabled', '1'); else if (_platforms.picarojaApp === true) localStorage.removeItem('vip_pr_disabled'); } catch (_) {} // #989
         let list = Array.isArray(_platforms.platforms) ? _platforms.platforms : (_platforms.platforms = []);
-        if (_prOff()) { // #989: apagada desde el panel ⇒ sin Pica Roja APP; 1girox y las conectadas
-            _platforms.platforms = list.filter((p) => p && p.id !== 'picaroja' && p.connected !== false);
+        if (_prOff()) { // #989: apagada desde el panel ⇒ sin Pica Roja APP (las demás como están)
+            _platforms.platforms = list.filter((p) => p && p.id !== 'picaroja');
             if (_platforms.preferredPlatform === 'picaroja') _platforms.preferredPlatform = 'girox'; if (_platforms.defaultPlatform === 'picaroja') _platforms.defaultPlatform = 'girox';
             setTimeout(_paintBrandLabels, 0); return;
         }
-        // #989: sólo las que se pueden jugar: Pica Roja APP (puerta) y las conectadas (1girox). Las "Pronto" (Ganamos, JUGAYGANA sin API) no se ofrecen.
-        list = list.filter((p) => p && (p.id === 'picaroja' || p.connected !== false));
+        // #989 (owner): las 4 en UNA fila: Pica Roja APP (principal) · 1girox · Ganamos (Pronto) · JUGAYGANA (Pronto, sin API todavía).
+        list = list.filter((p) => !!p);
         const pr = list.find((p) => p.id === 'picaroja'); const door = { id: 'picaroja', name: DOORS.picaroja.name, emoji: '♦️', connected: true, door: true, logoUrl: DOORS.picaroja.logoUrl, exclusive: true, playUrl: '', externalUrl: '' };
         if (pr) Object.assign(pr, door); else list.unshift(door);
         list.sort((x, y) => (x.id === 'picaroja' ? -1 : y.id === 'picaroja' ? 1 : 0)); // Pica Roja APP primera
@@ -2315,7 +2324,7 @@
     // #922 (owner): "que aparezca seleccionado cuando se elige y apenas se elige se cambie en el menú la plataforma": un solo repintado
     // para todo lo que muestra la elegida (tarjetas del completo, fichas del básico, pestañas, JUGÁ AQUÍ y "Menú X directo").
     function _repaintChosen() {
-        try { renderPlatforms(); } catch (_) {} try { _basicPaint(); } catch (_) {} try { renderEntryTabs(); } catch (_) {}
+        try { renderPlatforms(); } catch (_) {} try { _basicPaint(); } catch (_) {} try { renderEntryTabs(); } catch (_) {} try { _mcPaint(); } catch (_) {} // #989
         try { _paintPlatNav(); } catch (_) {} try { _paintBrandLabels(); } catch (_) {}
     }
     async function setPreferred(platformId) {
