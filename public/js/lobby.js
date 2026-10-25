@@ -154,6 +154,15 @@ VIP.lobby = (function () {
     }
     // #920 (owner): "una sección Casino lobby con los mismos lobbies que tiene Girox". Salen del catálogo de 1girox (búsqueda "lobby").
     function _lobbies() { return ((_data && _data.lobbies) || []); }
+    // #989 (owner: "de entrada en el Inicio poné Casino en vivo con los 4 lobbies de Girox"): los 4 lobbies que muestra Girox (Vivo Gaming · Pragmatic
+    // Live · Game Shows de Evolution · Ezugi), grandes, 2×2; si alguno no está en el catálogo se completa con los siguientes lobbies.
+    function _live4() {
+        const L = _lobbies(); if (!L.length) return '';
+        const want = [/vivo/i, /pragmatic/i, /game ?show/i, /ezugi/i]; const pick = []; const used = new Set();
+        want.forEach((re) => { const g = L.find((x) => !used.has(x.key) && (re.test(x.provider || '') || re.test(x.name || ''))); if (g) { used.add(g.key); pick.push(g); } });
+        L.forEach((g) => { if (pick.length < 4 && !used.has(g.key)) { used.add(g.key); pick.push(g); } });
+        return '<section class="prl-sec prl-live4-sec">' + _title('live', 'Casino en vivo', "VIP.lobby.go('vivo')") + '<div class="prl-live4">' + pick.slice(0, 4).map(_card).join('') + '</div></section>';
+    }
     function _backBar() { return '<div class="prl-backbar"><button type="button" class="prl-backbtn" onclick="VIP.lobby.back()">‹ Volver</button></div>'; }
     // #922 (owner): "Deportes: que aparezcan las casas de Girox chiquito para elegir y abra directo".
     function sportsMenu(ev) {
@@ -241,7 +250,7 @@ VIP.lobby = (function () {
         const _pvAll = (_data.providers || []).concat(_liveTiles().filter((t) => !(_data.providers || []).some((p) => String(p.name).toLowerCase() === t.name.toLowerCase()))); // F971
         // #989 (owner): "el sorteo ponelo abajo del usuario y dale más lugar apenas entra la gente: sorteo 1 un recuadro y sorteo 2 otro, que se vea
         // qué tipo de sorteo es antes de expandir": las dos tarjetas de sorteos.js (Gran Sorteo | Sorteo mensual, con el premio) al tope del Inicio.
-        m.innerHTML = '<div class="srt-cards prl-srt" data-srt-cards hidden></div>' + _hero() + _providers(_pvAll) + _row('grid', 'Casino lobby', _lobbies()) + _search() + // #925: Proveedores arriba
+        m.innerHTML = '<div class="srt-cards prl-srt" data-srt-cards hidden></div>' + _live4() + _hero() + _providers(_pvAll) + _row('grid', 'Casino lobby', _lobbies()) + _search() + // #925: Proveedores arriba
             '';
         m.innerHTML += _row('fire', 'Populares', _data.popular) + _row('star', 'Nuevos', _data.nuevos, null, 'VIP.lobby.extraAll()') +
             (_data.live && _data.live[0] ? _row('live', 'En vivo · ' + _data.live[0].title, _data.live[0].games, _data.live[0].providerId) : '') +

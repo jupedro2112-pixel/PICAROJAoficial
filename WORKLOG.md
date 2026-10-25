@@ -89,6 +89,10 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   dos tarjetas de sorteos.js (`[data-srt-cards]`, Gran Sorteo | Sorteo mensual con el premio) al tope del Inicio de la página, más altas (`.prl-srt`); la
   píldora del sorteo salió de la barra de la página (en el casino de Girox sigue igual).
 - **Proveedores (owner: "dejalos como antes pero con fondo negro, más profesional"):** vuelven los logos con sus colores + nombre en blanco, sobre negro.
+- **Casino en vivo de entrada (owner: "en el Inicio poné Casino en vivo con los 4 lobbies de Girox; después todo como está") — SW v661:** `_live4()` = los 4
+  lobbies que muestra Girox (Vivo Gaming · Pragmatic Live · Game Shows · Ezugi, elegidos del catálogo por proveedor/nombre, completados con los siguientes),
+  en 2×2 grandes, debajo de los recuadros del sorteo y arriba de Top partidos. El título lleva a Casino en vivo completo. Orden del Inicio ahora: sorteos ·
+  Casino en vivo (4) · Top partidos · Proveedores · Casino lobby · buscador · Populares · Nuevos · En vivo · proveedores principales.
 
 ## Sesión 2026-10-24
 

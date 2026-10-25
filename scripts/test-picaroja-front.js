@@ -93,7 +93,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
     'Proveedores', 'prl-pvb', 'KA Gaming', '1.001 juegos', 'Casino lobby', '/images/picaroja/lobby/3_101.webp', 'id="prlQ"', 'Populares', 'Gates of Olympus', 'Nuevos', 'NUEVO', 'En vivo · Evolution', 'Ver los 8.137 juegos', 'VIP.lobby.extraAll()');
   if (main.includes('prl-hero2') || main.includes('prl-hc')) throw new Error('siguen las fotos de arriba');
   if (!/prl-pvb"><img/.test(main)) throw new Error('los proveedores van con logo (fondo negro)');
-  must(main, 'data-srt-cards'); if (main.indexOf('data-srt-cards') > main.indexOf('Top partidos')) throw new Error('los recuadros del sorteo van arriba de Top partidos');
+  must(main, 'data-srt-cards', 'prl-live4', 'Casino en vivo'); if (main.indexOf('data-srt-cards') > main.indexOf('prl-live4') || main.indexOf('prl-live4') > main.indexOf('Top partidos')) throw new Error('orden: sorteos · Casino en vivo (4 lobbies) · Top partidos');
   if (main.indexOf('Top partidos') > main.indexOf('Proveedores')) throw new Error('Top partidos tiene que ir arriba de Proveedores');
   console.log('✔ inicio: Top partidos arriba · Proveedores · lobby · populares · nuevos (' + main.length + ' chars)');
   // 4) cuotas / partido ⇒ Digitain directo (sport/onyx) logueado; deportes desde el menú
