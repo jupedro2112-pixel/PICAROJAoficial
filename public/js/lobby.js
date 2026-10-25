@@ -47,10 +47,9 @@ VIP.lobby = (function () {
         const pill = '<button type="button" class="casino-brand casino-srt" hidden onclick="VIP.sorteos.casinoBar(true)" aria-label="Sorteo"><span class="cb-box"><span class="cb-ico" data-srt-brand-ico>🏆</span><span class="cb-txt"><b data-srt-brand-title>Sorteo mensual</b><small data-srt-brand-sub>NOVEDAD</small></span></span></button>';
         // #989 (owner, captura final: "así quiero que inicie; el Volver es ir al menú completo; lo demás igual que antes"): la barra completa con Menú;
         // "‹ Volver" cierra la página y deja la app en el menú COMPLETO (backHome).
-        let bar = (VIP.home && VIP.home.casinoBarHtml) ? VIP.home.casinoBarHtml({ back: 'VIP.lobby.backHome()', menu: 'VIP.home.casinoFullMenu()', logo: SK.bar, name: SK.name, idSuffix: 1 }) : '<div class="casino-topbar-row"><button type="button" class="casino-back" onclick="VIP.lobby.close()">‹ Volver</button><span class="casino-brand"><span class="cb-box"><b>PICA ROJA</b></span></span></div>';
+        // #989 (owner: "bajá Slots, Menú a la izquierda, después Casino en vivo y Deportes del otro lado"): arriba sin Menú ni Slots (van abajo).
+        let bar = (VIP.home && VIP.home.casinoBarHtml) ? VIP.home.casinoBarHtml({ back: 'VIP.lobby.backHome()', noMenu: true, logo: SK.bar, name: SK.name, idSuffix: 1 }) : '<div class="casino-topbar-row"><button type="button" class="casino-back" onclick="VIP.lobby.close()">‹ Volver</button><span class="casino-brand"><span class="cb-box"><b>PICA ROJA</b></span></span></div>';
         void pill; // #989 (owner): el sorteo ya no va en la barra: son DOS recuadros debajo del usuario, al tope del Inicio (más lugar, se ve el premio)
-        // #989 (owner: "al lado de Menú poné Slots y abrí todos los slots"): botón Slots en la barra de arriba, pegado a Menú ⇒ todo el catálogo.
-        bar = bar.replace('<span class="tn-lbl">Menú</span></button>', '<span class="tn-lbl">Menú</span></button><button type="button" class="tn-btn prl-tn-slots" onclick="VIP.lobby.go(\'slots\')" title="Todos los slots"><span class="tn-ico">' + ico('slots') + '</span><span class="tn-lbl">Slots</span></button>');
         document.body.insertAdjacentHTML('beforeend',
             '<div id="prLobby" class="prl" data-skin="picaroja" hidden role="dialog" aria-label="' + SK.name + '">' +
             '<div class="casino-topbar prl-cbar">' + bar + '</div>' +
@@ -65,10 +64,10 @@ VIP.lobby = (function () {
             '<button type="button" class="prl-qlchip" id="prlQlChip" onclick="VIP.lobby.ql()" aria-label="Carga rápida" title="Carga rápida · arrastrame si te tapa algo"><span class="prl-qlc"><img src="' + SK.bar + '" alt=""><i>⚡</i></span><small>CARGA RÁPIDA</small></button>' +
             '<main class="prl-main" id="prlMain"></main>' +
             '<button type="button" class="prl-top-btn" id="prlUp" hidden onclick="VIP.lobby.top()" aria-label="Volver arriba">' + ico('up') + '</button>' +
-            // barra propia (sin #bottomNav): Slots · Ruleta · Inicio · Deportes · Lobby (#989 owner: "abajo En vivo es casino, poné Ruleta")
-            '<nav class="prl-nav" aria-label="Menú">' + nb('slots', 'slots', 'Slots') + nb('ruleta', 'live', 'Ruleta') +
+            // barra propia (sin #bottomNav): Menú · Slots · Inicio · En vivo · Deportes (#989, igual que la barra de la app con la página abierta)
+            '<nav class="prl-nav" aria-label="Menú"><button type="button" data-v="menu" onclick="VIP.home.casinoFullMenu()">' + ico('menu') + '<span>Menú</span></button>' + nb('slots', 'slots', 'Slots') +
               '<button type="button" data-v="inicio" class="prl-home" onclick="VIP.lobby.go(\'inicio\')"><img src="' + SK.home + '" alt=""><span>Inicio</span></button>' +
-              '<button type="button" data-v="deportes" onclick="VIP.lobby.sportsMenu(event)">' + ico('sport') + '<span>Deportes</span></button>' + nb('lobbies', 'grid', 'Lobby') +
+              nb('vivo', 'live', 'En vivo') + '<button type="button" data-v="deportes" onclick="VIP.lobby.sportsMenu(event)">' + ico('sport') + '<span>Deportes</span></button>' +
             '</nav>' +
             '<div class="prl-drawer" id="prlDrawer" hidden onclick="if(event.target===this)VIP.lobby.menu(false)"><aside class="prl-dr" role="dialog" aria-label="Mi cuenta"><div id="prlDrBody"></div></aside></div>' +
             '</div>');
@@ -315,8 +314,9 @@ VIP.lobby = (function () {
     // F988 (owner: "el menú inferior de PICA ROJA va a ser el de la app: a la izquierda Slots, Inicio que vaya a Inicio y en vez de Perfil, Deportes con
     // los proveedores"): con la página abierta, la barra de abajo de la APP (#bottomNav, menú opción 2) pasa por encima y sus botones cambian; al
     // cerrar vuelven a ser los de siempre. Sin #bottomNav queda la barra propia de la página.
-    // #989 (owner, captura final): abajo Slots · Inicio · Deportes (el Menú queda arriba, como en el casino de Girox).
-    const _NAV_SWAP = { navMenu: { lbl: 'Slots', ico: 'slots', on: "VIP.lobby.go('slots')" }, navPerfil: { lbl: 'Deportes', ico: 'sport', on: 'VIP.lobby.sportsMenu(event)' } };
+    // #989 (owner: "bajá Slots, Menú a la izquierda, después Casino en vivo y Deportes del otro lado"): abajo Menú · Slots · Inicio · En vivo · Deportes.
+    const _NAV_SWAP = { navMenu: { lbl: 'Menú', ico: 'menu', on: 'VIP.home.casinoFullMenu()' }, navPerfil: { lbl: 'Deportes', ico: 'sport', on: 'VIP.lobby.sportsMenu(event)' } };
+    const _navExtra = (id, cls, on, k, lbl, title) => '<button type="button" class="' + esc(cls || 'tn-btn') + '" id="' + id + '" onclick="' + on + '" title="' + title + '"><span class="tn-ico">' + ico(k) + '</span><span class="tn-lbl">' + lbl + '</span></button>';
     let _navSaved = null;
     function _prNav(on) {
         if (on && !_navSaved && $('bottomNav')) {
@@ -324,9 +324,12 @@ VIP.lobby = (function () {
             Object.keys(_NAV_SWAP).forEach((id) => { const b = $(id); if (!b) return; const x = _NAV_SWAP[id]; _navSaved[id] = { html: b.innerHTML, on: b.getAttribute('onclick') };
                 b.innerHTML = '<span class="tn-ico">' + ico(x.ico) + '</span><span class="tn-lbl">' + x.lbl + '</span>'; b.setAttribute('onclick', x.on); });
             const ini = $('navInicio'); if (ini) { _navSaved.navInicio = { on: ini.getAttribute('onclick') }; ini.setAttribute('onclick', 'VIP.lobby.close(true);VIP.home.goHome()'); }
+            const mn = $('navMenu'); if (mn && !$('navPrSlots')) mn.insertAdjacentHTML('afterend', _navExtra('navPrSlots', mn.className, "VIP.lobby.go('slots')", 'slots', 'Slots', 'Todos los slots')); // Slots al lado de Menú
+            const pf = $('navPerfil'); if (pf && !$('navPrLive')) pf.insertAdjacentHTML('beforebegin', _navExtra('navPrLive', pf.className, "VIP.lobby.go('vivo')", 'live', 'En vivo', 'Casino en vivo')); // Casino en vivo al lado de Deportes
             document.body.classList.add('prl-appnav');
         } else if (!on && _navSaved) {
             Object.keys(_navSaved).forEach((id) => { const b = $(id); if (!b) return; if (_navSaved[id].html != null) b.innerHTML = _navSaved[id].html; b.setAttribute('onclick', _navSaved[id].on); });
+            ['navPrSlots', 'navPrLive'].forEach((id) => { const x = $(id); if (x) x.remove(); });
             _navSaved = null; document.body.classList.remove('prl-appnav');
         }
     }

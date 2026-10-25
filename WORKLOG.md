@@ -93,6 +93,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   lobbies que muestra Girox (Vivo Gaming · Pragmatic Live · Game Shows · Ezugi, elegidos del catálogo por proveedor/nombre, completados con los siguientes),
   en 2×2 grandes, debajo de los recuadros del sorteo y arriba de Top partidos. El título lleva a Casino en vivo completo. Orden del Inicio ahora: sorteos ·
   Casino en vivo (4) · Top partidos · Proveedores · Casino lobby · buscador · Populares · Nuevos · En vivo · proveedores principales.
+- **Barra de abajo (owner: "bajá Slots, Menú a la izquierda, después Casino en vivo y Deportes del otro lado") — SW v662:** con la página abierta la barra
+  de la app queda Menú · Slots · Inicio · En vivo · Deportes (`_prNav`: navMenu = Menú, `#navPrSlots` después, `#navPrLive` antes de navPerfil = Deportes;
+  se quitan al cerrar). Arriba ya no van Menú ni Slots (`casinoBarHtml({ noMenu })`). La barra propia (sin #bottomNav) tiene el mismo orden.
 
 ## Sesión 2026-10-24
 
