@@ -18,5 +18,9 @@ must(ns({ publisher: 'otro', campaignCode: 'OTRA' }), '1,3,5', 'cliente de otro 
 must(ns(null), '1,3,5', 'cliente sin campaña: sólo los sin alcance');
 must(ns({ publisher: null, campaignCode: 'picarojaok' }), '1,2,3,5', 'coincide por código (mayúsculas/minúsculas)');
 const L = m.listPixels(); if (L.length !== 5 || L[3].token || L[1].label !== 'publicista PICAROJAOK/picarojaok') { console.error('✘ listPixels', L); process.exit(1); }
+// píxeles del PANEL (Config['metaPixels'] descifrados por el server): valen igual que los de SSM
+m.setConfigPixels([{ id: 'p1', label: 'picarojaok (panel)', pixelId: '6666666666666666', token: 'tp', scope: ['PICAROJAOK'] }, { id: 'p2', pixelId: '7777777777777777', token: '', scope: ['*'] }]);
+must(ns({ publisher: 'picarojaok', campaignCode: 'PICAROJAOK' }), '1,2,3,5,cp1', 'panel: el píxel del publicista recibe por CAPI (el sin token no)');
+must(ns({ publisher: 'otro', campaignCode: 'OTRA' }), '1,3,5', 'panel: otro publicista no lo recibe');
+(async () => { const ids = await m.pixelIdsForCampaign('PICAROJAOK'); const exp = '2222222222222222,5555555555555555,6666666666666666,7777777777777777'; if (ids.join(',') !== exp) { console.error('✘ navegador: ' + ids.join(',') + ' (esperado ' + exp + ')'); process.exit(1); } console.log('✔ navegador de la landing: SSM con alcance + panel (sin el propio ni el partner sin alcance)'); console.log('✔ TODO OK'); })();
 console.log('✔ listPixels OK · ' + L.map((p) => '#' + p.n + ' ' + p.label).join(' · '));
-console.log('✔ TODO OK');

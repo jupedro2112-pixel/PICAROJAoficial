@@ -27,6 +27,12 @@ sólo CAPI ⇒ para el publicista "no llega nada".
 - **Configuración correcta en SSM (`/picaroja/prod/`):** por publicista un número n libre (2..9): `META_PIXEL_ID_n` = ID del píxel del publicista,
   `META_CAPI_ACCESS_TOKEN_n` = token de la API de conversiones de ESE píxel (Eventos → Configuración → API de conversiones → generar token),
   `META_PIXEL_PUBLISHER_n` = código de campaña (PICAROJAOK) o nombre del publicista, `META_TEST_EVENT_CODE_n` opcional. Después: redeploy (SSM carga al arrancar).
+- **Desde el PANEL (owner: "quiero arreglarlo a mano desde el admin") — admin SW v210:** Configuración → "📣 Píxeles de Meta por publicista": lista
+  (los de Amazon y los del panel: píxel enmascarado, token sí/no, qué recibe, últimos envíos) + formulario (publicista o campaña · ID del píxel · token ·
+  código de prueba · sólo servidor) + 🧪 Probar (manda `PicaRojaTest` y muestra la respuesta de Meta) + editar/borrar. `Config['metaPixels']` (token cifrado
+  con JWT_SECRET, `_credEncrypt`), `_metaPixelsLoad()` al arrancar, cada 5 min y al guardar ⇒ `metaCapi.setConfigPixels()`: valen igual que los de SSM,
+  tanto para la CAPI como para el navegador de la landing (`pixelIdsForCampaign`). Sin redeploy. Rutas: `POST /api/admin/meta-pixels`, `DELETE /:id`.
+  ⚠️ El commit 3d0a0dc salió sin el JS del panel (un ancla ambigua cortó el script); este lo completa.
 
 ### 989. ♦️ PLATAFORMA "Pica Roja APP": la página propia con los juegos de Girox, elegir y cambiar con 1girox, entrada directa — SW v651 · admin SW v208
 **Pedidos (owner, en orden):** "armemos Pica Roja al extremo: detectá en la otra terminal y agarrá sólo lo de Pica Roja y activalo" · "habilitando la
