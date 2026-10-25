@@ -79,7 +79,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   // 2) la página: barra con píldora del sorteo + cartel, hueco de la Carga rápida, saldo, main, nav propia
   L.open('inicio');
   const shell = body.innerHTML; clean(shell); balanced(shell);
-  must(shell, 'id="prLobby"', 'casino-topbar prl-cbar', 'class="casino-brand casino-srt"', 'class="casino-srt-bar"', 'VIP.sorteos.casinoBar(true)', 'id="prlQlChip"', 'id="prlPrBal"', 'id="prlMain"', 'class="prl-nav"', 'PICA ROJA', 'VIP.lobby.backHome()', 'title="Elegir menú"');
+  must(shell, 'prl-tn-slots', "VIP.lobby.go('slots')", "VIP.lobby.go('ruleta')", 'id="prLobby"', 'casino-topbar prl-cbar', 'class="casino-brand casino-srt"', 'class="casino-srt-bar"', 'VIP.sorteos.casinoBar(true)', 'id="prlQlChip"', 'id="prlPrBal"', 'id="prlMain"', 'class="prl-nav"', 'PICA ROJA', 'VIP.lobby.backHome()', 'title="Elegir menú"');
   if (shell.includes('prl-hero2') || shell.includes('jugaygana') || shell.includes('ganamos') || shell.includes('buffalo')) throw new Error('quedó algo de otras marcas o de las fotos');
   if (!body.classList.contains('prl-open') || !body.classList.contains('casino-open')) throw new Error('clases del body');
   if (!body.classList.contains('prl-appnav') || !mk('navMenu').innerHTML.includes('Slots') || !mk('navPerfil').innerHTML.includes('Deportes')) throw new Error('la barra de la app no cambió a Slots · Inicio · Deportes');
@@ -101,6 +101,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   console.log('✔ deportes: Digitain / Ultim8 con link directo');
   // 5) En vivo, Slots, lista de nuevos, volver
   L.go('vivo'); must(mk('prlMain').innerHTML, 'Casino en vivo', 'Evolution', 'Ezugi', 'VIP.lobby.liveProv(0)');
+  L.go('ruleta'); must(mk('prlMain').innerHTML, 'Ruleta', '7/1', 'Ver todo el casino en vivo'); if (mk('prlMain').innerHTML.includes('Ezugi Lobby')) throw new Error('Ruleta: sólo ruletas');
   L.go('slots'); must(mk('prlMain').innerHTML, 'Slots · todos los juegos', 'id="prlAll"'); await new Promise((r) => setImmediate(r)); must(mk('prlAll').innerHTML, 'Gates of Olympus');
   L.extraAll(); await new Promise((r) => setImmediate(r)); must(mk('prlMain').innerHTML, 'Juegos nuevos', 'Nuevo Slot');
   L.back(); must(mk('prlMain').innerHTML, 'Top partidos');

@@ -53,6 +53,8 @@ body.prl-appnav #prLobby .prl-qlchip { bottom: calc(var(--sab, env(safe-area-ins
 .prl-mo:active { background: var(--p-red, #e60023); } .prl-mo:active b, .prl-mo:active small { color: #fff; }
 .prl-mo-go b { color: #fff; } .prl-mo-go { background: var(--p-red, #e60023); border-color: var(--p-red, #e60023); }
 .prl-mnote { margin: 4px 14px 0; font: 600 10.5px var(--p-font); color: var(--p-muted); }
+.prl-cbar .prl-tn-slots .tn-ico .prl-ic { width: 18px; height: 18px; } /* #989: Slots al lado de Menú en la barra de arriba */
+@media (max-width: 400px) { .prl-cbar .casino-brand .cb-txt { display: none !important; } .prl-cbar .casino-brand .cb-box { padding: 3px !important; } } /* lugar para 7 botones */
 /* buscador, secciones y tarjetas (estilo Stake: títulos con ícono y ›, "Ver más" con línea) */
 .prl-search { display: flex; align-items: center; gap: 8px; margin: 16px 14px 0; padding: 0 12px; background: var(--p-surface); border: 2px solid var(--p-border); border-radius: 999px; color: var(--p-muted); }
 .prl-search:focus-within { border-color: var(--p-red, #e60023); }

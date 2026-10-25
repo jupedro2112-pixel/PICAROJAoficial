@@ -76,6 +76,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   ⚠️ El commit 6ced500 se subió con una aserción vieja en la prueba (el `tail` tapaba el exit code): corregida acá; la prueba vuelve a pasar entera.
 - **Proveedores sin logo (owner: "hay proveedores que tienen un círculo en blanco") — SW v658:** los logos de 1girox son íconos con fondo lleno; pasados a
   blanco quedaban como un círculo. Ahora el recuadro rojo lleva sólo el NOMBRE en blanco, centrado (`_provTile`, `.prl-pvb`).
+- **Owner: "abajo En vivo es casino, poné Ruleta; al lado de Menú poné Slots y abrí todos los slots" — SW v659:** en la barra de arriba, pegado a Menú, un
+  botón Slots (`.prl-tn-slots` ⇒ `go('slots')`, todo el catálogo). En la barra propia de abajo, "En vivo" pasa a "Ruleta" (vista `ruleta`: todas las ruletas
+  de girox-live.json + lobbies + en vivo, filtradas por nombre; botón "Ver todo el casino en vivo"). El casino en vivo entero sigue en Inicio, proveedores y ☰.
 
 ## Sesión 2026-10-24
 

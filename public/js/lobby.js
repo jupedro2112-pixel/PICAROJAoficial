@@ -49,6 +49,8 @@ VIP.lobby = (function () {
         // "‹ Volver" cierra la página y deja la app en el menú COMPLETO (backHome).
         let bar = (VIP.home && VIP.home.casinoBarHtml) ? VIP.home.casinoBarHtml({ back: 'VIP.lobby.backHome()', menu: 'VIP.home.casinoFullMenu()', logo: SK.bar, name: SK.name, idSuffix: 1 }) : '<div class="casino-topbar-row"><button type="button" class="casino-back" onclick="VIP.lobby.close()">‹ Volver</button><span class="casino-brand"><span class="cb-box"><b>PICA ROJA</b></span></span></div>';
         bar = bar.replace(/<\/div>\s*$/, pill + '</div>') + '<div class="casino-srt-bar" hidden></div>';
+        // #989 (owner: "al lado de Menú poné Slots y abrí todos los slots"): botón Slots en la barra de arriba, pegado a Menú ⇒ todo el catálogo.
+        bar = bar.replace('<span class="tn-lbl">Menú</span></button>', '<span class="tn-lbl">Menú</span></button><button type="button" class="tn-btn prl-tn-slots" onclick="VIP.lobby.go(\'slots\')" title="Todos los slots"><span class="tn-ico">' + ico('slots') + '</span><span class="tn-lbl">Slots</span></button>');
         document.body.insertAdjacentHTML('beforeend',
             '<div id="prLobby" class="prl" data-skin="picaroja" hidden role="dialog" aria-label="' + SK.name + '">' +
             '<div class="casino-topbar prl-cbar">' + bar + '</div>' +
@@ -63,8 +65,8 @@ VIP.lobby = (function () {
             '<button type="button" class="prl-qlchip" id="prlQlChip" onclick="VIP.lobby.ql()" aria-label="Carga rápida" title="Carga rápida · arrastrame si te tapa algo"><span class="prl-qlc"><img src="' + SK.bar + '" alt=""><i>⚡</i></span><small>CARGA RÁPIDA</small></button>' +
             '<main class="prl-main" id="prlMain"></main>' +
             '<button type="button" class="prl-top-btn" id="prlUp" hidden onclick="VIP.lobby.top()" aria-label="Volver arriba">' + ico('up') + '</button>' +
-            // barra propia (sin #bottomNav): Slots · En vivo · Inicio · Deportes · Lobby
-            '<nav class="prl-nav" aria-label="Menú">' + nb('slots', 'slots', 'Slots') + nb('vivo', 'live', 'En vivo') +
+            // barra propia (sin #bottomNav): Slots · Ruleta · Inicio · Deportes · Lobby (#989 owner: "abajo En vivo es casino, poné Ruleta")
+            '<nav class="prl-nav" aria-label="Menú">' + nb('slots', 'slots', 'Slots') + nb('ruleta', 'live', 'Ruleta') +
               '<button type="button" data-v="inicio" class="prl-home" onclick="VIP.lobby.go(\'inicio\')"><img src="' + SK.home + '" alt=""><span>Inicio</span></button>' +
               '<button type="button" data-v="deportes" onclick="VIP.lobby.sportsMenu(event)">' + ico('sport') + '<span>Deportes</span></button>' + nb('lobbies', 'grid', 'Lobby') +
             '</nav>' +
@@ -216,6 +218,15 @@ VIP.lobby = (function () {
         if (!_data) { m.innerHTML = _hero() + '<div class="prl-note">Cargando los juegos…</div>'; return; }
         if (_view === 'list') { m.innerHTML = _listHtml(); return; }
         if (_view === 'lobbies') { m.innerHTML = _backBar() + (_lobbies().length ? _row('grid', 'Casino lobby', _lobbies()) : '<div class="prl-note">No hay lobbies para mostrar ahora.</div>'); return; }
+        if (_view === 'ruleta') { // #989 (owner): todas las ruletas (en vivo y lobbies) en una sola vista
+            if (!_liveOr()) { m.innerHTML = _backBar() + _title('live', 'Ruleta', null) + '<div class="prl-note">Cargando…</div>'; return; }
+            const R = /rulet|roulette/i; const seen = new Set(); const games = [];
+            (_live || []).forEach((p) => (p.games || []).forEach((g) => { if (R.test(g.name) && !seen.has(g.key)) { seen.add(g.key); games.push(g); } }));
+            _lobbies().concat(...(_data.live || []).map((s) => s.games || [])).forEach((g) => { if (R.test(g.name) && !seen.has(g.key)) { seen.add(g.key); games.push(g); } });
+            m.innerHTML = _backBar() + _title('live', 'Ruleta', null) + (games.length ? '<div class="prl-grid">' + games.map(_card).join('') + '</div>' : '<div class="prl-note">No hay ruletas para mostrar ahora.</div>') +
+                '<div class="prl-more"><button type="button" onclick="VIP.lobby.go(\'vivo\')">Ver todo el casino en vivo</button></div>';
+            return;
+        }
         if (_view === 'vivo') {
             if (!_liveOr()) { m.innerHTML = _backBar() + _title('live', 'Casino en vivo', null) + '<div class="prl-note">Cargando…</div>'; return; }
             m.innerHTML = _backBar() + _title('live', 'Casino en vivo', null) + _providers(_liveTiles()) + // F971: todos los proveedores en vivo
