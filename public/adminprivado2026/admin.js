@@ -16595,8 +16595,31 @@ window.resetVipLevelsTable = resetVipLevelsTable;
 
 
 // ═══ #296: tilde de plataformas ofrecidas (COMANDOS) — reusa /api/admin/platforms ═══
+// #989: interruptor de la plataforma propia "Pica Roja APP" (App → Plataformas). GET/POST /api/admin/picaroja-app (sólo admin general guarda).
+async function loadPicarojaApp() {
+    const st = document.getElementById('prAppState'), btn = document.getElementById('prAppBtn'); if (!st) return;
+    try {
+        const r = await authFetch('/api/admin/picaroja-app'); if (!r.ok) { st.textContent = '—'; return; }
+        const j = await r.json(); const on = j.enabled !== false;
+        st.textContent = on ? '🟢 ENCENDIDA (predeterminada)' : '🔴 APAGADA (todos a 1girox)'; st.style.color = on ? '#26e07f' : '#ff6b6b';
+        if (btn) { btn.style.display = j.canEdit === true ? '' : 'none'; btn.textContent = on ? '⛔ Apagar Pica Roja APP' : '✅ Encender Pica Roja APP'; btn.dataset.on = on ? '1' : '0'; }
+    } catch (_) { st.textContent = '—'; }
+}
+async function togglePicarojaApp() {
+    const btn = document.getElementById('prAppBtn'); const on = btn && btn.dataset.on === '1';
+    if (on && !confirm('¿Apagar Pica Roja APP?\n\nLa app deja de ofrecerla y todos entran a 1girox (quien la tenía elegida pasa solo). No se mueve plata: es la misma cuenta. Se puede volver a encender cuando quieras.')) return;
+    try {
+        const r = await authFetch('/api/admin/picaroja-app', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !on }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { showToast(j.error || 'No se pudo cambiar', 'error'); return; }
+        showToast(j.enabled ? '✅ Pica Roja APP encendida: vuelve a ser la predeterminada' : '⛔ Pica Roja APP apagada: la app manda a todos a 1girox', 'success');
+        loadPicarojaApp();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.togglePicarojaApp = togglePicarojaApp;
 async function loadPlatToggles() {
     const row = document.getElementById('platTogglesRow'); if (!row) return;
+    try { loadPicarojaApp(); } catch (_) {} // #989
     try {
         const r = await authFetch('/api/admin/platforms'); const j = await r.json();
         if (!r.ok) { row.textContent = 'Sin permiso'; return; }

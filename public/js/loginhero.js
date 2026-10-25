@@ -75,7 +75,7 @@
                 // #989: en la pantalla de ingreso sólo las dos que se juegan: Pica Roja APP (la página propia, primera) y 1girox. Nada de "Pronto".
                 const _pr = { id: 'picaroja', name: 'Pica Roja APP', connected: true, logoUrl: '/icons/icon-96x96.png' };
                 for (let _i = list2.length - 1; _i >= 0; _i--) { if (list2[_i].id === 'picaroja') list2.splice(_i, 1); else if (list2[_i].connected === false) list2.splice(_i, 1); }
-                list2.unshift(_pr);
+                if (info.picarojaApp !== false) list2.unshift(_pr); // #989: salvo que esté apagada desde el panel
                 const isSoon = (p) => p.connected === false && p.id !== 'girox';
                 const _nm = (n) => (/^jugaygana$/i.test(String(n || '')) ? 'Jugaygana' : String(n || '')); // #428/#431: 'Jugaygana' con J mayúscula
                 row.innerHTML = list2.map((p) => '<span class="lg-plat-pill' + (isSoon(p) ? ' soon' : '') + '">' + (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '<i>' + _esc(p.emoji || '🎰') + '</i>') + '<b>' + _esc(_nm(p.name)) + '</b>' + (isSoon(p) ? '<small>Pronto</small>' : '') + '</span>').join(''); // #435: 'Pronto'

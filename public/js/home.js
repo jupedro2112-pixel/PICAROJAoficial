@@ -2221,8 +2221,11 @@
     const PR_OFF_KEY = 'vip_pr_off';
     const DOORS = { picaroja: { name: 'Pica Roja APP', emoji: '♦️', logoUrl: '/icons/icon-96x96.png' } };
     const BRANDS = { picaroja: 1, girox: 1 };
-    const _isDoor = (id) => !!DOORS[id];
-    function _localBrand() { try { const b = localStorage.getItem('vip_brand'); if (BRANDS[b]) return b; return localStorage.getItem(PR_OFF_KEY) === '1' ? 'girox' : 'picaroja'; } catch (_) { return 'picaroja'; } }
+    // #989: interruptor del panel (App → Plataformas → Pica Roja APP). Apagada (/api/platforms picarojaApp:false ⇒ localStorage vip_pr_disabled) la puerta
+    // no existe: todo va a 1girox, también para quien la tenía elegida. Se recuerda en el teléfono para que valga desde el arranque (antes de /api/platforms).
+    function _prOff() { try { return localStorage.getItem('vip_pr_disabled') === '1'; } catch (_) { return false; } }
+    const _isDoor = (id) => !!DOORS[id] && !_prOff();
+    function _localBrand() { try { if (_prOff()) return 'girox'; const b = localStorage.getItem('vip_brand'); if (BRANDS[b]) return b; return localStorage.getItem(PR_OFF_KEY) === '1' ? 'girox' : 'picaroja'; } catch (_) { return 'picaroja'; } }
     function _setLocalBrand(b) { try { localStorage.setItem('vip_brand', b); if (b === 'girox') localStorage.setItem(PR_OFF_KEY, '1'); else localStorage.removeItem(PR_OFF_KEY); } catch (_) {} }
     // #908 (gemela): la plataforma ACTIVA la guarda el server (misma cuenta: no mueve fichas). #989: sin bloqueo por saldo.
     let _brand = null;
@@ -2248,7 +2251,13 @@
     const _BRAND_NAMES = { picaroja: 'Pica Roja APP', girox: '1girox' };
     function _injectPR() {
         if (!_platforms) return;
+        try { if (_platforms.picarojaApp === false) localStorage.setItem('vip_pr_disabled', '1'); else if (_platforms.picarojaApp === true) localStorage.removeItem('vip_pr_disabled'); } catch (_) {} // #989
         let list = Array.isArray(_platforms.platforms) ? _platforms.platforms : (_platforms.platforms = []);
+        if (_prOff()) { // #989: apagada desde el panel ⇒ sin Pica Roja APP; 1girox y las conectadas
+            _platforms.platforms = list.filter((p) => p && p.id !== 'picaroja' && p.connected !== false);
+            if (_platforms.preferredPlatform === 'picaroja') _platforms.preferredPlatform = 'girox'; if (_platforms.defaultPlatform === 'picaroja') _platforms.defaultPlatform = 'girox';
+            setTimeout(_paintBrandLabels, 0); return;
+        }
         // #989: sólo las que se pueden jugar: Pica Roja APP (puerta) y las conectadas (1girox). Las "Pronto" (Ganamos, JUGAYGANA sin API) no se ofrecen.
         list = list.filter((p) => p && (p.id === 'picaroja' || p.connected !== false));
         const pr = list.find((p) => p.id === 'picaroja'); const door = { id: 'picaroja', name: DOORS.picaroja.name, emoji: '♦️', connected: true, door: true, logoUrl: DOORS.picaroja.logoUrl, exclusive: true, playUrl: '', externalUrl: '' };
@@ -2397,6 +2406,7 @@
         try { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; } catch (_) { return false; }
     }
     function openPlatform(platformId, opts) {
+        if (platformId === 'picaroja' && !_isDoor('picaroja')) platformId = 'girox'; // #989: Pica Roja APP apagada desde el panel ⇒ 1girox
         // #908/#989: si la PERSONA elige la otra plataforma (sin opts: los ingresos internos pasan `embed`), queda elegida y se abre.
         if (!opts && BRANDS[platformId] && (_brand || 'picaroja') !== platformId) { _brandGuard(platformId).then(() => { setPreferred(platformId).catch(() => {}); openPlatform(platformId, { checked: true }); }); return; }
         // #964 (owner: "ninguna visual de Girox en las otras páginas, revisá de punta a punta"): un ingreso INTERNO a Girox (Jugar, fotos del

@@ -62,6 +62,12 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Carga rápida como CÍRCULO (owner: "un círculo de carga rápida cuando entren a jugar; abierto que se vea y se diferencie de la página") — SW v654:**
   al entrar ya NO se abre sola: se ve el círculo verde (logo + rayo, "CARGA RÁPIDA" debajo) centrado bajo el saldo; tocarlo abre el panel AHÍ, con cabecera
   verde, cuerpo con tinte verde, borde y sombra (`.prl-qldock .casino-load`, sólo en la página; el panel del casino de Girox no cambia); ✕ ⇒ vuelve el círculo.
+- **INTERRUPTOR en el panel (owner: "deshabilitar Pica Roja si algo no funciona bien, porque hay gente jugando") — SW v655 · admin SW v209:** App →
+  Plataformas → "♦️ Pica Roja APP" (`#prAppRow`, `loadPicarojaApp`/`togglePicarojaApp`; `GET/POST /api/admin/picaroja-app`, guarda sólo el admin general;
+  `Config['picarojaAppEnabled']`, default true). Apagada: `/api/platforms` y `/api/landing/info` mandan `picarojaApp:false` ⇒ home.js guarda
+  `localStorage vip_pr_disabled` y `_prOff()` anula la puerta (`_isDoor` false, `_localBrand()` = 'girox', `_injectPR` la saca de la lista, `openPlatform('picaroja')`
+  ⇒ 1girox, stories `_doorBrand` null, la pantalla de ingreso no la muestra): todos entran al casino de 1girox, también quien la tenía elegida. No mueve
+  plata (misma cuenta). Encendida de vuelta: vuelve a ser la predeterminada. La app lo toma en la próxima apertura (cache de /api/platforms 60 s).
 
 ## Sesión 2026-10-24
 

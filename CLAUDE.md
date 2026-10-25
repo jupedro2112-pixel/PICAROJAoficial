@@ -343,7 +343,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   activa). Predeterminada y primera; "1girox" es la otra; se cambia libremente (sin bloqueo por saldo). Sin menú elegido se entra DIRECTO a la plataforma
   (`_defaultPref()` = 'girox' ⇒ `_giroxDirect` abre la elegida). Arriba la barra del casino con el sorteo (píldora ⇄ cartel, `paintCasino` pinta todas las
   `.casino-topbar`), la Carga rápida en `#prlQlDock` (abierta al entrar, ✕ ⇒ botón centrado), Top partidos (`/api/sports/board`, ESPN; tocar ⇒ Digitain directo:
-  1girox NO tiene API de apuestas), Proveedores rojo/blanco. CSS `css/picaroja.css`. Prueba `scripts/test-picaroja-front.js`. JUGAYGANA/Ganamos/BuffaloPlay de
+  1girox NO tiene API de apuestas), Proveedores rojo/blanco. CSS `css/picaroja.css`. Prueba `scripts/test-picaroja-front.js`. **Interruptor:** panel → App →
+  Plataformas → "Pica Roja APP" (`Config['picarojaAppEnabled']`; apagada ⇒ `picarojaApp:false` en `/api/platforms` ⇒ `_prOff()` manda a todos a 1girox). JUGAYGANA/Ganamos/BuffaloPlay de
   la gemela NO se trajeron; el adaptador `src/platforms/picaroja.js` (#986) quedó fuera del registro.
 - **CASINO CON EL BLOQUE DEL MENÚ ARRIBA (#988):** dentro de la plataforma, debajo de la barra, va `#casinoHome` (saldo · sorteos · nivel/racha · CARGÁ AQUÍ ·
   servicios copiados del básico) y el overlay SCROLLEA (barra sticky, iframe de una pantalla). Sin 1ª carga el cartel rojo grande ocupa el lugar del saldo; con

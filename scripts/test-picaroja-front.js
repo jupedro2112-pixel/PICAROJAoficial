@@ -46,7 +46,7 @@ const ctx = { console, Date, Math, Number, String, JSON, Object, Array, RegExp, 
   document: { body, getElementById: (id) => els[id] || null, querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {} },
   fetch: async (url, opts) => { fetchLog.push(url); const j = url.includes('/api/games/lobby') ? LOBBY : url.includes('/api/sports/board') ? BOARD : url.includes('picaroja-extra') ? { games: [['2/vs20new', 'Nuevo Slot', 'https://admin.1girox.com/game-img/n.webp', 13, 'pragmatic']] }
       : url.includes('girox-live') ? { providers: [{ name: 'Evolution', games: [['7/1', 'Ruleta', '', 2, 'evo']] }, { name: 'Ezugi', games: [['7/2', 'Ezugi Lobby', '', 4, 'ez']] }] } : url.includes('/api/games/catalog') ? { games: LOBBY.popular, hasMore: false }
-      : url.includes('/api/sorteos') ? SORT : url.includes('/api/platforms') ? { platforms: [{ id: 'girox', name: '1girox', connected: true, logoUrl: '/images/soporte-1girox.png' }, { id: 'ganamos', name: 'Ganamos', connected: false }, { id: 'jugaygana', name: 'JUGAYGANA', connected: false }], defaultPlatform: 'girox', preferredPlatform: null, minDepositArs: 2000 }
+      : url.includes('/api/sorteos') ? SORT : url.includes('/api/platforms') ? { platforms: [{ id: 'girox', name: '1girox', connected: true, logoUrl: '/images/soporte-1girox.png' }, { id: 'ganamos', name: 'Ganamos', connected: false }, { id: 'jugaygana', name: 'JUGAYGANA', connected: false }], defaultPlatform: 'girox', preferredPlatform: null, minDepositArs: 2000, picarojaApp: ctx.__prApp !== false }
       : url.includes('/api/me/brand') ? { brand: 'picaroja' } : {}; return { ok: true, status: 200, json: async () => j }; } };
 ctx.window = ctx; ctx.self = ctx; ctx.gamePlayed = []; const gamePlayed = ctx.gamePlayed;
 ctx.VIP = { state: { currentToken: 'tok', currentUser: { username: 'alex' } }, config: { API_URL: 'https://picaroja.com' }, ui: { showToast() {} }, stories: { paint() { ctx.storiesPainted = true; } }, withdraw: { openWithdrawModal() {} }, autoload: { getCbu: () => ({ alias: 'pica.roja', number: '000', titular: 'PICA' }) } };
@@ -56,7 +56,7 @@ const homeBits = 'const _el = (id) => document.getElementById(id); const _esc = 
   'let _platforms = null, _platformsAt = 0, _quickOpen = false, _quickDismissed = false, _chOpen = false, _cqCbuTries = 0; const MENU_ORDER = ["full", "basic", "easy", "girox"]; let _menusOn = { basic: true, easy: true, full: true, girox: true }; const HAS_DEP_KEY = "vip_has_dep";\n' +
   'function _fdNoteHtml() { return ""; } function _sbTagHtml() { return ""; } function _fdNotesPaint() {} function _igQuickBtnHtml() { return ""; } function _paintPlatNav() {} function _menuOn(p) { return _menusOn[p] !== false; } function _firstMenuOn() { return MENU_ORDER.find(_menuOn) || "basic"; } function _hasDeposit() { return false; }\n' +
   ['    const PR_OFF_KEY', '    const DOORS', '    const BRANDS', '    const _isDoor', '    let _brand = null', '    const _BRAND_NAMES'].map(line).join('') +
-  ['casinoBarHtml', 'toggleCasinoLoad', '_localBrand', '_setLocalBrand', '_syncBrand', '_brandGuard', '_brandName', '_paintBrandLabels', '_injectPR', 'loadPlatforms', '_defaultPref'].map(grab).join('') +
+  ['casinoBarHtml', 'toggleCasinoLoad', '_prOff', '_localBrand', '_setLocalBrand', '_syncBrand', '_brandGuard', '_brandName', '_paintBrandLabels', '_injectPR', 'loadPlatforms', '_defaultPref'].map(grab).join('') +
   'VIP.home = Object.assign(VIP.home || {}, { casinoBarHtml, toggleCasinoLoad, loadPlatforms, casinoFullMenu() {}, casinoInfo() {}, openProfile() {}, openPlatform(id) { ctx.opened = id; }, setHomeMode() {}, goHome() {}, casinoWithdraw() {}, casinoSupport() {}, gamePlay(k, n) { gamePlayed.push(k + "|" + n); }, _test: { injectPR: () => _injectPR(), platforms: () => _platforms, localBrand: _localBrand, defaultPref: _defaultPref } });';
 vm.runInContext(homeBits, ctx);
 vm.runInContext(fs.readFileSync('public/js/sorteos.js', 'utf8'), ctx);
@@ -71,6 +71,11 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   if (H._test.localBrand() !== 'picaroja') throw new Error('marca local: ' + H._test.localBrand());
   if (H._test.defaultPref() !== 'girox') throw new Error('menú predeterminado (directo a la plataforma): ' + H._test.defaultPref());
   console.log('✔ plataformas: Pica Roja APP (predeterminada) · 1girox · menú directo');
+  // 1b) interruptor del panel: picarojaApp:false ⇒ sin Pica Roja APP, todo a 1girox; de vuelta true ⇒ vuelve
+  ctx.__prApp = false; await H.loadPlatforms(true); const P2 = H._test.platforms();
+  if (P2.platforms.map((p) => p.id).join(',') !== 'girox' || H._test.localBrand() !== 'girox' || ctx.localStorage.getItem('vip_pr_disabled') !== '1') throw new Error('apagada: ' + P2.platforms.map((p) => p.id).join(',') + ' · marca ' + H._test.localBrand());
+  ctx.__prApp = true; await H.loadPlatforms(true); if (H._test.platforms().platforms[0].id !== 'picaroja' || H._test.localBrand() !== 'picaroja') throw new Error('encendida de vuelta');
+  console.log('✔ interruptor del panel: apagada ⇒ sólo 1girox · encendida ⇒ vuelve Pica Roja APP');
   // 2) la página: barra con píldora del sorteo + cartel, hueco de la Carga rápida, saldo, main, nav propia
   L.open('inicio');
   const shell = body.innerHTML; clean(shell); balanced(shell);

@@ -4,7 +4,7 @@
 // apretado pausa. Las historias vencen solas (horas configurables en el panel).
 (function () {
     // #962 (gemela) · #989: ¿la persona juega en Pica Roja APP (la página propia) y no en 1girox? ⇒ nada de la web de Girox: juego/deportes directos.
-    function _doorBrand() { try { const b = localStorage.getItem('vip_brand'); if (b === 'picaroja') return b; if (b === 'girox') return null; return localStorage.getItem('vip_pr_off') === '1' ? null : 'picaroja'; } catch (_) { return 'picaroja'; } }
+    function _doorBrand() { try { if (localStorage.getItem('vip_pr_disabled') === '1') return null; /* #989: apagada desde el panel */ const b = localStorage.getItem('vip_brand'); if (b === 'picaroja') return b; if (b === 'girox') return null; return localStorage.getItem('vip_pr_off') === '1' ? null : 'picaroja'; } catch (_) { return 'picaroja'; } }
     function _noGirox() { try { return document.body.classList.contains('prl-open') || !!_doorBrand(); } catch (_) { return false; } }
     'use strict';
     window.VIP = window.VIP || {};

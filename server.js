@@ -1251,7 +1251,7 @@ app.get('/api/landing/info', async (req, res) => {
     let welcome = null;
     try { const fd = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig(); welcome = { pct: fd, capArs: await getFirstDepositCapArs(), extraFixedArs: ig && ig.enabled ? ig.fixedArs : 0, withApp: fd + (ig && ig.enabled && !(ig.fixedArs > 0) ? ig.pct : 0) }; } catch (_) {} // #983: tope
     let services = []; try { services = await _landingServices(); } catch (_) {} // #555
-    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
+    res.json({ picarojaApp: await _picarojaAppOn(), /* #989 */  registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 
@@ -5289,6 +5289,19 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
 // #670: + girox ("Girox directo": entra a jugar al toque, con carga rápida y retiro adentro)
 function _menusEnabledNorm(v) { const m = { basic: !(v && v.basic === false), easy: !(v && v.easy === false), full: !(v && v.full === false), girox: !(v && v.girox === false) }; return (m.basic || m.easy || m.full || m.girox) ? m : { basic: true, easy: true, full: true, girox: true }; }
 app.get('/api/public/menu-layout', async (req, res) => { try { const v = await getConfig('menuLayout', 1); const menus = _menusEnabledNorm(await getConfig('menusEnabled', null)); res.set('Cache-Control', 'no-store'); res.json({ layout: Number(v) === 2 ? 2 : 1, menus }); } catch (_) { res.json({ layout: 1, menus: { basic: true, easy: true, full: true } }); } });
+// #989 (owner: "un botón en el admin, en App → Plataformas, para deshabilitar Pica Roja si algo no funciona bien, porque hay gente jugando"):
+// interruptor de la plataforma propia. Config['picarojaAppEnabled'] (default true). Apagada ⇒ /api/platforms manda picarojaApp:false y la app NO la
+// ofrece: quien la tenía elegida pasa a 1girox solo (home.js `_injectPR` / `_prOff`). No toca cargas, retiros ni la cuenta: es la misma de 1girox.
+async function _picarojaAppOn() { try { return (await getConfig('picarojaAppEnabled', true)) !== false; } catch (_) { return true; } }
+app.get('/api/admin/picaroja-app', authMiddleware, adminMiddleware, async (req, res) => { try { res.json({ success: true, enabled: await _picarojaAppOn(), canEdit: req.user.role === 'admin' }); } catch (_) { res.status(500).json({ error: 'Error' }); } });
+app.post('/api/admin/picaroja-app', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const on = !!(req.body && (req.body.enabled === true || req.body.enabled === 'true' || req.body.enabled === 1));
+    await Config.set('picarojaAppEnabled', on, req.user.username); logger.warn('[picaroja-app] ' + (on ? 'ENCENDIDA' : 'APAGADA') + ' por ' + req.user.username);
+    res.json({ success: true, enabled: on });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.get('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => { try { res.json({ success: true, menus: _menusEnabledNorm(await getConfig('menusEnabled', null)) }); } catch (_) { res.status(500).json({ error: 'Error' }); } });
 app.post('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -6598,6 +6611,7 @@ app.get('/api/platforms', authMiddleware, async (req, res) => {
         return { id: p.id, name: p.name, emoji: p.emoji, connected: p.connected, externalUrl: p.externalUrl || null, playUrl: play, logoUrl: p.logoUrl || '', isDefault: p.isDefault }; }),
       askMode: s.askMode, askTimeoutMin: s.askTimeoutMin, defaultPlatform: s.defaultPlatform, lastPlatform, preferredPlatform,
       choiceEnabled, minDeposit: minDep, withdrawMinArs: wdMin, withdrawOtp, // #299 / #379 / #382
+      picarojaApp: await _picarojaAppOn(), // #989: interruptor de la plataforma propia (panel → App → Plataformas)
       depositRolloverX: await getDepositRolloverX().catch(() => 1), bonusRolloverX: await _giftRolloverX().catch(() => 5), // #885: avisos de rollover en la app
       // #385: textos de los botones de abajo de la carga automática (COMANDOS). #266 homeBanner · #349 entryNews · #372 refundPromo ·
       // #373 supportIntro (nombre de turno #377). text === null ⇒ el comando se vació en COMANDOS → la app no lo muestra.

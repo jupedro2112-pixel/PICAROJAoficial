@@ -1489,6 +1489,8 @@ de Girox, sobre la MISMA cuenta de 1girox. Viene de la gemela FABRIOCTUBRE (sus 
 - **Trampas:** la página está en z-index 99990 (el casino de Girox 99999; modales con `body.casino-open` arriba). Un botón nuevo de la página que abra algo
   que NO es modal (soporte, menú) tiene que cerrarla antes (`VIP.lobby.close()`), si no queda detrás. Nunca abrir la web de Girox por un juego que no salió
   directo (#946): se avisa y se reintenta. 1girox no tiene API de apuestas: las cuotas son de referencia y la apuesta se hace en Digitain.
+- **Interruptor (#989):** `Config['picarojaAppEnabled']` (panel → App → Plataformas; `GET/POST /api/admin/picaroja-app`). `/api/platforms` y `/api/landing/info`
+  devuelven `picarojaApp`; con `false` home.js guarda `vip_pr_disabled` y `_prOff()` anula la puerta en todos lados (lista, marca local, `openPlatform`, historias).
 - **Prueba:** `node scripts/test-picaroja-front.js`.
 
 ## Casino con el bloque del menú arriba (#988, 2026-10-24)
