@@ -49,12 +49,6 @@ body.prl-appnav #prLobby .prl-qlchip { bottom: calc(var(--sab, env(safe-area-ins
 .prl-sb:active > i { background: rgba(255,255,255,.14); }
 .prl-srt + .srt-inline { margin: 0 12px 10px; }
 @media (max-width: 360px) { .prl-sb { grid-template-columns: 76px 1fr; } .prl-sb-pic { width: 76px; height: 62px; } .prl-sb-t b { font-size: 15px; } }
-/* #989 CASINO EN VIVO de entrada: los 4 lobbies de Girox en 2×2, grandes */
-.prl-live4-sec { margin-top: 6px; }
-.prl-live4 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 14px; }
-.prl-live4 .prl-g { width: 100%; }
-.prl-live4 .prl-gi { aspect-ratio: 4 / 3; border-radius: 14px; box-shadow: 0 6px 16px rgba(0,0,0,.16); }
-.prl-live4 .prl-gi i { font-size: 13px; }
 /* #989 TOP PARTIDOS (formato Stake: hora · escudos · equipos · cuotas 1 X 2). Tocar = Digitain logueado; cuotas de referencia */
 .prl-board { margin-top: 4px; }
 .prl-mrow { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 14px 6px; scrollbar-width: none; }

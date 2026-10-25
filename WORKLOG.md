@@ -107,6 +107,10 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   Cambiar menú, `_mcPaint`, elegir = `basicPick` ⇒ `setPreferred`). Colores por marca en picaroja.css. La pantalla de ingreso también muestra las 4.
 - **Selector de menús (owner, captura: "achicalo más, centrado y deslizable si hace falta") — SW v665:** `.mc-card` más chica (380 px, letras y
   recuadros compactos), centrada, con alto máximo 86 vh y scroll interno (picaroja.css). Así entra con la fila de plataformas y "Dejar fijo".
+- **Casino en vivo en su lugar (owner, captura: "los 4 lobbies arriba de los slots, debajo de Deportes, mismo formato y tamaño; sacá todo lo demás de
+  esa sección y después los más jugados") — SW v666:** fuera el bloque 2×2 de arriba y la sección "Casino lobby" (8+ lobbies con Ver más); en su lugar,
+  después de Proveedores, "Casino en vivo" = los 4 lobbies de Girox en UNA fila con las tarjetas de siempre, y enseguida Populares (los más jugados).
+  Orden del Inicio: sorteos · Top partidos · Proveedores · Casino en vivo (4) · Populares · buscador · Nuevos · En vivo · proveedores principales.
 
 ## Sesión 2026-10-24
 

@@ -93,10 +93,11 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   const tick = () => new Promise((r) => setImmediate(r)); for (let i = 0; i < 6; i++) await tick(); // llegan /api/games/lobby, /api/sports/board y los json
   const main = mk('prlMain').innerHTML; balanced(main);
   must(main, 'Top partidos', 'Barcelona', 'Real Madrid', '1.63', '5.40', "VIP.lobby.sport('/sports-new')", "VIP.lobby.sportMatch('Barcelona', 'Real Madrid')", 'prl-mlive', 'Inter', 'Hoy 16:00', 'Mañana 12:00', 'Apostar ›', 'Cuotas de referencia',
-    'Proveedores', 'prl-pvb', 'KA Gaming', '1.001 juegos', 'Casino lobby', '/images/picaroja/lobby/3_101.webp', 'id="prlQ"', 'Populares', 'Gates of Olympus', 'Nuevos', 'NUEVO', 'En vivo · Evolution', 'Ver los 8.137 juegos', 'VIP.lobby.extraAll()');
+    'Proveedores', 'prl-pvb', 'KA Gaming', '1.001 juegos', '/images/picaroja/lobby/3_101.webp', 'id="prlQ"', 'Populares', 'Gates of Olympus', 'Nuevos', 'NUEVO', 'En vivo · Evolution', 'Ver los 8.137 juegos', 'VIP.lobby.extraAll()');
   if (main.includes('prl-hero2') || main.includes('prl-hc')) throw new Error('siguen las fotos de arriba');
   if (!/prl-pvb"><img/.test(main)) throw new Error('los proveedores van con logo (fondo negro)');
-  must(main, 'id="prlSrt"', 'prl-live4', 'Casino en vivo'); if (main.indexOf('id="prlSrt"') > main.indexOf('prl-live4') || main.indexOf('prl-live4') > main.indexOf('Top partidos')) throw new Error('orden: sorteos · Casino en vivo (4 lobbies) · Top partidos');
+  must(main, 'id="prlSrt"', 'Casino en vivo'); if (main.includes('Casino lobby') || main.includes('prl-live4')) throw new Error('la sección Casino lobby se reemplaza por Casino en vivo (4 lobbies, mismo formato)');
+  const _o = ['id="prlSrt"', 'Top partidos', 'Proveedores', 'Casino en vivo', 'Populares', 'id="prlQ"', 'Nuevos'].map((k) => main.indexOf(k)); if (_o.some((i, n) => i < 0 || (n && i < _o[n - 1]))) throw new Error('orden del Inicio: sorteos · Top partidos · Proveedores · Casino en vivo · Populares · buscador · Nuevos (' + _o.join(',') + ')');
   const srt = mk('prlSrt').innerHTML || (main.slice(main.indexOf('id="prlSrt"'), main.indexOf('prl-live4')));
   must(srt, 'GRAN SORTEO', 'Peugeot 208 0 km', 'peugeot-208', '3 premios', 'Viaje al Caribe', 'USD 2.000', 'Empieza en', 'SORTEO MENSUAL', 'iPhone 18 Pro Max', 'EN CURSO', 'Ver detalle y participar', "VIP.lobby.srtOpen('gran')");
   if (/🚗|📱/.test(srt)) throw new Error('sin emojis en los recuadros del sorteo');
