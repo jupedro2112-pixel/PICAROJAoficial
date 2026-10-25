@@ -131,6 +131,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
 - **Sorteos chicos (owner, captura: "achicalos, que predomine 100 % la página de apuestas: 2 cuadrados a la mitad, uno al lado del otro") — SW v673:**
   `.prl-srt` en 2 columnas; cada recuadro vertical y compacto (foto arriba de 52 px, kicker, 1° premio en 13 px, los 3 premios en 2 líneas, estado,
   botón "Inscribite, es gratis ›"). Mismo contenido, la mitad de alto.
+- **Los 4 lobbies fijos (owner, captura: "estos son los juegos que quiero en Casino en vivo, buscalos y poné esos solos") — SW v674:** `LIVE4` en lobby.js =
+  Blackjack Lobby (Evolution, 7/10517_ifg) · Live Casino Lobby (Pragmatic, 3/101) · Game Show Lobby (Evolution, 7/10511_ifg) · Live Casino Lobby (Vivo Gaming,
+  9/13452), con gid/lk del catálogo real (ya no se eligen por nombre). Portadas propias para los 3 primeros; Vivo usa la de Girox.
 
 ## Sesión 2026-10-24
 
