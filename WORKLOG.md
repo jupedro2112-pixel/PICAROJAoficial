@@ -111,6 +111,7 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   esa sección y después los más jugados") — SW v666:** fuera el bloque 2×2 de arriba y la sección "Casino lobby" (8+ lobbies con Ver más); en su lugar,
   después de Proveedores, "Casino en vivo" = los 4 lobbies de Girox en UNA fila con las tarjetas de siempre, y enseguida Populares (los más jugados).
   Orden del Inicio: sorteos · Top partidos · Proveedores · Casino en vivo (4) · Populares · buscador · Nuevos · En vivo · proveedores principales.
+- **Botón de los recuadros del sorteo (owner): "Inscribite, es gratis ›"** (anotado: "Ya estás inscripto ✓ · Ver detalle ›") — SW v667.
 
 ## Sesión 2026-10-24
 

@@ -172,7 +172,7 @@ VIP.lobby = (function () {
                 '<b>' + esc(p1.name || s.title) + '</b>' +
                 (pr.length > 1 ? '<span class="prl-sb-pz">' + pr.length + ' premios: ' + pr.map((p) => p.pos + '° ' + esc(p.name)).join(' · ') + '</span>' : '') +
                 '<span class="prl-sb-st">' + st + '</span></span>' +
-                '<i>Ver detalle y participar ›</i></button>';
+                '<i>' + (joined ? 'Ya estás inscripto ✓ · Ver detalle ›' : 'Inscribite, es gratis ›') + '</i></button>'; // #989 (owner): "poné Inscribite, es gratis"
         }).join('');
     }
     function _paintSrt() { const b = $('prlSrt'); if (b && b.isConnected && _view === 'inicio') b.innerHTML = _srtBoxes(); }

@@ -99,7 +99,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   must(main, 'id="prlSrt"', 'Casino en vivo'); if (main.includes('Casino lobby') || main.includes('prl-live4')) throw new Error('la sección Casino lobby se reemplaza por Casino en vivo (4 lobbies, mismo formato)');
   const _o = ['id="prlSrt"', 'Top partidos', 'Proveedores', 'Casino en vivo', 'Populares', 'id="prlQ"', 'Nuevos'].map((k) => main.indexOf(k)); if (_o.some((i, n) => i < 0 || (n && i < _o[n - 1]))) throw new Error('orden del Inicio: sorteos · Top partidos · Proveedores · Casino en vivo · Populares · buscador · Nuevos (' + _o.join(',') + ')');
   const srt = mk('prlSrt').innerHTML || (main.slice(main.indexOf('id="prlSrt"'), main.indexOf('prl-live4')));
-  must(srt, 'GRAN SORTEO', 'Peugeot 208 0 km', 'peugeot-208', '3 premios', 'Viaje al Caribe', 'USD 2.000', 'Empieza en', 'SORTEO MENSUAL', 'iPhone 18 Pro Max', 'EN CURSO', 'Ver detalle y participar', "VIP.lobby.srtOpen('gran')");
+  must(srt, 'GRAN SORTEO', 'Peugeot 208 0 km', 'peugeot-208', '3 premios', 'Viaje al Caribe', 'USD 2.000', 'Empieza en', 'SORTEO MENSUAL', 'iPhone 18 Pro Max', 'EN CURSO', 'Inscribite, es gratis', "VIP.lobby.srtOpen('gran')");
   if (/🚗|📱/.test(srt)) throw new Error('sin emojis en los recuadros del sorteo');
   L.srtOpen('gran'); if (!els.srtInline || !mk('srtInlineBody').innerHTML.includes('Gran Sorteo')) throw new Error('el detalle del sorteo tiene que desplegarse DEBAJO, en la página'); if (els.srtModal && els.srtModal.hidden === false) throw new Error('no tiene que abrir la ventana completa');
   ctx.VIP.sorteos.closeInline();
