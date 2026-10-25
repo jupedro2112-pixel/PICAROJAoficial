@@ -92,6 +92,7 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   must(main, 'Top partidos', 'Barcelona', 'Real Madrid', '1.63', '5.40', "VIP.lobby.sport('/sports-new')", "VIP.lobby.sportMatch('Barcelona', 'Real Madrid')", 'prl-mlive', 'Inter', 'Hoy 16:00', 'Mañana 12:00', 'Apostar ›', 'Cuotas de referencia',
     'Proveedores', 'prl-pvb', 'KA Gaming', '1.001 juegos', 'Casino lobby', '/images/picaroja/lobby/3_101.webp', 'id="prlQ"', 'Populares', 'Gates of Olympus', 'Nuevos', 'NUEVO', 'En vivo · Evolution', 'Ver los 8.137 juegos', 'VIP.lobby.extraAll()');
   if (main.includes('prl-hero2') || main.includes('prl-hc')) throw new Error('siguen las fotos de arriba');
+  if (/prl-pvb"><img/.test(main)) throw new Error('los proveedores van sin logo (quedaban círculos blancos)');
   if (main.indexOf('Top partidos') > main.indexOf('Proveedores')) throw new Error('Top partidos tiene que ir arriba de Proveedores');
   console.log('✔ inicio: Top partidos arriba · Proveedores · lobby · populares · nuevos (' + main.length + ' chars)');
   // 4) cuotas / partido ⇒ Digitain directo (sport/onyx) logueado; deportes desde el menú

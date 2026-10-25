@@ -140,11 +140,12 @@ VIP.lobby = (function () {
             (L.length ? '<div class="prl-mrow">' + L.map(_match).join('') + '</div><p class="prl-mnote">Cuotas de referencia · tocá y apostás en Deportes con tu saldo</p>'
                 : (_board ? '' : '<div class="prl-mrow"><div class="prl-m prl-msk"></div><div class="prl-m prl-msk"></div></div>')) + '</section>';
     }
-    // #909: proveedores como Stake · #989 (owner): "fondo rojo del mismo color de PICA ROJA y el proveedor en blanco, sin colores": recuadro rojo,
-    // logo en blanco (silueta) + NOMBRE en blanco.
+    // #909: proveedores como Stake · #989 (owner): "fondo rojo del mismo color de PICA ROJA y el proveedor en blanco, sin colores": recuadro rojo con el
+    // NOMBRE en blanco. Sin el logo de 1girox: muchos son un ícono con fondo lleno y en blanco quedaban como un círculo (owner: "hay proveedores con
+    // un círculo en blanco, corregilo").
     function _provTile(p) {
         return '<button type="button" class="prl-pv" onclick="' + (p.on || 'VIP.lobby.all(' + Number(p.id) + ', \'' + jsq(p.name) + '\')') + '" aria-label="' + esc(p.name) + '">' +
-            '<span class="prl-pvb">' + (p.logo ? '<img loading="lazy" src="/api/games/img?u=' + encodeURIComponent(p.logo) + '" alt="" onerror="this.remove()">' : '') + '<b>' + esc(p.name) + '</b></span>' +
+            '<span class="prl-pvb"><b>' + esc(p.name) + '</b></span>' +
             '<small><i class="prl-dot"></i>' + Number(p.count || 0).toLocaleString('es-AR') + ' juegos</small></button>';
     }
     function _providers(list) {

@@ -74,6 +74,8 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   movimiento del Menú (vuelve a la barra de arriba) y el botón "En vivo" extra; abajo queda Slots · Inicio · Deportes como en la captura; el usuario/saldo
   sigue pegado a la barra; el círculo flota abajo a la derecha; "‹ Volver" = `VIP.lobby.backHome()` (cierra la página y deja el menú COMPLETO).
   ⚠️ El commit 6ced500 se subió con una aserción vieja en la prueba (el `tail` tapaba el exit code): corregida acá; la prueba vuelve a pasar entera.
+- **Proveedores sin logo (owner: "hay proveedores que tienen un círculo en blanco") — SW v658:** los logos de 1girox son íconos con fondo lleno; pasados a
+  blanco quedaban como un círculo. Ahora el recuadro rojo lleva sólo el NOMBRE en blanco, centrado (`_provTile`, `.prl-pvb`).
 
 ## Sesión 2026-10-24
 
