@@ -56,6 +56,9 @@ de JUGAYGANA, Ganamos y BuffaloPlay (páginas, datos, imágenes, `site.js`, `mar
   (SportFrame) fijo en su portada y Digitain no publica links por evento para nuestro dominio (gemela #940: bloquea Tor y exige el `parent` autorizado).
   Lo más cerca: `VIP.lobby.sportMatch(home, away)` abre Digitain logueado (mismo ingreso directo que un slot) y a los 2 s avisa "⚽ En Deportes buscá A – B".
   Para que salte al partido hay que pedirle a 1girox un link por evento de Digitain (o que Digitain autorice picaroja.com); se enchufa en `sportMatch`.
+- **Ajuste de la captura (owner) — SW v653:** el usuario/saldo (`#prlPrBal`) va pegado debajo de la barra, antes de la Carga rápida; el botón Menú salió de
+  la barra de arriba (`casinoBarHtml({ noMenu })`) y pasó ABAJO a la izquierda (`_prNav`: navMenu = Menú → `casinoFullMenu`); entre Inicio y Deportes se
+  agrega "En vivo" (`#navPrLive`, Casino en vivo); Deportes en la punta. La barra propia (`.prl-nav`, sin #bottomNav) sigue el mismo orden (+ Slots).
 
 ## Sesión 2026-10-24
 

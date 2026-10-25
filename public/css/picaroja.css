@@ -85,7 +85,7 @@ span.prl-st { cursor: default; }
 .prl-pv small { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 600 12px var(--p-font); color: var(--prl-mut); }
 .prl-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--prl-ok); }
 /* barra propia de abajo (sólo sin #bottomNav, menú opción 1) */
-.prl-nav { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; background: var(--p-card); border-top: 1px solid var(--p-border); box-shadow: 0 -4px 14px rgba(0,0,0,.08);
+.prl-nav { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; /* Menú · En vivo · Inicio · Slots · Deportes */ background: var(--p-card); border-top: 1px solid var(--p-border); box-shadow: 0 -4px 14px rgba(0,0,0,.08);
   padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 6px) max(6px, env(safe-area-inset-left, 0px)); }
 .prl-nav button { border: 0; background: none; color: var(--prl-mut); font: 600 11px var(--p-font); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; border-radius: 8px; cursor: pointer; }
 .prl-nav button .prl-ic { width: 22px; height: 22px; }
@@ -102,6 +102,7 @@ body.prl-appnav #prLobby .prl-nav { display: none !important; }
 body.prl-appnav #prLobby .prl-main { padding-bottom: calc(68px + var(--sab, 0px)); }
 body.prl-appnav #bottomNav .tn-ico svg.prl-ic, body.prl-appnav #bottomNav .tn-ico .prl-ic { width: 20px; height: 20px; }
 body.prl-appnav #prlSportPop.prl-sportpop { z-index: 99996; }
+body.prl-appnav #bottomNav #navPrLive { flex: 1 1 0; } /* #989: 4 botones: Menú · Inicio · En vivo · Deportes */
 body.has-install-bar .prl { bottom: 0; padding-bottom: calc(64px + var(--sab, 0px)); box-sizing: border-box; } /* #920: sin hueco entre el menú y la barra de instalar */
 body.has-install-bar .prl-nav { padding-bottom: 6px; }
 /* #922 selector chico de deportes (Digitain · Ultim8 · Caballos · TurfWin · Póker) */

@@ -77,7 +77,9 @@ vm.runInContext(fs.readFileSync('public/js/lobby.js', 'utf8'), ctx);
   must(shell, 'id="prLobby"', 'casino-topbar prl-cbar', 'class="casino-brand casino-srt"', 'class="casino-srt-bar"', 'VIP.sorteos.casinoBar(true)', 'id="prlQlDock"', 'id="prlQlChip"', 'id="prlPrBal"', 'id="prlMain"', 'class="prl-nav"', 'PICA ROJA', 'VIP.lobby.close()');
   if (shell.includes('prl-hero2') || shell.includes('jugaygana') || shell.includes('ganamos') || shell.includes('buffalo')) throw new Error('quedó algo de otras marcas o de las fotos');
   if (!body.classList.contains('prl-open') || !body.classList.contains('casino-open')) throw new Error('clases del body');
-  if (!body.classList.contains('prl-appnav') || !mk('navMenu').innerHTML.includes('Slots') || !mk('navPerfil').innerHTML.includes('Deportes')) throw new Error('la barra de la app no cambió a Slots · Inicio · Deportes');
+  if (!body.classList.contains('prl-appnav') || !mk('navMenu').innerHTML.includes('Menú') || !mk('navPerfil').innerHTML.includes('Deportes') || !els.navPrLive || !mk('navPerfil').innerHTML.includes('En vivo')) throw new Error('la barra de la app no cambió a Menú · Inicio · En vivo · Deportes');
+  if (shell.includes('title="Elegir menú"')) throw new Error('el botón Menú tiene que salir de la barra de arriba');
+  if (shell.indexOf('id="prlPrBal"') > shell.indexOf('id="prlQlDock"')) throw new Error('el usuario/saldo va antes que la Carga rápida');
   if (!ctx.storiesPainted) throw new Error('no repintó el aro de historias');
   console.log('✔ página: barra + sorteo en la barra + hueco de Carga rápida + nav de la app (' + shell.length + ' chars)');
   // 3) inicio: Top partidos (sin fotos), proveedores rojo/blanco, Casino lobby, buscador, Populares, Nuevos, En vivo, secciones, Ver los N juegos
