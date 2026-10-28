@@ -9649,13 +9649,13 @@ async function getInstantCashbackConfig() {
       return {
         enabled: raw.enabled === true,
         pct: Math.min(50, Math.max(0, Number(raw.pct) || 0)) || INSTANT_CASHBACK_DEFAULT.pct,
-        rolloverX: Math.min(50, Math.max(0, Math.round(Number(raw.rolloverX)))) || 0,
         minArs: Math.max(0, Math.round(Number(raw.minArs))) || 0,
-        maxDailyArs: Math.max(0, Math.round(Number(raw.maxDailyArs))) || 0
+        maxDailyArs: Math.max(0, Math.round(Number(raw.maxDailyArs))) || 0,
+        rolloverX: await _giftRolloverX() // #991 (owner): "reembolsos todos rollover x5 como bono" ⇒ el global, no el del panel del acumulativo
       };
     }
   } catch (_) { /* fallback */ }
-  return { ...INSTANT_CASHBACK_DEFAULT };
+  return { ...INSTANT_CASHBACK_DEFAULT, rolloverX: await _giftRolloverX() }; // #991
 }
 
 // Suma de reembolso acumulativo ya ACREDITADO de un usuario entre dos fechas
@@ -13021,6 +13021,7 @@ async function initializeData() {
   try { if (!(await getConfig('mig890NoFriction', null))) { const bs = (await getConfig('bankOutageSettings', null)) || {}; await Config.set('bankOutageSettings', Object.assign({}, BANK_SETTINGS_DEFAULT, typeof bs === 'object' ? bs : {}, { notifyFailedClient: false }), 'mig#890'); await Command.updateOne({ name: '/sys_withdraw_delayed', response: WITHDRAW_DELAYED_OLD_820 }, { $set: { response: WITHDRAW_DELAYED_DEFAULT } }); await Config.set('mig890NoFriction', new Date().toISOString(), 'mig#890'); } } catch (e) { console.warn('[startup-migration] #890:', e.message); }
   try { if (!(await getConfig('mig885FirePlazo', null))) { const fm = await getConfig('fireMilestones', null); if (Array.isArray(fm) && fm.length) await Config.set('fireMilestones', fm.map((m) => Object.assign({}, m, { depositDays: (parseInt(m.day, 10) || 15) * 2 })), 'mig#885'); await Config.set('firePlazoSince', new Date().toISOString(), 'mig#885'); await Config.set('mig885FirePlazo', new Date().toISOString(), 'mig#885'); } } catch (e) { console.warn('[startup-migration] #885:', e.message); }
   try { if (!(await getConfig('mig884RetiroText', null))) { await Command.updateOne({ name: '/sys_support_topic_retiro', response: SUPPORT_RETIRO_OLD_878 }, { $set: { response: SUPPORT_TOPIC_RETIRO_DEFAULT } }); await Config.set('mig884RetiroText', new Date().toISOString(), 'mig#884'); } } catch (e) { console.warn('[startup-migration] #884:', e.message); }
+  try { if (!(await getConfig('mig991RefBono', null))) { await Command.updateOne({ name: '/sys_support_topic_bono', response: SUPPORT_BONO_OLD_991 }, { $set: { response: SUPPORT_TOPIC_BONO_DEFAULT } }); await Config.set('mig991RefBono', new Date().toISOString(), 'mig#991'); } } catch (e) { console.warn('[startup-migration] #991:', e.message); } // #991: referidos ×1
   try { if (!(await getConfig('mig883BonoText', null))) { await Command.updateOne({ name: '/sys_support_topic_bono', response: SUPPORT_BONO_OLD_878 }, { $set: { response: SUPPORT_TOPIC_BONO_DEFAULT } }); await Config.set('mig883BonoText', new Date().toISOString(), 'mig#883'); } } catch (e) { console.warn('[startup-migration] #883:', e.message); }
   try { if (!(await getConfig('mig882DepositRoll', null))) { if ((await getConfig('depositRolloverX', null)) == null) await Config.set('depositRolloverX', 3, 'mig#882'); await Config.set('mig882DepositRoll', new Date().toISOString(), 'mig#882'); } } catch (e) { console.warn('[startup-migration] #882:', e.message); }
   try { if (!(await getConfig('mig879NoWithdrawOtp', null))) { await Config.set('withdrawOtpRequired', false, 'mig#879'); await Config.set('mig879NoWithdrawOtp', new Date().toISOString(), 'mig#879'); console.log('✅ #879: retiro sin SMS por retiro (teléfono verificado una vez)'); } } catch (e) { console.warn('[startup-migration] #879:', e.message); }
@@ -14548,7 +14549,8 @@ const SUPPORT_TOPIC_REEMBOLSO_DEFAULT = '🎁 La info del reembolso está en el 
 const SUPPORT_TOPIC_OTRO_DEFAULT = '❓ Contanos qué pasó, cuándo y con qué monto, y te respondemos.';
 const SUPPORT_DETAIL_DEFAULT = '📝 ¿Otra consulta? Escribila acá y te respondemos.';
 // #715 (owner): "Problema con el bono" → explicar bien el rollover ×{rollover}: qué es, cómo se desbloquea para retirar.
-const SUPPORT_TOPIC_BONO_DEFAULT = '🎁 Todo regalo entra como BONO con rollover ×{rollover}: para retirarlo hay que APOSTAR {rollover} veces el bono (ej.: $2.000 ⇒ $10.000 jugados). Y cada carga se juega ×{carga} antes de retirarla. Cuenta lo que jugás, no lo que cargás. Referidos: sin rollover. En Retirar premio ves cuánto te falta apostar.';
+const SUPPORT_BONO_OLD_991 = '🎁 Todo regalo entra como BONO con rollover ×{rollover}: para retirarlo hay que APOSTAR {rollover} veces el bono (ej.: $2.000 ⇒ $10.000 jugados). Y cada carga se juega ×{carga} antes de retirarla. Cuenta lo que jugás, no lo que cargás. Referidos: sin rollover. En Retirar premio ves cuánto te falta apostar.'; // #991: texto anterior (referidos sin rollover)
+const SUPPORT_TOPIC_BONO_DEFAULT = '🎁 Todo regalo entra como BONO con rollover ×{rollover}: para retirarlo hay que APOSTAR {rollover} veces el bono (ej.: $2.000 ⇒ $10.000 jugados). Y cada carga se juega ×{carga} antes de retirarla. Cuenta lo que jugás, no lo que cargás. Referidos: bono ×1. En Retirar premio ves cuánto te falta apostar.';
 // #878 (owner): "en las respuestas resumí un poco": textos viejos (si en COMANDOS siguen iguales se pasan a los nuevos, cortos).
 const SUPPORT_TEXTS_OLD_878 = {
   '/sys_support_topic_carga': ['💳 Antes que nada: la carga mínima es {min}. Con {min} o más se acredita sola en minutos. Si cargaste MENOS de {min}, mandanos acá la captura de tu transferencia para revisar el reintegro.', () => SUPPORT_TOPIC_CARGA_DEFAULT],
@@ -21944,7 +21946,8 @@ function _missionProgress(m, st) {
 }
 async function _missionCredit(m, st, wk, af) {
   const user = await User.findOne({ id: st.userId }).lean(); if (!user || user.role !== 'user' || user.isBlocked || _isFlagged(user)) return null;
-  af = af || { rolloverX: 3, maxRewardPctOfDeposits: 20, blockIfNetWithdrawn: true, minRewardArs: 500 };
+  af = af || { rolloverX: 5, maxRewardPctOfDeposits: 20, blockIfNetWithdrawn: true, minRewardArs: 500 };
+  af = Object.assign({}, af, { rolloverX: await _giftRolloverX() }); // #991 (owner): misiones = BONO con el rollover GLOBAL (×5), no el guardado aparte
   if (af.blockIfNetWithdrawn && st.wd >= st.total) { logger.info(`[misiones] ${user.username} ${m.id}: sin premio, retiró ($${st.wd}) ≥ lo que cargó ($${st.total}) en la semana`); return null; }
   let reward = m.rewardArs; if (af.maxRewardPctOfDeposits > 0) reward = Math.min(reward, Math.round(st.total * af.maxRewardPctOfDeposits / 100));
   if (!(reward >= Math.max(1, af.minRewardArs))) { logger.info(`[misiones] ${user.username} ${m.id}: premio topeado a $${reward} (< mínimo), se espera a que cargue más`); return null; }
@@ -22046,7 +22049,7 @@ app.get('/api/strategy/me', authMiddleware, async (req, res) => {
       missions = T.tier.items.filter((m) => m.active && m.rewardArs > 0).map((m) => { const p = _missionProgress(m, st); const c = claims.find((x) => x.missionId === m.id); return { id: m.id, title: m.title, type: m.type, target: m.target, minAmount: m.minAmount, rewardArs: m.rewardArs, value: p.value, done: p.done || !!c, credited: !!(c && c.status === 'credited') }; });
       nivel = { id: T.tier.id, name: T.tier.name, emoji: T.tier.emoji, idx: T.idx, total: cfg.missions.tiers.length, promo: T.promo, avgWeekly: T.avgWeekly, vipName: T.vipName, vipNextName: T.vipNextName, next: T.next ? { name: T.next.name, emoji: T.next.emoji, minWeekly: T.next.minWeekly, vipFrom: T.next.vipFrom } : null, faltaParaSubir: T.faltaParaSubir, todasCumplidas: missions.length > 0 && missions.every((m) => m.done) };
     }
-    res.set('Cache-Control', 'no-store'); res.json({ secondDeposit: sd, missions, nivel, weekKey: wk, weekEndsAt: end, rolloverX: cfg.missions.antiFraud.rolloverX, maxRewardPct: cfg.missions.antiFraud.maxRewardPctOfDeposits });
+    res.set('Cache-Control', 'no-store'); res.json({ secondDeposit: sd, missions, nivel, weekKey: wk, weekEndsAt: end, rolloverX: await _giftRolloverX(), /* #991 */ maxRewardPct: cfg.missions.antiFraud.maxRewardPctOfDeposits });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 // ── API admin: configuración + estadísticas

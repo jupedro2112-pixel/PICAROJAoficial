@@ -17,6 +17,14 @@ const { v4: uuidv4 } = require('uuid');
 const { User, Transaction, Message, ReferralCommission, ReferralPayout, mongoose } = require('../models');
 const giroxService = require('./giroxService');
 const logger = require('../utils/logger');
+const Config = require('../models/Config');
+
+// #991 (owner 2026-10-28): "el referido va con rollover x1 como bono" ⇒ la comisión entra como BONO de 1girox con
+// rollover ×Config['referralRolloverX'] (default 1). Si la plataforma no acepta ese multiplicador de bono (la lista
+// de bonos suele ser 0/2/5/…), `creditGift` la acredita como carga con ese rollover, con la MISMA reference.
+async function getReferralRolloverX() {
+  try { const v = Number(await Config.get('referralRolloverX', 1)); return Number.isFinite(v) && v >= 0 ? Math.min(50, Math.round(v)) : 1; } catch (_) { return 1; }
+}
 const { getPeriodLabel } = require('../utils/periodKey');
 
 /**
@@ -372,8 +380,7 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
       );
 
       // Acreditar las fichas de la comisión en 1girox.
-      // creditUserBalance() = depósito libre (sin rollover): el referidor puede usar
-      // y retirar la plata al instante, igual que con el `bonus` de JUGAYGANA.
+      // #991: creditGift() = BONO con rollover ×referralRolloverX (antes creditUserBalance = regalo ×0, retirable al instante).
       // 1girox trabaja por USERNAME (no hay id de plataforma en esta llamada).
       const referrer = await User.findOne({ id: refId }).lean();
       if (!referrer) {
@@ -385,7 +392,7 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
       const payoutReference = buildPayoutReference(payoutDoc.id);
 
       logger.info(
-        `[ReferralPayout] referralPayoutProviderAction=girox.creditUserBalance ` +
+        `[ReferralPayout] referralPayoutProviderAction=girox.creditGift ` +
         `providerCallSource=referralPayoutService/executePayoutsForPeriod ` +
         `isDeltaPayout=${isDeltaPayout} periodKey=${periodKey} referrer=${group.referrerUsername} ` +
         `commissionToPay=${totalAmount.toFixed(2)} username=${referrer.username} ` +
@@ -393,11 +400,11 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
         `referrerUserId=${refId} paymentType=${payoutType} paymentApplied=false`
       );
 
-      const creditResult = await giroxService.creditUserBalance(
+      const referralRolloverX = await getReferralRolloverX();
+      const creditResult = await giroxService.creditGift(
         referrer.username,
         totalAmount,
-        payoutReference,
-        { description }
+        { description, reference: payoutReference, rolloverX: referralRolloverX }
       );
 
       if (!creditResult.success) {
@@ -408,7 +415,7 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
           ? rawErr
           : 'Error al acreditar la comisión en 1girox';
         logger.error(
-          `[ReferralPayout] referralPayoutProviderAction=girox.creditUserBalance ` +
+          `[ReferralPayout] referralPayoutProviderAction=girox.creditGift ` +
           `providerResponse=${errStr} ` +
           `errorCode=${creditResult.code || 'n/a'} httpStatus=${creditResult.httpStatus || 'n/a'} ` +
           `errorMessage=${errStr} referrer=${group.referrerUsername} ` +
@@ -433,7 +440,7 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
       }
 
       logger.info(
-        `[ReferralPayout] providerResponse=success referralPayoutProviderAction=girox.creditUserBalance ` +
+        `[ReferralPayout] providerResponse=success referralPayoutProviderAction=girox.creditGift ` +
         `referrer=${group.referrerUsername} period=${periodKey} reference=${payoutReference} ` +
         `duplicate=${!!creditResult.duplicate} ` +
         `isDeltaPayout=${isDeltaPayout} commissionToPay=${totalAmount.toFixed(2)} ` +
@@ -459,7 +466,9 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
           referralCount: paidReferralsCount,
           payoutId: payoutDoc.id,
           payoutIndex,
-          isDelta: isDeltaPayout
+          isDelta: isDeltaPayout,
+          creditedAs: creditResult.creditedAs || null,
+          rollover: referralRolloverX
         }
       });
 
@@ -622,5 +631,6 @@ async function sendReferralCreditMessage(user, amount, periodLabel, isDelta = fa
 }
 
 module.exports = {
+  getReferralRolloverX,
   executePayoutsForPeriod
 };

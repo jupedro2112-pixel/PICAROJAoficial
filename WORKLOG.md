@@ -4,7 +4,23 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-10-25**
+> **Última actualización: 2026-10-28**
+
+## Sesión 2026-10-28
+
+### 991. 🎁 Regalos: todo BONO con su rollover — referidos ×1, misiones y reembolso acumulativo con el ×5 global — SW v648
+**Pedido (owner):** "comprobante primera carga va sin bono y el bono del 100% con rollover x5, misiones como bono rollover x5, instalar app como bono
+5000 rollover x5, referido rollover x1 el día 1, reembolsos todos rollover x5 como bono" · "en las historias lo mismo el bono x5".
+- **Verificado sin cambios:** la carga por comprobante / manual / hgcash entra como CARGA (×1, `_depositWithBonus`) y el 100% de 1ª carga va como
+  BONO aparte de la carga (×`bonusRolloverX` = 5). El bono de historia se consume en la carga ⇒ el mismo ×5. Extra por instalar: $5.000 fijo
+  (`installGift.fixedArs`), `creditGift` ×5. Reembolsos diario/semanal/mensual: `/bonus` ×`_giftRolloverX`.
+- **Cambios:** referidos (`referralPayoutService`) pasan de regalo ×0 a `creditGift` con `Config['referralRolloverX']` (default 1); Transaction guarda
+  `creditedAs`/`rollover`. Misiones: `_missionCredit` usa siempre `_giftRolloverX()` (antes el número guardado en `missions.antiFraud`, fallback 3).
+  Reembolso acumulativo: `getInstantCashbackConfig` usa el global (antes su propio rolloverX, default 2).
+- ⚠️ 1girox (config de agosto) acepta como multiplicadores de BONO 0/2/5/10/20/40: si sigue sin el 1, la comisión de referidos entra como CARGA ×1
+  (fallback de `creditGift`, misma reference). Para que figure como Bono hay que pedirle a 1girox el ×1 en bonos (o subir `referralRolloverX` a 2).
+- Textos: Soporte (`/sys_support_topic_bono`, migración `mig991RefBono` si no lo editaron), Info de la app (index.html) y Bases (terminos.html; además
+  decía carga ×3, ahora ×1). App v648.
 
 ## Sesión 2026-10-25
 

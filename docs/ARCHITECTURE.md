@@ -429,6 +429,12 @@ reintento manda la misma reference y la plataforma responde `duplicate:true`.
 
 ### 4.5 Rollover y bonos ACTIVOS en la plataforma
 
+> **Mapa vigente (#991, 2026-10-28):** carga real (comprobante, manual, hgcash) = CARGA ×`depositRolloverX` (1) por `_depositWithBonus`;
+> el bono que le toque (1ª carga 100%, historia, 2ª carga, lote, auto) va pegado como BONO ×`bonusRolloverX` (5). Misiones, extra por
+> instalar ($5.000 fijo), reembolsos (diario/semanal/mensual y acumulativo), ruleta, VIP, rakeback = BONO ×5 (`_giftRolloverX`, sin número
+> propio). Referidos (pago automático del día 1, `referralPayoutService`) = BONO ×`referralRolloverX` (1) vía `creditGift`. `creditGift`
+> cae a CARGA con el mismo rollover (misma reference) si el multiplicador no está en `bonus.multipliers` o el jugador ya tiene un bono activo.
+
 1girox tiene el feature "Rollover y Bonos" **activo**. Consecuencias:
 
 - **Los retiros se validan contra `wagering.available`, NO contra `balance`.** El
