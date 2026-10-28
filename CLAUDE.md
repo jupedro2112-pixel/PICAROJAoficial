@@ -121,7 +121,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `node scripts/test-cashback-spec.js`. Detalle: ARCHITECTURE §5.
 - **#659 (owner 2026-10-20): TODOS los regalos van con el ROLLOVER GLOBAL (`Config['bonusRolloverX']`, ×5; panel → Estrategia →
   rollover): bonos de carga, fueguito, ruleta, misiones, código de bienvenida, extra por instalar, REEMBOLSOS (los tres períodos y el
-  acumulativo), bono de nivel VIP y rakeback. **#991 (2026-10-28):** las comisiones de REFERIDOS también son BONO, con rollover ×`Config['referralRolloverX']` (1) vía `creditGift` (si 1girox no acepta ×1 como bono, entran como carga ×1, misma reference). Misiones y reembolso acumulativo usan SIEMPRE el global (`_giftRolloverX`), no su propio número.
+  acumulativo), bono de nivel VIP y rakeback. **#991 (2026-10-28):** las comisiones de REFERIDOS también son BONO, con rollover ×`Config['referralRolloverX']` (1) vía `creditGift` (si 1girox no acepta ×1 como bono, entran como carga ×1, misma reference). Misiones y reembolso acumulativo usan SIEMPRE el global (`_giftRolloverX`), no su propio número. Validar con `node scripts/test-gift-rollovers.js`.
   **#882/#883 → #976:** TODA carga real (hgcash y manual) va con rollover propio ×`Config['depositRolloverX']` (**1** desde 2026-10-24, antes 3) en
   `_depositWithBonus`; el bono ×5. Retiro mínimo `Config['withdrawMinArs']` $5.000 (#976). Registro abierto (`noWelcomeGifts`): sin fichas gratis ni 2ª
   carga hasta 5 cargas reales (`retentionJourney.TRUST_DEPOSITS`); desde la 5ª entra a toda la estrategia, sin regalo especial (#977).

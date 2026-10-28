@@ -21,6 +21,9 @@
   (fallback de `creditGift`, misma reference). Para que figure como Bono hay que pedirle a 1girox el ×1 en bonos (o subir `referralRolloverX` a 2).
 - Textos: Soporte (`/sys_support_topic_bono`, migración `mig991RefBono` si no lo editaron), Info de la app (index.html) y Bases (terminos.html; además
   decía carga ×3, ahora ×1). App v648.
+- **Prueba:** `node scripts/test-gift-rollovers.js` (15 casos) corre el `giroxService` real y las funciones de carga de `server.js` (extraídas del archivo) contra
+  un 1girox falso que valida multiplicadores, references e idempotencia: 1ª carga, comprobante común, bono fuera de rango, reintentos, bono activo,
+  referidos con y sin ×1 habilitado, errores 503. Si tocás `_depositWithBonus`, `creditGift` o el pago de referidos, correla.
 
 ## Sesión 2026-10-25
 
