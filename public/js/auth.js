@@ -9,6 +9,21 @@ VIP.auth = (function () {
     // Aplica Advanced Matching al pixel cuando el backend devolvió los hashes
     // (data.user.metaMatching). Idempotente: si se llama varias veces con el
     // mismo matching no duplica eventos. Nunca rompe la UI.
+    // #992: CUENTA SECUNDARIA (mismo teléfono / celular / CBU que otra) ⇒ cartel fijo arriba con su cuenta principal. Tocarlo despliega el detalle.
+    function _paintDupBar(main) {
+        let bar = document.getElementById('dupAccBar');
+        if (!main) { if (bar) bar.remove(); document.documentElement.classList.remove('has-dup-bar'); return; }
+        if (!bar) {
+            bar = document.createElement('div'); bar.id = 'dupAccBar'; bar.className = 'dup-acc-bar'; bar.setAttribute('role', 'status');
+            bar.innerHTML = '<div class="dab-row"><span class="dab-ico">⚠️</span><span class="dab-txt">Cuenta secundaria · tu cuenta principal es <b class="dab-main"></b></span></div>' +
+                '<div class="dab-more">Esta cuenta puede cargar y retirar normal, pero <b>no tiene bonos vigentes</b>. Volvé a tu cuenta principal <b class="dab-main"></b> para tener todos los beneficios.</div>';
+            bar.addEventListener('click', () => bar.classList.toggle('open'));
+            document.body.appendChild(bar);
+        }
+        bar.querySelectorAll('.dab-main').forEach((el) => { el.textContent = String(main); });
+        document.documentElement.classList.add('has-dup-bar');
+    }
+
     function _applyMetaMatching(user) {
         try {
             if (VIP.pixel && typeof VIP.pixel.initWithMatching === 'function' && user && user.metaMatching) {
@@ -802,6 +817,7 @@ VIP.auth = (function () {
                         // re-init del pixel para que conversiones posteriores
                         // (Login refresh, RefundClaim, InitiateCheckout) hereden AM.
                         _applyMetaMatching(userData);
+                        try { _paintDupBar(userData.dupMain || null); } catch (_) {}
                         return true;
                     }
                 } else if (response.status === 404) {

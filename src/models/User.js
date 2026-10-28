@@ -676,6 +676,10 @@ const userSchema = new mongoose.Schema({
   fraudNotes: { type: [{ at: Date, note: String }], default: [] },
   // #873 revisión de una ALERTA DE ESTAFA: 'legit' (revisado, no se vuelve a mostrar) | 'watch' (en observación). by/at/note de quién lo revisó.
   fraudReview: { status: { type: String, default: null }, by: { type: String, default: null }, at: { type: Date, default: null }, note: { type: String, default: null } },
+  // #992 CUENTA SECUNDARIA: mismo teléfono / celular / notificaciones que una cuenta MÁS VIEJA (la principal). Sin ningún regalo; la app le
+  // muestra arriba cuál es su cuenta principal. `dupCleared` = el admin la desmarcó (no se vuelve a marcar sola).
+  duplicateOf: { type: { userId: String, username: String, reason: String, at: Date }, default: null },
+  dupCleared: { type: { by: String, at: Date }, default: null },
   dailyRoulettePendingPct: { type: Number, default: 0 },
   dailyRoulettePendingLabel: { type: String, default: null },
   // #742: bono reclamado desde una HISTORIA (se consume en la próxima carga antes que cualquier otro bono; vence con la historia)

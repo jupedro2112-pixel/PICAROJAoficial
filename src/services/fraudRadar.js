@@ -186,7 +186,7 @@ async function scan(deps, opts = {}) {
 /** Caso completo de un cliente: movimientos, quién le cargó, a quién retira, celulares, IP, cuentas vinculadas. */
 async function caseFile(deps, userId) {
   const { User, Transaction, PendingPayout, BankMovement } = deps;
-  const u = await User.findOne({ id: userId }).select('id username createdAt lastLogin phoneVerified phone isBlocked blockReason blockedAt blockedBy registrationIp registrationUserAgent fcmToken fcmTokens fraudFlags fraudNotes fraudReview referredByUserId referralCode acquisitionSource acquisitionCampaign withdrawalAccount lastDevice').lean();
+  const u = await User.findOne({ id: userId }).select('id username createdAt lastLogin phoneVerified phone isBlocked blockReason blockedAt blockedBy registrationIp registrationUserAgent fcmToken fcmTokens fraudFlags fraudNotes fraudReview duplicateOf dupCleared referredByUserId referralCode acquisitionSource acquisitionCampaign withdrawalAccount lastDevice').lean();
   if (!u) return null;
   const [txs, pays, ins, refs] = await Promise.all([
     Transaction.find({ $or: [{ userId }, { username: u.username }] }).sort({ createdAt: -1 }).limit(80).select('type amount bonus description createdAt platform metadata.source').lean(),

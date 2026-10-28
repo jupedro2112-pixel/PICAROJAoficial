@@ -429,6 +429,9 @@ reintento manda la misma reference y la plataforma responde `duplicate:true`.
 
 ### 4.5 Rollover y bonos ACTIVOS en la plataforma
 
+> **Cuenta secundaria (#992):** antes de acreditar cualquier regalo, `giroxService` consulta el guard (`setGiftGuard`, inyectado por server.js: `User.duplicateOf`)
+> y devuelve `gifts_blocked` si la cuenta es secundaria de otra. `opts.noGiftGuard` lo saltea (devolución de retiro rechazado, Bonificación manual).
+
 > **Mapa vigente (#991, 2026-10-28):** carga real (comprobante, manual, hgcash) = CARGA ×`depositRolloverX` (1) por `_depositWithBonus`;
 > el bono que le toque (1ª carga 100%, historia, 2ª carga, lote, auto) va pegado como BONO ×`bonusRolloverX` (5). Misiones, extra por
 > instalar ($5.000 fijo), reembolsos (diario/semanal/mensual y acumulativo), ruleta, VIP, rakeback = BONO ×5 (`_giftRolloverX`, sin número

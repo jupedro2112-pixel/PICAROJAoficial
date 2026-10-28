@@ -272,6 +272,13 @@ function setKeyResolver(fn) { _keyResolver = typeof fn === 'function' ? fn : nul
 // (el agente veía "cargado" y en el panel del publicista el saldo seguía en $0).
 let _publisherOwned = null;
 function setPublisherOwnedCheck(fn) { _publisherOwned = typeof fn === 'function' ? fn : null; }
+// #992 (owner 2026-10-28): CUENTA SECUNDARIA (mismo teléfono / celular / notificaciones que otra) ⇒ sin NINGÚN regalo. server.js inyecta
+// el chequeo; `creditGift` y `creditUserBalance` lo consultan antes de acreditar un regalo. Devuelve el motivo (string) o null.
+// Excepciones con `opts.noGiftGuard`: devoluciones de plata propia (retiro rechazado) y la Bonificación MANUAL del panel.
+let _giftGuard = null;
+function setGiftGuard(fn) { _giftGuard = typeof fn === 'function' ? fn : null; }
+async function _giftBlocked(username) { try { return (_giftGuard && await _giftGuard(String(username))) || null; } catch (_) { return null; } }
+function _giftBlockedResult(why) { return { success: false, error: 'Cuenta secundaria: sin regalos (' + why + ')', code: 'gifts_blocked', httpStatus: null }; }
 async function _isPublisherOwned(username) { try { return !!(_publisherOwned && await _publisherOwned(String(username))); } catch (_) { return false; } }
 async function _resolveKeyFor(username) {
   if (!_keyResolver || !username) return null;
@@ -1028,6 +1035,7 @@ async function withdrawFromUser(username, amount, description = '', reference = 
 async function creditUserBalance(username, amount, reference = null, opts = {}) {
   const amt = _normalizeAmount(amount);
   if (amt === null) return { success: false, error: 'Monto inválido', code: 'invalid_amount' };
+  if (!(opts && opts.noGiftGuard)) { const why = await _giftBlocked(username); if (why) { logger.warn(`[girox] regalo a ${username} $${amt} NO acreditado: ${why}`); return _giftBlockedResult(why); } } // #992
 
   // Multiplier EXPLÍCITO (incluido 0): /bonus estricto, SIN fallback a depósito —
   // lo usan el botón Bonificación del panel, el welcome code cash y los lotes, donde
@@ -1124,7 +1132,8 @@ async function creditGift(username, amount, opts = {}) {
   const roll = Math.max(0, Math.round(Number(opts.rolloverX) || 0));
   const description = opts.description || '';
   const reference = opts.reference || null;
-  if (roll === 0) return creditUserBalance(username, amt, reference, { description });
+  if (!opts.noGiftGuard) { const why = await _giftBlocked(username); if (why) { logger.warn(`[girox] regalo a ${username} $${amt} NO acreditado: ${why}`); return _giftBlockedResult(why); } } // #992
+  if (roll === 0) return creditUserBalance(username, amt, reference, { description, noGiftGuard: true });
 
   let viaBonus = true;
   let why = null;
@@ -1156,7 +1165,7 @@ async function creditGift(username, amount, opts = {}) {
   }
 
   if (viaBonus) {
-    const r = await creditUserBalance(username, amt, reference, { multiplier: roll, description });
+    const r = await creditUserBalance(username, amt, reference, { multiplier: roll, description, noGiftGuard: true });
     if (r && r.success) { r.creditedAs = 'bonus'; r.claimRequired = true; return r; }
     const definitivo = r && (['feature_disabled', 'bonus_out_of_range', 'validation_error', 'invalid_multiplier', 'player_not_found'].includes(r.code) || r.httpStatus === 422);
     if (!definitivo) return r; // transitorio: no cambiar de vía
@@ -1609,6 +1618,8 @@ module.exports = {
   getPublisherKeyOverridesCount: function () { return _publisherKeyConfigs().length; },
   // ruteo por dueño del jugador (server.js inyecta el resolver username→apiKey)
   setKeyResolver,
+  setGiftGuard,
+  isGiftBlocked: _giftBlocked,
   setPublisherOwnedCheck,
   // jugadores
   createPlatformUser,

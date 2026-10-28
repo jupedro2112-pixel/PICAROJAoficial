@@ -17648,6 +17648,8 @@ async function openFraudCase(userId) {
               '<div>🆔 Creada: <b>' + fd(u.createdAt) + '</b></div><div>🕒 Último ingreso: <b>' + fd(u.lastLogin) + '</b></div><div>📱 Teléfono: <b>' + (u.phoneVerified ? 'verificado ' + escHtml(u.phone || '') : 'sin verificar') + '</b></div>' +
               '<div>🌐 IP de alta: <b>' + escHtml(u.registrationIp || '—') + '</b></div><div>📲 Celulares (avisos): <b>' + u.devices + '</b></div><div>📣 Origen: <b>' + escHtml((u.source || '') + (u.campaign ? ' · ' + u.campaign : '')) + '</b></div>' +
               (u.savedAccount ? '<div>🏦 Cuenta guardada: <b>' + escHtml(u.savedAccount.titular || '') + ' ' + escHtml(u.savedAccount.cbu || '') + '</b></div>' : '') +
+              (u.duplicateOf ? '<div style="color:#f59e0b">🔁 Cuenta SECUNDARIA de <b>' + escHtml(u.duplicateOf.username || '') + '</b> (' + escHtml(u.duplicateOf.reason || '') + ', ' + fd(u.duplicateOf.at) + '): sin ningún regalo</div>' : '') + // #992
+              (u.dupCleared ? '<div style="color:#9ca3af">✅ Marca de cuenta secundaria quitada por ' + escHtml(u.dupCleared.by || '') + ' ' + fd(u.dupCleared.at) + '</div>' : '') +
               (u.isBlocked ? '<div style="color:#f87171">⛔ Bloqueado ' + fd(u.blockedAt) + ' por ' + escHtml(u.blockedBy || '') + ': ' + escHtml(u.blockReason || '') + '</div>' : '') +
             '</div>' +
             '<div style="font-size:.75rem;color:#9ca3af;margin-bottom:.5rem">Navegador del alta: ' + escHtml(u.registrationUserAgent || '—') + '</div>' +
@@ -17656,7 +17658,7 @@ async function openFraudCase(userId) {
             '<h3 style="font-size:.9rem;margin:.8rem 0 .3rem">🏧 A quién retira</h3>' + tbl(['Fecha', 'Monto', 'Estado', 'Titular que puso', 'Titular REAL del CBU', 'CBU / alias'], c.withdrawals.map((x) => '<tr><td>' + fd(x.at) + '</td><td>' + _frMoney(x.amount) + '</td><td>' + escHtml(x.status || '') + '</td><td>' + escHtml(x.titular || '') + '</td><td>' + escHtml(x.realHolder || '—') + '</td><td>' + escHtml((x.cbu || '') + (x.alias ? ' · ' + x.alias : '')) + '</td></tr>')) +
             '<h3 style="font-size:.9rem;margin:.8rem 0 .3rem">📒 Movimientos en la app (últimos 80)</h3>' + tbl(['Fecha', 'Tipo', 'Monto', 'Bono', 'Detalle'], c.transactions.map((x) => '<tr><td>' + fd(x.at) + '</td><td>' + escHtml(x.type || '') + '</td><td>' + _frMoney(x.amount) + '</td><td>' + (x.bonus ? _frMoney(x.bonus) : '') + '</td><td>' + escHtml(x.description || x.source || '') + '</td></tr>')) +
             (u.fraudNotes && u.fraudNotes.length ? '<h3 style="font-size:.9rem;margin:.8rem 0 .3rem">📝 Notas</h3><ul style="font-size:.78rem;margin:0 0 0 1rem;padding:0">' + u.fraudNotes.map((n) => '<li>' + fd(n.at) + ' — ' + escHtml(n.note || '') + '</li>').join('') + '</ul>' : '') +
-            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem">' + (u.isBlocked ? '<button class="btn btn-secondary" onclick="fraudUnblock(\'' + escHtml(u.id) + '\',\'' + escHtml(u.username) + '\')">🔓 Desbloquear</button>' : '<button class="btn" style="background:#dc2626;color:#fff" onclick="fraudBlock(\'' + escHtml(u.id) + '\',\'' + escHtml(u.username) + '\')">⛔ Bloquear la cuenta</button>') +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem">' + (u.duplicateOf ? '<button class="btn btn-secondary" onclick="fraudDupClear(\'' + escHtml(u.id) + '\',\'' + escHtml(u.username) + '\')">✅ Quitar marca de cuenta secundaria</button>' : '') + (u.isBlocked ? '<button class="btn btn-secondary" onclick="fraudUnblock(\'' + escHtml(u.id) + '\',\'' + escHtml(u.username) + '\')">🔓 Desbloquear</button>' : '<button class="btn" style="background:#dc2626;color:#fff" onclick="fraudBlock(\'' + escHtml(u.id) + '\',\'' + escHtml(u.username) + '\')">⛔ Bloquear la cuenta</button>') +
               '<button class="btn btn-secondary" onclick="fraudReview(\'' + escHtml(u.id) + '\',\'watch\')">👁 Dejar en observación</button><button class="btn btn-secondary" onclick="fraudReview(\'' + escHtml(u.id) + '\',\'legit\')">✅ Es legítimo</button></div>';
     } catch (e) { b.innerHTML = '<span style="color:#f87171">No se pudo cargar el caso: ' + escHtml(e.message) + '</span>'; }
 }
@@ -17665,6 +17667,12 @@ async function fraudBlock(userId, username) {
     if (!reason || reason.trim().length < 5) return;
     try { const r = await authFetch('/api/admin/users/' + encodeURIComponent(userId) + '/block', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason.trim() }) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('⛔ ' + username + ' bloqueado (se le cerró la sesión)', 'success'); try { document.getElementById('frCaseModal').classList.add('hidden'); } catch (_) {} loadFraud(true); } catch (e) { showToast('No se pudo bloquear: ' + e.message, 'error'); }
 }
+// #992: la cuenta NO es de la misma persona ⇒ vuelve a recibir bonos y regalos (no se vuelve a marcar sola).
+async function fraudDupClear(userId, username) {
+    if (!window.confirm('¿Quitar la marca de cuenta secundaria a ' + username + '? Vuelve a recibir bonos y regalos.')) return;
+    try { const r = await authFetch('/api/admin/users/' + encodeURIComponent(userId) + '/dup-clear', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('✅ ' + username + ': ya no es cuenta secundaria', 'success'); openFraudCase(userId); } catch (e) { showToast('No se pudo: ' + e.message, 'error'); }
+}
+window.fraudDupClear = fraudDupClear;
 async function fraudUnblock(userId, username) {
     if (!window.confirm('¿Desbloquear a ' + username + '?')) return;
     try { const r = await authFetch('/api/admin/users/' + encodeURIComponent(userId) + '/unblock', { method: 'POST' }); const j = await r.json(); if (!r.ok) throw new Error(j.error || 'error'); showToast('🔓 ' + username + ' desbloqueado', 'success'); loadFraud(true); } catch (e) { showToast('No se pudo: ' + e.message, 'error'); }

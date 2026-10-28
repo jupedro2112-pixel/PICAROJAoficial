@@ -8,6 +8,31 @@
 
 ## Sesión 2026-10-28
 
+### 992. 🔁 CUENTA SECUNDARIA: mismo teléfono / celular / notificaciones / CBU que envía ⇒ se le avisa cuál es su cuenta principal, sin NINGÚN bono, cartel arriba — SW v649 · admin SW v208
+**Pedido (owner, captura de "SIN EXTRA POR INSTALAR LA APP: mismo celular que picanico51"):** "cuando se registran con el mismo teléfono, sin tomar
+la IP, avisarle al cliente que tiene otra cuenta, decirle cuál y que no tiene bono vigente, desactivarle todos los bonos y dejarle aclarado arriba cuál
+es su cuenta principal" · "que pueda cargar pero que no tenga bonos, sugerencia volver a su cuenta principal; detectá mismo teléfono y mismo CBU que
+envía la transferencia".
+- **Detección** (`_dupAccountCheck`, server.js): grupo = la cuenta + las que comparten teléfono (10 dígitos, con cualquier separador guardado:
+  `_telTailRegex`), ID del celular (`deviceIds`), token de notificaciones o **CBU que envía** (el de la carga en curso + los de sus cargas anteriores en
+  BankMovement Inbound; los retiros no cuentan). La IP NO cuenta. **Principal = la más vieja** (no marcada); las demás quedan `User.duplicateOf`
+  {userId, username, reason, at} + fraudFlags `dup_account` + fraudNote. Corre: al registrar celular nuevo (ping), al verificar teléfono, en la entrada
+  rápida con celular, en la detección de bienvenida (`_welcomeAbuseOf`), en hgcash ANTES del bono (con el CBU de esa transferencia) y en toda carga
+  (`resolveAutoBonus`). Marca atómica (`duplicateOf: null` en el filtro) ⇒ un solo aviso aunque corra en varias instancias.
+- **Al marcar:** mensaje al cliente `/sys_dup_account` ({principal}, {username}; editable en COMANDOS): tiene otra cuenta (cuál), esta no tiene bonos
+  vigentes, puede cargar y retirar normal, sugerencia de volver a la principal para tener los beneficios; push personal; nota interna para el agente.
+- **Sin ningún regalo:** `resolveAutoBonus` devuelve sin bono (la carga entra igual); guard central en giroxService (`setGiftGuard`, server.js lo
+  inyecta con caché de 60 s) ⇒ `creditGift`/`creditUserBalance` devuelven `gifts_blocked` (reembolsos, misiones, ruleta, fueguito, VIP, rakeback, lotes,
+  instalar, referidos). Ruleta responde `DUP_ACCOUNT`; historia con bono ya la frena `_isFlagged`. **Excepciones** (`noGiftGuard`): Bonificación MANUAL
+  del panel (decisión del agente) y devolución del bono de un retiro rechazado (es su plata). Ojo: `dup_account` cuenta como "marcado" ⇒ sus retiros
+  van a confirmación humana (`_payoutTrust`) y suma en Alertas de estafa.
+- **App:** `/api/users/me` devuelve `dupMain` ⇒ `auth.js _paintDupBar` pone un cartel fijo arriba "Cuenta secundaria · tu cuenta principal es X"
+  (tocarlo despliega el detalle; estilos en pin.css con tokens, sigue el modo nocturno).
+- **Panel:** Alertas de estafa → caso del cliente muestra "🔁 Cuenta SECUNDARIA de X (motivo)" y el botón **"✅ Quitar marca de cuenta secundaria"**
+  (sólo admin, `POST /api/admin/users/:id/dup-clear` ⇒ `dupCleared`, no se vuelve a marcar sola).
+- **Prueba:** `node scripts/test-dup-account.js` (10 casos: la función REAL extraída de server.js contra una base en memoria + el guard real).
+- **Arreglo de paso:** `_welcomeAbuseOf` buscaba el teléfono con los 8 dígitos pegados ⇒ no encontraba teléfonos guardados con espacios/guiones.
+
 ### 991. 🎁 Regalos: todo BONO con su rollover — referidos ×1, misiones y reembolso acumulativo con el ×5 global — SW v648
 **Pedido (owner):** "comprobante primera carga va sin bono y el bono del 100% con rollover x5, misiones como bono rollover x5, instalar app como bono
 5000 rollover x5, referido rollover x1 el día 1, reembolsos todos rollover x5 como bono" · "en las historias lo mismo el bono x5".

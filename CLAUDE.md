@@ -312,6 +312,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   totales del panel de 1girox que carga el owner (`DailyClose.giroxPanel`). Un flujo NUEVO que mueva fichas tiene que dejar Transaction con
   `platform` y el `type` correcto (si no, el cierre con 1girox no cuadra). **AGENTES (#889):** depositor/withdrawer ven 8 secciones
   (`AGENT_SECTIONS` en admin.js). (La clave temporal del panel de #889 se revirtió en #892.)
+- **CUENTA SECUNDARIA (#992):** mismo teléfono / celular / notificaciones / CBU que envía que una cuenta más vieja ⇒ `User.duplicateOf` + fraudFlag
+  `dup_account` (`_dupAccountCheck`; la IP NO cuenta). Sin NINGÚN regalo: guard central `girox.setGiftGuard` en `creditGift`/`creditUserBalance` (un regalo
+  NUEVO tiene que pasar por esas funciones; sólo devoluciones de plata propia o la Bonificación manual van con `noGiftGuard`) y `resolveAutoBonus` sin bono.
+  Carga y retira normal; la app muestra arriba la cuenta principal (`dupMain`). Desmarcar: caso del cliente en Alertas de estafa. Test `scripts/test-dup-account.js`.
 - **ALERTAS DE ESTAFA (#873):** `src/services/fraudRadar.js` (reglas + puntaje + caso). Una señal nueva de estafa va como regla ahí (con
   evidencia); nunca bloquear automático: el panel bloquea con `/api/admin/users/:id/block`. Probar con MongoDB en memoria (WORKLOG #873).
 - **HISTORIAS AUTOMÁTICAS (#827 → #931):** `src/services/storyAutopilot.js` (contenido) + `_storyAutoTick` (publica 5/día JUNTAS a las 00:05-00:09 y apaga

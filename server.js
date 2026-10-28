@@ -1793,7 +1793,7 @@ async function _welcomeAbuseOf(userIn) {
     if (Array.isArray(u.deviceIds) && u.deviceIds.length) or.push({ deviceIds: { $in: u.deviceIds } });
     const toks = [].concat(u.fcmToken ? [u.fcmToken] : [], (u.fcmTokens || []).map((t) => t && t.token).filter(Boolean));
     if (toks.length) or.push({ $or: [{ fcmToken: { $in: toks } }, { 'fcmTokens.token': { $in: toks } }] });
-    if (tel.length === 10) or.push({ phone: { $regex: tel.slice(-8) } });
+    if (tel.length === 10) or.push({ phone: { $regex: _telTailRegex(tel) } }); // #992: con espacios / guiones guardados
     if (!or.length) return null;
     const others = await User.find({ id: { $ne: u.id }, role: 'user', $or: or }).select('username phone deviceIds fcmToken fcmTokens').limit(20).lean();
     const hits = [];
@@ -1803,9 +1803,81 @@ async function _welcomeAbuseOf(userIn) {
       else if (Array.isArray(u.deviceIds) && u.deviceIds.length && (o.deviceIds || []).some((d) => u.deviceIds.includes(d))) hits.push('mismo celular que ' + o.username);
       else if (toks.length && (toks.includes(o.fcmToken) || (o.fcmTokens || []).some((t) => t && toks.includes(t.token)))) hits.push('mismas notificaciones que ' + o.username);
     }
+    if (hits.length) _dupAccountCheck(u, 'welcome').catch(() => {}); // #992
     return hits.length ? hits.slice(0, 3).join(', ') : null;
   } catch (e) { logger.warn('[welcome-abuse] ' + e.message); return null; }
 }
+// #992 (owner 2026-10-28): "cuando se registran con el mismo teléfono / celular, avisarle al cliente que tiene otra cuenta, cuál, que no tiene
+// bono vigente, desactivarle todos los bonos y dejarle aclarado arriba cuál es su cuenta principal" (la IP NO cuenta: comparten wifi).
+// Grupo = esta cuenta + las que comparten teléfono / ID del celular / token de notificaciones. PRINCIPAL = la más vieja; las demás quedan
+// `duplicateOf` + fraudFlags 'dup_account' (⇒ _isFlagged: sin bienvenida, 2ª carga, misiones, historia con bono) y el guard de giroxService
+// les frena TODO regalo (reembolsos, ruleta, fueguito, VIP, rakeback, lotes, referidos). Cargas y retiros siguen normales. El admin la desmarca
+// desde Alertas de estafa (POST /api/admin/users/:id/dup-clear ⇒ `dupCleared`, no se vuelve a marcar sola).
+const DUP_ACCOUNT_MSG_DEFAULT = '⚠️ Detectamos que ya tenés otra cuenta con nosotros: *{principal}*. Esa es tu cuenta PRINCIPAL.\n\nEsta cuenta ({username}) queda como secundaria: podés cargar y retirar normal, pero NO tiene bonos vigentes (bonos de carga, reembolsos, ruleta, misiones, historias con bono ni ningún otro regalo).\n\n👉 Te sugerimos volver a tu cuenta principal *{principal}* para tener todos los beneficios. Si creés que es un error, escribinos por acá.';
+// Los teléfonos se guardan como los escribió el cliente ("+54 9 11 5555-1234"): se busca por los últimos 8 dígitos con cualquier separador
+// en el medio (la comparación exacta de 10 dígitos la hace después `_dupPairReason` / el filtro de `_welcomeAbuseOf`).
+function _telTailRegex(tel) { return String(tel).slice(-8).split('').join('\\D*') + '\\D*$'; }
+function _dupPairReason(a, b) {
+  const ta = String(a.phone || '').replace(/\D/g, '').slice(-10); const tb = String(b.phone || '').replace(/\D/g, '').slice(-10);
+  if (ta.length === 10 && ta === tb) return 'mismo teléfono';
+  if ((a.deviceIds || []).some((d) => (b.deviceIds || []).includes(d))) return 'mismo celular';
+  const tk = (u) => [].concat(u.fcmToken ? [u.fcmToken] : [], (u.fcmTokens || []).map((t) => t && t.token).filter(Boolean));
+  const ka = tk(a); if (ka.length && tk(b).some((t) => ka.includes(t))) return 'mismas notificaciones';
+  return null;
+}
+const _dupGuardCache = new Map(); // username → { why, ts }
+async function _dupAccountCheck(userIn, origin, opts = {}) {
+  try {
+    if (!userIn || !userIn.id) return null;
+    const F = 'id username phone deviceIds fcmToken fcmTokens createdAt role duplicateOf dupCleared isBlocked';
+    const u = await User.findOne({ id: userIn.id }).select(F).lean(); if (!u || u.role !== 'user') return null;
+    const or = []; const tel = String(u.phone || '').replace(/\D/g, '').slice(-10);
+    if (Array.isArray(u.deviceIds) && u.deviceIds.length) or.push({ deviceIds: { $in: u.deviceIds } });
+    const toks = [].concat(u.fcmToken ? [u.fcmToken] : [], (u.fcmTokens || []).map((t) => t && t.token).filter(Boolean));
+    if (toks.length) or.push({ fcmToken: { $in: toks } }, { 'fcmTokens.token': { $in: toks } });
+    if (tel.length === 10) or.push({ phone: { $regex: _telTailRegex(tel) } });
+    // MISMO CBU que envía la transferencia (owner): el de esta carga (opts.cbu) + los que ya usó esta cuenta para cargar.
+    const cbuIds = new Set();
+    try {
+      const BankMovement = require('./src/models/BankMovement');
+      const cbus = new Set(); const dig = (x) => String(x || '').replace(/\D/g, '');
+      if (dig(opts.cbu).length >= 10) cbus.add(dig(opts.cbu));
+      (await BankMovement.find({ matchedUserId: u.id, direction: { $ne: 'Outbound' }, fromCBU: { $nin: [null, ''] } }).select('fromCBU').sort({ createdAt: -1 }).limit(30).lean()).forEach((m) => { if (dig(m.fromCBU).length >= 10) cbus.add(dig(m.fromCBU)); });
+      if (cbus.size) {
+        const ids = await BankMovement.distinct('matchedUserId', { direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, $or: [...cbus].slice(0, 6).map((c) => ({ fromCBU: { $regex: c.slice(-14) + '$' } })) });
+        ids.filter(Boolean).slice(0, 20).forEach((id) => cbuIds.add(String(id)));
+        if (cbuIds.size) or.push({ id: { $in: [...cbuIds] } });
+      }
+    } catch (e) { logger.warn('[dup-account] cbu: ' + e.message); }
+    if (!or.length) return null;
+    const why = (o) => _dupPairReason(u, o) || (cbuIds.has(String(o.id)) ? 'mismo CBU de transferencia' : null);
+    const others = (await User.find({ id: { $ne: u.id }, role: 'user', $or: or }).select(F).limit(20).lean()).filter((o) => why(o));
+    if (!others.length) return null;
+    const reasonOf = new Map(others.map((o) => [o.id, why(o)]));
+    const group = [u, ...others].sort((x, y) => new Date(x.createdAt || 0) - new Date(y.createdAt || 0));
+    // principal = la más vieja que NO esté marcada como secundaria de otra (si todas lo están, la más vieja)
+    const main = group.find((g) => !g.duplicateOf) || group[0];
+    const marked = [];
+    for (const g of group) {
+      if (g.id === main.id || g.duplicateOf || g.dupCleared) continue;
+      const reason = _dupPairReason(g, main) || (g.id === u.id ? reasonOf.get(main.id) : reasonOf.get(g.id)) || 'mismo dispositivo o CBU';
+      const r = await User.updateOne({ id: g.id, duplicateOf: null, dupCleared: null }, { $set: { duplicateOf: { userId: main.id, username: main.username, reason, at: new Date() } }, $addToSet: { fraudFlags: 'dup_account' }, $push: { fraudNotes: { at: new Date(), note: `Cuenta secundaria de ${main.username} (${reason})` } } });
+      if (!(r && r.modifiedCount)) continue; // otra instancia ya la marcó
+      _dupGuardCache.delete(g.username); marked.push(g.username);
+      logger.warn(`[dup-account] ${g.username} = secundaria de ${main.username} (${reason}; ${origin || ''})`);
+      _emitAdminOnlyChatNote(g.id, g.username, `🔁 CUENTA SECUNDARIA: ${reason} que ${main.username} (su cuenta principal). Se le avisó al cliente y quedó SIN NINGÚN REGALO (bonos, reembolsos, ruleta, misiones, historias, referidos). Puede cargar y retirar normal. Si es otra persona, desmarcala en Alertas de estafa → caso del cliente → "Quitar marca de cuenta secundaria".`).catch(() => {});
+      const text = await renderSystemCommand('/sys_dup_account', DUP_ACCOUNT_MSG_DEFAULT, { principal: main.username, username: g.username });
+      if (text) await _sendUserSystemMessage(g, text, { metadata: { kind: 'dup_account', principal: main.username }, push: { title: '⚠️ Ya tenés otra cuenta', body: `Tu cuenta principal es ${main.username}. Volvé a ella para tener todos los beneficios.`, data: { kind: 'personal' } } });
+    }
+    return { main: main.username, marked };
+  } catch (e) { logger.warn('[dup-account] ' + e.message); return null; }
+}
+girox.setGiftGuard(async (username) => {
+  const hit = _dupGuardCache.get(username); if (hit && Date.now() - hit.ts < 60 * 1000) return hit.why;
+  const u = await User.findOne({ username }).select('duplicateOf role').lean();
+  const why = u && u.role === 'user' && u.duplicateOf && u.duplicateOf.username ? 'cuenta secundaria de ' + u.duplicateOf.username : null;
+  _dupGuardCache.set(username, { why, ts: Date.now() }); return why;
+});
 function _installGiftExpired(ig) { return !!(ig && ig.expiresAt && new Date(ig.expiresAt).getTime() < Date.now()); }
 // Devuelve true si se OFRECIÓ (el que llama puede omitir el cartel genérico "instalá la app").
 async function maybeOfferInstallGift(userIn, { amount, platform = null, source = '' } = {}) {
@@ -3209,6 +3281,7 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
     const _ref = `vip-hg-${chargeKey || movement.movementId}`;
     // BONO AUTOMÁTICO (#210): el bono en % pendiente entra junto con la carga.
     const _reuse = await _cbuReuseCheck(user, movement); // #509
+    await _dupAccountCheck(user, 'cbu', { cbu: movement && movement.fromCBU }); // #992: mismo CBU que otra cuenta ⇒ secundaria, esta carga ya sin bono
     const _auto = await resolveAutoBonus(user, Number(amount), 'auto-hgcash', { noWelcome: !!_reuse });
     const result = await _depositWithBonus(adapter, user.username, Number(amount), 'Carga automática (hgcash)', _ref, _auto.bonus); // #839
     if (!result.success) {
@@ -5347,7 +5420,7 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
     let accessToken = null;
     try { accessToken = new URL(out.body.accessUrl).searchParams.get('acceso'); } catch (_) {}
     if (verifiedPhone) { // #541: el celular verificado queda en la cuenta (igual que el registro con SMS)
-      try { await User.updateOne({ username: out.body.username }, { $set: { phone: verifiedPhone, phoneKey: normalizePhoneKey(verifiedPhone), phoneVerified: true, phoneVerificationPending: false } }); } catch (e) { logger.warn(`[quick-entry] no se pudo guardar el celular verificado de ${out.body.username}: ${e.message}`); }
+      try { User.findOne({ username: out.body.username }).select('id').lean().then((nu) => nu && setTimeout(() => _dupAccountCheck(nu, 'quick-entry').catch(() => {}), 3000)).catch(() => {}); /* #992 */ await User.updateOne({ username: out.body.username }, { $set: { phone: verifiedPhone, phoneKey: normalizePhoneKey(verifiedPhone), phoneVerified: true, phoneVerificationPending: false } }); } catch (e) { logger.warn(`[quick-entry] no se pudo guardar el celular verificado de ${out.body.username}: ${e.message}`); }
     }
     res.status(201).json({ success: true, username: out.body.username, password: out.body.password, accessToken, platforms: out.body.platforms || [] });
   } catch (e) { logger.error('[quick-entry] ' + e.message); res.status(500).json({ error: 'Error del servidor. Probá de nuevo.' }); }
@@ -6001,7 +6074,9 @@ app.get('/api/users/me', authMiddleware, async (req, res) => {
       phone: user.phone,
       externalId: user.id
     });
-    res.json({ ...user, metaMatching });
+    let dupMain = null; // #992: cuenta secundaria ⇒ la app muestra arriba cuál es la principal
+    try { const d = await User.findOne({ id: user.id }).select('duplicateOf').lean(); dupMain = (d && d.duplicateOf && d.duplicateOf.username) || null; } catch (_) {}
+    res.json({ ...user, metaMatching, dupMain });
   } catch (error) {
     console.error('Error obteniendo usuario:', error);
     res.status(500).json({ error: 'Error del servidor' });
@@ -7283,6 +7358,7 @@ app.post('/api/auth/verify-phone/confirm', authMiddleware, sensitiveLimiter, asy
     user.phoneVerificationPending = false;
     user.smsConsent = true;
     await user.save();
+    _dupAccountCheck(user, 'phone').catch(() => {}); // #992
 
     res.json({
       success: true,
@@ -11403,6 +11479,7 @@ app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, re
       {
         // Elige un multiplicador VÁLIDO para la plataforma (x1 puede no estarlo).
         multiplier: await getGiroxBonusMultiplier(),
+        noGiftGuard: true, // #992: la Bonificación MANUAL del panel vale también para una cuenta secundaria (decisión del agente)
         description: 'Bonificación otorgada'
       }
     );
@@ -14927,6 +15004,11 @@ const _isFlagged = (user) => Array.isArray(user && user.fraudFlags) && user.frau
 async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   const none = { pct: 0, bonus: 0, source: null, label: null, claimed: false, rule: '', revert: async () => {} };
   if (!user || !(Number(amount) > 0)) return none;
+  try { // #992: cuenta secundaria ⇒ ningún bono en la carga (la carga entra igual). Se re-chequea acá (teléfono, celular, CBU con el que cargó).
+    await _dupAccountCheck(user, 'deposit');
+    const _dup = ((await User.findOne({ id: user.id }).select('duplicateOf').lean()) || {}).duplicateOf;
+    if (_dup && _dup.username) { logger.info(`[auto-bonus] ${user.username}: sin bono — cuenta secundaria de ${_dup.username}`); return none; }
+  } catch (_) {}
   // #509: cuenta marcada por multicuenta → sin bonos de bienvenida ni 2ª carga (sí ruleta/lotes, que ya ganó)
   // #974: teléfono / celular / notificaciones compartidas con otra cuenta ⇒ sin bonos de bienvenida (se chequea sólo en la primera carga real).
   let _abuse = null;
@@ -16051,6 +16133,7 @@ async function getFireRolloverMultiplier() {
 //               transitorio del /bonus se devuelve tal cual (el caller restaura
 //               el premio y el cliente reintenta con la MISMA reference).
 async function _creditFireReward(username, amount, desc, ref, mult) {
+  { const why = await girox.isGiftBlocked(username); if (why) return { success: false, error: 'Cuenta secundaria: sin regalos (' + why + ')', code: 'gifts_blocked' }; } // #992
   if (!(mult > 0)) {
     return girox.creditUserBalance(username, amount, ref, { description: desc });
   }
@@ -19645,6 +19728,17 @@ app.get('/api/admin/fraud/case/:id', authMiddleware, adminMiddleware, async (req
     res.json(c);
   } catch (e) { logger.error('[fraude] caso: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
+// #992: quitar la marca de CUENTA SECUNDARIA (era otra persona). Sólo el admin. Queda `dupCleared` ⇒ no se vuelve a marcar sola.
+app.post('/api/admin/users/:id/dup-clear', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el admin.' });
+    const u = await User.findOne({ id: String(req.params.id) }).select('id username duplicateOf').lean(); if (!u) return res.status(404).json({ error: 'Cliente no encontrado' });
+    await User.updateOne({ id: u.id }, { $set: { duplicateOf: null, dupCleared: { by: req.user.username, at: new Date() } }, $pull: { fraudFlags: 'dup_account' }, $push: { fraudNotes: { at: new Date(), note: `${req.user.username} quitó la marca de cuenta secundaria${u.duplicateOf ? ' (de ' + u.duplicateOf.username + ')' : ''}` } } });
+    _dupGuardCache.delete(u.username);
+    _emitAdminOnlyChatNote(u.id, u.username, `✅ ${req.user.username} quitó la marca de CUENTA SECUNDARIA: vuelve a recibir bonos y regalos como cualquier cliente.`).catch(() => {});
+    res.json({ success: true });
+  } catch (e) { logger.error('[dup-clear] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.post('/api/admin/fraud/review/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
@@ -21317,7 +21411,7 @@ app.post('/api/activity/ping', authMiddleware, async (req, res) => {
         const did = /^[A-Za-z0-9-]{8,64}$/.test(String(d.id || '')) ? String(d.id) : null; // #952: ID propio del celular
         const dev = { os: String(d.os || '').slice(0, 10), model: String(d.model || '').slice(0, 60), w: Math.round(Number(d.w) || 0), h: Math.round(Number(d.h) || 0), dpr: Math.round((Number(d.dpr) || 0) * 100) / 100, app: d.app === true, sat: Math.round(Number(d.sat) || 0), id: did, at: now };
         await User.updateOne({ id: userId, $or: [{ lastDevice: null }, { 'lastDevice.model': { $ne: dev.model } }, { 'lastDevice.app': { $ne: dev.app } }, { 'lastDevice.id': { $ne: did } }, { 'lastDevice.at': { $lt: new Date(now - 86400000) } }] }, { $set: { lastDevice: dev } });
-        if (did) await User.updateOne({ id: userId, deviceIds: { $ne: did } }, { $push: { deviceIds: { $each: [did], $slice: -6 } } }); // #952: últimos 6 celulares distintos
+        if (did) { const _dr = await User.updateOne({ id: userId, deviceIds: { $ne: did } }, { $push: { deviceIds: { $each: [did], $slice: -6 } } }); /* #952: últimos 6 celulares distintos */ if (_dr && _dr.modifiedCount) _dupAccountCheck({ id: userId }, 'device').catch(() => {}); /* #992 */ }
       }
     } catch (_) {}
     const last = await AppSession.findOne({ userId }).sort({ lastPingAt: -1 }).select('id lastPingAt').lean();
@@ -23181,7 +23275,7 @@ app.post('/api/admin/payouts/:id/cancel', authMiddleware, withdrawerMiddleware, 
         if (r && r.success) { chipsOk = true; await mkRefundTx(chipsPart, 'chips', r.data); }
       }
       if (bonusPart > 0) {
-        const r = await (platforms.getAdapter(payout.platform) || girox).creditUserBalance(payout.username, bonusPart, `vip-payoutref-bonus-${payout.id}`);
+        const r = await (platforms.getAdapter(payout.platform) || girox).creditUserBalance(payout.username, bonusPart, `vip-payoutref-bonus-${payout.id}`, { noGiftGuard: true }); // #992: es SU bono devuelto, no un regalo
         if (r && r.success) { bonusOk = true; await mkRefundTx(bonusPart, 'bonus', r.data); }
       }
     } catch (e) {
@@ -24580,6 +24674,7 @@ app.post('/api/roulette/spin', authMiddleware, async (req, res) => {
     // Gates CONFIGURABLES desde el panel (Ruleta diaria).
     const cfg = await getDailyRouletteConfig();
     if (!cfg.enabled) return res.status(403).json({ error: 'La ruleta diaria no está disponible por ahora.' });
+    { const why = await girox.isGiftBlocked(username); if (why) return res.status(403).json({ error: 'Esta cuenta es secundaria (' + why + '): no tiene bonos ni ruleta. Usá tu cuenta principal.', code: 'DUP_ACCOUNT' }); } // #992
     if (cfg.requireAppInstalled) {
       const u = await User.findOne({ id: userId }, { fcmTokenContext: 1, fcmTokens: 1 }).lean();
       if (!_rouletteHasAppInstalled(u)) {
