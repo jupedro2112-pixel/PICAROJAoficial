@@ -6055,22 +6055,24 @@ async function loadRegistrationMode() {
         const chk = document.getElementById('regSmsChk'); const st = document.getElementById('regModeState'); const btn = document.getElementById('regModeSaveBtn');
         if (chk) { chk.checked = j.mode === 'sms'; chk.disabled = !j.canEdit; }
         const ichk = document.getElementById('regInviteChk'); if (ichk) { ichk.checked = j.mode === 'invite'; ichk.disabled = !j.canEdit; } // #748
+        const cchk = document.getElementById('regClosedChk'); if (cchk) { cchk.checked = j.mode === 'closed'; cchk.disabled = !j.canEdit; } // #993
         const lchk = document.getElementById('regLoginChk'); if (lchk) { lchk.checked = j.entryLogin === true; lchk.disabled = !j.canEdit; } // #538
         const schk = document.getElementById('regQuickSmsChk'); if (schk) { schk.checked = j.quickEntrySms !== false; schk.disabled = !j.canEdit; } // #541
         const ochk = document.getElementById('regOrganicGiftsChk'); if (ochk) { ochk.checked = j.organicGifts === true; ochk.disabled = !j.canEdit; } // #975
         if (btn) btn.style.display = j.canEdit ? '' : 'none';
-        if (st) st.textContent = (j.mode === 'invite' ? 'Ahora: 🔒 SÓLO CON INVITACIÓN (landing + referidos; login abierto)' : (j.mode === 'quick' ? 'Ahora: ENTRADA RÁPIDA (nombre' + (j.quickEntrySms !== false ? ' + celular verificado' : ', sin SMS') + ')' : 'Ahora: registro con SMS')) + (j.organicGifts ? ' · registro abierto CON regalos' : ' · registro abierto SIN regalos de bienvenida') + (j.entryLogin ? ' · pantalla de ingreso: INICIAR SESIÓN' : '');
+        if (st) st.textContent = (j.mode === 'closed' ? 'Ahora: ⛔ REGISTRO CERRADO (nadie crea cuentas; login abierto)' : j.mode === 'invite' ? 'Ahora: 🔒 SÓLO CON INVITACIÓN (landing + referidos; login abierto)' : (j.mode === 'quick' ? 'Ahora: ENTRADA RÁPIDA (nombre' + (j.quickEntrySms !== false ? ' + celular verificado' : ', sin SMS') + ')' : 'Ahora: registro con SMS')) + (j.organicGifts ? ' · registro abierto CON regalos' : ' · registro abierto SIN regalos de bienvenida') + (j.entryLogin ? ' · pantalla de ingreso: INICIAR SESIÓN' : '');
     } catch (_) {}
 }
 async function saveRegistrationMode() {
-    const chk = document.getElementById('regSmsChk'); const ichk = document.getElementById('regInviteChk'); const mode = (ichk && ichk.checked) ? 'invite' : (chk && !chk.checked ? 'quick' : 'sms'); // #748
+    const chk = document.getElementById('regSmsChk'); const ichk = document.getElementById('regInviteChk'); const cchk = document.getElementById('regClosedChk');
+    const mode = (cchk && cchk.checked) ? 'closed' : ((ichk && ichk.checked) ? 'invite' : (chk && !chk.checked ? 'quick' : 'sms')); // #748 · #993: cerrado gana
     const lchk = document.getElementById('regLoginChk'); const entryLogin = !!(lchk && lchk.checked); // #538
     const schk = document.getElementById('regQuickSmsChk'); const quickEntrySms = !!(schk && schk.checked); // #541
     const ochk = document.getElementById('regOrganicGiftsChk'); const organicGifts = !!(ochk && ochk.checked); // #975
     try {
         const r = await authFetch('/api/admin/registration-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, entryLogin, quickEntrySms, organicGifts }) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
-        showToast(mode === 'invite' ? '🔒 Registro SÓLO CON INVITACIÓN activado (landing y referidos)' : (mode === 'quick' ? 'Registro DESACTIVADO: la app pide sólo el nombre y entra directo' : 'Registro con SMS activado'), 'success');
+        showToast(mode === 'closed' ? '⛔ REGISTRO CERRADO: nadie puede crear cuentas nuevas' : mode === 'invite' ? '🔒 Registro SÓLO CON INVITACIÓN activado (landing y referidos)' : (mode === 'quick' ? 'Registro DESACTIVADO: la app pide sólo el nombre y entra directo' : 'Registro con SMS activado'), 'success');
         loadRegistrationMode();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
@@ -17602,7 +17604,28 @@ async function loadFraud(fresh) {
         if (!r.ok) throw new Error(j.error || 'error');
         _frData = j; renderFraud();
     } catch (e) { box.innerHTML = '<span style="color:#f87171">No se pudo cargar: ' + escHtml(e.message) + '</span>'; }
+    loadFraudAuto();
 }
+// #993 ANTIFRAUDE AUTOMÁTICO (config + última pasada)
+async function loadFraudAuto() {
+    try {
+        const r = await authFetch('/api/admin/fraud/auto-config'); const j = await r.json(); if (!r.ok) return;
+        const c = j.config || {}; const on = document.getElementById('frAutoOn'), b = document.getElementById('frAutoBlock'), v = document.getElementById('frAutoReview'), btn = document.getElementById('frAutoSave');
+        if (on) { on.checked = c.enabled !== false; on.disabled = !j.canEdit; } if (b) { b.value = c.blockScore; b.disabled = !j.canEdit; } if (v) { v.value = c.reviewScore; v.disabled = !j.canEdit; } if (btn) btn.style.display = j.canEdit ? '' : 'none';
+        const l = document.getElementById('frAutoLast'); const x = j.last;
+        if (l) l.innerHTML = x ? 'Última pasada: ' + escHtml(new Date(x.at).toLocaleString('es-AR')) + ' · ' + (x.scanned || 0) + ' revisados · <b style="color:#f87171">' + (x.blocked || []).length + ' bloqueados</b>' + ((x.blocked || []).length ? ' (' + escHtml(x.blocked.join(', ')) + ')' : '') + ' · <b style="color:#f59e0b">' + (x.review || []).length + ' en observación</b>' + ((x.review || []).length ? ' (' + escHtml(x.review.join(', ')) + ')' : '') : 'Todavía no corrió ninguna pasada.';
+    } catch (_) {}
+}
+async function saveFraudAuto() {
+    const enabled = !!(document.getElementById('frAutoOn') || {}).checked;
+    const blockScore = Number((document.getElementById('frAutoBlock') || {}).value); const reviewScore = Number((document.getElementById('frAutoReview') || {}).value);
+    try {
+        const r = await authFetch('/api/admin/fraud/auto-config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled, blockScore, reviewScore }) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
+        showToast(enabled ? '🤖 Antifraude automático: bloquea desde ' + j.config.blockScore + ' pts, observa desde ' + j.config.reviewScore : 'Antifraude automático APAGADO', 'success'); loadFraudAuto();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.loadFraudAuto = loadFraudAuto; window.saveFraudAuto = saveFraudAuto;
 function _frMoney(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('es-AR'); }
 function renderFraud() {
     const box = document.getElementById('frList'); if (!box || !_frData) return;

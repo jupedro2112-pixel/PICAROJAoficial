@@ -1251,7 +1251,7 @@ app.get('/api/landing/info', async (req, res) => {
     let welcome = null;
     try { const fd = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig(); welcome = { pct: fd, withApp: fd + (ig && ig.enabled ? ig.pct : 0) }; } catch (_) {}
     let services = []; try { services = await _landingServices(); } catch (_) {} // #555
-    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
+    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ registerClosedText: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), /* #993 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 
@@ -5073,6 +5073,8 @@ async function _landingSignupHandler(req, res) {
     if (String(process.env.LANDING_SIGNUP_DISABLED || '').toLowerCase() === 'true') {
       return res.status(410).json({ error: 'El registro rápido no está disponible en este momento.' });
     }
+    // #993: REGISTRO CERRADO también corta la landing de publicidad (antes sólo el modo invitación miraba la app).
+    if ((await getRegistrationMode()) === 'closed') return res.status(403).json({ error: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), code: 'REGISTRATION_CLOSED' });
 
     const { name, campaignCode, utm, fbc, fbp, landingUrl, referralCode } = req.body || {};
     // #532 (seguridad/#529): el link de referido (/?ref=CODE) llega hasta acá también en el registro rápido y en la landing.
@@ -5363,15 +5365,20 @@ async function getRegistrationMode() {
   // #425 (owner): default 'quick' — la entrada con el nombre ES la forma de registro; 'sms' queda como opción del tilde.
   // #748 (owner): 'invite' = SÓLO CON INVITACIÓN: nadie se registra desde la app; sólo entra quien llega por la landing (campaña
   // activa) o por un link de referido de un cliente. Iniciar sesión sigue abierto para los que ya son clientes.
-  try { const v = await getConfig('registrationMode', 'quick'); return v === 'sms' ? 'sms' : (v === 'invite' ? 'invite' : 'quick'); } catch (_) { return 'quick'; }
+  // #993 (owner 2026-10-30): 'closed' = REGISTRO CERRADO a todos (ni la app, ni la landing, ni referidos); sólo el panel crea cuentas. Login abierto.
+  try { const v = await getConfig('registrationMode', 'quick'); return v === 'sms' ? 'sms' : (v === 'invite' ? 'invite' : (v === 'closed' ? 'closed' : 'quick')); } catch (_) { return 'quick'; }
 }
+const ACCOUNT_BLOCKED_DEFAULT = '🔒 Tu cuenta fue bloqueada por seguridad y se cerró la sesión. Si creés que es un error, escribinos desde Soporte (pantalla de ingreso).';
+const REGISTER_CLOSED_DEFAULT = '🔒 Por el momento no estamos abriendo cuentas nuevas. Si ya sos cliente, iniciá sesión con tu usuario y clave.';
 const REGISTER_INVITE_DEFAULT = '🔒 El registro es sólo con invitación, por seguridad. Pedile el link a quien te recomendó o entrá por nuestra publicidad oficial. Si ya sos cliente, iniciá sesión con tu usuario y clave.';
 // #975: ¿el registro abierto (sin publicidad ni referido) lleva regalos de bienvenida? Default NO (owner: "sin ningún beneficio para que no
 // llegue gente a querer estafar; sí promocionar instalar la app para recibir notificaciones, el reembolso y el servicio, pero no regalos").
 async function _organicGiftsAllowed() { try { return (await getConfig('organicWelcomeGifts', false)) === true; } catch (_) { return false; } }
 async function _inviteOnlyBlocks(referralCode, campaignCode) {
   try {
-    if ((await getRegistrationMode()) !== 'invite') return null;
+    const mode = await getRegistrationMode();
+    if (mode === 'closed') return await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}); // #993
+    if (mode !== 'invite') return null;
     const ref = String(referralCode || '').toUpperCase().trim(); const camp = String(campaignCode || '').toUpperCase().trim();
     if (ref && await User.exists({ referralCode: ref })) return null;
     if (camp && camp !== 'INGRESO' && await Campaign.exists({ code: camp, isActive: { $ne: false } })) return null;
@@ -5485,7 +5492,7 @@ app.get('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (
 app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general.' });
-    const mode = req.body && req.body.mode === 'invite' ? 'invite' : (req.body && req.body.mode === 'quick' ? 'quick' : 'sms'); // #748: + invite
+    const mode = req.body && req.body.mode === 'closed' ? 'closed' : (req.body && req.body.mode === 'invite' ? 'invite' : (req.body && req.body.mode === 'quick' ? 'quick' : 'sms')); // #748: + invite · #993: + closed
     await Config.set('registrationMode', mode, req.user.username);
     // #538: pantalla de ingreso = Iniciar sesión (usuario + clave + olvidé mi contraseña, sin bono de bienvenida)
     let entryLogin = (await getConfig('entryLogin', false)) === true;
@@ -13390,6 +13397,20 @@ async function initializeData() {
       response: '🎰 Sumate a PICA ROJA con mi link: cargas automáticas en segundos y reembolsos todos los días 👉 {link}'
     },
     {
+      // #993: aviso de REGISTRO CERRADO (pantalla de ingreso, landing y respuesta del server)
+      name: '/sys_register_closed',
+      description: 'REGISTRO CERRADO: aviso que ve quien quiere crear una cuenta (app, landing de publicidad o link de referido) cuando el registro está cerrado (Configuración → Registro de clientes).',
+      type: 'message',
+      response: REGISTER_CLOSED_DEFAULT
+    },
+    {
+      // #993: lo que ve el cliente cuando el antifraude (o un agente) le bloquea la cuenta y se le cierra la sesión
+      name: '/sys_account_blocked',
+      description: 'Cuenta BLOQUEADA: aviso que ve el cliente al cerrársele la sesión por un bloqueo (antifraude automático o manual). Vacío = texto por defecto.',
+      type: 'message',
+      response: ACCOUNT_BLOCKED_DEFAULT
+    },
+    {
       // #748: aviso de "registro sólo con invitación" (pantalla de ingreso y respuesta del server)
       name: '/sys_register_invite',
       description: 'Registro SÓLO CON INVITACIÓN: aviso que ve quien quiere registrarse sin link de referido ni de publicidad (Configuración → Registro de clientes).',
@@ -14331,11 +14352,16 @@ async function _withdrawalRequestHandler(req, res) {
       let needsReview = amountNum > prCfg.minArs || !prCfg.autoBelow || !hgcashPay.isEnabled();
       // #881: además, sólo clientes de CONFIANZA cobran solos (se puede apagar en Confirmación de pagos → Regla).
       let trustWhy = null;
+      // #993: antifraude en el momento (sólo este cliente): ≥ 90 pts lo bloquea y le cierra la sesión; ≥ 60 deja el retiro para revisión.
+      let fraudWhy = null;
+      try { const fr = await _fraudCheckUser(user.id, 'retiro'); if (fr && fr.level) { needsReview = true; fraudWhy = (fr.level === 'block' ? 'cuenta BLOQUEADA por el antifraude' : 'en observación del antifraude') + (fr.why ? ' (' + fr.why + ')' : ''); } } catch (e) { logger.warn('[antifraude] retiro: ' + e.message); }
       if (!needsReview && prCfg.trustedOnly) { const t = await _payoutTrust(user.id, prCfg); if (!t.trusted) { needsReview = true; trustWhy = t.why; } }
       // #820: por id (antes por usuario+monto: podía marcar un retiro VIEJO del mismo monto).
-      await PendingPayout.updateOne({ id: _newPayoutId }, { $set: Object.assign({ reviewRequired: needsReview, autoPay: !needsReview }, trustWhy ? { reviewReason: 'no es cliente de confianza: ' + trustWhy.join(' · ') } : {}) });
+      await PendingPayout.updateOne({ id: _newPayoutId }, { $set: Object.assign({ reviewRequired: needsReview, autoPay: !needsReview }, fraudWhy ? { reviewReason: 'antifraude: ' + fraudWhy } : (trustWhy ? { reviewReason: 'no es cliente de confianza: ' + trustWhy.join(' · ') } : {})) });
       if (needsReview) {
-        await _emitAdminOnlyChatNote(user.id, user.username, trustWhy
+        await _emitAdminOnlyChatNote(user.id, user.username, fraudWhy
+          ? `🔎 RETIRO EN REVISIÓN: $${amountNum.toLocaleString('es-AR')} — ${fraudWhy}. Confirmalo o rechazalo en Panel → Confirmación de pagos.`
+          : trustWhy
           ? `🔎 RETIRO EN REVISIÓN: $${amountNum.toLocaleString('es-AR')} — no sale solo porque todavía no es cliente de confianza (${trustWhy.join(' · ')}). Confirmalo o rechazalo en Panel → Confirmación de pagos.`
           : `🔎 RETIRO EN REVISIÓN: $${amountNum.toLocaleString('es-AR')} (umbral $${prCfg.minArs.toLocaleString('es-AR')}). Confirmalo o rechazalo en Panel → Confirmación de pagos.`).catch(() => {});
       } else {
@@ -19704,6 +19730,8 @@ app.post('/api/admin/change-own-password', authMiddleware, async (req, res) => {
 // ===== #873 ALERTAS DE ESTAFA (src/services/fraudRadar.js) — reglas + puntaje + caso completo; bloquear usa /api/admin/users/:id/block.
 const fraudRadar = require('./src/services/fraudRadar');
 let _fraudCache = { at: 0, days: 0, data: null };
+// #877: cuánto apostó / ganó cada uno (Partner API, batch; sólo para quienes retiran, máx. 100). netwin positivo = perdió.
+async function _fraudStats(usernames, from, to) { const out = new Map(); const r = await girox.getPlayersStatsBatch(usernames, from, to, 'fraude'); if (r && r.success) for (const [k, v] of Object.entries(r.players || {})) out.set(k, v); return out; }
 app.get('/api/admin/fraud/alerts', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
@@ -19711,9 +19739,7 @@ app.get('/api/admin/fraud/alerts', authMiddleware, adminMiddleware, async (req, 
     // #877: 5 min de memoria (las stats del juego usan el cupo de 1girox que comparten cargas y retiros); 'fresh' fuerza, pero no más de 1 por minuto.
     if (_fraudCache.data && _fraudCache.days === days && Date.now() - _fraudCache.at < (req.query.fresh ? 60 * 1000 : 5 * 60 * 1000)) return res.json(Object.assign({ cached: true }, _fraudCache.data));
     const PendingPayout = require('./src/models/PendingPayout'); const BankMovement = require('./src/models/BankMovement');
-    // #877: cuánto apostó / ganó cada uno (Partner API, batch; sólo para quienes retiran, máx. 100). netwin positivo = perdió.
-    const stats = async (usernames, from, to) => { const out = new Map(); const r = await girox.getPlayersStatsBatch(usernames, from, to, 'fraude'); if (r && r.success) for (const [k, v] of Object.entries(r.players || {})) out.set(k, v); return out; };
-    const data = await fraudRadar.scan({ User, Transaction, PendingPayout, BankMovement, stats }, { days });
+    const data = await fraudRadar.scan({ User, Transaction, PendingPayout, BankMovement, stats: _fraudStats }, { days });
     data.rules = fraudRadar.RULES; data.generatedAt = new Date().toISOString();
     _fraudCache = { at: Date.now(), days, data };
     res.json(data);
@@ -19745,11 +19771,125 @@ app.post('/api/admin/fraud/review/:id', authMiddleware, adminMiddleware, async (
     const st = String((req.body && req.body.status) || ''); if (!['legit', 'watch', 'clear'].includes(st)) return res.status(400).json({ error: 'Estado inválido.' });
     const note = String((req.body && req.body.note) || '').slice(0, 300);
     const set = st === 'clear' ? { fraudReview: { status: null, by: req.user.username, at: new Date(), note } } : { fraudReview: { status: st, by: req.user.username, at: new Date(), note } };
+    if (st !== 'watch') set.fraudAutoSkip = true; // #993: lo revisó una persona ⇒ el antifraude automático no lo vuelve a frenar solo
     const r = await User.updateOne({ id: String(req.params.id) }, { $set: set, $push: { fraudNotes: { at: new Date(), note: `[${req.user.username}] ${st === 'legit' ? 'revisado: legítimo' : (st === 'watch' ? 'en observación' : 'revisión borrada')}${note ? ' — ' + note : ''}` } } });
     if (!(r.matchedCount || r.n)) return res.status(404).json({ error: 'Cliente no encontrado' });
     _fraudCache = { at: 0, days: 0, data: null };
     logger.info(`[fraude] ${req.user.username} marcó ${req.params.id} como ${st}`);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+// ===== #993 ANTIFRAUDE AUTOMÁTICO (owner 2026-10-30: "bloqueo de usuarios cuando detecte cosas inusuales, un sistema completo de seguridad
+// antifraude con bloqueo definitivo, que si bloqueo lo haga cerrar sesión"). Usa el MISMO puntaje del radar (#873, fraudRadar.scan):
+//   · puntaje ≥ blockScore (90) ⇒ BLOQUEO automático: sesión cerrada en vivo (tokenVersion + socket), retiros pendientes frenados para revisión.
+//   · puntaje ≥ reviewScore (60) ⇒ EN OBSERVACIÓN: sus retiros no salen solos (Confirmación de pagos), nada más.
+// Corre cada 30 min (escaneo de 30 días) y en cada pedido de retiro (sólo ese cliente, antes de decidir si se paga solo).
+// Si una persona lo desbloquea o lo revisa (legítimo / borrar) queda `fraudAutoSkip` y el motor no lo vuelve a tocar.
+// Config['fraudAuto'] = { enabled, blockScore, reviewScore } (panel → Alertas de estafa → 🤖). Sólo clientes (role 'user').
+const FRAUD_AUTO_DEFAULT = { enabled: true, blockScore: 90, reviewScore: 60 };
+const FRAUD_AUTO_ACTOR = 'antifraude';
+// Para BLOQUEAR solo hace falta además una CONDUCTA (cómo mueve la plata). Compartir celular / teléfono / CBU de carga con otra cuenta por sí
+// solo es la CUENTA SECUNDARIA de #992 (carga sin bonos): con eso solo queda, como mucho, en observación.
+const FRAUD_BEHAVIOR_RULES = new Set(['cbu_wd_shared', 'third_party_payers', 'wd_other_person', 'bonus_abuse', 'no_play_withdraw', 'new_big_wd', 'fast_cycle', 'referral_farm']);
+async function getFraudAutoConfig() {
+  try {
+    const r = (await getConfig('fraudAuto', null)) || {};
+    const b = Number(r.blockScore), v = Number(r.reviewScore);
+    const blockScore = Number.isFinite(b) && b >= 40 ? Math.min(500, Math.round(b)) : FRAUD_AUTO_DEFAULT.blockScore;
+    const reviewScore = Number.isFinite(v) && v >= 30 ? Math.min(blockScore, Math.round(v)) : Math.min(blockScore, FRAUD_AUTO_DEFAULT.reviewScore);
+    return { enabled: r.enabled !== false, blockScore, reviewScore };
+  } catch (_) { return Object.assign({}, FRAUD_AUTO_DEFAULT); }
+}
+// Cierra TODAS las sesiones abiertas del cliente: el aviso por socket hace que la app muestre el motivo y vuelva al login; después se cortan
+// los sockets (con el adapter de Redis llega a todas las instancias). El tokenVersion ya subió: cualquier pedido con el token viejo da 401/403.
+async function _kickUserSessions(userId) {
+  try {
+    const message = await renderSystemCommand('/sys_account_blocked', ACCOUNT_BLOCKED_DEFAULT, {});
+    io.to(`user_${userId}`).emit('account_blocked', { message });
+    setTimeout(() => { try { io.in(`user_${userId}`).disconnectSockets(true); } catch (_) {} }, 1500);
+  } catch (e) { logger.warn('[antifraude] no se pudo cortar la sesión: ' + e.message); }
+}
+// Bloqueo (manual o automático): atómico (no bloquea dos veces), revoca sesiones y deja los retiros pendientes para revisión humana.
+async function _blockUserAccount(userId, reason, by) {
+  const why = String(reason || '').slice(0, MAX_BLOCK_REASON_LENGTH);
+  const u = await User.findOneAndUpdate({ id: String(userId), isBlocked: { $ne: true } },
+    { $set: { isBlocked: true, blockReason: why, blockedAt: new Date(), blockedBy: by }, $inc: { tokenVersion: 1 }, $push: { fraudNotes: { at: new Date(), note: `Bloqueado por ${by}: ${why}` } } },
+    { new: true }).select('id username').lean();
+  if (!u) return null;
+  await PendingPayout.updateMany({ userId: u.id, status: { $in: ['pending_review', 'failed'] } }, { $set: { reviewRequired: true, autoPay: false, reviewReason: 'cuenta BLOQUEADA: ' + why.slice(0, 200) } }).catch(() => {});
+  await _kickUserSessions(u.id);
+  _fraudCache = { at: 0, days: 0, data: null };
+  return u;
+}
+// Aplica la decisión automática a las alertas del radar. Devuelve { blocked: [usernames], review: [usernames] }.
+async function _fraudAutoApply(alerts, source) {
+  const out = { blocked: [], review: [] };
+  const cfg = await getFraudAutoConfig(); if (!cfg.enabled) return out;
+  for (const a of alerts || []) {
+    if (!a || a.isBlocked || a.autoSkip || (a.review && a.review.status === 'legit')) continue;
+    const why = `${a.score} pts — ` + (a.reasons || []).map((r) => r.label).slice(0, 4).join(' · ');
+    if (a.score >= cfg.blockScore && (a.reasons || []).some((r) => FRAUD_BEHAVIOR_RULES.has(r.key))) {
+      const u = await _blockUserAccount(a.userId, `Antifraude automático (${source}): ${why}`, FRAUD_AUTO_ACTOR).catch((e) => { logger.warn('[antifraude] ' + e.message); return null; });
+      if (u) {
+        out.blocked.push(u.username);
+        logger.warn(`[antifraude] BLOQUEADO ${u.username} (${source}): ${why}`);
+        _emitAdminOnlyChatNote(u.id, u.username, `⛔ BLOQUEO AUTOMÁTICO del antifraude (${why}). Se le cerró la sesión y sus retiros pendientes quedaron para revisión. Si es un cliente legítimo, desbloquealo desde Alertas de estafa / Usuarios.`).catch(() => {});
+      }
+    } else if (a.score >= cfg.reviewScore && !(a.review && a.review.status)) {
+      const r = await User.updateOne({ id: a.userId, isBlocked: { $ne: true }, fraudAutoSkip: { $ne: true }, 'fraudReview.status': { $nin: ['watch', 'legit'] } },
+        { $set: { fraudReview: { status: 'watch', by: FRAUD_AUTO_ACTOR, at: new Date(), note: why.slice(0, 300) } }, $push: { fraudNotes: { at: new Date(), note: `En observación automática (${source}): ${why}` } } }).catch(() => null);
+      if (r && (r.modifiedCount || r.nModified)) {
+        out.review.push(a.username);
+        await PendingPayout.updateMany({ userId: a.userId, status: { $in: ['pending_review', 'failed'] } }, { $set: { reviewRequired: true, autoPay: false, reviewReason: 'antifraude: en observación (' + why.slice(0, 180) + ')' } }).catch(() => {});
+        _emitAdminOnlyChatNote(a.userId, a.username, `🔎 EN OBSERVACIÓN automática del antifraude (${why}). Sus retiros no salen solos: revisalos en Confirmación de pagos.`).catch(() => {});
+      }
+    }
+  }
+  if (out.blocked.length || out.review.length) _fraudCache = { at: 0, days: 0, data: null };
+  return out;
+}
+// Chequeo de UN cliente (al pedir un retiro). Nunca tarda más de 6 s: si el radar no contesta, el retiro sigue las reglas de siempre.
+// Devuelve { level: 'block' | 'review' | null, score, why }.
+async function _fraudCheckUser(userId, source) {
+  const cfg = await getFraudAutoConfig(); if (!cfg.enabled) return { level: null };
+  const BankMovement = require('./src/models/BankMovement');
+  const scan = fraudRadar.scan({ User, Transaction, PendingPayout, BankMovement, stats: _fraudStats }, { days: 30, userIds: [String(userId)], minScore: 0 });
+  const data = await Promise.race([scan, new Promise((r) => setTimeout(() => r(null), 6000))]).catch(() => null);
+  const a = data && data.alerts && data.alerts[0];
+  if (a) await _fraudAutoApply([a], source);
+  const u = await User.findOne({ id: String(userId) }).select('isBlocked fraudReview').lean();
+  const why = a ? `${a.score} pts — ` + (a.reasons || []).map((r) => r.label).slice(0, 4).join(' · ') : null;
+  if (u && u.isBlocked) return { level: 'block', score: a ? a.score : null, why };
+  if (u && u.fraudReview && u.fraudReview.status === 'watch') return { level: 'review', score: a ? a.score : null, why: why || (u.fraudReview.note || 'en observación') };
+  return { level: null, score: a ? a.score : 0 };
+}
+// Pasada periódica. En AWS corre en cada instancia: el "lease" en Config evita repetir el escaneo (y las stats de 1girox) en la misma media hora.
+async function _fraudAutoTick() {
+  const cfg = await getFraudAutoConfig(); if (!cfg.enabled) return;
+  const last = await getConfig('fraudAutoLastRun', null);
+  if (last && Date.now() - new Date(last).getTime() < 25 * 60 * 1000) return;
+  await Config.set('fraudAutoLastRun', new Date().toISOString(), 'antifraude');
+  const BankMovement = require('./src/models/BankMovement');
+  const data = await fraudRadar.scan({ User, Transaction, PendingPayout, BankMovement, stats: _fraudStats }, { days: 30, minScore: cfg.reviewScore });
+  const r = await _fraudAutoApply(data.alerts, 'escaneo');
+  await Config.set('fraudAutoLastResult', { at: new Date().toISOString(), scanned: data.scanned, blocked: r.blocked, review: r.review }, 'antifraude');
+  if (r.blocked.length || r.review.length) logger.warn(`[antifraude] pasada: ${r.blocked.length} bloqueados (${r.blocked.join(', ')}) · ${r.review.length} en observación`);
+}
+setTimeout(() => { _fraudAutoTick().catch((e) => logger.warn('[antifraude] tick: ' + e.message)); setInterval(() => { _fraudAutoTick().catch((e) => logger.warn('[antifraude] tick: ' + e.message)); }, 30 * 60 * 1000); }, 4 * 60 * 1000 + Math.floor(Math.random() * 60000));
+app.get('/api/admin/fraud/auto-config', authMiddleware, adminMiddleware, async (req, res) => {
+  try { res.json({ success: true, config: await getFraudAutoConfig(), last: await getConfig('fraudAutoLastResult', null), canEdit: req.user.role === 'admin' }); }
+  catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/fraud/auto-config', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el admin.' });
+    const b = req.body || {}; const blockScore = Math.round(Number(b.blockScore)); const reviewScore = Math.round(Number(b.reviewScore));
+    if (!Number.isFinite(blockScore) || blockScore < 40 || blockScore > 500) return res.status(400).json({ error: 'Puntaje de bloqueo entre 40 y 500.' });
+    if (!Number.isFinite(reviewScore) || reviewScore < 30 || reviewScore > blockScore) return res.status(400).json({ error: 'Puntaje de observación entre 30 y el de bloqueo.' });
+    const next = { enabled: b.enabled !== false, blockScore, reviewScore };
+    await Config.set('fraudAuto', next, req.user.username);
+    logger.info(`[antifraude] config ${JSON.stringify(next)} por ${req.user.username}`);
+    res.json({ success: true, config: next });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/users/:id/block', authMiddleware, adminMiddleware, async (req, res) => {
@@ -19774,14 +19914,11 @@ app.post('/api/admin/users/:id/block', authMiddleware, adminMiddleware, async (r
       return res.status(403).json({ error: 'No se pueden bloquear cuentas administrativas.' });
     }
 
-    user.isBlocked = true;
-    user.blockReason = reason.trim().slice(0, MAX_BLOCK_REASON_LENGTH);
-    user.blockedAt = new Date();
-    user.blockedBy = req.user.username;
-    user.tokenVersion = (user.tokenVersion || 0) + 1;
-    await user.save();
+    // #993: mismo camino que el antifraude automático (cierra la sesión en vivo y frena sus retiros pendientes)
+    const done = await _blockUserAccount(user.id, reason.trim(), req.user.username);
+    if (!done && !user.isBlocked) return res.status(409).json({ error: 'No se pudo bloquear (reintentá).' });
 
-    logger.info(`Admin ${req.user.username} bloqueó a ${user.username}: ${user.blockReason}`);
+    logger.info(`Admin ${req.user.username} bloqueó a ${user.username}: ${reason.trim()}`);
     res.json({ success: true, message: `Usuario ${user.username} bloqueado.` });
   } catch (e) {
     logger.error(`Error en block: ${e.message}`);
@@ -19798,11 +19935,15 @@ app.post('/api/admin/users/:id/unblock', authMiddleware, adminMiddleware, async 
     const user = await User.findOne({ id });
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
 
+    const wasAuto = user.blockedBy === FRAUD_AUTO_ACTOR;
     user.isBlocked = false;
     user.blockReason = null;
     user.blockedAt = null;
     user.blockedBy = null;
+    user.fraudAutoSkip = true; // #993: lo desbloqueó una persona ⇒ el antifraude automático no lo vuelve a bloquear solo
+    user.fraudNotes = (user.fraudNotes || []).concat([{ at: new Date(), note: `${req.user.username} lo desbloqueó${wasAuto ? ' (lo había bloqueado el antifraude automático)' : ''}` }]);
     await user.save();
+    _fraudCache = { at: 0, days: 0, data: null };
 
     logger.info(`Admin ${req.user.username} desbloqueó a ${user.username}`);
     res.json({ success: true, message: `Usuario ${user.username} desbloqueado.` });
@@ -23019,6 +23160,14 @@ async function _payPendingPayout(id, actor, baseUrl) {
     if (!payout) return res.status(404).json({ error: 'Pago no encontrado' });
     if (!['pending_review', 'failed'].includes(payout.status)) {
       return res.status(400).json({ error: `El pago ya está en estado "${payout.status}".` });
+    }
+    // #993: el pago AUTOMÁTICO nunca sale a una cuenta bloqueada o en observación del antifraude (una persona sí puede confirmarlo).
+    if (actor && actor.username === PAYOUT_AUTO_ACTOR.username) {
+      const pu = await User.findOne({ id: payout.userId }).select('isBlocked fraudReview').lean();
+      if (pu && (pu.isBlocked || (pu.fraudReview && pu.fraudReview.status === 'watch'))) {
+        await PendingPayout.updateOne({ id: payout.id }, { $set: { reviewRequired: true, autoPay: false, reviewReason: pu.isBlocked ? 'cuenta BLOQUEADA' : 'antifraude: en observación' } });
+        return res.status(409).json({ error: 'Cuenta bloqueada o en observación: el pago queda para revisión.' });
+      }
     }
 
     let accountId = await resolveHgcashAccountId();

@@ -317,7 +317,11 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   NUEVO tiene que pasar por esas funciones; sólo devoluciones de plata propia o la Bonificación manual van con `noGiftGuard`) y `resolveAutoBonus` sin bono.
   Carga y retira normal; la app muestra arriba la cuenta principal (`dupMain`). Desmarcar: caso del cliente en Alertas de estafa. Test `scripts/test-dup-account.js`.
 - **ALERTAS DE ESTAFA (#873):** `src/services/fraudRadar.js` (reglas + puntaje + caso). Una señal nueva de estafa va como regla ahí (con
-  evidencia); nunca bloquear automático: el panel bloquea con `/api/admin/users/:id/block`. Probar con MongoDB en memoria (WORKLOG #873).
+  evidencia). **#993 ANTIFRAUDE AUTOMÁTICO:** `_fraudAutoApply` (server.js) bloquea solo con puntaje ≥ `Config['fraudAuto'].blockScore` (90) Y una regla
+  de CONDUCTA (`FRAUD_BEHAVIOR_RULES`; una regla nueva de conducta va a esa lista), y deja en observación (retiros sin pago automático) desde 60.
+  Corre cada 30 min y en cada pedido de retiro. Todo bloqueo pasa por `_blockUserAccount` (cierra la sesión en vivo: tokenVersion + socket
+  `account_blocked`). Desbloquear o revisar a mano ⇒ `fraudAutoSkip` (el motor no lo vuelve a tocar). Test `scripts/test-fraud-auto.js`.
+  **Registro cerrado:** `registrationMode:'closed'` corta app, landing y referidos (sólo el panel crea cuentas).
 - **HISTORIAS AUTOMÁTICAS (#827 → #931):** `src/services/storyAutopilot.js` (contenido) + `_storyAutoTick` (publica 5/día JUNTAS a las 00:05-00:09 y apaga
   las del día anterior; la primera es SIEMPRE Soporte/atención; `Story.autoKey` único; fotos estilo de la página `style:'page'`).
   Partidos de ESPN (1girox no expone eventos; su Deportes es Digitain sin deep link). Textos de SERVICIO, nunca "ruleta" ni plata/sueldos.

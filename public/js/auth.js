@@ -24,6 +24,28 @@ VIP.auth = (function () {
         document.documentElement.classList.add('has-dup-bar');
     }
 
+    // #993: cuenta BLOQUEADA (antifraude automático o un agente) ⇒ se cierra la sesión al toque y se muestra el motivo en la pantalla de ingreso.
+    function forceBlockedLogout(message) {
+        if (!VIP.state || !VIP.state.currentToken) return;
+        const msg = message || '🔒 Tu cuenta fue bloqueada por seguridad y se cerró la sesión. Si creés que es un error, escribinos desde Soporte.';
+        try { handleLogout(); } catch (_) {}
+        setTimeout(() => {
+            try { const e = document.getElementById('errorMessage'); if (e) { e.textContent = msg; e.classList.add('show'); } } catch (_) {}
+            try { if (VIP.ui && VIP.ui.showToast) VIP.ui.showToast(msg, 'error'); } catch (_) {}
+        }, 300);
+    }
+    // Si la app quedó abierta cuando la bloquearon, el próximo pedido a la API responde 403 USER_BLOCKED: también cierra la sesión.
+    (function () {
+        const _f = window.fetch; if (!_f || _f.__vipBlocked) return;
+        const w = function () {
+            return _f.apply(this, arguments).then((r) => {
+                try { if (r && r.status === 403 && VIP.state && VIP.state.currentToken) r.clone().json().then((d) => { if (d && d.code === 'USER_BLOCKED') forceBlockedLogout(); }).catch(() => {}); } catch (_) {}
+                return r;
+            });
+        };
+        w.__vipBlocked = true; window.fetch = w;
+    })();
+
     function _applyMetaMatching(user) {
         try {
             if (VIP.pixel && typeof VIP.pixel.initWithMatching === 'function' && user && user.metaMatching) {
@@ -1811,6 +1833,7 @@ VIP.auth = (function () {
         verifyToken,
         tryAccessLink,
         handleLogout,
+        forceBlockedLogout, // #993
         ensureUserLoaded,
         initializeSession,
         handleChangePassword,

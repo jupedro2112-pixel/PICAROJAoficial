@@ -4,7 +4,31 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-10-28**
+> **Última actualización: 2026-10-30**
+
+## Sesión 2026-10-30
+
+### 993. 🤖 ANTIFRAUDE AUTOMÁTICO (bloquea solo y cierra la sesión) + ⛔ REGISTRO CERRADO — SW v650 · admin SW v209
+**Pedido (owner):** "poner un bloqueo de usuarios para cuando detecte cosas inusuales, de este tipo [cuentas que se cubren entre sí en baccarat
+para limpiar el rollover], armar un sistema completo de seguridad antifraude con bloqueo definitivo, que si bloqueo lo haga cerrar sesión, y que no
+haya registro en la página". Elegido en las preguntas: bloqueo automático sólo con puntaje MUY alto (≥ 90; 60–89 = retiro frenado para revisión) y
+cerrar el registro a TODOS.
+**Qué se hizo:**
+- `_fraudAutoApply` / `_fraudCheckUser` / `_fraudAutoTick` / `_blockUserAccount` / `_kickUserSessions` (server.js, junto a Alertas de estafa).
+  Mismo puntaje del radar (#873). Para BLOQUEAR hace falta además una regla de conducta (`FRAUD_BEHAVIOR_RULES`): compartir celular/teléfono/CBU
+  de carga solo es la cuenta secundaria de #992 (que tiene que poder cargar), así que eso solo deja "en observación".
+- Corre cada 30 min (lease en Config) y en cada pedido de retiro, antes de decidir si sale solo (corte a los 6 s). El pago automático y el
+  reintento nunca pagan a una cuenta bloqueada o en observación (`_payPendingPayout`).
+- Bloqueo (manual o automático): sesión revocada (`tokenVersion`), aviso `account_blocked` por socket y corte de sockets; la PWA sale al login
+  con el motivo (`/sys_account_blocked`) y cualquier `403 USER_BLOCKED` también la saca. Retiros pendientes ⇒ Confirmación de pagos.
+- Desbloquear o marcar legítimo/borrar revisión ⇒ `User.fraudAutoSkip` (el motor no lo vuelve a tocar). Desbloquear deja nota.
+- Panel → Alertas de estafa → 🤖 Antifraude automático (encendido, puntajes, última pasada con quiénes bloqueó/observó). Sólo el admin edita.
+- `registrationMode:'closed'` (Configuración → Registro de clientes → ⛔ REGISTRO CERRADO): rechaza registro de la app, entrada rápida, landing de
+  publicidad y links de referido (`/sys_register_closed`); la pantalla de ingreso queda sólo con Iniciar sesión. El panel sigue creando cuentas.
+**Ojo al subir:** el antifraude arranca ENCENDIDO: en la primera pasada (≈ 5 min después del deploy) bloquea a quien ya tenga ≥ 90 pts con
+conducta. El registro cerrado NO se activa solo: hay que tildarlo en el panel (corta también los links de publicistas: la pauta deja de sumar).
+No se puede cortar la sesión abierta dentro del casino de 1girox (no hay endpoint): no puede cargar ni retirar por la app.
+**Test:** `node scripts/test-fraud-auto.js` (10/10) + dup-account 10/10, gift-rollovers 15/15, bonus-cap 12/12, cashback 10/10.
 
 ## Sesión 2026-10-28
 

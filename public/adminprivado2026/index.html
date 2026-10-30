@@ -779,6 +779,7 @@ document.addEventListener('change', function (ev) {
                                 <b>Desactivado</b> = la pantalla de ingreso muestra <b>"Tu nombre → Entrar"</b> para TODOS: se crea la cuenta sola en las plataformas (misma lógica de la landing, campaña INGRESO, clave inicial) y la persona entra directo (autologin). "Ya tengo cuenta" sigue disponible.<br>
                                 <b>Links de publicidad (#422):</b> quien entra por un link de publicista ve SIEMPRE "Tu nombre → Entrar" (cuenta atribuida a esa campaña), sin importar el tilde. El inicio normal (sin link) respeta el tilde.</p>
                             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                                <label style="margin:0;display:flex;align-items:center;gap:8px;cursor:pointer;flex:1 0 100%;padding:8px 10px;border:1px solid rgba(230,0,35,.6);border-radius:10px;background:rgba(230,0,35,.1);"><input type="checkbox" id="regClosedChk" style="width:auto;"> <b>⛔ REGISTRO CERRADO</b> — nadie puede crear una cuenta: ni desde la app, ni por links de publicidad (landing), ni por links de referido. Sólo el panel crea cuentas. Iniciar sesión sigue abierto para los clientes actuales (#993).</label>
                                 <label style="margin:0;display:flex;align-items:center;gap:8px;cursor:pointer;flex:1 0 100%;padding:8px 10px;border:1px solid rgba(230,0,35,.35);border-radius:10px;background:rgba(230,0,35,.05);"><input type="checkbox" id="regInviteChk" style="width:auto;"> <b>🔒 Registro SÓLO CON INVITACIÓN (recomendado)</b> — nadie se registra desde la app: sólo entra quien llega por /landing (publicidad) o por el link de referido de un cliente. Iniciar sesión sigue abierto. El aviso se edita en COMANDOS → <code>/sys_register_invite</code>.</label><!-- #748 -->
                                 <label style="margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="regSmsChk" style="width:auto;"> Registro con SMS (usuario + clave + teléfono) en vez de la entrada con el nombre</label>
                                 <label style="margin:0;display:flex;align-items:center;gap:6px;cursor:pointer;flex:1 0 100%;"><input type="checkbox" id="regLoginChk" style="width:auto;"> Pantalla de ingreso = <b>Iniciar sesión</b> (usuario, clave y "Olvidé mi contraseña"), sin el bono de bienvenida. Los links de publicidad y de referidos siguen mostrando el registro.</label>
@@ -2904,6 +2905,18 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                     </div>
                 </div>
                 <div class="card" style="margin-bottom:1rem;font-size:.8rem;color:#a5b4fc">Cada cliente con movimiento en el período se revisa con reglas (como los sistemas antifraude de las casas grandes): multicuenta por banco, celular o conexión, cargas desde cuentas de terceros, retiros a nombre de otra persona, abuso de bonos, ciclos de carga y retiro sin jugar, cuentas nuevas con retiros grandes y referidos propios. Cada regla suma puntos (60+ = riesgo alto). <b>Nada se bloquea solo</b>: abrí el caso, revisá la evidencia y decidí.</div>
+                <!-- #993 ANTIFRAUDE AUTOMÁTICO: bloquea solo con puntaje muy alto (cierra la sesión) y frena los retiros con puntaje alto -->
+                <div class="card" id="frAutoCard" style="margin-bottom:1rem;font-size:.82rem">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                        <b>🤖 Antifraude automático</b>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:0"><input type="checkbox" id="frAutoOn" style="width:auto"> Encendido</label>
+                        <label style="margin:0">Bloquear desde <input type="number" id="frAutoBlock" class="form-input" style="width:80px;display:inline-block" min="40" max="500"> pts</label>
+                        <label style="margin:0">En observación desde <input type="number" id="frAutoReview" class="form-input" style="width:80px;display:inline-block" min="30" max="500"> pts</label>
+                        <button class="btn btn-primary btn-small" id="frAutoSave" onclick="saveFraudAuto()">Guardar</button>
+                    </div>
+                    <div style="color:#9ab;margin-top:6px;line-height:1.5">Revisa a todos cada 30 min y a cada cliente cuando pide un retiro. <b>Bloqueo</b> (además del puntaje tiene que haber una conducta: retirar sin jugar, abuso de bonos, retirar a nombre de otro o a un CBU de otros, pasar plata; compartir celular/teléfono solo = cuenta secundaria, no se bloquea): se le cierra la sesión al instante, no puede volver a entrar y sus retiros pendientes quedan para revisión. <b>En observación</b>: puede jugar, pero sus retiros no salen solos (Confirmación de pagos). Si desbloqueás o marcás como legítimo a alguien, el sistema ya no lo vuelve a tocar solo.</div>
+                    <div id="frAutoLast" style="color:#9ab;margin-top:4px"></div>
+                </div>
                 <div id="frSummary" style="margin-bottom:.6rem;font-size:.85rem"></div>
                 <div id="frList">Cargando…</div>
             </section>

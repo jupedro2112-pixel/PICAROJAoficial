@@ -8,6 +8,7 @@
  * cuentas de terceros, abuso de bonos, ciclos de carga y retiro, cuentas nuevas con retiros grandes) y suman un PUNTAJE de riesgo por cliente.
  * Cada regla deja la EVIDENCIA concreta (qué otras cuentas, qué CBU/CUIT, montos y fechas) para que una persona revise el caso y decida.
  * Nada se bloquea solo: el panel muestra el caso y el agente bloquea (o lo marca legítimo / en observación).
+ * #993 (owner 2026-10-30): ahora SÍ hay bloqueo automático, pero vive en server.js (`_fraudAutoApply`): este módulo sólo puntúa.
  *
  * Todo por agregaciones de Mongo sobre lo que ya guardamos (sin servicios externos): User, Transaction, PendingPayout, BankMovement.
  */
@@ -51,8 +52,9 @@ async function scan(deps, opts = {}) {
   const since = new Date(Date.now() - days * 86400000);
   const long = new Date(Date.now() - 180 * 86400000);
 
-  // 1) Candidatos: cargaron, pidieron retiro o están marcados.
-  const [depUsers, wdUsers, flaggedUsers] = await Promise.all([
+  // 1) Candidatos: cargaron, pidieron retiro o están marcados. #993: `opts.userIds` = sólo esos (chequeo de un cliente al pedir un retiro).
+  const only = Array.isArray(opts.userIds) && opts.userIds.length ? opts.userIds.map(String) : null;
+  const [depUsers, wdUsers, flaggedUsers] = only ? [only, [], []] : await Promise.all([
     Transaction.distinct('userId', { type: 'deposit', createdAt: { $gte: since } }),
     PendingPayout.distinct('userId', { createdAt: { $gte: since } }),
     User.distinct('id', { fraudFlags: { $exists: true, $ne: [] } })
@@ -61,7 +63,7 @@ async function scan(deps, opts = {}) {
   if (!ids.length) return { days, scanned: 0, alerts: [] };
 
   const users = await User.find({ id: { $in: ids }, role: 'user' })
-    .select('id username createdAt phone phoneVerified isBlocked blockReason registrationIp fcmToken fcmTokens deviceIds lastDevice fraudFlags fraudReview referredByUserId acquisitionSource acquisitionCampaign withdrawalAccount').lean();
+    .select('id username createdAt phone phoneVerified isBlocked blockReason registrationIp fcmToken fcmTokens deviceIds lastDevice fraudFlags fraudReview fraudAutoSkip referredByUserId acquisitionSource acquisitionCampaign withdrawalAccount').lean();
   const byId = new Map(users.map((u) => [u.id, u]));
 
   // 2) Plata por cliente (de por vida, 180 d): cargas reales, regalos, retiros pagados/pedidos.
@@ -170,9 +172,9 @@ async function scan(deps, opts = {}) {
     if (!u.phoneVerified && R.length) add('no_phone', 'No verificó su celular por SMS');
 
     const score = R.reduce((a, r) => a + r.pts, 0);
-    if (score < (Number(opts.minScore) || 30)) continue;
+    if (score < (opts.minScore != null ? Number(opts.minScore) : 30)) continue;
     alerts.push({
-      userId: u.id, username: u.username, score, level: score >= 60 ? 'alto' : 'medio', reasons: R,
+      userId: u.id, username: u.username, score, level: score >= 60 ? 'alto' : 'medio', reasons: R, autoSkip: !!u.fraudAutoSkip,
       isBlocked: !!u.isBlocked, blockReason: u.blockReason || null, review: u.fraudReview || null, ageDays: Math.round(ageDays),
       phoneVerified: !!u.phoneVerified, source: u.acquisitionSource || null, campaign: u.acquisitionCampaign || null,
       deposits: { n: dep.n, total: Math.round(dep.total) }, gifts: { n: gift.n, total: Math.round(gift.total) }, play: st ? { wagered: wag, netwin: nw } : null,

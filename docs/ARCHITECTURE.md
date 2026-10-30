@@ -1572,3 +1572,25 @@ insertando `SorteoTicket` (único por key+periodKey+n). Después corre `_sorteoD
 **Trampas:** tickets nunca bajan (si cambia realShare, se conserva lo emitido); el commit congela `total` — tickets emitidos después no entran a ESE
 sorteo; cambiar `tickets.per`/`dayCap` a mitad de período sólo afecta lo que se emite de ahí en adelante. El ganador del 1° premio se excluye del
 ranking (`_sorteoWinners(key, pk, excludeUserId)`). Requisito teléfono = 10 dígitos cargados (no exige verificación: eso va al cobrar).
+
+## Antifraude automático y registro cerrado (#993, 2026-10-30)
+- **Motor:** `_fraudAutoApply(alerts, source)` (server.js) usa el MISMO puntaje del radar (`fraudRadar.scan`, #873). Config `Config['fraudAuto']`
+  `{ enabled, blockScore: 90, reviewScore: 60 }` (panel → Alertas de estafa → 🤖, sólo admin; `GET/POST /api/admin/fraud/auto-config`).
+  - `score ≥ blockScore` **y** al menos una regla de CONDUCTA (`FRAUD_BEHAVIOR_RULES`: retiro a CBU de otros, varios titulares, retira a nombre de
+    otro, abuso de bonos, retira sin jugar, retiro grande en cuenta nueva, ciclo rápido, granja de referidos) ⇒ `_blockUserAccount` (atómico:
+    `isBlocked`, `blockedBy:'antifraude'`, `tokenVersion+1`, retiros `pending_review|failed` ⇒ `reviewRequired`, `_kickUserSessions`).
+    Sólo identidad compartida (celular / teléfono / CBU de carga = cuenta secundaria #992) NUNCA bloquea sola: queda en observación.
+  - `score ≥ reviewScore` ⇒ `fraudReview.status='watch'` (`by:'antifraude'`): sus retiros no salen solos.
+  - `User.fraudAutoSkip` = una persona lo desbloqueó o lo revisó (legítimo / borrar) ⇒ el motor no lo vuelve a tocar (el radar lo sigue mostrando).
+- **Cuándo corre:** `_fraudAutoTick` cada 30 min (lease `Config['fraudAutoLastRun']` 25 min para no repetir entre instancias; resultado en
+  `Config['fraudAutoLastResult']`) y `_fraudCheckUser` en `POST /api/withdrawal/request` antes de decidir el pago automático (scan con
+  `opts.userIds`, corte a los 6 s: si el radar no contesta sigue el flujo normal). `_payPendingPayout` con el actor `auto-retiros` se niega a pagar
+  a una cuenta bloqueada o en observación (una persona sí puede).
+- **Cerrar sesión:** `_kickUserSessions` emite `account_blocked` (texto `/sys_account_blocked`) a `user_<id>` y corta esos sockets (Redis adapter ⇒
+  todas las instancias). La PWA (`VIP.auth.forceBlockedLogout`, socket.js) sale al login con el motivo; además auth.js envuelve `fetch` y cualquier
+  `403 USER_BLOCKED` hace lo mismo. El bloqueo manual (`/api/admin/users/:id/block`) usa el mismo `_blockUserAccount`.
+  ⚠️ La sesión ya abierta DENTRO del casino de 1girox no la cortamos nosotros (no hay endpoint); no puede retirar ni cargar por la app.
+- **Registro cerrado:** `registrationMode = 'closed'` (Configuración → Registro de clientes → ⛔). `_inviteOnlyBlocks` lo rechaza en
+  `/api/auth/register` y `quick-entry`, y `_landingSignupHandler` también (landing de publicidad, `REGISTRATION_CLOSED`). Texto `/sys_register_closed`.
+  Siguen: login, alta desde el panel (`/api/users`, `/api/admin/users`, publisher-admin) y la creación local de un jugador que YA existe en 1girox.
+- Test: `node scripts/test-fraud-auto.js` (10 casos).

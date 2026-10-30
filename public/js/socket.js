@@ -43,6 +43,11 @@ VIP.socket = (function () {
             }
         });
 
+        // #993: el antifraude (o un agente) bloqueó la cuenta ⇒ fuera de la sesión con el motivo.
+        VIP.state.socket.on('account_blocked', function (data) {
+            try { VIP.auth.forceBlockedLogout(data && data.message); } catch (_) {}
+        });
+
         VIP.state.socket.on('reconnect', function (attemptNumber) {
             VIP.state.socket.emit('authenticate', VIP.state.currentToken);
             setTimeout(() => { VIP.chat.loadMessages(true); }, 500);
