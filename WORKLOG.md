@@ -4,7 +4,55 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-01**
+> **Última actualización: 2026-11-05**
+
+## Sesión 2026-11-05
+
+### 1020. Comprobantes sin IA: duplicado = sin carga; comprobante falso = sin carga automática; retiros "en hasta 20 min" (2026-11-05)
+- Owner: "si coincide con otra no se carga automática, es comprobante duplicado; si es uno nuevo y falla, ahí sí cargamos" ⇒ en el respaldo sin IA
+  (`_receiptTrustedFallback`, sólo clientes de confianza) la imagen ya enviada (mismo `imageHash`) ya no cae al camino de "error/reenviá": se registra
+  `status:'duplicate'` (`_fallbackDuplicate`, mismo criterio que con IA: reenvío propio sin acreditar = sólo nota; acreditado o de otro cliente = nota +
+  `/sys_receipt_duplicate`). Nunca carga. Un comprobante NUEVO sigue el respaldo de #1010.
+- Owner: "si relee y no era real, ese cliente no tiene más carga automática y entra en revisión la próxima" ⇒ `_receiptAiRecheckTick` con problemas
+  además graba `User.autoLoadOff {at, why}`. `hgcashAutoCarga` lo chequea (después del modo sombra): la transferencia que coincide queda `needs_review`
+  (la consume la carga manual) y el comprobante escala a Cargas pendientes (`_depositReviewEscalate`). `_receiptTrust` también lo excluye. Se devuelve
+  marcándolo Legítimo o borrando la revisión en 🛡️ Antifraude (`POST /api/admin/fraud/review/:id`).
+- Owner: "cuando la API falla para retiros, avisarle al cliente que por la gran cantidad de pagos dentro de un plazo de 20 minutos su pago será realizado"
+  ⇒ `/sys_withdraw_delayed` con ese texto (ahora sembrado en COMANDOS: antes no existía en la base y no se podía editar) y push "⏳ Tu retiro sale en hasta
+  20 min". Sale UNA vez por retiro (`_notifyWithdrawDelayed`, reserva atómica de `clientDelayNotifiedAt`) cuando falla el pago por el banco (como antes) y
+  ahora también cuando el chequeo antifraude no responde (`deferFraud`). Ojo: los reintentos llegan a 60 min (banco) / 30 min (antifraude); si no sale,
+  pasa a revisión y le llega `/sys_withdraw_review`. → Ajustado en la 2ª parte (abajo): ahora los reintentos caben en ~20 min.
+- 2ª parte (owner: "dejalo avisado: envió comprobante no válido cuando falló la API, entró en revisión; avisarle al cliente cuando carga que va a tener que
+  esperar por eso" + "revisar si la API volvió lo más ágil posible, detectar cuando la gente envía, y que verifique TODOS los que se cargaron sin la API y
+  los saque de pendiente"):
+  - Cliente con `autoLoadOff`: al mandar el comprobante ya escala a Cargas pendientes con `/sys_deposit_autoload_off` (nuevo, editable: "un comprobante
+    que enviaste antes no se pudo validar, tus cargas las revisa una persona y van a demorar") + nota "🛑 SIN CARGA AUTOMÁTICA: envió un comprobante NO
+    válido cuando falló la IA…". `_depositReviewEscalate(c, why, { autoLoadOff })`.
+  - `_receiptAiRecheckTick` reescrito: cada 2 min (sin pendientes = una consulta) + `_kickReceiptRecheck()` apenas un comprobante nuevo se lee bien (la IA
+    volvió); corta tras 2 errores técnicos seguidos; sin tope de intentos mientras exista la imagen (si venció, nota para revisarlo a mano). Resultados:
+    OK ⇒ `shiftReview` automático "✅ revisión IA" (sale de 👀 Para revisar) y, si no se había acreditado, vuelve al camino normal con los datos leídos
+    (`hgcashMatchFromComprobante`); foto que no era comprobante y no se acreditó ⇒ se cierra sin castigo (`reviewStatus:'none'`); reenvío propio sin
+    acreditar ⇒ duplicado cerrado; acreditado y no coincide / ya acreditado antes / de OTRO cliente ⇒ observación + `autoLoadOff`. El "repetido" sólo
+    mira comprobantes ANTERIORES y no marcados duplicado (antes un reenvío posterior podía castigar al original).
+  - Banco ágil: `_payoutAutoRetryTick` pasa cada 1 min y cada retiro espera 3 min entre intentos (6 ≈ 18 min); `_bankPayoutOk` dispara `_kickPayoutRetry()`
+    (el primer pago que sale bien reintenta YA los fallados). Antifraude sin respuesta: cada 3 min × 6 (antes 10 × 3).
+- 3ª parte:
+  - CLIENTE FIEL (owner: "5ª carga, en 3 días distintos, así está bien; los que ya son fieles detectalo viendo cómo vienen cargando"): `_receiptTrust` =
+    7+ días · **5+ cargas reales en 3+ días distintos (ART)** (`RECEIPT_TRUST`; antes 3 cargas) · resto igual. Se calcula EN VIVO sobre el historial de
+    Transaction (una agregación), así que los que ya venían cargando son fieles solos, sin migración.
+  - 🔌 COMPROBANTES SIN API A VERIFICAR (owner: "apartado nuevo de fallas de API, control automático, con los comprobantes que se cargaron solos sin ver; que un empleado
+    mirando el banco lo marque si ve que entró, así se va sacando"): panel → Manejo → 🔌 Comprobantes sin API a verificar (también para agentes, `AGENT_SECTIONS`). Estado
+    de la IA (último leído / último error / pendientes de re-leer) y del banco (alerta + retiros fallados reintentándose); lista de `trustedFallback` con
+    titular, CBU (últimos 6), op. y hora de entrada para buscar en el banco; botones 🏦 Lo vi en el banco (`POST /api/admin/api-failures/:id/bank-seen`,
+    sólo acreditados) y ⚠️ Sospechoso (reusa `/api/admin/shift-review/receipt/:id`). Sale de la lista cuando la IA lo verifica o con "visto en el banco";
+    si la IA después encuentra un problema, el recheck limpia `shiftReview` y vuelve. Contador en el menú (cada 2 min). Admin SW v236.
+  - Owner: "agregalo abajo de Comprobantes a verificar con el nombre 'Comprobantes sin API a verificar'; que entren a mirar, si chequean tildan y si no
+    vos lo hacés automáticamente cuando vuelve" ⇒ ítem movido y renombrado; explicación en 3 pasos; tilde de UN toque (☑ Lo vi en el banco, sin pedir
+    nota; con problema de la IA dice ☑ Ya lo revisé y la fila va con borde rojo); "⚠️ algo no cierra" queda como link chico (cliente en observación).
+    Aviso arriba: "el control es AUTOMÁTICO… no es obligatorio, si tenés tiempo podés ir adelantándote". Caché de 20 s del GET (se limpia al tildar).
+  - Revisión final: un reenvío PROPIO sin acreditar (aunque el original ya se hubiera cargado) ya no deja al cliente sin carga automática: se cierra
+    como duplicado. Castigo sólo si se acreditó y no coincide / se acreditó dos veces, o si el comprobante era de OTRO cliente.
+  - Guía para encargados: HTML aparte (no en el repo, que es público).
 
 ## Sesión 2026-11-01
 

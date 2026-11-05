@@ -2152,6 +2152,8 @@ async function _receiptQueueForAgent(userId, username, compId, why, first) {
 const RECEIPT_RECEIVED_DEFAULT = '✅ Recibimos tu comprobante{amount}. En breve tu carga será realizada: te avisamos acá apenas se acredite.'; // #811
 const RECEIPT_DUPLICATE_DEFAULT = '⚠️ Ese comprobante ya fue usado{amount}. Cada transferencia se acredita UNA sola vez. Si creés que es un error, contanos acá en Soporte y lo revisamos.';
 const DEPOSIT_PENDING_REVIEW_DEFAULT = '⏳ Tu carga{amount} sigue pendiente: un agente la está verificando ahora mismo. No hace falta que hagas nada, te avisamos acá en cuanto se acredite.';
+// #1020 (owner): "darle un aviso al cliente cuando carga, que va a tener que esperar por eso, para las próximas cargas".
+const DEPOSIT_AUTOLOAD_OFF_DEFAULT = '⏳ Recibimos tu comprobante{amount}. Como un comprobante que enviaste antes no se pudo validar, por ahora tus cargas las revisa una persona del equipo y van a demorar un poco más. No hace falta que hagas nada: te avisamos acá apenas se acredite.';
 const DEPOSIT_REJECTED_DEFAULT = '❌ No pudimos acreditar tu carga{amount}: {motivo}. Si tenés dudas, escribinos acá en Soporte.';
 const DEPOSIT_REJECT_REASONS = { no_llego: 'la transferencia no entró en nuestra cuenta', duplicado: 'ese comprobante ya había sido acreditado', ilegible: 'el comprobante no se lee completo (mandalo de nuevo, entero)', monto: 'el monto no coincide con lo que entró', otro: 'no pudimos validarla' };
 async function getDepositReviewConfig() {
@@ -2223,13 +2225,15 @@ async function _depositReviewCloseRepeats(c, by, how) {
   } catch (e) { logger.warn(`[deposit-review] cerrar repetidos: ${e.message}`); return 0; }
 }
 // Escala un comprobante pendiente: aviso al cliente + nota interna + panel.
-async function _depositReviewEscalate(c, why) {
+async function _depositReviewEscalate(c, why, opts) {
   try {
     const r = await Comprobante.findOneAndUpdate(
       { id: c.id, reviewStatus: 'pending', reviewEscalatedAt: null },
       { $set: { reviewEscalatedAt: new Date(), reviewEscalateReason: String(why || '').slice(0, 80) } }, { new: true }).lean();
     if (!r) return false;
-    const txt = await renderSystemCommand('/sys_deposit_pending_review', DEPOSIT_PENDING_REVIEW_DEFAULT, { amount: _amtStr(c.amount) });
+    // #1020: cliente sin carga automática ⇒ aviso propio ("va a demorar porque un comprobante anterior no se pudo validar"); vacío ⇒ el común.
+    let txt = (opts && opts.autoLoadOff) ? await renderSystemCommand('/sys_deposit_autoload_off', DEPOSIT_AUTOLOAD_OFF_DEFAULT, { amount: _amtStr(c.amount) }) : null;
+    if (!txt) txt = await renderSystemCommand('/sys_deposit_pending_review', DEPOSIT_PENDING_REVIEW_DEFAULT, { amount: _amtStr(c.amount) });
     if (txt) await _sendUserSystemMessage({ id: c.userId, username: c.username }, txt, { metadata: { kind: 'deposit_pending', comprobanteId: c.id, amount: c.amount || 0, escalated: true } });
     await _emitAdminOnlyChatNote(c.userId, c.username, `⏳ CARGA PENDIENTE${_amtStr(c.amount)} — ${why || 'sin acreditación automática'}. Revisala en "Cargas pendientes": confirmar (carga) o rechazar.`);
     _emitDepositReviewUpdate(c.userId, { action: 'escalated', id: c.id, username: c.username, amount: c.amount });
@@ -2271,24 +2275,31 @@ async function _depositReviewConsume(userId, amount, by) {
 // "que sea manual cuando se trabe la API, pero para clientes activos que siempre envían bien el comprobante que funcione igual aunque falle: ellos
 // no se van a dar cuenta de que no analizamos su comprobante y pueden seguir cargando o retirando; para clientes de más de una semana; y siempre,
 // cuando vuelva, revisemos bien que esté todo OK".
-//  • Confianza (_receiptTrust): cuenta de 7+ días · 3+ cargas reales · sin marcas de fraude / cuenta secundaria / bloqueo / observación ·
+//  • Confianza (_receiptTrust): cuenta de 7+ días · 5+ cargas reales en 3+ días distintos (#1020) · sin marcas de fraude / cuenta secundaria / bloqueo / observación ·
 //    sin comprobantes repetidos ni rechazados en 30 días · con al menos una transferencia suya ya acreditada (para conocer su cuenta de origen).
 //  • Si la IA falla: el comprobante entra a la cola como 'trustedFallback' (sin datos leídos) y se acredita con la transferencia ENTRANTE que venga
 //    de una cuenta (CBU o titular) que el cliente YA usó antes, dentro de la ventana de hgcash. Si hay 0 o 2+ candidatas, espera / queda manual.
 //    Al cliente le llega el acuse de siempre (no se le pide reenviar).
 //  • _receiptAiRecheckTick (cada 10 min): cuando la IA vuelve, se re-lee la imagen y se compara con lo acreditado. Si no es comprobante, el monto
 //    no coincide o el comprobante ya lo había usado alguien ⇒ nota PRIORIDAD ALTA en el chat + cliente "en observación" (sus retiros pasan a revisión).
+const RECEIPT_TRUST = { minAccountDays: 7, minDeposits: 5, minDistinctDays: 3 }; // #1020 (antes 3 cargas, sin días distintos)
 async function _receiptTrust(userId) {
-  const u = await User.findOne({ id: String(userId) }).select('createdAt fraudFlags duplicateOf isBlocked fraudReview').lean();
+  const u = await User.findOne({ id: String(userId) }).select('createdAt fraudFlags duplicateOf isBlocked fraudReview autoLoadOff').lean();
   if (!u) return { ok: false, why: 'cliente no encontrado' };
-  if ((Date.now() - new Date(u.createdAt || 0).getTime()) < 7 * 86400000) return { ok: false, why: 'cuenta de menos de 7 días' };
+  if (u.autoLoadOff && u.autoLoadOff.at) return { ok: false, why: 'carga automática desactivada' }; // #1020
+  if ((Date.now() - new Date(u.createdAt || 0).getTime()) < RECEIPT_TRUST.minAccountDays * 86400000) return { ok: false, why: 'cuenta de menos de ' + RECEIPT_TRUST.minAccountDays + ' días' };
   if ((u.fraudFlags || []).length || u.duplicateOf || u.isBlocked || (u.fraudReview && u.fraudReview.status === 'watch')) return { ok: false, why: 'cuenta marcada' };
   const since30 = new Date(Date.now() - 30 * 86400000);
-  const [nDep, badRc] = await Promise.all([
-    Transaction.countDocuments({ ..._REAL_DEP, userId: String(userId), description: { $not: /PRUEBA/i } }),
+  // #1020 (owner): "fiel" = 5 cargas reales (igual que TRUST_DEPOSITS de la estrategia) en al menos 3 días distintos (hora ART): 5 cargas chicas el mismo
+  // día no alcanzan. Se calcula EN VIVO sobre su historial de cargas, así los clientes que ya venían cargando quedan fieles solos, sin migración.
+  const [depAgg, badRc] = await Promise.all([
+    Transaction.aggregate([{ $match: { ..._REAL_DEP, userId: String(userId), description: { $not: /PRUEBA/i } } },
+      { $group: { _id: null, n: { $sum: 1 }, days: { $addToSet: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: '-03:00' } } } } }]),
     Comprobante.exists({ userId: String(userId), createdAt: { $gte: since30 }, $or: [{ status: 'duplicate' }, { reviewStatus: 'rejected' }] })
   ]);
-  if (nDep < 3) return { ok: false, why: nDep + ' cargas' };
+  const nDep = (depAgg[0] && depAgg[0].n) || 0; const nDays = (depAgg[0] && (depAgg[0].days || []).length) || 0;
+  if (nDep < RECEIPT_TRUST.minDeposits) return { ok: false, why: nDep + ' cargas' };
+  if (nDays < RECEIPT_TRUST.minDistinctDays) return { ok: false, why: 'cargas en ' + nDays + ' día(s) distinto(s)' };
   if (badRc) return { ok: false, why: 'comprobante repetido o rechazado en 30 días' };
   return { ok: true };
 }
@@ -2305,7 +2316,12 @@ async function _receiptTrustedFallback({ userId, username, content, messageId, e
   const t = await _receiptTrust(userId); if (!t.ok) return false;
   const ks = await _knownSendersOf(userId); if (!ks.cbus.size) return false; // sin CBU de origen conocido: manual
   let imageHash = null; try { if (typeof content === 'string' && content.startsWith('data:')) { const m = content.match(/;base64,(.*)$/s); if (m) imageHash = crypto.createHash('sha256').update(m[1]).digest('hex'); } } catch (_) {}
-  if (imageHash && await Comprobante.exists({ isComprobante: true, imageHash })) return false; // la misma imagen ya se usó: camino normal (manual)
+  // #1020 (owner): "si coincide con otra no se carga automática: es comprobante duplicado; si es uno nuevo y falla, ahí sí cargamos".
+  // La misma imagen ya enviada ⇒ se registra como DUPLICADO (sin carga), igual que cuando la IA sí lo lee.
+  if (imageHash) {
+    const original = await Comprobante.findOne({ isComprobante: true, imageHash }).sort({ createdAt: 1 }).lean();
+    if (original) { await _fallbackDuplicate({ userId, username, messageId, imageHash, original, error }); return true; }
+  }
   const c = { id: uuidv4(), userId, username, messageId, isComprobante: true, aiConfidence: 0, amount: null, status: 'error', errorReason: String(error || '').slice(0, 300),
     imageHash, model: comprobanteAi.getModel(), trustedFallback: true, aiRetryPending: true, aiRetries: 0, bankMatchStatus: 'none', reviewStatus: 'pending', reviewQueuedAt: new Date(), createdAt: new Date() };
   await Comprobante.create(c);
@@ -2317,6 +2333,37 @@ async function _receiptTrustedFallback({ userId, username, content, messageId, e
   await _trustedFallbackMatch({ comprobante: c, ks });
   logger.info(`[comprobante] respaldo sin IA para ${username} (cliente de confianza)`);
   return true;
+}
+// #1020: comprobante sin leer (IA caída) cuya IMAGEN ya se había enviado ⇒ duplicado, nunca carga automática. Mismo criterio que el camino con IA:
+// reenvío propio de algo todavía NO acreditado = sólo nota (el original sigue su curso); acreditado o de OTRO cliente = "ya fue usado".
+async function _fallbackDuplicate({ userId, username, messageId, imageHash, original, error }) {
+  const sameUser = String(original.userId) === String(userId);
+  try {
+    await Comprobante.create({ id: uuidv4(), userId, username, messageId, isComprobante: true, aiConfidence: 0, amount: null, status: 'duplicate', imageHash,
+      errorReason: String(error || '').slice(0, 300), model: comprobanteAi.getModel(), duplicateOfUserId: original.userId || null, duplicateOfUsername: original.username || null,
+      duplicateOfComprobanteId: original.id || null, createdAt: new Date() });
+  } catch (_) {}
+  let credited = true;
+  if (sameUser) { try { credited = !!(await Comprobante.exists({ imageHash, $or: [{ autoCharged: true }, { reviewStatus: 'confirmed' }] })); } catch (_) { credited = true; } }
+  if (sameUser && !credited) {
+    await _emitAdminOnlyChatNote(userId, username, '🧾 El cliente REENVIÓ un comprobante suyo que todavía NO se acreditó (la IA está caída: se reconoció por la imagen). No es otro pago: no se carga de nuevo.').catch(() => {});
+    if (original.reviewStatus === 'pending') { // igual que con IA (#1011): "ya lo tenemos, no hace falta reenviarlo"
+      try {
+        const pTxt = await renderSystemCommand('/sys_receipt_already_pending', RECEIPT_ALREADY_PENDING_DEFAULT, { amount: _amtStr(original.amount) });
+        if (pTxt) await _sendUserSystemMessage({ id: userId, username }, pTxt, { metadata: { kind: 'receipt_already_pending', amount: original.amount || 0, channel: 'support' } });
+      } catch (_) {}
+    }
+  } else {
+    await _emitAdminOnlyChatNote(userId, username, sameUser
+      ? '🧾 Comprobante REPETIDO (misma imagen que uno suyo ya acreditado; la IA está caída). NO se cargó automático. Revisá antes de cargar.'
+      : `🚨 COMPROBANTE YA UTILIZADO POR: @${original.username || original.userId} (misma imagen; la IA está caída). NO se cargó automático. NO cargar sin verificar.`).catch(() => {});
+    try {
+      const dupTxt = await renderSystemCommand('/sys_receipt_duplicate', RECEIPT_DUPLICATE_DEFAULT, { amount: _amtStr(original.amount) });
+      if (dupTxt) await _sendUserSystemMessage({ id: userId, username }, dupTxt, { metadata: { kind: 'receipt_duplicate', amount: original.amount || 0 } });
+    } catch (_) {}
+  }
+  _chatAutoCloseIfHandled(userId, 'comprobante repetido (sin IA)').catch(() => {});
+  logger.info(`[comprobante] respaldo sin IA: imagen repetida de ${username} (original de ${original.username || original.userId}) ⇒ duplicado`);
 }
 // Busca la transferencia del cliente (comprobante sin leer → movimiento) o el comprobante sin leer (movimiento → cliente). Sólo si hay UNA.
 async function _trustedFallbackMatch({ comprobante, ks, movement }) {
@@ -2337,32 +2384,85 @@ async function _trustedFallbackMatch({ comprobante, ks, movement }) {
   }
   return false;
 }
+// #1020 (owner): "revisar si la API volvió lo más ágil posible: detectar cuando la gente envía si volvió, para ya volver a chequear todo, y que verifique
+// TODOS los comprobantes que se cargaron sin la API y los saque de pendiente". Ahora:
+//  • corre cada 2 min (barato: sin pendientes es una consulta) y además se DISPARA apenas un comprobante nuevo se lee bien (= la IA volvió);
+//  • si la IA sigue caída corta en el primer error técnico (no gasta intentos de todos); sigue intentando mientras exista la imagen (Message TTL 3 días);
+//  • resultado por comprobante:
+//      OK + acreditado      ⇒ "✅ verificado por la IA" en Para revisar (shiftReview auto) — sale de lo pendiente.
+//      OK + sin acreditar   ⇒ toma los datos leídos y vuelve al camino normal (busca la transferencia y se acredita solo; si no, sigue en la cola CON datos).
+//      no era comprobante, sin acreditar ⇒ se cierra sin castigo (foto equivocada): sale de Cargas pendientes.
+//      reenvío del mismo cliente sin acreditar ⇒ se cierra como duplicado (el original sigue).
+//      acreditado y no coincide / ya lo había acreditado él / de OTRO cliente ⇒ observación + SIN CARGA AUTOMÁTICA (autoLoadOff) + nota PRIORIDAD ALTA.
+let _receiptRecheckKickAt = 0;
+function _kickReceiptRecheck() {
+  if (Date.now() - _receiptRecheckKickAt < 60000) return; _receiptRecheckKickAt = Date.now();
+  Comprobante.exists({ aiRetryPending: true }).then((x) => { if (x) _receiptAiRecheckTick(); }).catch(() => {});
+}
 async function _receiptAiRecheckTick() {
   try {
-    if (!comprobanteAi.isEnabled() || !(await _cronClaim('receiptairecheck', 8 * 60000))) return;
-    const due = await Comprobante.find({ aiRetryPending: true, createdAt: { $gte: new Date(Date.now() - 72 * 3600000) } }).sort({ createdAt: 1 }).limit(10).lean();
+    if (!comprobanteAi.isEnabled() || !(await Comprobante.exists({ aiRetryPending: true })) || !(await _cronClaim('receiptairecheck', 90000))) return;
+    const due = await Comprobante.find({ aiRetryPending: true }).sort({ createdAt: 1 }).limit(25).lean();
+    let techFails = 0;
     for (const c of due) {
       const msg = c.messageId ? await Message.findOne({ id: c.messageId }).select('content').lean() : null;
-      if (!msg || !msg.content) { await Comprobante.updateOne({ id: c.id }, { $set: { aiRetryPending: false, aiRecheck: { at: new Date(), ok: null, note: 'la imagen ya no está' } } }); continue; }
+      if (!msg || !msg.content) {
+        await Comprobante.updateOne({ id: c.id }, { $set: { aiRetryPending: false, aiRecheck: { at: new Date(), ok: null, note: 'la imagen ya no está: no se pudo verificar (revisalo a mano)' } } });
+        await _emitAdminOnlyChatNote(c.userId, c.username, '🧾 No se pudo verificar con la IA un comprobante que entró sin leer (la imagen ya venció). Revisalo a mano en 👀 Para revisar.').catch(() => {});
+        continue;
+      }
       const r = await comprobanteAi.analyzeComprobante(msg.content);
-      if (!r.ok) { const n = Number(c.aiRetries || 0) + 1; await Comprobante.updateOne({ id: c.id }, { $set: { aiRetries: n, aiRetryPending: n < 12 } }); if (n >= 12) await _emitAdminOnlyChatNote(c.userId, c.username, '🧾 La IA no pudo revisar el comprobante que se acreditó sin leer (12 intentos). Miralo a mano en el chat.').catch(() => {}); continue; }
-      const fresh = await Comprobante.findOne({ id: c.id }).lean();
-      const mv = fresh && fresh.matchedMovementId ? await BankMovement.findOne({ movementId: fresh.matchedMovementId }).select('amount').lean() : null;
+      if (!r.ok) {
+        await Comprobante.updateOne({ id: c.id }, { $inc: { aiRetries: 1 } });
+        if (++techFails >= 2) break; // la IA sigue caída: se reintenta en la próxima pasada (o apenas un comprobante nuevo se lea bien)
+        continue;
+      }
+      techFails = 0;
+      const fresh = await Comprobante.findOne({ id: c.id }).lean(); if (!fresh) continue;
+      const credited = !!fresh.autoCharged || fresh.bankMatchStatus === 'auto_charged' || fresh.reviewStatus === 'confirmed';
+      const mv = fresh.matchedMovementId ? await BankMovement.findOne({ movementId: fresh.matchedMovementId }).select('amount').lean() : null;
       const opKey = _normComprobanteKey(r.operationNumber); const coel = r.coelsaId ? 'coelsa' + _normComprobanteKey(r.coelsaId) : null;
-      const dupOf = (opKey || coel) ? await Comprobante.findOne({ id: { $ne: c.id }, isComprobante: true, dedupeKey: { $in: [opKey, coel].filter(Boolean) } }).select('username userId').lean() : null;
+      // sólo un comprobante ANTERIOR y real (no las copias marcadas duplicado): un reenvío posterior no convierte al original en "repetido"
+      const dupOf = (opKey || coel) ? await Comprobante.findOne({ id: { $ne: c.id }, isComprobante: true, status: { $ne: 'duplicate' }, createdAt: { $lt: fresh.createdAt }, dedupeKey: { $in: [opKey, coel].filter(Boolean) } })
+        .select('id username userId autoCharged reviewStatus').lean() : null;
+      const dupOther = !!dupOf && String(dupOf.userId) !== String(c.userId);
+      const dupSelfCredited = !!dupOf && !dupOther && (!!dupOf.autoCharged || dupOf.reviewStatus === 'confirmed');
+      const data = { amount: r.amount || null, operationNumber: r.operationNumber || null, coelsaId: r.coelsaId || null, originHolder: r.originHolder || null, originCbu: r.originCbu || null,
+        destHolder: r.destHolder || null, destCbu: r.destCbu || null, bank: r.bank || null, paymentDate: r.paymentDate || null, rawText: r.rawText || null, aiConfidence: r.confidence || 0 };
       const problems = [];
       if (!r.isComprobante) problems.push('la imagen NO es un comprobante');
       if (mv && Number(r.amount) > 0 && !_amountsEqual(r.amount, mv.amount)) problems.push(`el comprobante dice $${Number(r.amount).toLocaleString('es-AR')} y se acreditaron $${Number(mv.amount).toLocaleString('es-AR')}`);
-      if (dupOf) problems.push('el comprobante ya lo había enviado ' + (String(dupOf.userId) === String(c.userId) ? 'el mismo cliente' : '@' + dupOf.username));
-      await Comprobante.updateOne({ id: c.id }, { $set: { aiRetryPending: false, amount: r.amount || null, operationNumber: r.operationNumber || null, coelsaId: r.coelsaId || null, originHolder: r.originHolder || null, originCbu: r.originCbu || null, paymentDate: r.paymentDate || null, rawText: r.rawText || null, dedupeKey: opKey || coel || null, aiRecheck: { at: new Date(), ok: problems.length === 0, note: problems.join(' · ') || 'OK' } } });
-      if (problems.length) {
-        await User.updateOne({ id: c.userId }, { $set: { fraudReview: { status: 'watch', by: 'revisión IA', at: new Date(), note: 'Comprobante acreditado sin leer y revisado después: ' + problems.join(' · '), priority: 'high' } } });
-        await _emitAdminOnlyChatNote(c.userId, c.username, '🚨 PRIORIDAD ALTA — REVISIÓN POSTERIOR del comprobante acreditado sin leer: ' + problems.join(' · ') + '. El cliente quedó EN OBSERVACIÓN (sus retiros pasan a revisión). Verificalo en 🛡️ Antifraude.').catch(() => {});
+      if (dupOther) problems.push('el comprobante ya lo había enviado @' + (dupOf.username || dupOf.userId));
+      else if (dupSelfCredited && credited) problems.push('el comprobante ya se le había acreditado antes al mismo cliente (se acreditó dos veces)');
+      const serious = dupOther || (credited && problems.length > 0); // un reenvío propio SIN acreditar (aunque el original ya se haya cargado) no se castiga: se cierra como duplicado
+      const now = new Date();
+      if (!serious && !credited && !r.isComprobante) { // foto equivocada que nunca se acreditó: se cierra sin castigo
+        await Comprobante.updateOne({ id: c.id }, { $set: { ...data, aiRetryPending: false, isComprobante: false, status: 'not_comprobante', reviewStatus: 'none', reviewResolution: 'auto', reviewNote: 'la IA la re-leyó: no es un comprobante', aiRecheck: { at: now, ok: true, note: 'no era un comprobante (no se había acreditado): cerrado' } } });
+        _emitDepositReviewUpdate(c.userId, { action: 'closed', id: c.id });
+        await _emitAdminOnlyChatNote(c.userId, c.username, '🧾 La IA volvió y re-leyó la imagen que había entrado sin leer: NO era un comprobante y no se había acreditado ⇒ se sacó de Cargas pendientes.').catch(() => {});
+        continue;
       }
+      if (!serious && !credited && dupOf) { // reenvío propio de algo todavía sin acreditar: el original sigue su curso
+        await Comprobante.updateOne({ id: c.id }, { $set: { ...data, aiRetryPending: false, status: 'duplicate', reviewStatus: 'none', reviewResolution: 'auto', duplicateOfUserId: dupOf.userId, duplicateOfUsername: dupOf.username || null, duplicateOfComprobanteId: dupOf.id, aiRecheck: { at: now, ok: true, note: 'reenvío del mismo comprobante (sin acreditar): cerrado' } } });
+        _emitDepositReviewUpdate(c.userId, { action: 'closed', id: c.id });
+        continue;
+      }
+      await Comprobante.updateOne({ id: c.id }, { $set: { ...data, aiRetryPending: false, dedupeKey: opKey || coel || null, status: serious ? 'duplicate' : (opKey || coel ? 'unique' : 'no_key'),
+        aiRecheck: { at: now, ok: !serious, note: problems.join(' · ') || 'OK' },
+        ...(serious ? { shiftReview: null } : {}), // #1020: si una persona lo había dado por visto y la IA encuentra un problema, vuelve a Comprobantes sin API a verificar
+        ...(!serious && !fresh.shiftReview ? { shiftReview: { by: 'revisión IA', at: now, verdict: 'ok', note: credited ? 'la IA lo leyó y coincide con lo acreditado' : 'la IA lo leyó: sigue el camino normal con los datos leídos' } } : {}) } });
+      if (serious) {
+        // #1020 (owner): "si relee y no era real, ese cliente no tiene más carga automática y entra en revisión la próxima".
+        await User.updateOne({ id: c.userId }, { $set: { fraudReview: { status: 'watch', by: 'revisión IA', at: now, note: 'Comprobante enviado con la IA caída y revisado después: ' + problems.join(' · '), priority: 'high' },
+          autoLoadOff: { at: now, why: ('envió un comprobante no válido cuando falló la IA: ' + problems.join(' · ')).slice(0, 300) } } });
+        await _emitAdminOnlyChatNote(c.userId, c.username, '🚨 PRIORIDAD ALTA — REVISIÓN POSTERIOR del comprobante que entró sin leer' + (credited ? ' (YA ACREDITADO)' : ' (no se acreditó)') + ': ' + problems.join(' · ') + '. El cliente quedó EN OBSERVACIÓN (sus retiros pasan a revisión) y SIN CARGA AUTOMÁTICA: sus próximas cargas las revisa una persona y a él se le avisa que va a demorar. Para devolvérsela, marcalo Legítimo o borrá la revisión en 🛡️ Antifraude.').catch(() => {});
+        continue;
+      }
+      if (!credited) hgcashMatchFromComprobante({ ...fresh, ...data, isComprobante: true, dedupeKey: opKey || coel || null, aiRetryPending: false }).catch(() => {}); // vuelve al camino normal con los datos leídos
     }
   } catch (e) { logger.warn('[comprobante] re-revisión IA: ' + e.message); }
 }
-setInterval(() => { _receiptAiRecheckTick(); }, 10 * 60000);
+setInterval(() => { _receiptAiRecheckTick(); }, 2 * 60000);
 async function analyzeComprobanteFromMessage({ userId, username, content, messageId }) {
   try {
     if (!comprobanteAi.isEnabled()) {
@@ -2398,6 +2498,7 @@ async function analyzeComprobanteFromMessage({ userId, username, content, messag
       _askReceiptResend(userId, username, 'error', _cidE); // #808 · #825
       return;
     }
+    _kickReceiptRecheck(); // #1020: este comprobante se leyó bien ⇒ la IA está andando: re-verificar YA los que entraron sin leer
 
     // No es comprobante (captura de error, foto cualquiera): registrar liviano, sin avisar.
     if (!result.isComprobante) {
@@ -2549,7 +2650,12 @@ async function analyzeComprobanteFromMessage({ userId, username, content, messag
     // sólo si pasan los minutos configurados sin acreditación.
     try {
       const hg = await getHgcashConfig();
-      if (!hg.enabled || hg.mode !== 'auto') {
+      const _alo = await User.findOne({ id: String(userId) }).select('autoLoadOff').lean().catch(() => null); // #1020
+      if (_alo && _alo.autoLoadOff && _alo.autoLoadOff.at) {
+        // #1020 (owner): sin carga automática ⇒ desde que manda el comprobante sabe que va a esperar (lo revisa una persona).
+        await _depositReviewEscalate({ ...base, status }, 'cliente sin carga automática', { autoLoadOff: true });
+        await _emitAdminOnlyChatNote(userId, username, `🛑 SIN CARGA AUTOMÁTICA: envió un comprobante NO válido cuando falló la IA y quedó en revisión (${_alo.autoLoadOff.why || 'comprobante falso al re-leerlo'}). Esta carga la verifica una persona: se le avisó que va a demorar. Para devolverle la carga automática: 🛡️ Antifraude → Legítimo / borrar revisión.`).catch(() => {});
+      } else if (!hg.enabled || hg.mode !== 'auto') {
         await _depositReviewEscalate({ ...base, status }, !hg.enabled ? 'banco automático apagado' : 'banco automático en modo sombra');
       } else {
         const ackTxt = await renderSystemCommand('/sys_receipt_received', RECEIPT_RECEIVED_DEFAULT, { amount: _amtStr(result.amount) });
@@ -3069,6 +3175,18 @@ async function hgcashAutoCarga({ movement, comprobante, mode }) {
     await _emitAdminOnlyChatNote(user.id, user.username,
       `🏦 MATCH hgcash (MODO SOMBRA) — ${dataDesc}\n✅ La transferencia coincide con el comprobante. Lista para cargar (auto-carga DESACTIVADA — cargá vos).`);
     logger.info(`[hgcash] shadow match user=${user.username} amount=$${amount} movement=${movement.movementId}`);
+    return;
+  }
+
+  // #1020: cliente SIN carga automática (un comprobante acreditado sin leer resultó falso al re-leerlo) ⇒ la transferencia coincide pero NO se
+  // acredita: queda en Cargas pendientes para una persona (el movimiento en needs_review lo consume la carga manual, como el de bajo mínimo).
+  if (user.autoLoadOff && user.autoLoadOff.at) {
+    await BankMovement.updateOne({ movementId: movement.movementId },
+      { $set: { matchStatus: 'needs_review', matchedUserId: user.id, matchedUsername: user.username, matchedComprobanteId: comprobante.id, chargeError: 'cliente sin carga automática (#1020)' } });
+    await Comprobante.updateOne({ id: comprobante.id }, { $set: { bankMatchStatus: 'needs_review', matchedMovementId: movement.movementId } });
+    await _emitAdminOnlyChatNote(user.id, user.username, `🛑 La transferencia coincide (${dataDesc}) pero este cliente está SIN CARGA AUTOMÁTICA (${user.autoLoadOff.why || 'comprobante falso al re-leerlo'}). Verificala y cargala a mano en Cargas pendientes.`).catch(() => {});
+    await _depositReviewEscalate(Object.assign({}, comprobante, { amount: comprobante.amount || amount }), 'cliente sin carga automática', { autoLoadOff: true });
+    logger.info(`[hgcash] sin carga automática user=${user.username} $${amount} mov=${movement.movementId}`);
     return;
   }
 
@@ -13370,6 +13488,7 @@ async function initializeData() {
   // #906: el texto de "Comprobante no válido" pide los datos completos en la foto (sólo si nadie lo editó).
   try { if (!(await getConfig('mig906SqComp', null))) { await Command.updateOne({ name: '/sys_sq_comprobante', response: '📎 Tu comprobante no es válido o no se pudo leer. Volvé a adjuntarlo ENTERO (que se vean titular, monto, fecha y N° de operación) tocando el botón de abajo y tu carga se genera sola.' }, { $set: { response: '📎 Tu comprobante no es válido o no se pudo leer. Sacá la captura de nuevo con TODOS los datos completos y bien visibles en la foto (titular, CUIT, monto, fecha y hora y N° de operación), sin recortar, y adjuntala tocando el botón de abajo: tu carga se genera sola.' } }); await Config.set('mig906SqComp', new Date().toISOString(), 'mig#906'); } } catch (e) { console.warn('[startup-migration] #906:', e.message); }
   try { if (!(await getConfig('mig897MinDep2000', null))) { await Config.set('minDepositArs', 2000, 'mig#897'); const hg = (await getConfig('hgcash', null)) || {}; if (typeof hg === 'object' && Number(hg.minChargeARS) > 2000) await _hgcashSetFields({ minChargeARS: 2000 }); await Config.set('mig897MinDep2000', new Date().toISOString(), 'mig#897'); console.log('✅ #897: carga mínima $2.000'); } } catch (e) { console.warn('[startup-migration] #897:', e.message); }
+  try { await Command.updateOne({ name: '/sys_withdraw_delayed', response: WITHDRAW_DELAYED_OLD_890 }, { $set: { response: WITHDRAW_DELAYED_DEFAULT } }); } catch (e) { console.warn('[startup-migration] #1020:', e.message); } // #1020: sólo el texto viejo sin editar
   try { if (!(await getConfig('mig890NoFriction', null))) { const bs = (await getConfig('bankOutageSettings', null)) || {}; await Config.set('bankOutageSettings', Object.assign({}, BANK_SETTINGS_DEFAULT, typeof bs === 'object' ? bs : {}, { notifyFailedClient: false }), 'mig#890'); await Command.updateOne({ name: '/sys_withdraw_delayed', response: WITHDRAW_DELAYED_OLD_820 }, { $set: { response: WITHDRAW_DELAYED_DEFAULT } }); await Config.set('mig890NoFriction', new Date().toISOString(), 'mig#890'); } } catch (e) { console.warn('[startup-migration] #890:', e.message); }
   try { if (!(await getConfig('mig885FirePlazo', null))) { const fm = await getConfig('fireMilestones', null); if (Array.isArray(fm) && fm.length) await Config.set('fireMilestones', fm.map((m) => Object.assign({}, m, { depositDays: (parseInt(m.day, 10) || 15) * 2 })), 'mig#885'); await Config.set('firePlazoSince', new Date().toISOString(), 'mig#885'); await Config.set('mig885FirePlazo', new Date().toISOString(), 'mig#885'); } } catch (e) { console.warn('[startup-migration] #885:', e.message); }
   try { if (!(await getConfig('mig884RetiroText', null))) { await Command.updateOne({ name: '/sys_support_topic_retiro', response: SUPPORT_RETIRO_OLD_878 }, { $set: { response: SUPPORT_TOPIC_RETIRO_DEFAULT } }); await Config.set('mig884RetiroText', new Date().toISOString(), 'mig#884'); } } catch (e) { console.warn('[startup-migration] #884:', e.message); }
@@ -13733,6 +13852,13 @@ async function initializeData() {
       response: '🔎 Tu retiro de ${amount} quedó en REVISIÓN de seguridad. Lo revisa una persona del equipo y te avisamos por acá apenas salga. No tenés que hacer nada: tu saldo no se tocó.'
     },
     {
+      // #1020: el pago automático no salió (banco) o el chequeo antifraude no respondió ⇒ aviso único al cliente, sin hablar de fallas.
+      name: '/sys_withdraw_delayed',
+      description: 'Mensaje (chat de soporte + push) al cliente cuando su retiro automático se demora porque el banco o el chequeo antifraude no respondieron (se reintenta solo). Una vez por retiro. Variable: {amount}. Vacío = no se manda.',
+      type: 'message',
+      response: WITHDRAW_DELAYED_DEFAULT
+    },
+    {
       // #1010: aviso diario del giro GRATIS de la ruleta (13–15 h, sólo a quien puede girar y no giró).
       name: '/sys_roulette_ready',
       description: 'Push automática (una por día, 13–15 h) a quien puede girar GRATIS la ruleta y todavía no giró (no sale si ese día ya recibió otro aviso masivo; a los 3 sin girar se pausa). Variable: {pct} (% máximo del giro gratis). Vacío = no se manda.',
@@ -13923,6 +14049,13 @@ async function initializeData() {
       description: 'Carga automática: aviso "carga pendiente, un agente la está revisando" (banco automático apagado / sin acreditación en N minutos). Variable: {amount}. Vacío = no se manda.',
       type: 'message',
       response: DEPOSIT_PENDING_REVIEW_DEFAULT
+    },
+    {
+      // #1020: cliente SIN carga automática (mandó un comprobante no válido mientras la IA estaba caída) ⇒ cada carga suya la revisa una persona.
+      name: '/sys_deposit_autoload_off',
+      description: 'Aviso al cliente SIN carga automática (un comprobante suyo acreditado sin leer no era válido): su carga queda para revisión manual y va a tener que esperar. Variable: {amount}. Vacío = se manda el aviso común de carga pendiente.',
+      type: 'message',
+      response: DEPOSIT_AUTOLOAD_OFF_DEFAULT
     },
     {
       name: '/sys_deposit_rejected',
@@ -14752,7 +14885,8 @@ async function _withdrawalRequestHandler(req, res) {
           : `🔎 RETIRO EN REVISIÓN: $${amountNum.toLocaleString('es-AR')} — el pago automático está apagado o el banco automático no está configurado. Confirmalo o rechazalo en Panel → Confirmación de pagos.`).catch(() => {});
         _notifyWithdrawHold(user, amountNum).catch(() => {}); // #1010: el cliente se entera de que está en revisión
       } else if (deferFraud) {
-        await _emitAdminOnlyChatNote(user.id, user.username, `⏳ RETIRO de $${amountNum.toLocaleString('es-AR')}: el chequeo antifraude no respondió a tiempo (API lenta). Se reintenta SOLO cada 10 min; si da limpio se paga solo, si a los 30 min sigue sin responder queda en Confirmación de pagos.`).catch(() => {});
+        await _emitAdminOnlyChatNote(user.id, user.username, `⏳ RETIRO de $${amountNum.toLocaleString('es-AR')}: el chequeo antifraude no respondió a tiempo (API lenta). Se reintenta SOLO cada 3 min; si da limpio se paga solo, si a los 20 min sigue sin responder queda en Confirmación de pagos.`).catch(() => {});
+        _notifyWithdrawDelayed(_newPayoutId).catch(() => {}); // #1020: el cliente recibe "por la gran cantidad de pagos, en hasta 20 minutos"
       } else {
         const pp = { id: _newPayoutId };
         if (pp) setImmediate(() => { _payPendingPayout(pp.id, PAYOUT_AUTO_ACTOR, getPublicBaseUrl()).then((o) => { logger.info(`[pay-review] pago AUTOMÁTICO $${amountNum} ${user.username} → ${o.code} ${JSON.stringify(o.body).slice(0, 160)}`); _payoutAutoFailNote(pp.id, o).catch(() => {}); }).catch((e) => logger.warn(`[pay-review] pago automático falló: ${e.message}`)); });
@@ -14969,6 +15103,7 @@ async function _bankPayoutFailed(reason, payout) {
 }
 async function _bankPayoutOk() {
   _bankFailStreak = 0;
+  try { _kickPayoutRetry(); } catch (_) {} // #1020: el banco respondió ⇒ reintentar ya los retiros que fallaron
   try {
     const cur = await getBankOutage();
     if (cur.active && cur.mode === 'auto') { await setBankOutage(false, { mode: 'auto', by: 'auto' }); return; }
@@ -20186,6 +20321,7 @@ app.post('/api/admin/fraud/review/:id', authMiddleware, adminMiddleware, async (
     if (st === 'legit' && note.trim().length < 5) return res.status(400).json({ error: 'Escribí el motivo (mínimo 5 caracteres): queda en el historial de bloqueos.' });
     const set = st === 'clear' ? { fraudReview: { status: null, by: req.user.username, at: new Date(), note } } : { fraudReview: { status: st, by: req.user.username, at: new Date(), note } };
     if (st !== 'watch') set.fraudAutoSkip = true; // #993: lo revisó una persona ⇒ el antifraude automático no lo vuelve a frenar solo
+    if (st !== 'watch') set.autoLoadOff = { at: null, why: null }; // #1020: Legítimo / borrar la revisión le devuelve la carga automática
     const r = await User.updateOne({ id: String(req.params.id) }, { $set: set, $push: { fraudNotes: { at: new Date(), note: `[${req.user.username}] ${st === 'legit' ? 'revisado: legítimo' : (st === 'watch' ? 'en observación' : 'revisión borrada')}${note ? ' — ' + note : ''}` } } });
     if (!(r.matchedCount || r.n)) return res.status(404).json({ error: 'Cliente no encontrado' });
     _fraudCache = { at: 0, days: 0, data: null };
@@ -23637,24 +23773,30 @@ function _payoutRetrySafe(r) {
   return r.debitConfirmed === true || /^No se pudo leer el saldo/.test(String(r.error || ''));
 }
 const WITHDRAW_DELAYED_OLD_820 = '⏳ Tu retiro de ${amount} está demorado. Ya lo está revisando un agente y te avisamos apenas salga. ¡Gracias por la paciencia!'; // #890: el de antes ("está demorado")
-const WITHDRAW_DELAYED_DEFAULT = '✅ Tu retiro de ${amount} fue procesado y lo estamos verificando. Aguardá un poquito: en breve lo vas a ver en tu cuenta y te avisamos por acá.'; // #890 (owner): "retiro procesado, estamos verificando"
+const WITHDRAW_DELAYED_OLD_890 = '✅ Tu retiro de ${amount} fue procesado y lo estamos verificando. Aguardá un poquito: en breve lo vas a ver en tu cuenta y te avisamos por acá.'; // #890 (owner): "retiro procesado, estamos verificando"
+// #1020 (owner): "cuando la API falla para retiros, avisarle al cliente que por la gran cantidad de pagos dentro de un plazo de 20 minutos su pago será realizado".
+const WITHDRAW_DELAYED_DEFAULT = '⏳ Por la gran cantidad de pagos, tu retiro de ${amount} se va a realizar dentro de un plazo de 20 minutos. No tenés que hacer nada: te avisamos por acá apenas salga.';
+// Aviso ÚNICO por retiro (reserva atómica de clientDelayNotifiedAt: multi-instancia). Lo usan el pago automático que falló (banco) y el chequeo
+// antifraude que no respondió (_withdrawFraudGate 'unchecked'). Texto editable /sys_withdraw_delayed (vacío = no se manda).
+async function _notifyWithdrawDelayed(payoutId) {
+  try {
+    const p = await PendingPayout.findOneAndUpdate({ id: payoutId, clientDelayNotifiedAt: null }, { $set: { clientDelayNotifiedAt: new Date() } }, { new: true }).lean();
+    if (!p) return;
+    const u = await User.findOne({ id: p.userId }).select('id username fcmToken fcmTokens fcmTokenContext').lean();
+    const txt = await renderSystemCommand('/sys_withdraw_delayed', WITHDRAW_DELAYED_DEFAULT, { amount: Number(p.amount || 0).toLocaleString('es-AR') });
+    if (u && txt) await _sendUserSystemMessage(u, txt, { metadata: { kind: 'withdraw_delayed', channel: 'support' }, push: { title: '⏳ Tu retiro sale en hasta 20 min', body: 'Por la gran cantidad de pagos, tu retiro se realiza dentro de los próximos 20 minutos.' } }); // sin hablar de fallas (#890)
+  } catch (e) { logger.warn('[pay-retry] aviso al cliente: ' + e.message); }
+}
 async function _payoutAutoFailNote(id, o) {
   if (o && o.code === 200 && o.body && o.body.success !== false) return;
   const p = await PendingPayout.findOne({ id }).lean(); if (!p || p.status === 'paid' || p.status === 'paying' || p.status === 'cancelled') return;
   const why = (o && o.body && (o.body.error || o.body.message)) || p.error || 'sin detalle';
   const willRetry = _payoutRetrySafe(p) && Number(p.autoRetries || 0) < PAYOUT_AUTO_RETRIES;
   await _emitAdminOnlyChatNote(p.userId, p.username, `💸 ⚠️ PAGO AUTOMÁTICO de $${Number(p.amount || 0).toLocaleString('es-AR')} no salió (${String(why).slice(0, 160)}). ` +
-    (willRetry ? 'Se reintenta solo cada 10 min; si sigue fallando queda en Confirmación de pagos.' : 'NO se reintenta solo: resolvelo en Panel → Confirmación de pagos.')).catch(() => {});
+    (willRetry ? 'Se reintenta solo cada 3 min (y al toque cuando el banco vuelve a pagar); si sigue fallando queda en Confirmación de pagos.' : 'NO se reintenta solo: resolvelo en Panel → Confirmación de pagos.')).catch(() => {});
   // #820 → #890: si el pago automático no salió, el cliente recibe UNA vez "aguardá un poco más, hay muchos pagos" (sin hablar de fallas),
   // se reintente solo o lo tenga que confirmar un agente.
-  if (!p.clientDelayNotifiedAt) {
-    try {
-      const u = await User.findOne({ id: p.userId }).select('id username fcmToken fcmTokens fcmTokenContext').lean();
-      const txt = await renderSystemCommand('/sys_withdraw_delayed', WITHDRAW_DELAYED_DEFAULT, { amount: Number(p.amount || 0).toLocaleString('es-AR') });
-      if (u && txt) await _sendUserSystemMessage(u, txt, { metadata: { kind: 'withdraw_delayed', channel: 'support' }, push: { title: '✅ Retiro procesado', body: 'Lo estamos verificando: en breve lo vas a ver en tu cuenta.' } }); // #890: sin hablar de fallas
-      await PendingPayout.updateOne({ id: p.id }, { $set: { clientDelayNotifiedAt: new Date() } });
-    } catch (e) { logger.warn('[pay-retry] aviso al cliente: ' + e.message); }
-  }
+  if (!p.clientDelayNotifiedAt) await _notifyWithdrawDelayed(p.id); // #1020: "dentro de un plazo de 20 minutos"
 }
 // ===== #1010 PARA REVISAR (el de turno) + SALDO BAJO DEL BANCO =====
 // Owner: "con todo automático, dejá un sector para el que esté de turno para que pueda revisar si hay algo raro". Lista lo que salió SOLO y
@@ -23748,6 +23890,7 @@ app.post('/api/admin/shift-review/:kind/:id', authMiddleware, adminMiddleware, a
     const doc = await Model.findOne({ id: String(req.params.id) }).select('id userId username amount').lean(); if (!doc) return res.status(404).json({ error: 'No encontrado' });
     const rv = { by: req.user.username, at: new Date(), verdict, note: note || null };
     await Model.updateOne({ id: doc.id }, { $set: { shiftReview: rv } });
+    try { _apiFailCache.clear(); } catch (_) {} // #1020: Comprobantes sin API a verificar al día
     if (verdict === 'suspicious') {
       await User.updateOne({ id: doc.userId }, { $set: { fraudReview: { status: 'watch', by: req.user.username, at: new Date(), note: 'Marcado por el de turno (' + (kind === 'payout' ? 'retiro automático' : 'carga sin leer el comprobante') + ')' + (note ? ': ' + note : ''), priority: 'high' } } });
       await _emitAdminOnlyChatNote(doc.userId, doc.username, `⚠️ MARCADO SOSPECHOSO por ${req.user.username} (Para revisar · ${kind === 'payout' ? 'retiro automático' : 'carga sin leer el comprobante'})${note ? ': ' + note : ''}. Queda EN OBSERVACIÓN: sus próximos retiros pasan a revisión. Revisalo en 🛡️ Antifraude.`).catch(() => {});
@@ -23755,10 +23898,72 @@ app.post('/api/admin/shift-review/:kind/:id', authMiddleware, adminMiddleware, a
     res.json({ success: true, review: rv });
   } catch (e) { res.status(500).json({ error: 'Error' }); }
 });
+// ===== #1020 COMPROBANTES SIN API A VERIFICAR (antes 'Fallas de API') =====
+// Owner: "un apartado nuevo de fallas de API (control automático) con los comprobantes a analizar que se cargaron solos sin ver, que también pueda verlo
+// un empleado mirando el banco y marcarlo si ve que entró, así ya se va sacando". Panel → 🔌 Comprobantes sin API a verificar (lo ven también los agentes).
+//  • Estado: IA de comprobantes (último leído bien / último error / pendientes de re-leer) y banco (retiros fallados que se reintentan solos, alerta).
+//  • Lista: comprobantes que entraron SIN leer (Comprobante.trustedFallback). Pendiente = acreditado sin control, o con problema sin mirar.
+//    Sale de la lista cuando la IA lo verifica (shiftReview 'revisión IA') o cuando una persona lo marca "🏦 Lo vi en el banco" (shiftReview.bankSeen).
+//    Si la IA después encuentra un problema, vuelve a aparecer (el recheck limpia shiftReview).
+// Caché de 20 s por instancia (hours+all): varios agentes con el panel abierto (contador cada 2 min) comparten la misma consulta. Un tilde lo limpia.
+const _apiFailCache = new Map();
+app.get('/api/admin/api-failures', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const hours = Math.min(168, Math.max(1, Number(req.query.hours) || 72)); const since = new Date(Date.now() - hours * 3600000);
+    const all = String(req.query.all || '') === '1';
+    const ck = hours + '|' + (all ? 1 : 0); const hit = _apiFailCache.get(ck);
+    if (hit && Date.now() - hit.at < 20000) return res.json(hit.body);
+    const [lastOk, lastErr, aiPending, failedPayouts, outage] = await Promise.all([
+      Comprobante.findOne({ status: { $ne: 'error' }, model: { $ne: 'sin-ia' }, aiConfidence: { $gt: 0 } }).sort({ createdAt: -1 }).select('createdAt').lean(),
+      Comprobante.findOne({ status: 'error' }).sort({ createdAt: -1 }).select('createdAt errorReason').lean(),
+      Comprobante.countDocuments({ aiRetryPending: true }),
+      PendingPayout.countDocuments({ autoPay: true, status: 'failed', createdAt: { $gte: new Date(Date.now() - 24 * 3600000) } }),
+      getBankOutage().catch(() => null)
+    ]);
+    const okAt = lastOk ? new Date(lastOk.createdAt).getTime() : 0; const errAt = lastErr ? new Date(lastErr.createdAt).getTime() : 0;
+    const ai = { enabled: comprobanteAi.isEnabled(), working: okAt >= errAt, lastOkAt: lastOk ? lastOk.createdAt : null, lastErrorAt: lastErr ? lastErr.createdAt : null,
+      lastError: lastErr ? String(lastErr.errorReason || '').slice(0, 120) : null, pendingRecheck: aiPending };
+    const bank = { failedPayouts, outage: !!(outage && outage.active) };
+    const rc = await Comprobante.find({ trustedFallback: true, createdAt: { $gte: since } }).sort({ createdAt: -1 }).limit(200)
+      .select('id userId username createdAt autoCharged bankMatchStatus reviewStatus matchedMovementId aiRetryPending aiRecheck shiftReview amount').lean();
+    const mvIds = rc.map((c) => c.matchedMovementId).filter(Boolean);
+    const mvs = mvIds.length ? await BankMovement.find({ movementId: { $in: mvIds } }).select('movementId amount fromName fromCBU coelsaCode externalId createdAt').lean() : [];
+    const MV = new Map(mvs.map((m) => [m.movementId, m]));
+    const items = rc.map((c) => {
+      const m = MV.get(c.matchedMovementId) || null; const credited = !!c.autoCharged || c.bankMatchStatus === 'auto_charged' || c.reviewStatus === 'confirmed';
+      const problem = !!(c.aiRecheck && c.aiRecheck.ok === false);
+      const iaState = c.aiRetryPending ? 'waiting' : (c.aiRecheck ? (c.aiRecheck.ok === false ? 'problem' : (c.aiRecheck.ok ? 'ok' : 'unknown')) : 'unknown');
+      const pending = (credited || problem) && !c.shiftReview;
+      const cbu = m && m.fromCBU ? String(m.fromCBU).replace(/\D/g, '') : '';
+      return { id: c.id, userId: c.userId, username: c.username, at: c.createdAt, credited, pending, problem, iaState, iaNote: c.aiRecheck ? c.aiRecheck.note || null : null,
+        amount: (m && m.amount) || c.amount || null, fromName: m ? m.fromName || null : null, fromCbuTail: cbu ? '…' + cbu.slice(-6) : null,
+        operation: m ? (m.coelsaCode || m.externalId || null) : null, movementAt: m ? m.createdAt : null, review: c.shiftReview || null };
+    });
+    const body = { success: true, hours, ai, bank, pending: items.filter((x) => x.pending).length, items: all ? items : items.filter((x) => x.pending || x.iaState === 'waiting' || !x.credited) };
+    _apiFailCache.set(ck, { at: Date.now(), body });
+    res.json(body);
+  } catch (e) { logger.warn('[api-failures] ' + e.message); res.status(500).json({ error: 'No se pudo cargar' }); }
+});
+// "🏦 Lo vi en el banco": la persona confirma que la transferencia entró ⇒ sale de la lista (la IA igual lo re-lee cuando vuelve, por seguridad).
+app.post('/api/admin/api-failures/:id/bank-seen', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
+    const note = String((req.body && req.body.note) || '').slice(0, 300);
+    const c = await Comprobante.findOne({ id: String(req.params.id), trustedFallback: true }).select('id userId username autoCharged bankMatchStatus reviewStatus').lean();
+    if (!c) return res.status(404).json({ error: 'No encontrado' });
+    const credited = !!c.autoCharged || c.bankMatchStatus === 'auto_charged' || c.reviewStatus === 'confirmed';
+    if (!credited) return res.status(400).json({ error: 'Todavía no se acreditó: si lo ves en el banco, cargalo desde Comprobantes a verificar.' });
+    await Comprobante.updateOne({ id: c.id }, { $set: { shiftReview: { by: req.user.username, at: new Date(), verdict: 'ok', bankSeen: true, note: 'Visto en el banco' + (note ? ': ' + note : '') } } });
+    await _emitAdminOnlyChatNote(c.userId, c.username, `🏦 ${req.user.username} verificó en el banco la carga que entró sin leer el comprobante (IA caída).` + (note ? ' Nota: ' + note : '')).catch(() => {});
+    _apiFailCache.clear(); // el que tildó ve la lista al día
+    logger.info(`[api-failures] ${req.user.username} vio en el banco ${c.id} (${c.username})`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error' }); }
+});
 // #1010 (owner): "manual sólo cuando se trabe la API" ⇒ el retiro cuyo chequeo antifraude no respondió se re-chequea cada 10 min, hasta 3 veces.
 async function _payoutFraudRecheckTick() {
   try {
-    if (!(await _cronClaim('payoutfraudrecheck', 8 * 60000))) return;
+    if (!(await _cronClaim('payoutfraudrecheck', 150000))) return;
     const rows = await PendingPayout.find({ status: 'pending_review', reviewRequired: false, autoPay: false, 'fraudRecheck.at': { $ne: null }, createdAt: { $gte: new Date(Date.now() - 24 * 3600000) } }).limit(20).lean();
     if (!rows.length) return;
     const prCfg = await getPayoutReviewConfig();
@@ -23774,7 +23979,7 @@ async function _payoutFraudRecheckTick() {
       const g = await _withdrawFraudGate(u, Number(p.amount));
       if (g.unchecked) {
         const n = Number((p.fraudRecheck && p.fraudRecheck.n) || 0) + 1;
-        if (n >= 3) await toReview('el chequeo antifraude no respondió en 30 min (revisalo a mano)');
+        if (n >= 6) await toReview('el chequeo antifraude no respondió en 20 min (revisalo a mano)');
         else await PendingPayout.updateOne({ id: p.id }, { $set: { fraudRecheck: { n, at: new Date() } } });
         continue;
       }
@@ -23785,7 +23990,7 @@ async function _payoutFraudRecheckTick() {
     }
   } catch (e) { logger.warn('[pay-review] re-chequeo antifraude: ' + e.message); }
 }
-setInterval(() => { _payoutFraudRecheckTick(); }, 10 * 60000);
+setInterval(() => { _payoutFraudRecheckTick(); }, 3 * 60000); // #1020: cada 3 min × 6 ≈ los 20 min que se le prometen al cliente
 async function _payoutAutoRetryTick() {
   if (!hgcashPay.isEnabled()) return;
   // #838 (owner): "si le saco el tilde desde el admin, que sea todo manual" ⇒ sin "Pagar solos los menores al umbral" tampoco se reintenta solo.
@@ -23793,7 +23998,7 @@ async function _payoutAutoRetryTick() {
   const now = Date.now();
   const rows = await PendingPayout.find({
     autoPay: true, status: { $in: ['failed', 'pending_review'] }, autoRetries: { $not: { $gte: PAYOUT_AUTO_RETRIES } },
-    createdAt: { $gte: new Date(now - 24 * 3600 * 1000) }, updatedAt: { $lt: new Date(now - 10 * 60 * 1000) }
+    createdAt: { $gte: new Date(now - 24 * 3600 * 1000) }, updatedAt: { $lt: new Date(now - 3 * 60 * 1000) } // #1020: cada 3 min (6 intentos ≈ los 20 min que se le prometen al cliente)
   }).select('id status debitConfirmed error paidBy autoRetries updatedAt').limit(20).lean();
   for (const r of rows) {
     if (!_payoutRetrySafe(r)) continue;
@@ -23807,7 +24012,10 @@ async function _payoutAutoRetryTick() {
     } catch (e) { logger.warn(`[pay-retry] ${r.id}: ${e.message}`); }
   }
 }
-setTimeout(() => { _payoutAutoRetryTick().catch(() => {}); setInterval(() => { _payoutAutoRetryTick().catch(() => {}); }, 5 * 60 * 1000); }, 3 * 60 * 1000);
+setTimeout(() => { _payoutAutoRetryTick().catch(() => {}); setInterval(() => { _payoutAutoRetryTick().catch(() => {}); }, 60 * 1000); }, 3 * 60 * 1000); // #1020: pasada cada 1 min (cada retiro espera 3 min entre intentos)
+// #1020 (owner): "revisar si la API del banco volvió lo más ágil posible" ⇒ apenas un pago sale bien (_bankPayoutOk) se reintentan YA los que fallaron.
+let _payoutRetryKickAt = 0;
+function _kickPayoutRetry() { if (Date.now() - _payoutRetryKickAt < 60000) return; _payoutRetryKickAt = Date.now(); setImmediate(() => { _payoutAutoRetryTick().catch(() => {}); }); }
 
 // El agente CONFIRMA el pago → se ejecuta el cash-out automático en hgcash.
 
@@ -23900,7 +24108,7 @@ app.get('/api/admin/payouts/review', authMiddleware, withdrawerMiddleware, async
       const whyAuto = [];
       if (p.status === 'paying') whyAuto.push('quedó EN PROCESO en el banco sin confirmar' + (p.hgTransactionId ? ' (hg ' + String(p.hgStatus || 'sin estado') + '): tocá 🔄 Consultar al banco' : ' y SIN número de operación de hg: mirá el extracto antes de hacer nada'));
       if (p.status === 'failed') whyAuto.push('el pago automático FALLÓ' + (p.error ? ' (' + String(p.error).slice(0, 80) + ')' : '') + ': antes de reintentar mirá el extracto del banco');
-      if (p.fraudRecheck && p.fraudRecheck.at) whyAuto.push('el chequeo antifraude no respondió: se reintenta solo (intento ' + (Number(p.fraudRecheck.n || 0) + 1) + ' de 3)'); // #1010 (ya no hay umbral de monto)
+      if (p.fraudRecheck && p.fraudRecheck.at) whyAuto.push('el chequeo antifraude no respondió: se reintenta solo (intento ' + (Number(p.fraudRecheck.n || 0) + 1) + ' de 6)'); // #1010 (ya no hay umbral de monto)
       if (!cfg.autoBelow) whyAuto.push('el pago automático está apagado');
       if (!hgcashPay.isEnabled()) whyAuto.push('el banco automático no está conectado');
       // #1010: ya no hay regla de "cliente de confianza" para retirar (el motivo viejo confundía).

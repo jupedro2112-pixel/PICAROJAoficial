@@ -372,10 +372,15 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **BANCO AUTOMÁTICO BLINDADO (#1012):** `getConfig` devuelve el default si la base falla ⇒ NUNCA leer→mezclar→guardar `Config['hgcash']` entero
   (lo apagaba solo). Cambios puntuales con `_hgcashSetFields`; sólo el panel guarda el objeto (con `confirmOff` para apagar). `_hgcashGuardTick`
   restaura `Config['hgcashLastGood']` si aparece apagado sin `manualOff`. Misma trampa para cualquier Config crítica: usar $set de campo.
-- **COMPROBANTE SIN LECTURA (#1010):** si la IA de comprobantes falla y el cliente es de CONFIANZA (`_receiptTrust`: 7+ días, 3+ cargas, sin marcas
+- **COMPROBANTE SIN LECTURA (#1010):** si la IA de comprobantes falla y el cliente es de CONFIANZA (`_receiptTrust`: 7+ días, 5+ cargas en 3+ días distintos (#1020), sin marcas
   ni comprobantes repetidos/rechazados), `_receiptTrustedFallback` acredita con la transferencia que llegue de una cuenta que ya usó (`_knownSendersOf`,
   sólo si hay UNA) y `_receiptAiRecheckTick` re-lee la imagen cuando vuelve la IA (si no coincide ⇒ cliente en observación + nota PRIORIDAD ALTA).
   El guard de carga duplicada (`duplicateGuardMinutes`) sólo frena si la carga reciente del mismo monto fue MANUAL.
+  **#1020:** imagen repetida sin IA = duplicado (nunca carga). Re-lectura que no coincide ⇒ `User.autoLoadOff` (sin carga automática: `hgcashAutoCarga`
+  manda todo a Cargas pendientes; se devuelve con Legítimo / borrar revisión en Antifraude). Retiro demorado por banco o antifraude sin respuesta ⇒
+  `_notifyWithdrawDelayed` (`/sys_withdraw_delayed`, "en hasta 20 minutos", una vez por retiro). Los reintentos (banco cada 3 min ×6, antifraude 3 min ×6)
+  están medidos para ese plazo: si se alargan, cambiar el texto. Re-verificación de comprobantes sin leer: `_receiptAiRecheckTick` (2 min + disparo al leer uno OK).
+  Panel → 🔌 Comprobantes sin API a verificar (`/api/admin/api-failures*`, también agentes): cargas sin leer para verificar en el banco ("🏦 Lo vi en el banco").
 - **TOPE ÚNICO POR REGALO (#1010):** `Config['giftMaxArs']` ($15.000). Un regalo NUEVO pasa su monto por `_capGift` ANTES de grabar y acreditar
   (reembolsos: `_calcRefundCapped`, nunca `refundTiers.calcRefund` directo). Fuera del tope: Bonificación manual, devoluciones, referidos.
 - **SESIÓN Y BASE LENTA (#1006):** `authMiddleware` devuelve 401 SÓLO por errores del JWT; un error de la base es 503 `DB_BUSY` (si no, el panel y la

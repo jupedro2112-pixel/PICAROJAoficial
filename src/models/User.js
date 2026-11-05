@@ -675,6 +675,9 @@ const userSchema = new mongoose.Schema({
   missionTier: { promo: { type: Number, default: 0 }, updatedWeek: { type: String, default: null }, promotedWeek: { type: String, default: null }, lastTierId: { type: String, default: null } },
   fraudNotes: { type: [{ at: Date, note: String }], default: [] },
   // #873 revisión de una ALERTA DE ESTAFA: 'legit' (revisado, no se vuelve a mostrar) | 'watch' (en observación). by/at/note de quién lo revisó.
+  // #1020: el comprobante acreditado SIN leer resultó falso al re-leerlo ⇒ sin carga automática (todo comprobante va a Cargas pendientes)
+  // hasta que una persona lo marque Legítimo o borre la revisión en 🛡️ Antifraude.
+  autoLoadOff: { at: { type: Date, default: null }, why: { type: String, default: null } },
   fraudReview: { status: { type: String, default: null }, by: { type: String, default: null }, at: { type: Date, default: null }, note: { type: String, default: null }, priority: { type: String, default: null } }, // #996: priority 'high' = puntaje de bloqueo (decide una persona)
   // #993 ANTIFRAUDE AUTOMÁTICO: una persona lo desbloqueó o lo revisó ⇒ el motor automático ya no lo bloquea ni lo frena solo (el radar lo sigue mostrando).
   fraudAutoSkip: { type: Boolean, default: false },

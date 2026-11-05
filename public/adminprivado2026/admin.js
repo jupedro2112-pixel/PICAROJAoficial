@@ -660,7 +660,7 @@ function setupRoleBasedUI() {
     // #889 (owner): los agentes de PAGOS y CARGAS ven sólo: Soporte, Cargas pendientes, Retiros pendientes, Cargas automáticas, Ruleta
     // diaria, Referidos, Usuarios y Transacciones. (Los permisos reales los pone el servidor; esto ordena lo que ven.)
     if (role === 'depositor' || role === 'withdrawer') {
-        const AGENT_SECTIONS = ['support', 'depositReviews', 'payReview', 'cargasAuto', 'chats']; // #898 · #982 (owner): sólo Soporte, Comprobantes a verificar, Pagos a confirmar, Cargas automáticas y Chat completo
+        const AGENT_SECTIONS = ['support', 'depositReviews', 'payReview', 'apiFailures', 'cargasAuto', 'chats']; // #1020: + Comprobantes sin API a verificar // #898 · #982 (owner): sólo Soporte, Comprobantes a verificar, Pagos a confirmar, Cargas automáticas y Chat completo
         document.querySelectorAll('.sidebar-nav .nav-item').forEach((it) => { if (!AGENT_SECTIONS.includes(it.dataset.section)) it.style.display = 'none'; else it.style.display = ''; });
         document.querySelectorAll('.sidebar-nav .nav-group-title').forEach((t) => {
             let n = t.nextElementSibling, any = false;
@@ -5079,6 +5079,7 @@ function switchSection(section) {
     if (section === 'depositReviews') loadDepositReviews(); // #376
     if (section === 'support') { loadSupport(); gsLoad(); } // #377 · #953: + gente sin acceso
     if (section === 'payReview') loadPayReview(); // #566
+    if (section === 'apiFailures') loadApiFailures(); // #1020
     if (section === 'cargasAuto') loadCargasAuto(); // #763
     if (section === 'gastos') { datosIaGate('Gastos').then(function (ok) { if (ok) loadGastos(); }); } // #770 clave
     if (section === 'roulette') loadRouletteAdmin();
@@ -6458,6 +6459,68 @@ async function shiftReviewMark(kind, id, verdict) {
         else showToast((j && j.error) || 'No se pudo marcar', 'error');
     } catch (e) { showToast('Error de conexión', 'error'); }
 }
+// #1020 (owner): "apartado de fallas de API (control automático): los comprobantes que se cargaron solos sin ver, que un empleado mirando el banco
+// pueda marcarlo si ve que entró, así se va sacando". Sale de la lista solo cuando la IA lo verifica, o con "🏦 Lo vi en el banco".
+let _apiFailHours = 72, _apiFailAll = false;
+function _apiFailuresBadgeSet(n) { const b = document.getElementById('apiFailuresBadge'); if (b) { b.textContent = String(n || 0); b.style.display = n ? '' : 'none'; } }
+async function loadApiFailures() {
+    const box = document.getElementById('apiFailuresBox'); if (!box) return;
+    try {
+        const r = await authFetch('/api/admin/api-failures?hours=' + _apiFailHours + (_apiFailAll ? '&all=1' : '')); const j = await r.json();
+        if (!j || !j.success) { box.innerHTML = '<div class="cbu-form">' + escapeHtml((j && j.error) || 'No se pudo cargar') + '</div>'; return; }
+        _apiFailuresBadgeSet(j.pending);
+        const fm = (v) => '$' + Math.round(Number(v) || 0).toLocaleString('es-AR');
+        const fd = (d) => d ? new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+        const chip = (txt, bad) => '<span style="display:inline-block;margin:2px 4px 0 0;padding:1px 8px;border-radius:9px;font-size:11.5px;background:' + (bad ? 'var(--p-red-soft,#fbecee);color:var(--p-red,#d23a4e)' : 'var(--p-surface,#f1f1f1)') + '">' + txt + '</span>';
+        const ai = j.ai || {}, bank = j.bank || {};
+        let html = '<div class="cbu-form"><h3 style="margin:0 0 6px">Estado ahora</h3>' +
+            '<div style="font-size:13px;line-height:1.7">🤖 IA de comprobantes: ' + (!ai.enabled ? '<b>sin configurar</b>' : (ai.working ? '<b>✅ andando</b> (último leído ' + fd(ai.lastOkAt) + ')' : '<b style="color:var(--p-red,#d23a4e)">⚠️ con fallas</b> (último error ' + fd(ai.lastErrorAt) + (ai.lastError ? ': ' + escapeHtml(ai.lastError) : '') + ')')) +
+            (ai.pendingRecheck ? ' · ' + ai.pendingRecheck + ' comprobante(s) esperando que la IA los vuelva a leer' : '') + '<br>' +
+            '🏦 Banco: ' + (bank.outage ? '<b style="color:var(--p-red,#d23a4e)">⚠️ marcado con fallas</b>' : '✅ sin alerta') + (bank.failedPayouts ? ' · ' + bank.failedPayouts + ' retiro(s) fallado(s) que se reintentan solos cada 3 min (ver Pagos a confirmar)' : '') + '</div>' +
+            '<div style="font-size:13px;margin:10px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--p-border,#e2e2e2);line-height:1.5">🤖 <b>El control es AUTOMÁTICO:</b> cuando vuelve la IA, el sistema verifica todo solo. <b>No es obligatorio</b> mirar esto: si tenés tiempo, podés ir adelantándote verificando en el banco y tildando.</div>' +
+            '<div style="font-size:12.5px;margin:8px 0 0;padding:10px 12px;border-radius:10px;background:var(--p-surface,#f1f1f1);line-height:1.6"><b>¿Qué es esto?</b> Cuando la IA no puede leer un comprobante, a los clientes FIELES (5+ cargas en 3+ días) se les carga igual con la transferencia que llegó desde su cuenta de siempre. Esas cargas quedan acá para controlarlas:<br>' +
+            '<b>1.</b> Si tenés tiempo, buscá la transferencia en el banco con los datos de cada una (titular, CBU, hora).<br>' +
+            '<b>2.</b> Si la ves, tocá <b>☑ Lo vi en el banco</b> y sale de la lista.<br>' +
+            '<b>3.</b> Si nadie la tilda, no pasa nada: cuando vuelve la IA, <b>el sistema la verifica solo</b> y la saca. Si encuentra algo raro, aparece acá en <span style="color:var(--p-red,#d23a4e)"><b>rojo</b></span> y el cliente queda sin carga automática.</div></div>';
+        html += '<div class="cbu-form" style="margin-top:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between"><h3 style="margin:0">🧾 Para controlar ' + (j.pending ? '<span style="background:var(--p-red,#d23a4e);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px">' + j.pending + '</span>' : '') + '</h3>' +
+            '<span style="font-size:12px"><select onchange="_apiFailHours=Number(this.value);loadApiFailures()">' + [24, 72, 168].map((h) => '<option value="' + h + '"' + (h === _apiFailHours ? ' selected' : '') + '>últimas ' + (h === 168 ? '7 días' : h + ' h') + '</option>').join('') + '</select> ' +
+            '<label style="cursor:pointer"><input type="checkbox" style="width:auto"' + (_apiFailAll ? ' checked' : '') + ' onchange="_apiFailAll=this.checked;loadApiFailures()"> ver también los ya revisados</label></span></div>';
+        const items = j.items || [];
+        html += items.length ? items.map(function (c) {
+            const ia = c.iaState === 'waiting' ? chip('⏳ la IA lo verifica sola cuando vuelva') : c.iaState === 'ok' ? chip('✅ la IA lo verificó') : c.iaState === 'problem' ? chip('🚨 la IA encontró un problema: ' + escapeHtml(c.iaNote || ''), true) : chip('— ' + escapeHtml(c.iaNote || 'sin verificar'));
+            const st = c.credited ? chip('💰 ya acreditado') : chip('⏳ todavía no se acreditó (está en Comprobantes a verificar)');
+            const rv = c.review ? '<span style="font-size:12px;color:var(--p-muted,#767676)">' + (c.review.bankSeen ? '☑ Visto en el banco' : (c.review.verdict === 'ok' ? '✅ Verificado' : '⚠️ Marcado sospechoso')) + ' · ' + escapeHtml(c.review.by || '') + ' ' + fd(c.review.at) + '</span>' : '';
+            const tick = '<button class="btn-primary btn-small" onclick="apiFailBankSeen(\'' + c.id + '\')">' + (c.problem ? '☑ Ya lo revisé' : '☑ Lo vi en el banco') + '</button>';
+            const sus = '<a href="#" style="font-size:11.5px;color:var(--p-muted,#767676)" onclick="apiFailSuspicious(\'' + c.id + '\');return false">⚠️ algo no cierra</a>';
+            const actions = c.review ? rv : (c.credited ? tick + ' ' + sus : '<button class="btn-secondary btn-small" onclick="switchSection(\'depositReviews\')">⏳ Ir a Comprobantes a verificar</button>');
+            return '<div style="border-top:1px solid var(--p-border,#e2e2e2);padding:8px 0;font-size:12.5px' + (c.review ? ';opacity:.6' : '') + (c.problem && !c.review ? ';border-left:3px solid var(--p-red,#d23a4e);padding-left:8px' : '') + '">' +
+                '<b>' + escapeHtml(c.username || '') + '</b> · ' + (c.amount ? fm(c.amount) : 'monto sin leer') + ' · comprobante ' + fd(c.at) +
+                '<div style="color:var(--p-muted,#767676)">Para buscar en el banco: ' + (c.fromName ? escapeHtml(c.fromName) : 'titular —') + (c.fromCbuTail ? ' · CBU ' + escapeHtml(c.fromCbuTail) : '') + (c.operation ? ' · op. ' + escapeHtml(String(c.operation)) : '') + (c.movementAt ? ' · entró ' + fd(c.movementAt) : '') + '</div>' +
+                '<div>' + st + ia + '</div>' +
+                '<div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-secondary btn-small" onclick="openChatFromDelay(\'' + c.userId + '\')">💬 Chat</button> ' + actions + '</div></div>';
+        }).join('') : '<div style="font-size:12.5px;color:var(--p-muted,#767676);padding:8px 0">Nada para controlar 🎉 La IA leyó todo o ya está verificado.</div>';
+        box.innerHTML = html + '</div>';
+    } catch (e) { box.innerHTML = '<div class="cbu-form">Error de conexión</div>'; }
+}
+async function apiFailBankSeen(id) { // un toque: queda registrado quién y cuándo (sin pedir nota)
+    try {
+        const r = await authFetch('/api/admin/api-failures/' + encodeURIComponent(id) + '/bank-seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+        const j = await r.json();
+        if (j && j.success) { showToast('☑ Listo, sale de la lista', 'success'); loadApiFailures(); } else showToast((j && j.error) || 'No se pudo marcar', 'error');
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+async function apiFailSuspicious(id) {
+    const note = window.prompt('¿Qué viste raro? (queda en la nota del cliente; el cliente queda en observación)');
+    if (note === null) return;
+    try {
+        const r = await authFetch('/api/admin/shift-review/receipt/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict: 'suspicious', note: note || '' }) });
+        const j = await r.json();
+        if (j && j.success) { showToast('⚠️ Cliente en observación', 'info'); loadApiFailures(); } else showToast((j && j.error) || 'No se pudo marcar', 'error');
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+window.loadApiFailures = loadApiFailures; window.apiFailBankSeen = apiFailBankSeen; window.apiFailSuspicious = apiFailSuspicious;
+// Contador del menú: cada 2 min con la pestaña visible (liviano: sólo el número).
+setInterval(function () { try { if (document.visibilityState === 'visible' && currentAdmin && document.getElementById('apiFailuresBadge')) { if (document.getElementById('apiFailuresSection')?.classList.contains('active')) loadApiFailures(); else authFetch('/api/admin/api-failures?hours=72').then(function (r) { return r.json(); }).then(function (j) { if (j && j.success) _apiFailuresBadgeSet(j.pending); }).catch(function () {}); } } catch (_) {} }, 120000);
 async function loadPayReview() {
     try { atencionAnalisis('pay'); } catch (_) {} // #750
     try { // #1010 (revisión): como mucho cada 15 s por los avisos en vivo, y si llega uno en el medio se recarga al cumplirse (no se pierde)

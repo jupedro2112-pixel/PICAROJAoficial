@@ -1767,3 +1767,26 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
   cada cliente queda con `rouletteNudge.lastAt` al avisarle (nunca dos el mismo día). Ambos sueltan el lock al terminar (`_cronRelease`), igual que
   `_weeklyCloseTick`. Negocio / análisis: `fresh=1` siempre recalcula; sin fresh, los pedidos simultáneos esperan la misma cuenta.
 
+
+### #1020 — Respaldo sin IA: duplicados, `autoLoadOff` y aviso de "20 minutos" (2026-11-05)
+- **Imagen repetida sin IA:** `_receiptTrustedFallback` busca el `imageHash` en Comprobante; si existe ⇒ `_fallbackDuplicate` (Comprobante
+  `status:'duplicate'` + nota; `/sys_receipt_duplicate` salvo reenvío propio sin acreditar). Devuelve `true` (no cae al "reenviá" del error de IA).
+- **`User.autoLoadOff {at, why}`:** lo graba `_receiptAiRecheckTick` cuando la re-lectura no coincide (junto con `fraudReview.watch`). `hgcashAutoCarga`
+  lo chequea tras el modo sombra ⇒ BankMovement `needs_review` (+`matchedUserId`, lo consume la carga manual) + Comprobante `bankMatchStatus:'needs_review'`
+  + `_depositReviewEscalate`. `_receiptTrust` también lo excluye. Lo limpia `POST /api/admin/fraud/review/:id` con `legit` o `clear`.
+  Un camino NUEVO de carga automática tiene que pasar por `hgcashAutoCarga` (o chequear `autoLoadOff`).
+- **`_notifyWithdrawDelayed(payoutId)`:** aviso único (reserva atómica `PendingPayout.clientDelayNotifiedAt: null → now`) con `/sys_withdraw_delayed`
+  ("por la gran cantidad de pagos… dentro de 20 minutos"). Lo llaman `_payoutAutoFailNote` (falla del banco) y el pedido con `deferFraud`
+  (antifraude sin respuesta). Ahora está en el sembrado de comandos de `initializeData` (antes sólo existía el fallback del código).
+- **Re-verificación ágil (#1020, 2ª parte):** `_receiptAiRecheckTick` cada 2 min (`_cronClaim` 90 s) + `_kickReceiptRecheck()` desde
+  `analyzeComprobanteFromMessage` cuando una lectura sale OK. Cierra cada `aiRetryPending` según el resultado (ver WORKLOG #1020); OK ⇒ `shiftReview`
+  `{by:'revisión IA', verdict:'ok'}` y, sin acreditar, `hgcashMatchFromComprobante` con los datos leídos. Castigo (`fraudReview.watch` + `autoLoadOff`)
+  sólo si estaba acreditado y no coincide, o el comprobante ya lo había usado otro cliente / ya se le había acreditado.
+- **Cliente con `autoLoadOff` que manda comprobante:** escala al toque con `/sys_deposit_autoload_off` (`_depositReviewEscalate(c, why, {autoLoadOff:true})`).
+- **Reintentos de retiros:** `_payoutAutoRetryTick` cada 1 min, 3 min entre intentos por retiro (`updatedAt`, timestamps del schema), 6 intentos;
+  `_bankPayoutOk` ⇒ `_kickPayoutRetry()`. `_payoutFraudRecheckTick` cada 3 min, 6 intentos.
+- **Cliente fiel (`_receiptTrust`, #1020):** `RECEIPT_TRUST = { minAccountDays: 7, minDeposits: 5, minDistinctDays: 3 }`; cargas reales (`_REAL_DEP`, sin
+  PRUEBA) contadas con una agregación (`$addToSet` del día ART de `timestamp`). En vivo, sin estado guardado.
+- **🔌 Comprobantes sin API a verificar (#1020):** `GET /api/admin/api-failures?hours=&all=` (estado IA/banco + `Comprobante.trustedFallback` con datos del BankMovement)
+  y `POST /api/admin/api-failures/:id/bank-seen` (`shiftReview {bankSeen:true}`; sólo acreditados). Panel: sección `apiFailures` (`loadApiFailures`,
+  badge `apiFailuresBadge`), en `AGENT_SECTIONS`. Pendiente = (acreditado o con problema) y sin `shiftReview`.
