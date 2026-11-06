@@ -406,7 +406,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   campaña / nombre del publicista / `*`). Navegador (landing) = `pixelIdsForCampaign`; CAPI = `_capiDestinations(scope)` manda a cada píxel sólo los
   eventos de SUS clientes (el `_2` de SSM es picarojaok; sin `META_PIXEL_PUBLISHER_n` = recibe todo). picaroja2026 es OTRA pauta con su propio píxel, fuera
   de este server: no mezclar. Sin token = sólo navegador. También se cargan
-  desde el panel (Configuración → Píxeles de Meta por publicista, `Config['metaPixels']`, token cifrado). Diagnóstico: `GET /api/admin/meta-pixels[?campaign=]` y `/api/admin/meta-pixels/:n/test`.
+  desde el panel (Configuración → Píxeles de Meta por publicista, `Config['metaPixels']`, token cifrado). **#1025:** TODA carga acreditada (también la automática del banco)
+  manda `Purchase`; la landing de pauta carga el píxel del navegador (`/api/meta-pixel-id`) y manda `fbc`/`fbp` al alta. Un flujo nuevo de carga tiene que llamar `metaCapi.track('Purchase', …)`. Diagnóstico: `GET /api/admin/meta-pixels[?campaign=]` y `/api/admin/meta-pixels/:n/test`.
 - **LINK DE RESULTADOS DEL PUBLICISTA (#805):** `Campaign.statsToken` ⇒ `/r/<token>` muestra números agregados de esa campaña sin login
   (sólo lectura). Generar uno nuevo invalida el anterior; desactivar = `statsToken:null`. Nunca agregar ahí datos de usuarios ni retiros.
 - **KEY POR PUBLICISTA (#699, 2026-10-21):** un usuario que se registró por el link de un publicista (`User.giroxOwnerCampaign`) se opera

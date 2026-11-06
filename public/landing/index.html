@@ -236,6 +236,43 @@
   var baseUrl = sameOrigin || ph(L.baseUrl) || '';
   var $ = function (id) { return document.getElementById(id); };
 
+  // #1025 (réplica de CARGASGIROXactivo #214): PÍXEL DE META del navegador por campaña/publicista. El backend dice qué píxeles cargar
+  // (GET /api/meta-pixel-id?c=<campaña>); si no hay ninguno para esta campaña no se carga fbq. Antes esta landing NO cargaba ningún píxel:
+  // ni PageView ni el registro del navegador, y tampoco mandaba fbc/fbp ⇒ Meta no atribuía los registros/cargas al anuncio.
+  (function loadMetaPixel() {
+    var _inited = false;
+    function initPixels(ids) {
+      if (_inited || !ids || !ids.length) return;
+      _inited = true;
+      window.__picaPixelIds = ids;
+      try {
+        !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+      } catch (e) { return; }
+      ids.forEach(function (id) { try { fbq('init', id); } catch (e) {} });
+      try { fbq('track', 'PageView'); } catch (e) {}
+    }
+    try {
+      if (!campaign || campaign === 'DEMO') return;
+      fetch(baseUrl + '/api/meta-pixel-id?c=' + encodeURIComponent(campaign))
+        .then(function (r) { return r.json(); })
+        .then(function (d) { initPixels(d && d.pixelIds ? d.pixelIds : []); })
+        .catch(function () {});
+    } catch (e) {}
+  })();
+  function cookie(n) { var m = document.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; }
+  // ATRIBUCIÓN DE PAUTA: la cookie _fbc la crea el píxel, pero puede no haber cargado cuando el cliente se registra ⇒ se arma a mano con el
+  // fbclid del anuncio (formato oficial fb.1.<ts>.<fbclid>) y el backend lo guarda en el usuario: todo el embudo viaja atribuido al anuncio.
+  function fbcFromUrl() {
+    var existing = cookie('_fbc'); if (existing) return existing;
+    try { var id = qs.get('fbclid'); if (id) return 'fb.1.' + Date.now() + '.' + id; } catch (e) {}
+    return null;
+  }
+  // fbp: id del navegador. Si el píxel todavía no creó _fbp, se genera uno válido y se PERSISTE (la app lo reutiliza al entrar).
+  function fbpFromCookieOrGen() {
+    var existing = cookie('_fbp'); if (existing) return existing;
+    try { var v = 'fb.1.' + Date.now() + '.' + (Math.floor(1e9 + Math.random() * 9e9)); document.cookie = '_fbp=' + v + '; path=/; max-age=' + (90 * 24 * 3600) + '; SameSite=Lax'; return v; } catch (e) { return null; }
+  }
+
   // ── navegador embebido (Instagram / Facebook / TikTok) ──
   var ua = navigator.userAgent || '';
   var inApp = /Instagram|FBAN|FBAV|FB_IAB|FBIOS|TikTok|Line\/|Snapchat/i.test(ua);
@@ -334,11 +371,14 @@
     var utm = { source: qs.get('utm_source'), medium: qs.get('utm_medium'), campaign: qs.get('utm_campaign'), content: qs.get('utm_content'), term: qs.get('utm_term') };
     fetch(baseUrl + '/api/landing/signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name, campaignCode: campaign, referralCode: String(qs.get('ref') || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 12) || undefined, utm: utm, landingUrl: location.href.slice(0, 2000) })
+      body: JSON.stringify({ name: name, campaignCode: campaign, referralCode: String(qs.get('ref') || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 12) || undefined, utm: utm, landingUrl: location.href.slice(0, 2000), fbc: fbcFromUrl() || undefined, fbp: fbpFromCookieOrGen() || undefined })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (x) {
       if (!x.ok && x.j && x.j.code === 'platform_not_configured') { simulateSignup(true); return; } // #311 modo prueba
       if (!x.ok) { err.textContent = x.j.error || 'No pudimos crear tu cuenta. Probá de nuevo.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'CREAR MI CUENTA'; return; }
-      result = x.j; showStep2();
+      result = x.j;
+      // #1025: registro en el NAVEGADOR con el MISMO event_id que la CAPI (reg_<id>) ⇒ Meta deduplica navegador + servidor.
+      try { if (window.fbq && x.j && x.j.metaEventId) fbq('track', 'CompleteRegistration', { content_name: 'signup_landing' }, { eventID: x.j.metaEventId }); } catch (e) {}
+      showStep2();
     }).catch(function () {
       err.textContent = 'Error de conexión. Probá de nuevo.'; err.style.display = 'block'; btn.disabled = false; btn.textContent = 'CREAR MI CUENTA';
     });

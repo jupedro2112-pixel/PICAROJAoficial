@@ -3723,6 +3723,20 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
       outboundWebhook.notify('carga', user, { amount: Number(amount), firstDeposit: _hgFTD, transactionId: txId });
       try { io.to(`user_${user.id}`).emit('deposit_credited', { amount: Number(amount), firstDeposit: !!_hgFTD }); } catch (_) {} // #712: cartel "Buena suerte" en el casino
     } catch (_) {}
+    // #1025 (réplica del #213 de CARGASGIROXactivo): la AUTO-CARGA del banco no mandaba el Purchase a Meta ⇒ el píxel propio y los de los
+    // publicistas veían el registro pero NO la venta (casi todas las cargas entran por acá). Mismo evento que la carga manual, con la IP/navegador
+    // del registro del jugador y la URL de su landing. Fire-and-forget: nunca frena la carga.
+    try {
+      const _mFTD = await _isFirstDeposit(user.id);
+      metaCapi.track(
+        'Purchase',
+        { email: user.email, phone: user.phone, externalId: user.id, fbc: user.metaFbc, fbp: user.metaFbp, clientIp: user.registrationIp, clientUserAgent: user.registrationUserAgent },
+        { value: Number(amount), currency: 'ARS', content_name: 'deposit_hgcash', content_type: 'product', content_category: metaCapi.valueCategory(Number(amount)),
+          order_id: (result && result.data && (result.data.transfer_id || result.data.transferId)) || txId || null },
+        { firstDeposit: _mFTD, eventSourceUrl: user.landingUrl || undefined }
+      );
+      fbAdsWebhook.notify('Purchase', user, { value: Number(amount), currency: 'ARS' });
+    } catch (_) {}
     _emitHgcashUpdate('cargado');
     _chatAutoCloseIfHandled(user.id, 'carga acreditada sola').catch(() => {}); // #895
     logger.info(`[hgcash] auto-carga OK user=${user.username} amount=$${amount} movement=${movement.movementId} platform=${pid} by=${by}`);

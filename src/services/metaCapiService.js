@@ -64,7 +64,11 @@ function _scopeMatches(scope, info) {
 // El alcance rige para TODOS los píxeles con alcance, incluido el `_2` de SSM (el panel mostró que el `_2` es picarojaok, con token válido y envíos OK:
 // hasta ahora recibía los eventos de TODOS los clientes; owner: "son dos pautas distintas, no mezclar"). Sin META_PIXEL_PUBLISHER_n = recibe todo.
 function _capiDestinations(info) {
-  return listPixels().filter((p) => p.token && (info === undefined || _scopeMatches(p.scope, info)));
+  const all = listPixels().filter((p) => p.token && (info === undefined || _scopeMatches(p.scope, info)));
+  // #1025 (réplica del #216 de CARGASGIROXactivo): el MISMO píxel cargado en SSM y en el panel ⇒ un solo envío por evento (gana el del panel).
+  const byId = new Map();
+  for (const p of all) { const cur = byId.get(p.pixelId); if (!cur || (p.source === 'panel' && cur.source !== 'panel')) byId.set(p.pixelId, p); }
+  return [...byId.values()];
 }
 
 // ---- Resolución del "dueño" de un evento (publicista + campaña) — #197 (réplica
@@ -201,8 +205,11 @@ function buildUserData(userInfo = {}, requestCtx = {}) {
   const dobHash = sha256(userInfo.dateOfBirth);
   if (dobHash) user_data.db = [dobHash];
 
-  if (requestCtx.ip) user_data.client_ip_address = requestCtx.ip;
-  if (requestCtx.userAgent) user_data.client_user_agent = requestCtx.userAgent;
+  // #1025 (réplica del #213 de CARGASGIROXactivo): sin request (auto-carga del banco, crons) se usa la IP/navegador del REGISTRO del jugador.
+  const clientIp = requestCtx.ip || userInfo.clientIp;
+  const clientUa = requestCtx.userAgent || userInfo.clientUserAgent;
+  if (clientIp) user_data.client_ip_address = clientIp;
+  if (clientUa) user_data.client_user_agent = clientUa;
   // fbp / fbc — identificadores de Meta Ads (fbp = navegador, fbc = clic del
   // anuncio, clave para atribuir conversiones a la pauta).
   // Prioridad: la cookie viva del request (eventos browser-side / self-service).

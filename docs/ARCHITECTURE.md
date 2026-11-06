@@ -1806,3 +1806,9 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
 - Landing: `/api/landing/info?c=CODE` → `welcome.{pct,capArs,restPct}`; `public/landing/index.html` lo pinta en `#bonusBig/#bonusSub`.
 - Panel: `#cfgNewCard` antes de `.commands-layout` (no la toca `initCommandsAccordion`); `loadPublisherWelcome` se llama desde `loadInstallBonusPct`.
 
+### #1025 — Píxel de Meta igual que CARGASGIROXactivo (2026-11-06)
+- `hgcashAutoCarga` manda `Purchase` (`content_name 'deposit_hgcash'`, IP/UA del registro, `eventSourceUrl` = `user.landingUrl`) + `fbAdsWebhook`.
+- `public/landing/index.html`: `loadMetaPixel` (fbq init de `pixelIdsForCampaign`, PageView), `fbc`/`fbp` en el POST `/api/landing/signup`,
+  `CompleteRegistration` con `eventID = metaEventId` (dedupe con la CAPI `reg_<id>`).
+- `metaCapiService`: `_capiDestinations` deduplica por `pixelId` (panel gana); `buildUserData` cae a `userInfo.clientIp/clientUserAgent`.
+

@@ -8,6 +8,20 @@
 
 ## Sesión 2026-11-06
 
+### 1025. FIX píxel de Meta: réplica de lo que anda en CARGASGIROXactivo (#213/#214/#216 de esa repo) (2026-11-06)
+- **Pedido (owner):** "hay algo que está fallando en cuanto al meta pixel; en CARGASGIROXactivo está correcto: replicalo tal cual".
+- **Qué fallaba acá (comparando las dos repos):**
+  1. La **carga automática del banco** (`hgcashAutoCarga`, casi todas las cargas) NO mandaba el `Purchase` a Meta: sólo la carga manual y la
+     autogestionada. Meta veía registros y casi ninguna venta. **Fix:** Purchase `deposit_hgcash` (value, order_id, externalId ⇒ va al píxel de SU
+     publicista, IP/navegador del registro, `eventSourceUrl` = su landing, `firstDeposit`) + aviso fb-ads. Fire-and-forget.
+  2. La **landing de pauta** (`public/landing/index.html`) NO cargaba ningún píxel del navegador (ni PageView ni CompleteRegistration) y NO mandaba
+     `fbc`/`fbp` al alta ⇒ los registros y cargas no se atribuían al anuncio. **Fix:** `loadMetaPixel` (`/api/meta-pixel-id?c=` = los píxeles de
+     publicista de esa campaña), `fbcFromUrl` (fbclid ⇒ fb.1.ts.fbclid), `fbpFromCookieOrGen`, y `CompleteRegistration` con `eventID = metaEventId`
+     (`reg_<id>`, el mismo de la CAPI ⇒ Meta deduplica).
+  3. `metaCapiService`: `buildUserData` usa `userInfo.clientIp/clientUserAgent` cuando no hay request; `_capiDestinations` deduplica por ID de píxel
+     (el mismo píxel en SSM y en el panel recibía cada evento dos veces; gana el del panel).
+- **Ojo (Meta):** un píxel con "código de prueba" cargado manda TODO como prueba (no cuenta como conversión): dejarlo vacío fuera de las pruebas.
+
 ### 1024. Bono de 1ª carga POR PUBLICISTA + tarjeta 🆕 NUEVO arriba de Configuración — admin SW v238 (2026-11-06)
 - **Pedido (owner):** "que según el publicista de donde venga se pueda configurar el bono a regalar y el tope", "tipo así" (captura de un formulario:
   publicista · % · tope de carga · % sobre el excedente · activa · tabla de reglas con editar/borrar), "en la landing que en la portada se modifique
