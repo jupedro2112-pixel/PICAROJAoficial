@@ -85,7 +85,18 @@ const _periodKey = require('./src/utils/periodKey');
 const { setGlobalReferralRate, getGlobalReferralRate, refreshReferralRateFromCommand, REFERRAL_PCT_COMMAND } = require('./src/utils/referralRate');
 const referralTiers = require('./src/services/referralTierService');
 const { setRedisClient, getRedisClient } = require('./src/utils/redisClient');
-const { generateAndSendOTP, verifyOTP } = require('./src/services/otpService');
+const { generateAndSendOTP: _otpSendRaw, verifyOTP } = require('./src/services/otpService');
+// #1023 (owner): INTERRUPTOR DE SMS (Configuración → Registro de clientes → "📲 Usar SMS"). Config['smsEnabled'], default ENCENDIDO.
+// Apagado (p. ej. si AWS SNS falla o se quedó sin saldo) ⇒ no se manda NINGÚN código: el registro y la entrada rápida no piden celular,
+// retirar no exige teléfono verificado ni código, y "olvidé mi clave"/login por SMS responden SMS_OFF (texto /sys_sms_off → Soporte).
+// Todo código de SMS nuevo sale por generateAndSendOTP (este envoltorio), nunca por _otpSendRaw directo.
+async function getSmsEnabled() { try { const v = await getConfig('smsEnabled', true); return !(v === false || v === 'false' || v === 0); } catch (_) { return true; } }
+const SMS_OFF_DEFAULT = '📵 Por el momento no estamos enviando SMS. Si necesitás recuperar tu clave o tu cuenta, escribinos por Soporte y te ayudamos.';
+async function _smsOffText() { return (await renderSystemCommand('/sys_sms_off', SMS_OFF_DEFAULT, {})) || SMS_OFF_DEFAULT; }
+async function generateAndSendOTP(phone, purpose) {
+  if (!(await getSmsEnabled())) return { success: false, smsOff: true, error: await _smsOffText() };
+  return _otpSendRaw(phone, purpose);
+}
 const { sendSMS } = require('./src/services/smsService');
 const { validateInternationalPhone, normalizePhoneKey } = require('./src/middlewares/security');
 
@@ -1252,7 +1263,7 @@ app.get('/api/landing/info', async (req, res) => {
     let welcome = null;
     try { const fd = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig(); welcome = { pct: fd, withApp: fd + (ig && ig.enabled ? ig.pct : 0) }; } catch (_) {}
     let services = []; try { services = await _landingServices(); } catch (_) {} // #555
-    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ registerClosedText: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), /* #993 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, services }); // #421/#424/#530/#538/#541/#555
+    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ registerClosedText: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), /* #993 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true && (await getSmsEnabled()), /* #1023 */ smsEnabled: await getSmsEnabled(), services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 
@@ -5715,7 +5726,7 @@ async function getRegistrationMode() {
   // #993 (owner 2026-10-30): 'closed' = REGISTRO CERRADO en la página principal (app, entrada rápida, referidos). Login abierto.
   // #994 (owner 2026-10-31): "no quiero que esté habilitado sólo para la página principal; para landing sí quiero que se registren" ⇒
   // la landing de publicidad (campaña ACTIVA distinta de INGRESO) sigue creando cuentas (_closedAllowsCampaign).
-  try { const v = await getConfig('registrationMode', 'quick'); return v === 'sms' ? 'sms' : (v === 'invite' ? 'invite' : (v === 'closed' ? 'closed' : 'quick')); } catch (_) { return 'quick'; }
+  try { const v = await getConfig('registrationMode', 'quick'); if (v === 'sms') return (await getSmsEnabled()) ? 'sms' : 'quick'; /* #1023: SMS apagado ⇒ entrada con el nombre */ return v === 'invite' ? 'invite' : (v === 'closed' ? 'closed' : 'quick'); } catch (_) { return 'quick'; }
 }
 const ACCOUNT_BLOCKED_DEFAULT = '🔒 Tu cuenta fue bloqueada por seguridad y se cerró la sesión. Si creés que es un error, escribinos desde Soporte (pantalla de ingreso).';
 const REGISTER_CLOSED_DEFAULT = '🔒 Por el momento no estamos abriendo cuentas nuevas. Si ya sos cliente, iniciá sesión con tu usuario y clave.';
@@ -5769,7 +5780,7 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
     // #553 (seguridad): sólo un código de PUBLICISTA (campaña activa distinta de INGRESO) exime del SMS. INGRESO es la campaña
     // orgánica que crea el boot y cualquiera la conoce: mandarla a mano no puede saltear la verificación.
     const isAdLink = !!code && code !== 'INGRESO';
-    const smsRequired = !isAdLink && (await getConfig('quickEntrySms', true)) === true;
+    const smsRequired = !isAdLink && (await getConfig('quickEntrySms', true)) === true && (await getSmsEnabled()); // #1023
     if (smsRequired && !verifiedPhone) return res.status(400).json({ code: 'SMS_REQUIRED', error: 'Verificá tu celular por SMS para crear la cuenta.' });
     if (mode !== 'quick' && !isAdLink && !verifiedPhone) return res.status(410).json({ error: 'La entrada rápida no está activa. Registrate con tu teléfono.' });
     req._allowNoApi = process.env.TESTER_ADMIN_PROMOTE === '1'; // #426: sólo entorno de prueba · #779: nunca por RENDER (base compartida)
@@ -5842,7 +5853,8 @@ app.post('/api/admin/public-base-url', authMiddleware, adminMiddleware, async (r
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.get('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
-  res.json({ success: true, mode: await getRegistrationMode(), organicGifts: await _organicGiftsAllowed(), entryLogin: (await getConfig('entryLogin', false)) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, canEdit: req.user.role === 'admin' }); // #538/#541
+  const _rawMode = await getConfig('registrationMode', 'quick'); // #1023: el panel muestra lo elegido (con SMS apagado 'sms' rige como 'quick')
+  res.json({ success: true, smsEnabled: await getSmsEnabled(), mode: _rawMode === 'sms' ? 'sms' : await getRegistrationMode(), organicGifts: await _organicGiftsAllowed(), entryLogin: (await getConfig('entryLogin', false)) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, canEdit: req.user.role === 'admin' }); // #538/#541
 });
 app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -5854,6 +5866,7 @@ app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async 
     if (req.body && typeof req.body.entryLogin === 'boolean') { entryLogin = req.body.entryLogin; await Config.set('entryLogin', entryLogin, req.user.username); } // #553: sólo si viene
     if (req.body && typeof req.body.quickEntrySms === 'boolean') await Config.set('quickEntrySms', req.body.quickEntrySms, req.user.username); // #541
     if (req.body && typeof req.body.organicGifts === 'boolean') await Config.set('organicWelcomeGifts', req.body.organicGifts, req.user.username); // #975
+    if (req.body && typeof req.body.smsEnabled === 'boolean') { await Config.set('smsEnabled', req.body.smsEnabled, req.user.username); logger.warn(`[sms] SMS ${req.body.smsEnabled ? 'ENCENDIDOS' : 'APAGADOS'} por ${req.user.username}`); } // #1023
     logger.info(`[registration-mode] ${mode} · pantalla de ingreso: ${entryLogin ? 'INICIAR SESIÓN' : 'registro'} por ${req.user.username}`);
     res.json({ success: true, mode, entryLogin });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -7371,6 +7384,7 @@ app.post('/api/auth/login-otp-request', authLimiter, smsIpLimiter, async (req, r
       return res.status(400).json({ error: 'Número de teléfono inválido' });
     }
 
+    if (!(await getSmsEnabled())) return res.status(503).json({ error: await _smsOffText(), code: 'SMS_OFF' }); // #1023 (igual para todos: no revela nada)
     // Check if user exists with this phone (verified)
     const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true }).lean();
 
@@ -7475,6 +7489,7 @@ app.post('/api/auth/request-password-reset', sensitiveLimiter, smsIpLimiter, asy
 
   try {
     const { phone } = req.body;
+    if (!(await getSmsEnabled())) return res.status(503).json({ error: await _smsOffText(), code: 'SMS_OFF' }); // #1023
 
     if (phone && typeof phone === 'string') {
       const normalizedPhone = String(phone || '').trim(); /* #956 */
@@ -14090,6 +14105,13 @@ async function initializeData() {
       response: DEPOSIT_AUTOLOAD_OFF_DEFAULT
     },
     {
+      // #1023: SMS APAGADOS desde Configuración (si falla AWS SNS) ⇒ lo que ve quien pide un código (olvidé mi clave, login por SMS, verificar celular).
+      name: '/sys_sms_off',
+      description: 'Cuando los SMS están APAGADOS (Configuración → Registro de clientes → Usar SMS): lo que ve el cliente si pide un código (olvidé mi clave, entrar por SMS, verificar el celular). Vacío = mensaje por defecto.',
+      type: 'message',
+      response: SMS_OFF_DEFAULT
+    },
+    {
       name: '/sys_deposit_rejected',
       description: 'Carga automática: aviso cuando el agente RECHAZA una carga pendiente. Variables: {amount}, {motivo}. Vacío = no se manda.',
       type: 'message',
@@ -14515,6 +14537,7 @@ app.get('/api/withdrawal/account', authMiddleware, async (req, res) => {
         savedAt: acc.savedAt || null
       },
       phoneVerified: user.phoneVerified === true,
+      smsOff: !(await getSmsEnabled()), // #1023: la app no pide verificar el teléfono para retirar
       phone: user.phone || user.whatsapp || null
     });
   } catch (error) {
@@ -14690,7 +14713,7 @@ async function _withdrawalRequestHandler(req, res) {
     // Para retirar, la cuenta debe tener el teléfono verificado por SMS.
     // El registro es sin SMS, pero el retiro siempre exige verificación.
     if (user.isBlocked === true || user.isActive === false) return res.status(403).json({ error: 'Tu cuenta no puede retirar en este momento. Escribinos por Soporte.', code: 'ACCOUNT_BLOCKED' }); // #954
-    if (user.phoneVerified !== true && !req._testBypass) { // #714: la prueba del tester no exige teléfono
+    if (user.phoneVerified !== true && !req._testBypass && (await getSmsEnabled())) { // #714: la prueba del tester no exige teléfono · #1023: con SMS apagado no se exige
       return res.status(400).json({
         error: 'Para retirar tu premio necesitás verificar tu teléfono por SMS.',
         code: 'PHONE_VERIFICATION_REQUIRED'
@@ -15155,6 +15178,7 @@ const WITHDRAW_BTN_DEFAULT = 'Retirar premio';
 const WITHDRAW_BTN_SUB_DEFAULT = 'Mínimo {retiro_min} · pago automático'; // #391: corto y legible
 // #382 (owner 2026-10-18): código SMS en CADA retiro (anti-estafa). Config['withdrawOtpRequired'], default true. #879: la migración lo apaga (verificación única).
 async function getWithdrawOtpRequired() {
+  if (!(await getSmsEnabled())) return false; // #1023: sin SMS no hay código por retiro
   try { const v = await getConfig('withdrawOtpRequired', null); if (v === false || v === 'false' || v === 0) return false; } catch (_) {}
   return true;
 }

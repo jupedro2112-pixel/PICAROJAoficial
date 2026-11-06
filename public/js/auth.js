@@ -1498,6 +1498,10 @@ VIP.auth = (function () {
                 body: JSON.stringify({ phone: fullPhone })
             });
             const data = await response.json();
+            if (data && data.code === 'SMS_OFF') { // #1023: SMS apagados desde el panel ⇒ no hay código: que escriba a Soporte
+                if (resultDiv) { resultDiv.textContent = data.error; resultDiv.style.background = 'rgba(255, 170, 0, 0.15)'; resultDiv.style.color = ''; resultDiv.style.display = 'block'; }
+                return;
+            }
 
             document.getElementById('resetStep1').style.display = 'none';
             document.getElementById('resetStep2').style.display = '';

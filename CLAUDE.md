@@ -279,6 +279,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   **#881 → #1010:** ya NO hay regla de "cliente de confianza" ni de monto para retirar (owner: "todo libre para todos"); el modal de retiro usa
   `available` y muestra el rollover (`_rolloverSummary`). Nunca mostrar/validar contra `balance`.
   **#879 RETIRO:** el teléfono se verifica por SMS UNA vez; después no hay código por retiro (`Config['withdrawOtpRequired']=false`, owner).
+  **#1023 SMS APAGABLES:** `Config['smsEnabled']` (panel → Registro de clientes → 📲 Usar SMS, default ON). Todo código pasa por el envoltorio
+  `generateAndSendOTP` (nunca `_otpSendRaw`); un chequeo NUEVO de teléfono verificado tiene que saltearse con `!(await getSmsEnabled())` o la gente queda trabada.
   **#566/#814 → #1010 RETIROS 100% AUTOMÁTICOS:** todo retiro se paga SOLO por hgcash al pedirlo vía `_payPendingPayout` (misma función que el
   botón Pagar). Sólo va a Confirmación de pagos lo que frena el ANTIFRAUDE (`_fraudCheckUser`: bloqueo / observación / 'unchecked' / bono, retiro
   grande tras un regalo, juego espejo) o si `payoutReview.autoBelow` está apagado / hgcash sin configurar. Al frenarse: `_notifyWithdrawHold`

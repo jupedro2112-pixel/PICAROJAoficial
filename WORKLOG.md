@@ -8,6 +8,18 @@
 
 ## Sesión 2026-11-06
 
+### 1023. Interruptor de SMS en Configuración (por si falla AWS SNS) — PWA v660, admin SW v237 (2026-11-06)
+- **Pedido (owner):** "que se pueda configurar desde configuración el uso de SMS por si falla, dejalo activado pero que se pueda desactivar".
+- `Config['smsEnabled']` (default **true**; panel → Configuración → Registro de clientes → "📲 Usar SMS", sólo admin, va en el mismo Guardar).
+- Todo código sale por el envoltorio `generateAndSendOTP` (server.js, arriba): apagado ⇒ no llama a SNS y devuelve `{success:false, smsOff:true}`
+  con el texto `/sys_sms_off` (editable en COMANDOS).
+- Con SMS APAGADOS: modo de registro 'sms' rige como 'quick' (entrada con el nombre; el panel sigue mostrando lo elegido) · la entrada rápida no
+  pide celular (`quickEntrySms` efectivo = false) · RETIRO: no exige teléfono verificado ni código (`getWithdrawOtpRequired` false; `/api/withdrawal/account`
+  manda `smsOff` y withdraw.js saltea el paso del teléfono) · login por SMS y "olvidé mi clave" responden 503 `SMS_OFF` (auth.js muestra el texto) ·
+  verificar celular / cambiar clave por SMS muestran el mismo texto. El antifraude del retiro y la cuenta secundaria (CBU, celular, titular) siguen igual.
+- Siguen pidiendo celular verificado (esperan a que vuelvan los SMS): el extra por instalar la app (apagado por flag) y los sorteos. El SMS MASIVO del
+  panel no depende del tilde.
+
 ### 1022. Cuenta secundaria también por MISMO TITULAR (CUIT / nombre) y la secundaria no suma en publicidad (2026-11-06)
 - **Pedido (owner):** que el que vuelve por la landing con otro celular / número / banco no cobre de nuevo la bienvenida; y "que en publicidad no
   sume ese cliente, que lo detecte como duplicado y no cuente doble en clientes nuevos".

@@ -1791,3 +1791,12 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
 - **🔌 Comprobantes sin API a verificar (#1020):** `GET /api/admin/api-failures?hours=&all=` (estado IA/banco + `Comprobante.trustedFallback` con datos del BankMovement)
   y `POST /api/admin/api-failures/:id/bank-seen` (`shiftReview {bankSeen:true}`; sólo acreditados). Panel: sección `apiFailures` (`loadApiFailures`,
   badge `apiFailuresBadge`), en `AGENT_SECTIONS`. Pendiente = (acreditado o con problema) y sin `shiftReview`.
+
+### #1023 — Interruptor de SMS (2026-11-06)
+- `Config['smsEnabled']` (default true). `getSmsEnabled()` + envoltorio `generateAndSendOTP` (server.js, junto al require de otpService): apagado ⇒
+  ningún envío a SNS, respuesta `smsOff` con `/sys_sms_off`.
+- Efectos con SMS apagados: `getRegistrationMode` devuelve 'quick' si estaba 'sms' (el GET del panel muestra el valor guardado); `quickEntrySms` efectivo
+  false (quick-entry y `/api/public/...` info); `getWithdrawOtpRequired` false; `POST /api/withdrawal/request` no exige `phoneVerified`;
+  `/api/withdrawal/account` → `smsOff:true` (withdraw.js `_smsOff`); `login-otp-request` y `request-password-reset` → 503 `SMS_OFF` (auth.js lo muestra).
+- No cambia: antifraude del retiro, cuenta secundaria, SMS masivo del panel. Siguen exigiendo celular verificado: extra por instalar y sorteos.
+
