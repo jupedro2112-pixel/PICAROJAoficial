@@ -275,7 +275,10 @@
       // #832 (owner): "100% en la primera carga y un 50% de regalo extra instalando la app, resumido" ⇒ grande el % de la 1ª carga y abajo el extra.
       var w = info.welcome || {}; var pApp = Number(w.withApp) || 0, pNo = Number(w.pct) || 0; var extra = Math.max(0, pApp - pNo);
       if (pNo > 0) $('bonusBig').textContent = pNo + '%';
-      $('bonusSub').textContent = 'EN TU PRIMERA CARGA'; // #537
+      // #1024: el % y el tope son los del PUBLICISTA de este link (o el general); 0% ⇒ no se promete bono
+      var cap = Number(w.capArs) || 0, rest = Number(w.restPct) || 0;
+      $('bonusSub').textContent = 'EN TU PRIMERA CARGA' + (cap > 0 ? ' · HASTA $' + cap.toLocaleString('es-AR') + (rest > 0 ? ' (+' + rest + '% DEL RESTO)' : '') : ''); // #537
+      if (!(pNo > 0) && info.welcome) { var pr = document.querySelector('.promo'); if (pr) pr.style.display = 'none'; }
       var note = extra > 0 ? ('+' + extra + '% EXTRA instalando la app y activando notificaciones') : ''; $('bonusNote').textContent = note; $('bonusNote').style.display = note ? '' : 'none';
       var rf = info.refunds || {}; if (rf.dailyMax) $('sysRefund').textContent = rf.dailyMax + '%';
       var rp = Number(info.referralPct); if (rp > 0) $('sysRef').textContent = rp + '%';

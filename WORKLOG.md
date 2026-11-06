@@ -8,6 +8,21 @@
 
 ## Sesión 2026-11-06
 
+### 1024. Bono de 1ª carga POR PUBLICISTA + tarjeta 🆕 NUEVO arriba de Configuración — admin SW v238 (2026-11-06)
+- **Pedido (owner):** "que según el publicista de donde venga se pueda configurar el bono a regalar y el tope", "tipo así" (captura de un formulario:
+  publicista · % · tope de carga · % sobre el excedente · activa · tabla de reglas con editar/borrar), "en la landing que en la portada se modifique
+  también el % según el código", "máximo un publicista por campaña, que no te deje modificar 2 a la vez" y "todo esto nuevo ponelo en configuración
+  adelante como NUEVO".
+- `Config['publisherWelcome']` (clave en Mongo `publisherwelcome`) = `{ CODIGO: { pct, capArs, restPct, active, by, at } }`, UNA regla por campaña (la
+  clave es el código). Rutas `GET/POST /api/admin/publisher-welcome` (POST sólo admin; `$set`/`$unset` de un campo, nunca el objeto entero #1012).
+- `getFirstDepositBonusPct(who)` / `getFirstDepositCapArs(who)` aceptan usuario o código: si su `acquisitionCampaign` tiene regla ACTIVA, mandan esa.
+  `resolveAutoBonus` la usa en la 1ª carga con `restPct` y, si la regla fija tope, NO pasa por `_capGift` (el tope del publicista manda). Tope 0 = sin tope.
+- Landing: `/api/landing/info?c=` devuelve `welcome.pct/capArs/restPct` del publicista; la portada muestra "X% EN TU PRIMERA CARGA · HASTA $Y"
+  (y se oculta el cartel si el % es 0). Los textos de soporte con `{fd_pct}`/`{fd_tope}` usan los del cliente.
+- Panel: tarjeta `#cfgNewCard` ARRIBA de Configuración (fuera del acordeón): bono por publicista (formulario de a UNO + tabla), 📲 Usar SMS (movido acá,
+  ruta propia `POST /api/admin/sms-enabled`), y resúmenes con link de Comprobantes sin API, retiros en 20 min y cuentas secundarias por titular.
+- Sin estadística de "cobrado" por regla (como en la captura): falta un registro de qué bono de 1ª carga salió de qué regla.
+
 ### 1023. Interruptor de SMS en Configuración (por si falla AWS SNS) — PWA v660, admin SW v237 (2026-11-06)
 - **Pedido (owner):** "que se pueda configurar desde configuración el uso de SMS por si falla, dejalo activado pero que se pueda desactivar".
 - `Config['smsEnabled']` (default **true**; panel → Configuración → Registro de clientes → "📲 Usar SMS", sólo admin, va en el mismo Guardar).

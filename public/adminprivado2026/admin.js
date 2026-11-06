@@ -6212,6 +6212,82 @@ async function saveRegistrationMode() {
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 window.loadRegistrationMode = loadRegistrationMode; window.saveRegistrationMode = saveRegistrationMode;
+// #1023: guardar sólo el interruptor de SMS (tarjeta 🆕 NUEVO)
+async function saveSmsEnabled() {
+    const c = document.getElementById('regSmsOnChk'); if (!c) return;
+    try {
+        const r = await authFetch('/api/admin/sms-enabled', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !!c.checked }) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
+        showToast(j.enabled ? '✅ SMS encendidos' : '📵 SMS APAGADOS: nadie queda esperando un código', j.enabled ? 'success' : 'info');
+        loadRegistrationMode();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+// #1024: bono de bienvenida (1ª carga) POR PUBLICISTA — formulario de UNA campaña a la vez (una regla por campaña) + tabla de reglas.
+let _pwData = null;
+function _pwMoney(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('es-AR'); }
+function _pwExample(pct, cap, rest) {
+    // tope = monto de CARGA (misma regla que bonusCap.bonusWithCap): pct% hasta el tope y rest% sobre lo que pasa (sólo si rest < pct)
+    const calc = (amt) => (cap > 0 && amt > cap && pct > rest) ? cap * pct / 100 + (amt - cap) * rest / 100 : amt * pct / 100;
+    return 'Ej.: carga ' + _pwMoney(10000) + ' → ' + _pwMoney(calc(10000)) + ' de bono · carga ' + _pwMoney(40000) + ' → ' + _pwMoney(calc(40000)) + '.';
+}
+async function loadPublisherWelcome() {
+    const box = document.getElementById('pwBox'); if (!box) return;
+    try {
+        const r = await authFetch('/api/admin/publisher-welcome'); const j = await r.json(); if (!r.ok) { box.textContent = j.error || 'No se pudo cargar'; return; }
+        _pwData = j;
+        const g = document.getElementById('pwGeneral'); if (g) g.textContent = j.general.pct + '% hasta ' + (j.general.capArs > 0 ? _pwMoney(j.general.capArs) + ' de carga' : 'sin tope');
+        if (!j.rows.length) { box.textContent = 'No hay campañas de publicistas cargadas.'; return; }
+        const dis = j.canEdit ? '' : ' disabled';
+        const opts = j.rows.map((x) => '<option value="' + escapeHtml(x.code) + '">' + escapeHtml((x.publisher || x.name) + ' (' + x.code + ')') + (x.rule ? ' · ya tiene regla' : '') + (x.campaignActive ? '' : ' · inactiva') + '</option>').join('');
+        const rules = j.rows.filter((x) => x.rule);
+        box.innerHTML =
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">' +
+            '<label style="margin:0;flex:2 1 220px;font-size:12px;">Publicista (campaña)<select id="pwCode" onchange="pwPick()" style="width:100%;"' + dis + '><option value="">— elegí el publicista (campaña) —</option>' + opts + '</select></label>' +
+            '<label style="margin:0;flex:1 1 90px;font-size:12px;">% del bono<input type="number" id="pwPct" min="0" max="500" placeholder="' + j.general.pct + '" oninput="pwPreview()" style="width:100%;"' + dis + '></label>' +
+            '<label style="margin:0;flex:1 1 120px;font-size:12px;">Tope de carga $ (0 = sin tope)<input type="number" id="pwCap" min="0" step="1000" placeholder="' + j.general.capArs + '" oninput="pwPreview()" style="width:100%;"' + dis + '></label>' +
+            '<label style="margin:0;flex:1 1 100px;font-size:12px;">% sobre el resto<input type="number" id="pwRest" min="0" max="500" placeholder="0" oninput="pwPreview()" style="width:100%;"' + dis + '></label>' +
+            '<label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12.5px;"><input type="checkbox" id="pwActive" checked style="width:auto;"' + dis + '> Activa</label></div>' +
+            '<div id="pwEx" style="font-size:12.5px;color:#b26b00;margin:0 0 8px;"></div>' +
+            (j.canEdit ? '<button class="btn-primary" style="width:100%;margin-bottom:12px;" onclick="savePublisherWelcome()">💾 Guardar regla del publicista</button>' : '<p style="font-size:12px;">Sólo el administrador general puede cambiarlo.</p>') +
+            (rules.length ? '<table style="width:100%;border-collapse:collapse;font-size:13px;"><tr style="text-align:left;color:var(--p-muted,#777);font-size:11.5px;text-transform:uppercase;"><th style="padding:6px;">Publicista</th><th style="padding:6px;">Regla</th><th style="padding:6px;">Estado</th><th></th></tr>' +
+                rules.map((x) => { const p = x.rule.pct != null ? x.rule.pct : j.general.pct, c = x.rule.capArs != null ? x.rule.capArs : j.general.capArs;
+                    return '<tr style="border-top:1px solid var(--p-line,#e4e4e7);"><td style="padding:6px;"><b>' + escapeHtml(x.publisher || x.name) + '</b><br><span style="font-size:11.5px;color:var(--p-muted,#777);">' + escapeHtml(x.code) + '</span></td>' +
+                        '<td style="padding:6px;">' + p + '% hasta ' + (c > 0 ? _pwMoney(c) + ' de carga' : 'sin tope') + (x.rule.restPct > 0 ? ' · ' + x.rule.restPct + '% del resto' : '') + '<br><span style="font-size:11.5px;color:var(--p-muted,#777);">' + escapeHtml(_pwExample(p, c, x.rule.restPct)) + '</span></td>' +
+                        '<td style="padding:6px;font-weight:800;color:' + (x.rule.active ? '#1f7a3d' : '#999') + ';">' + (x.rule.active ? 'ACTIVA' : 'PAUSADA') + '</td>' +
+                        '<td style="padding:6px;white-space:nowrap;">' + (j.canEdit ? '<button class="btn-secondary btn-small" title="Editar" onclick="pwEdit(\'' + escapeHtml(x.code) + '\')">✏️</button> <button class="btn-secondary btn-small" title="Borrar (vuelve al general)" onclick="pwDelete(\'' + escapeHtml(x.code) + '\')">🗑️</button>' : '') + '</td></tr>'; }).join('') + '</table>'
+                : '<p style="font-size:12.5px;color:var(--p-muted,#777);margin:0;">Todavía ningún publicista tiene regla propia: todos usan el general.</p>');
+        pwPreview();
+    } catch (_) { box.textContent = 'Error de conexión'; }
+}
+function pwPick() {
+    const code = (document.getElementById('pwCode') || {}).value; const x = _pwData && _pwData.rows.find((r) => r.code === code); const rl = x && x.rule;
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v == null ? '' : v; };
+    set('pwPct', rl ? rl.pct : ''); set('pwCap', rl ? rl.capArs : ''); set('pwRest', rl ? (rl.restPct || '') : '');
+    const a = document.getElementById('pwActive'); if (a) a.checked = rl ? rl.active : true; pwPreview();
+}
+function pwEdit(code) { const sel = document.getElementById('pwCode'); if (!sel) return; sel.value = code; pwPick(); sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+function pwPreview() {
+    const ex = document.getElementById('pwEx'); if (!ex || !_pwData) return;
+    const v = (id) => { const e = document.getElementById(id); return e && e.value !== '' ? Number(e.value) : null; };
+    const p = v('pwPct') != null ? v('pwPct') : _pwData.general.pct, c = v('pwCap') != null ? v('pwCap') : _pwData.general.capArs, r = v('pwRest') || 0;
+    ex.textContent = (document.getElementById('pwCode') || {}).value ? _pwExample(p, c, r) : 'Elegí un publicista: se edita de a UNO (una regla por campaña).';
+}
+async function _pwSend(body) {
+    try {
+        const r = await authFetch('/api/admin/publisher-welcome', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
+        showToast(j.pct == null && j.capArs == null ? body.code + ': vuelve al bono general' : body.code + ': regla guardada', 'success'); loadPublisherWelcome();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function savePublisherWelcome() {
+    const code = (document.getElementById('pwCode') || {}).value; if (!code) { showToast('Elegí el publicista (campaña)', 'error'); return; }
+    const val = (id) => { const e = document.getElementById(id); return e && e.value !== '' ? e.value : null; };
+    if (val('pwPct') == null && val('pwCap') == null) { showToast('Poné el % o el tope (o borrá la regla para usar el general)', 'error'); return; }
+    await _pwSend({ code, pct: val('pwPct'), capArs: val('pwCap'), restPct: val('pwRest'), active: !!(document.getElementById('pwActive') || {}).checked });
+}
+async function pwDelete(code) { await _pwSend({ code, pct: null, capArs: null }); }
+window.pwPick = pwPick; window.pwEdit = pwEdit; window.pwPreview = pwPreview; window.pwDelete = pwDelete;
+window.saveSmsEnabled = saveSmsEnabled; window.loadPublisherWelcome = loadPublisherWelcome; window.savePublisherWelcome = savePublisherWelcome;
 // #589: Página de la app (dominio público) editable
 async function loadPublicBaseUrl() {
     try {
@@ -6854,6 +6930,7 @@ async function loadInstallBonusPct() {
     try { loadPublicBaseUrl(); } catch (_) {} // #589
     try { loadDatosIaPin(); } catch (_) {} // #590
     try { loadRegistrationMode(); } catch (_) {} // #421
+    try { loadPublisherWelcome(); } catch (_) {} // #1024
     try { loadBankOutage(); } catch (_) {} // #442
     try { loadWebhooksCard(); } catch (_) {} // #562 webhooks salientes
     const form = document.getElementById('installBonusPctForm');

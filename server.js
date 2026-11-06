@@ -1261,7 +1261,7 @@ app.get('/api/landing/info', async (req, res) => {
     let referralPct = null; try { referralPct = require('./src/utils/referralRate').getConfiguredPct(); } catch (_) {} // #424
     // #530: % de bienvenida REAL para el banner de la pantalla de ingreso (nada hardcodeado): primera carga + extra por instalar la app.
     let welcome = null;
-    try { const fd = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig(); welcome = { pct: fd, withApp: fd + (ig && ig.enabled ? ig.pct : 0) }; } catch (_) {}
+    try { const _lc = String((req.query && req.query.c) || '').toUpperCase().trim().slice(0, 40); const fd = await getFirstDepositBonusPct(_lc || null); /* #1024: la landing de cada publicista muestra SU bono */ const ig = await getInstallGiftConfig(); const _lw = _lc ? await _pubWelcomeFor(_lc) : null; welcome = { pct: fd, withApp: fd + (ig && ig.enabled ? ig.pct : 0), capArs: await getFirstDepositCapArs(_lc || null), restPct: (_lw && _lw.capArs != null && _lw.restPct) || 0 }; } catch (_) {}
     let services = []; try { services = await _landingServices(); } catch (_) {} // #555
     res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ registerClosedText: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), /* #993 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true && (await getSmsEnabled()), /* #1023 */ smsEnabled: await getSmsEnabled(), services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -5850,6 +5850,43 @@ app.post('/api/admin/public-base-url', authMiddleware, adminMiddleware, async (r
     await _loadPublicBaseUrlOverride(); _resetRenderedHtmlCaches();
     logger.info(`[public-base-url] ${url || '(default)'} por ${req.user.username}`);
     res.json({ success: true, url: getPublicBaseUrl(), source: _publicBaseUrlOverride ? 'panel' : (process.env.PUBLIC_BASE_URL ? 'env' : 'default') });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #1024 (owner): Configuración → 🆕 NUEVO → bono de bienvenida (1ª carga) y tope POR PUBLICISTA. Vacío = el general.
+app.get('/api/admin/publisher-welcome', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const all = await _pubWelcomeAll();
+    const camps = await Campaign.find({ code: { $nin: ['INGRESO'] } }).select('code name publisher isActive').sort({ isActive: -1, publisher: 1, code: 1 }).limit(300).lean();
+    const rows = camps.map((c) => { const o = all[c.code] || null; return { code: c.code, name: c.name || c.code, publisher: c.publisher || null, campaignActive: c.isActive !== false,
+      rule: o ? { pct: o.pct != null && o.pct !== '' ? Number(o.pct) : null, capArs: o.capArs != null && o.capArs !== '' ? Number(o.capArs) : null, restPct: Number(o.restPct) || 0, active: o.active !== false, by: o.by || null, at: o.at || null } : null }; });
+    res.json({ success: true, general: { pct: await getFirstDepositBonusPct(), capArs: await getFirstDepositCapArs() }, giftMaxArs: await _refreshGiftMax(), rows, canEdit: req.user.role === 'admin' });
+  } catch (e) { logger.warn('[publisher-welcome] ' + e.message); res.status(500).json({ error: 'No se pudo cargar' }); }
+});
+app.post('/api/admin/publisher-welcome', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const code = String((req.body && req.body.code) || '').toUpperCase().trim();
+    if (!/^[A-Z0-9_-]{2,40}$/.test(code) || code === 'INGRESO' || !(await Campaign.exists({ code }))) return res.status(400).json({ error: 'Campaña inválida.' });
+    const num = (v, max) => { if (v === null || v === undefined || String(v).trim() === '') return null; const n = Number(String(v).replace(/[^\d.]/g, '')); return Number.isFinite(n) && n >= 0 && n <= max ? Math.round(n) : NaN; };
+    const pct = num(req.body.pct, 500), capArs = num(req.body.capArs, 10000000), restPct = num(req.body.restPct, 500); const active = req.body.active !== false;
+    if (Number.isNaN(restPct)) return res.status(400).json({ error: 'El % sobre el excedente tiene que ser un número entre 0 y 500.' });
+    if (Number.isNaN(pct)) return res.status(400).json({ error: 'El % tiene que ser un número entre 0 y 500 (vacío = el general).' });
+    if (Number.isNaN(capArs)) return res.status(400).json({ error: 'El tope tiene que ser un monto en pesos (0 = sin tope, vacío = el general).' });
+    // $set de UN campo (nunca leer→mezclar→guardar el objeto entero: #1012)
+    if (pct == null && capArs == null) await Config.updateOne({ key: 'publisherwelcome' }, { $unset: { ['value.' + code]: '' } }); // las claves de Config van en minúsculas
+    else await Config.updateOne({ key: 'publisherwelcome' }, { $set: { ['value.' + code]: { pct, capArs, restPct: restPct || 0, active, by: req.user.username, at: new Date() }, updatedBy: req.user.username } }, { upsert: true }); // UNA regla por campaña (la clave es el código)
+    try { Config._cache.clear(); } catch (_) {} _pubWelcomeCache.at = 0;
+    logger.info(`[publisher-welcome] ${code}: ${pct == null ? 'general' : pct + '%'} · tope ${capArs == null ? 'general' : '$' + capArs} por ${req.user.username}`);
+    res.json({ success: true, code, pct, capArs, restPct: restPct || 0, active });
+  } catch (e) { logger.warn('[publisher-welcome] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #1023: guardar SÓLO el interruptor de SMS (tarjeta 🆕 NUEVO de Configuración)
+app.post('/api/admin/sms-enabled', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    if (typeof (req.body && req.body.enabled) !== 'boolean') return res.status(400).json({ error: 'Falta enabled.' });
+    await Config.set('smsEnabled', req.body.enabled, req.user.username); logger.warn(`[sms] SMS ${req.body.enabled ? 'ENCENDIDOS' : 'APAGADOS'} por ${req.user.username}`);
+    res.json({ success: true, enabled: req.body.enabled });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.get('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
@@ -15029,9 +15066,29 @@ async function _refreshGiftMax() { try { const raw = await getConfig('giftMaxArs
 function _capGift(amount) { const a = Math.max(0, Math.round(Number(amount) || 0)); return _giftMaxCache > 0 ? Math.min(a, _giftMaxCache) : a; }
 function _calcRefundCapped(loss, tiers) { const r = refundTiers.calcRefund(loss, tiers); return r && Number(r.amount) > 0 ? Object.assign({}, r, { amount: _capGift(r.amount), capped: _giftMaxCache > 0 && Number(r.amount) > _giftMaxCache }) : r; }
 setTimeout(() => { _refreshGiftMax(); setInterval(_refreshGiftMax, 5 * 60 * 1000); }, 20 * 1000);
-async function getFirstDepositCapArs() { try { const n = Number(await getConfig('firstDepositCapArs', null)); if (Number.isFinite(n) && n >= 0) return Math.round(n); } catch (_) {} return FIRST_DEPOSIT_CAP_DEFAULT; }
+// #1024 (owner): BONO DE BIENVENIDA POR PUBLICISTA. Config['publisherWelcome'] = { CODIGO_CAMPAÑA: { pct, capArs } } (panel → Configuración →
+// 🆕 NUEVO). null/ausente = usa el general. Se elige por User.acquisitionCampaign (la landing por ?c=). El tope del publicista REEMPLAZA al tope de
+// 1ª carga Y al tope único por regalo (giftMaxArs) para ese bono. capArs = tope de CARGA (bonusCap: pct% hasta capArs + restPct% del resto).
+let _pubWelcomeCache = { at: 0, v: {} };
+async function _pubWelcomeAll() { if (Date.now() - _pubWelcomeCache.at < 60000) return _pubWelcomeCache.v; let v = {}; try { const raw = await getConfig('publisherWelcome', null); if (raw && typeof raw === 'object') v = raw; } catch (_) {} _pubWelcomeCache = { at: Date.now(), v }; return v; }
+async function _pubWelcomeFor(who) {
+  try {
+    let code = null;
+    if (typeof who === 'string') code = who; else if (who && who.acquisitionCampaign !== undefined) code = who.acquisitionCampaign; else if (who && who.id) { const u = await User.findOne({ id: who.id }).select('acquisitionCampaign').lean(); code = u && u.acquisitionCampaign; }
+    code = String(code || '').toUpperCase().trim(); if (!code) return null;
+    const o = (await _pubWelcomeAll())[code]; if (!o || o.active === false) return null; // regla pausada ⇒ el general
+    const pct = Number(o.pct), cap = Number(o.capArs), rest = Number(o.restPct);
+    const out = { code, pct: o.pct != null && o.pct !== '' && Number.isFinite(pct) && pct >= 0 && pct <= 500 ? Math.round(pct) : null, capArs: o.capArs != null && o.capArs !== '' && Number.isFinite(cap) && cap >= 0 ? Math.round(cap) : null,
+      restPct: Number.isFinite(rest) && rest > 0 && rest <= 500 ? Math.round(rest) : 0 };
+    return out.pct == null && out.capArs == null ? null : out;
+  } catch (_) { return null; }
+}
+async function getFirstDepositCapArs(who) {
+  if (who) { const o = await _pubWelcomeFor(who); if (o && o.capArs != null) return o.capArs; } // #1024
+  try { const n = Number(await getConfig('firstDepositCapArs', null)); if (Number.isFinite(n) && n >= 0) return Math.round(n); } catch (_) {} return FIRST_DEPOSIT_CAP_DEFAULT; }
 const FIRST_DEPOSIT_BONUS_PCT_DEFAULT = 100; // #810 (owner 2026-10-22): 100% en la primera carga
-async function getFirstDepositBonusPct() {
+async function getFirstDepositBonusPct(who) {
+  if (who) { const o = await _pubWelcomeFor(who); if (o && o.pct != null) return o.pct; } // #1024: el del publicista del cliente
   try {
     const n = Number(await getConfig('firstDepositBonusPct', null));
     if (Number.isFinite(n) && n >= 0 && n <= 500) return Math.round(n);
@@ -15299,7 +15356,7 @@ async function _supportQuickReply(userId, username, quick, text) {
       if (recent) return;
     }
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), rollover: String(await _giftRolloverX()), carga: String(await getDepositRolloverX()) }; // #883: {carga}
-    try { const _fd = await getFirstDepositBonusPct(), _cap = await getFirstDepositCapArs(), _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
+    try { const _fd = await getFirstDepositBonusPct({ id: userId }), _cap = await getFirstDepositCapArs({ id: userId }) /* #1024 */, _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
     if (topic === 'otro') {
       const t = await renderSystemCommand('/sys_support_topic_otro', SUPPORT_TOPIC_OTRO_DEFAULT, vars);
       if (t) await _sendUserSystemMessage(u, t, { metadata: Object.assign({}, SUPPORT_TERMS_BTN, { topic }) });
@@ -15636,12 +15693,12 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   // bono de primera carga (antes un bono pendiente de ruleta/historia/lote lo reemplazaba). Esos otros quedan pendientes para la próxima carga.
   let c = { claimed: false };
   if (!blockWelcome) {
-    const fp0 = await getFirstDepositBonusPct();
+    const fp0 = await getFirstDepositBonusPct(user); // #1024: el del publicista del cliente, si tiene
     if (fp0 > 0 && await _isFirstRealDeposit(user)) c = { pct: fp0, claimed: true, source: 'first_deposit', label: `bono de bienvenida de la primera carga (${fp0}%)`, revert: async () => {} };
   } else {
     // #839: que se SEPA por qué una primera carga entró sin el bono de bienvenida (antes no quedaba rastro visible para el agente).
     try {
-      if ((await getFirstDepositBonusPct()) > 0 && await _isFirstRealDeposit(user)) {
+      if ((await getFirstDepositBonusPct(user)) > 0 && await _isFirstRealDeposit(user)) {
         const why = _abuse ? _abuse : (Array.isArray(user.fraudFlags) && user.fraudFlags.length) ? `la cuenta está marcada por anti-estafa (${user.fraudFlags.join(', ')})` : 'cargó desde un CBU que ya usó otra cuenta';
         _emitAdminOnlyChatNote(user.id, user.username, `⚠️ PRIMERA CARGA SIN BONO DE BIENVENIDA: ${why}. Si es un cliente legítimo, cargale el bono a mano desde Bonificación.`).catch(() => {});
         logger.warn(`[auto-bonus] ${user.username}: primera carga sin bono de bienvenida — ${why}`);
@@ -15658,7 +15715,7 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   // carga real del cliente y no tenía otro bono pendiente, lleva Config['firstDepositBonusPct'] (manual o
   // hgcash), con el tope. Va ANTES del 10% de carga automática (#274): en la primera carga manda éste.
   if (!c.claimed && !blockWelcome) {
-    const fp = await getFirstDepositBonusPct();
+    const fp = await getFirstDepositBonusPct(user); // #1024
     if (fp > 0 && await _isFirstRealDeposit(user)) c = { pct: fp, claimed: true, source: 'first_deposit', label: `bono de bienvenida de la primera carga (${fp}%)`, revert: async () => {} };
   }
   // #274 (owner 2026-10-17): "la bonificación de la carga automática es del 10%, dice 0%". Toda carga
@@ -15672,12 +15729,14 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   // #812 (owner): "el 100% de la PRIMERA carga es LIBRE (sin tope); después respetar hasta $20.000 si es 100% y después un 20%" ⇒ el bono de
   // primera carga no pasa por el tope; todas las demás fuentes sí. El rollover ×5 es el global de siempre (Config['bonusRolloverX']).
   // #974: la primera carga tiene su propio tope (Config['firstDepositCapArs'], 0 = libre) y 0% sobre el resto.
-  const _fdCap = c.source === 'first_deposit' ? await getFirstDepositCapArs() : 0;
-  const cfg = c.source === 'first_deposit' ? Object.assign({}, await getBonusCapConfig(), _fdCap > 0 ? { enabled: true, capArs: _fdCap, restPct: 0 } : { enabled: false }) : await getBonusCapConfig();
+  const _fdCap = c.source === 'first_deposit' ? await getFirstDepositCapArs(user) : 0;
+  const _pubCap = c.source === 'first_deposit' ? (await _pubWelcomeFor(user)) : null; const _pubCapSet = !!(_pubCap && _pubCap.capArs != null); // #1024
+  const cfg = c.source === 'first_deposit' ? Object.assign({}, await getBonusCapConfig(), _fdCap > 0 ? { enabled: true, capArs: _fdCap, restPct: (_pubCapSet && _pubCap.restPct) || 0 } : { enabled: false }) : await getBonusCapConfig(); // #1024: % sobre el excedente del publicista
   // Lote: _loteBonusAmount (#172, mismo tope, mismo resultado que bonusWithCap);
   // el resto de las fuentes: bonusWithCap.
   await _refreshGiftMax();
-  const bonus = _capGift(c.source === 'promo_bonus' ? _loteBonusAmount(amount, c.pct, _loteCfgFor(c, cfg)) : bonusCap.bonusWithCap(amount, c.pct, cfg)); // #CAP tope propio del lote · #1010 tope único por regalo
+  const _raw = c.source === 'promo_bonus' ? _loteBonusAmount(amount, c.pct, _loteCfgFor(c, cfg)) : bonusCap.bonusWithCap(amount, c.pct, cfg);
+  const bonus = _pubCapSet ? Math.max(0, Math.round(Number(_raw) || 0)) : _capGift(_raw); // #CAP tope propio del lote · #1010 tope único por regalo · #1024 el tope del publicista manda
   if (!(bonus > 0)) { await c.revert(); return none; }
   if (c.settle) await c.settle(bonus);
   return { pct: c.pct, bonus, source: c.source, label: c.label, claimed: true, rule: bonusCap.describeRule(c.pct, cfg), capTxt: _loteCapTxt(c.pct, c.source === 'promo_bonus' ? _loteCfgFor(c, cfg) : cfg), revert: c.revert };
@@ -23297,7 +23356,7 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), carga: String(await getDepositRolloverX().catch(() => 1)), rollover: String(await _giftRolloverX().catch(() => 5)) };
-    try { const _fd = await getFirstDepositBonusPct(), _cap = await getFirstDepositCapArs(), _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
+    try { const _fd = await getFirstDepositBonusPct({ id: u.id }), _cap = await getFirstDepositCapArs({ id: u.id }) /* #1024 */, _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
     if (q.dynamic === 'sorteo') {
       // #944: resumen de los dos sorteos con los números de la config (fechas, premios, puntos, SORTEO EXTRA, requisitos, cobro).
       const cfg = await _sorteosCfg(); const now = new Date(); const R = sorteosRules;
