@@ -1800,3 +1800,9 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
   `/api/withdrawal/account` → `smsOff:true` (withdraw.js `_smsOff`); `login-otp-request` y `request-password-reset` → 503 `SMS_OFF` (auth.js lo muestra).
 - No cambia: antifraude del retiro, cuenta secundaria, SMS masivo del panel. Siguen exigiendo celular verificado: extra por instalar y sorteos.
 
+### #1024 — Bono de 1ª carga por publicista + tarjeta 🆕 NUEVO (2026-11-06)
+- `Config['publisherWelcome']` `{ CODE: { pct, capArs (tope de CARGA), restPct, active } }`; `_pubWelcomeFor(user|code)` (caché 60 s por proceso).
+  `getFirstDepositBonusPct/CapArs(who)`; en `resolveAutoBonus` la 1ª carga usa `{capArs, restPct}` del publicista y saltea `_capGift` si la regla fija tope.
+- Landing: `/api/landing/info?c=CODE` → `welcome.{pct,capArs,restPct}`; `public/landing/index.html` lo pinta en `#bonusBig/#bonusSub`.
+- Panel: `#cfgNewCard` antes de `.commands-layout` (no la toca `initCommandsAccordion`); `loadPublisherWelcome` se llama desde `loadInstallBonusPct`.
+

@@ -385,6 +385,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `_notifyWithdrawDelayed` (`/sys_withdraw_delayed`, "en hasta 20 minutos", una vez por retiro). Los reintentos (banco cada 3 min ×6, antifraude 3 min ×6)
   están medidos para ese plazo: si se alargan, cambiar el texto. Re-verificación de comprobantes sin leer: `_receiptAiRecheckTick` (2 min + disparo al leer uno OK).
   Panel → 🔌 Comprobantes sin API a verificar (`/api/admin/api-failures*`, también agentes): cargas sin leer para verificar en el banco ("🏦 Lo vi en el banco").
+- **BONO DE 1ª CARGA POR PUBLICISTA (#1024):** `Config['publisherWelcome']` (panel → Configuración → 🆕 NUEVO, una regla por campaña). Leer el % / tope de
+  1ª carga SIEMPRE con `getFirstDepositBonusPct(user)` / `getFirstDepositCapArs(user)` (cliente o código de campaña) cuando hay un cliente en juego.
+  Lo nuevo de cada sesión va también a la tarjeta `#cfgNewCard` (arriba de Configuración, pedido del owner).
 - **TOPE ÚNICO POR REGALO (#1010):** `Config['giftMaxArs']` ($15.000). Un regalo NUEVO pasa su monto por `_capGift` ANTES de grabar y acreditar
   (reembolsos: `_calcRefundCapped`, nunca `refundTiers.calcRefund` directo). Fuera del tope: Bonificación manual, devoluciones, referidos.
 - **SESIÓN Y BASE LENTA (#1006):** `authMiddleware` devuelve 401 SÓLO por errores del JWT; un error de la base es 503 `DB_BUSY` (si no, el panel y la
