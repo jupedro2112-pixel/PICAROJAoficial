@@ -2402,8 +2402,9 @@ function _kickReceiptRecheck() {
 async function _receiptAiRecheckTick() {
   try {
     if (!comprobanteAi.isEnabled() || !(await Comprobante.exists({ aiRetryPending: true })) || !(await _cronClaim('receiptairecheck', 90000))) return;
-    const due = await Comprobante.find({ aiRetryPending: true }).sort({ createdAt: 1 }).limit(25).lean();
-    let techFails = 0;
+    // menos reintentos primero: una imagen que la IA nunca logra leer no tapa a las demás
+    const due = await Comprobante.find({ aiRetryPending: true }).sort({ aiRetries: 1, createdAt: 1 }).limit(25).lean();
+    let techFails = 0, readOk = 0;
     for (const c of due) {
       const msg = c.messageId ? await Message.findOne({ id: c.messageId }).select('content').lean() : null;
       if (!msg || !msg.content) {
@@ -2413,11 +2414,16 @@ async function _receiptAiRecheckTick() {
       }
       const r = await comprobanteAi.analyzeComprobante(msg.content);
       if (!r.ok) {
+        if (readOk > 0 && (c.aiRetries || 0) + 1 >= 5) { // la IA anda (leyó otros) pero ESTA imagen no se puede leer: pasa a revisión a mano
+          await Comprobante.updateOne({ id: c.id }, { $set: { aiRetryPending: false, shiftReview: null, aiRecheck: { at: new Date(), ok: null, note: 'la IA no pudo leer esta imagen tras varios intentos: revisalo a mano' } } });
+          await _emitAdminOnlyChatNote(c.userId, c.username, '🧾 La IA volvió pero no pudo leer un comprobante que entró sin leer (5 intentos). Revisalo a mano en 🔌 Comprobantes sin API a verificar.').catch(() => {});
+          continue;
+        }
         await Comprobante.updateOne({ id: c.id }, { $inc: { aiRetries: 1 } });
         if (++techFails >= 2) break; // la IA sigue caída: se reintenta en la próxima pasada (o apenas un comprobante nuevo se lea bien)
         continue;
       }
-      techFails = 0;
+      techFails = 0; readOk++;
       const fresh = await Comprobante.findOne({ id: c.id }).lean(); if (!fresh) continue;
       const credited = !!fresh.autoCharged || fresh.bankMatchStatus === 'auto_charged' || fresh.reviewStatus === 'confirmed';
       const mv = fresh.matchedMovementId ? await BankMovement.findOne({ movementId: fresh.matchedMovementId }).select('amount').lean() : null;

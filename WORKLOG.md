@@ -4,7 +4,17 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-05**
+> **Última actualización: 2026-11-06**
+
+## Sesión 2026-11-06
+
+### 1021. Revisión final de #1020: una imagen ilegible ya no frena la re-verificación (2026-11-06)
+- **Problema:** `_receiptAiRecheckTick` tomaba los comprobantes sin leer por antigüedad y cortaba la pasada tras 2 fallas técnicas seguidas. Si 2 imágenes
+  viejas no se podían leer nunca, la pasada fallaba siempre en ellas y las demás no se re-verificaban hasta que vencieran (3 días).
+- **Arreglo:** el orden ahora es por `aiRetries` (menos intentos primero) y después por fecha. Si la IA leyó otros en la misma pasada y ESTA imagen falla
+  por 5.ª vez ⇒ sale de la cola con `aiRecheck.ok:null` ("revisalo a mano"), `shiftReview:null` (si estaba acreditada, sigue en 🔌 Comprobantes sin API
+  a verificar) y una nota interna. Sin castigo al cliente.
+- Revisado además: sintaxis OK, textos `/sys_withdraw_delayed` y `/sys_deposit_autoload_off`, rutas `/api/admin/api-failures*`, panel admin v236.
 
 ## Sesión 2026-11-05
 
