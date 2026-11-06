@@ -8,6 +8,13 @@
 
 ## Sesión 2026-11-06
 
+### 1026. FIX "Meta rechazó la prueba: no hay píxel NaN" en Píxeles de Meta — admin SW v239 (2026-11-06)
+- **Owner (captura):** 🧪 Probar en un píxel cargado desde el PANEL (ZAM2026) devolvía "no hay píxel NaN"; en CARGASGIROXactivo no pasa.
+- **Causa:** `POST/GET /api/admin/meta-pixels/:n/test` hacía `parseInt(req.params.n)`; los píxeles del panel tienen `n = 'c<id>'` ⇒ `NaN` y
+  `testPixel` no lo encontraba. Los de SSM (n numérico) sí andaban. **Fix:** se pasa `req.params.n` tal cual (como en CARGASGIROX).
+- De paso, réplica del #215 de esa repo: los `onclick` de Probar / ✏️ / 🗑️ van enteros por `escapeHtml` (antes se escapaba cada
+  `JSON.stringify` por separado y las comillas podían cortar el atributo).
+
 ### 1025. FIX píxel de Meta: réplica de lo que anda en CARGASGIROXactivo (#213/#214/#216 de esa repo) (2026-11-06)
 - **Pedido (owner):** "hay algo que está fallando en cuanto al meta pixel; en CARGASGIROXactivo está correcto: replicalo tal cual".
 - **Qué fallaba acá (comparando las dos repos):**

@@ -5707,14 +5707,14 @@ app.get('/api/admin/meta-pixels', authMiddleware, adminMiddleware, async (req, r
 app.post('/api/admin/meta-pixels/:n/test', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
-    const r = await metaCapi.testPixel(parseInt(req.params.n, 10), String((req.body && req.body.testEventCode) || (req.query && req.query.testEventCode) || '').trim() || null);
+    const r = await metaCapi.testPixel(req.params.n, String((req.body && req.body.testEventCode) || (req.query && req.query.testEventCode) || '').trim() || null);
     logger.info('[meta-pixels] prueba #' + req.params.n + ' por ' + req.user.username + ': ' + (r.ok ? 'OK' : 'ERROR ' + JSON.stringify(r.error).slice(0, 200)));
     res.json(r);
   } catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
 });
 // GET también para probar desde la barra del navegador con la sesión del panel abierta.
 app.get('/api/admin/meta-pixels/:n/test', authMiddleware, adminMiddleware, async (req, res) => {
-  try { if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' }); res.json(await metaCapi.testPixel(parseInt(req.params.n, 10), String((req.query && req.query.testEventCode) || '').trim() || null)); }
+  try { if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' }); res.json(await metaCapi.testPixel(req.params.n, String((req.query && req.query.testEventCode) || '').trim() || null)); }
   catch (e) { res.status(500).json({ error: 'Error del servidor', detalle: e.message }); }
 });
 app.get('/api/meta-pixel-id', async (req, res) => {
