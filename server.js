@@ -1827,10 +1827,19 @@ function _dupPairReason(a, b) {
   return null;
 }
 const _dupGuardCache = new Map(); // username → { why, ts }
+// #1022: CUIT de PERSONA (20/23/24/27): los de empresa (30/33/34 = billeteras como Mercado Pago, bancos) los comparte mucha gente.
+function _personCuit(x) { const d = String(x || '').replace(/\D/g, ''); return d.length === 11 && /^(20|23|24|27)/.test(d) ? d : null; }
+// Nombre del titular comparable: sin acentos, minúsculas, y sólo nombres completos (3+ palabras) que no sean de empresa/billetera.
+function _personName(x) {
+  const n = String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (n.split(' ').length < 3) return null;
+  if (/\b(sa|srl|sas|sociedad|mercado|uala|banco|pagos?|wallet|brubank|naranja|personal|lemon|prex|cuenta|digital|argentina)\b/.test(n)) return null;
+  return n;
+}
 async function _dupAccountCheck(userIn, origin, opts = {}) {
   try {
     if (!userIn || !userIn.id) return null;
-    const F = 'id username phone deviceIds fcmToken fcmTokens createdAt role duplicateOf dupCleared isBlocked';
+    const F = 'id username phone deviceIds fcmToken fcmTokens createdAt role duplicateOf dupCleared isBlocked acquisitionCampaign';
     const u = await User.findOne({ id: userIn.id }).select(F).lean(); if (!u || u.role !== 'user') return null;
     const or = []; const tel = String(u.phone || '').replace(/\D/g, '').slice(-10);
     if (Array.isArray(u.deviceIds) && u.deviceIds.length) or.push({ deviceIds: { $in: u.deviceIds } });
@@ -1838,12 +1847,24 @@ async function _dupAccountCheck(userIn, origin, opts = {}) {
     if (toks.length) or.push({ fcmToken: { $in: toks } }, { 'fcmTokens.token': { $in: toks } });
     if (tel.length === 10) or.push({ phone: { $regex: _telTailRegex(tel) } });
     // MISMO CBU que envía la transferencia (owner): el de esta carga (opts.cbu) + los que ya usó esta cuenta para cargar.
-    const cbuIds = new Set();
+    const cbuIds = new Set(); const cuitIds = new Set(); const nameIds = new Set();
     try {
       const BankMovement = require('./src/models/BankMovement');
       const cbus = new Set(); const dig = (x) => String(x || '').replace(/\D/g, '');
       if (dig(opts.cbu).length >= 10) cbus.add(dig(opts.cbu));
-      (await BankMovement.find({ matchedUserId: u.id, direction: { $ne: 'Outbound' }, fromCBU: { $nin: [null, ''] } }).select('fromCBU').sort({ createdAt: -1 }).limit(30).lean()).forEach((m) => { if (dig(m.fromCBU).length >= 10) cbus.add(dig(m.fromCBU)); });
+      // #1022 (owner): además del CBU, el MISMO TITULAR (CUIT de persona o nombre completo) aunque transfiera desde otro banco.
+      const cuits = new Set(); const names = new Set();
+      const addPayer = (cuit, name) => { const c = _personCuit(cuit); if (c) cuits.add(c); if (_personName(name)) names.add(String(name).trim()); };
+      addPayer(opts.cuit, opts.name);
+      (await BankMovement.find({ matchedUserId: u.id, direction: { $ne: 'Outbound' } }).select('fromCBU fromCUIT fromName').sort({ createdAt: -1 }).limit(30).lean()).forEach((m) => { if (dig(m.fromCBU).length >= 10) cbus.add(dig(m.fromCBU)); addPayer(m.fromCUIT, m.fromName); });
+      const otherIds = async (q) => (await BankMovement.distinct('matchedUserId', { direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, ...q })).filter(Boolean).slice(0, 20).map(String);
+      if (cuits.size) (await otherIds({ fromCUIT: { $in: [...cuits].slice(0, 6).flatMap((c) => [c, c.slice(0, 2) + '-' + c.slice(2, 10) + '-' + c.slice(10)]) } })).forEach((id) => cuitIds.add(id));
+      if (names.size) {
+        const want = new Set([...names].map(_personName));
+        const hits = await BankMovement.find({ direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, fromName: { $in: [...names].slice(0, 6) } }).select('matchedUserId fromName').limit(50).lean();
+        hits.filter((m) => want.has(_personName(m.fromName))).forEach((m) => nameIds.add(String(m.matchedUserId)));
+      }
+      if (cuitIds.size || nameIds.size) or.push({ id: { $in: [...new Set([...cuitIds, ...nameIds])].slice(0, 30) } });
       if (cbus.size) {
         const ids = await BankMovement.distinct('matchedUserId', { direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, $or: [...cbus].slice(0, 6).map((c) => ({ fromCBU: { $regex: c.slice(-14) + '$' } })) });
         ids.filter(Boolean).slice(0, 20).forEach((id) => cbuIds.add(String(id)));
@@ -1851,7 +1872,8 @@ async function _dupAccountCheck(userIn, origin, opts = {}) {
       }
     } catch (e) { logger.warn('[dup-account] cbu: ' + e.message); }
     if (!or.length) return null;
-    const why = (o) => _dupPairReason(u, o) || (cbuIds.has(String(o.id)) ? 'mismo CBU de transferencia' : null);
+    const why = (o) => _dupPairReason(u, o) || (cbuIds.has(String(o.id)) ? 'mismo CBU de transferencia' : null)
+      || (cuitIds.has(String(o.id)) ? 'mismo CUIT del titular de la transferencia' : null) || (nameIds.has(String(o.id)) ? 'mismo titular de la transferencia' : null);
     const others = (await User.find({ id: { $ne: u.id }, role: 'user', $or: or }).select(F).limit(20).lean()).filter((o) => why(o));
     if (!others.length) return null;
     const reasonOf = new Map(others.map((o) => [o.id, why(o)]));
@@ -1865,6 +1887,9 @@ async function _dupAccountCheck(userIn, origin, opts = {}) {
       const r = await User.updateOne({ id: g.id, duplicateOf: null, dupCleared: null }, { $set: { duplicateOf: { userId: main.id, username: main.username, reason, at: new Date() } }, $addToSet: { fraudFlags: 'dup_account' }, $push: { fraudNotes: { at: new Date(), note: `Cuenta secundaria de ${main.username} (${reason})` } } });
       if (!(r && r.modifiedCount)) continue; // otra instancia ya la marcó
       _dupGuardCache.delete(g.username); marked.push(g.username);
+      // #1022 (owner): "que en publicidad no sume ese cliente": la secundaria sale de los números del publicista (no es un cliente nuevo).
+      // La campaña queda guardada en acquisitionDupCampaign (se devuelve al quitar la marca); giroxOwnerCampaign (la key) no se toca.
+      if (g.acquisitionCampaign) await User.updateOne({ id: g.id, acquisitionCampaign: g.acquisitionCampaign }, { $set: { acquisitionDupCampaign: g.acquisitionCampaign, acquisitionCampaign: null } }).catch(() => {});
       logger.warn(`[dup-account] ${g.username} = secundaria de ${main.username} (${reason}; ${origin || ''})`);
       _emitAdminOnlyChatNote(g.id, g.username, `🔁 CUENTA SECUNDARIA: ${reason} que ${main.username} (su cuenta principal). Se le avisó al cliente y quedó SIN NINGÚN REGALO (bonos, reembolsos, ruleta, misiones, historias, referidos). Puede cargar y retirar normal. Si es otra persona, desmarcala en 🛡️ Antifraude → caso del cliente → "Quitar marca de cuenta secundaria".`).catch(() => {});
       const text = await renderSystemCommand('/sys_dup_account', DUP_ACCOUNT_MSG_DEFAULT, { principal: main.username, username: g.username });
@@ -3591,7 +3616,7 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
     const _ref = `vip-hg-${chargeKey || movement.movementId}`;
     // BONO AUTOMÁTICO (#210): el bono en % pendiente entra junto con la carga.
     const _reuse = await _cbuReuseCheck(user, movement); // #509
-    await _dupAccountCheck(user, 'cbu', { cbu: movement && movement.fromCBU }); // #992: mismo CBU que otra cuenta ⇒ secundaria, esta carga ya sin bono
+    await _dupAccountCheck(user, 'cbu', { cbu: movement && movement.fromCBU, cuit: movement && movement.fromCUIT, name: movement && movement.fromName }); // #992 · #1022 (titular): mismo CBU que otra cuenta ⇒ secundaria, esta carga ya sin bono
     const _auto = await resolveAutoBonus(user, Number(amount), 'auto-hgcash', { noWelcome: !!_reuse });
     const result = await _depositWithBonus(adapter, user.username, Number(amount), 'Carga automática (hgcash)', _ref, _auto.bonus); // #839
     if (!result.success) {
@@ -13463,6 +13488,7 @@ async function initializeData() {
   // #975 (owner 2026-10-24): "habilitar de vuelta el registro en la página, sin ningún beneficio" ⇒ modo 'quick' (nombre + celular verificado por SMS,
   // quickEntrySms queda como esté) y regalos de bienvenida sólo para publicidad y referidos (organicWelcomeGifts=false). El tilde del panel sigue mandando después.
   try { if (!(await getConfig('mig975OpenReg', null))) { await Config.set('registrationMode', 'quick', 'mig#975'); await Config.set('organicWelcomeGifts', false, 'mig#975'); await Config.set('mig975OpenReg', new Date().toISOString(), 'startup-migration'); logger.info('[mig975] registro abierto (entrada rápida) sin regalos de bienvenida para el orgánico'); } } catch (e) { logger.warn('[mig975] ' + e.message); }
+  try { if (!(await getConfig('mig1022DupAds', null))) { const r = await User.updateMany({ role: 'user', duplicateOf: { $ne: null }, dupCleared: null, acquisitionCampaign: { $nin: [null, ''] } }, [{ $set: { acquisitionDupCampaign: '$acquisitionCampaign', acquisitionCampaign: null } }]); await Config.set('mig1022DupAds', new Date().toISOString(), 'mig#1022'); logger.info(`[mig1022] ${r.modifiedCount || 0} cuentas secundarias fuera de los números de publicidad`); } } catch (e) { logger.warn('[mig1022] ' + e.message); } // #1022
   // #974: textos del extra por instalar y del cartel de primera carga: de "% EXTRA" a monto fijo y tope (sólo si siguen con el texto viejo).
   try { if (!(await getConfig('mig974WelcomeCaps', null))) {
     const r1 = await Command.updateOne({ name: '/sys_install_gift_offer', response: /\{pct\}%/ }, { $set: { response: "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo." } });
@@ -20311,8 +20337,8 @@ app.get('/api/admin/fraud/dup-accounts', authMiddleware, adminMiddleware, async 
 app.post('/api/admin/users/:id/dup-clear', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el admin.' });
-    const u = await User.findOne({ id: String(req.params.id) }).select('id username duplicateOf').lean(); if (!u) return res.status(404).json({ error: 'Cliente no encontrado' });
-    await User.updateOne({ id: u.id }, { $set: { duplicateOf: null, dupCleared: { by: req.user.username, at: new Date() } }, $pull: { fraudFlags: 'dup_account' }, $push: { fraudNotes: { at: new Date(), note: `${req.user.username} quitó la marca de cuenta secundaria${u.duplicateOf ? ' (de ' + u.duplicateOf.username + ')' : ''}` } } });
+    const u = await User.findOne({ id: String(req.params.id) }).select('id username duplicateOf acquisitionCampaign acquisitionDupCampaign').lean(); if (!u) return res.status(404).json({ error: 'Cliente no encontrado' });
+    await User.updateOne({ id: u.id }, { $set: { duplicateOf: null, dupCleared: { by: req.user.username, at: new Date() }, ...(u.acquisitionDupCampaign && !u.acquisitionCampaign ? { acquisitionCampaign: u.acquisitionDupCampaign, acquisitionDupCampaign: null } : {}) }, $pull: { fraudFlags: 'dup_account' }, $push: { fraudNotes: { at: new Date(), note: `${req.user.username} quitó la marca de cuenta secundaria${u.duplicateOf ? ' (de ' + u.duplicateOf.username + ')' : ''}` } } });
     _dupGuardCache.delete(u.username);
     _emitAdminOnlyChatNote(u.id, u.username, `✅ ${req.user.username} quitó la marca de CUENTA SECUNDARIA: vuelve a recibir bonos y regalos como cualquier cliente.`).catch(() => {});
     res.json({ success: true });

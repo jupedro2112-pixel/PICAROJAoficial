@@ -431,6 +431,7 @@ reintento manda la misma reference y la plataforma responde `duplicate:true`.
 
 > **Cuenta secundaria (#992):** antes de acreditar cualquier regalo, `giroxService` consulta el guard (`setGiftGuard`, inyectado por server.js: `User.duplicateOf`)
 > y devuelve `gifts_blocked` si la cuenta es secundaria de otra. `opts.noGiftGuard` lo saltea (devolución de retiro rechazado, Bonificación manual).
+> **#1022:** `_dupAccountCheck` también cruza el TITULAR de las transferencias (`BankMovement.fromCUIT` de persona 20/23/24/27 y `fromName` completo de 3+ palabras, normalizado; índices en ambos). Una secundaria marcada pierde la atribución de publicidad: `User.acquisitionCampaign` pasa a `acquisitionDupCampaign` (todos los conteos del publicista la dejan de contar; `giroxOwnerCampaign` queda igual) y `/dup-clear` la devuelve. Migración `mig1022DupAds` para las ya marcadas.
 
 > **Mapa vigente (#991, 2026-10-28):** carga real (comprobante, manual, hgcash) = CARGA ×`depositRolloverX` (1) por `_depositWithBonus`;
 > el bono que le toque (1ª carga 100%, historia, 2ª carga, lote, auto) va pegado como BONO ×`bonusRolloverX` (5). Misiones, extra por

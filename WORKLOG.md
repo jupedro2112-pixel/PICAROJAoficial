@@ -8,6 +8,18 @@
 
 ## Sesión 2026-11-06
 
+### 1022. Cuenta secundaria también por MISMO TITULAR (CUIT / nombre) y la secundaria no suma en publicidad (2026-11-06)
+- **Pedido (owner):** que el que vuelve por la landing con otro celular / número / banco no cobre de nuevo la bienvenida; y "que en publicidad no
+  sume ese cliente, que lo detecte como duplicado y no cuente doble en clientes nuevos".
+- `_dupAccountCheck` suma, además de teléfono / celular / notificaciones / CBU: **mismo CUIT de persona** del que transfiere (sólo 20/23/24/27;
+  los de empresa 30/33/34 = billeteras/bancos los comparte mucha gente) y **mismo nombre completo del titular** (3+ palabras, sin acentos, sin
+  nombres de empresa/billetera: `_personCuit` / `_personName`). La carga hgcash le pasa `cuit`/`name` del movimiento ANTES del bono. Índices nuevos
+  `BankMovement.fromCUIT` y `fromName`.
+- Al marcar una secundaria que vino por publicidad: `acquisitionCampaign` ⇒ null y se guarda en `User.acquisitionDupCampaign` (sale de TODOS los
+  números del publicista sin tocar las ~50 consultas). `giroxOwnerCampaign` (la key de 1girox) NO se toca. Quitar la marca (`/dup-clear`) la devuelve.
+  Migración `mig1022DupAds` aplica lo mismo a las secundarias que ya estaban marcadas.
+- Riesgo conocido: dos personas distintas con el mismo nombre completo ⇒ se desmarca desde Antifraude → Cuentas secundarias.
+
 ### 1021. Revisión final de #1020: una imagen ilegible ya no frena la re-verificación (2026-11-06)
 - **Problema:** `_receiptAiRecheckTick` tomaba los comprobantes sin leer por antigüedad y cortaba la pasada tras 2 fallas técnicas seguidas. Si 2 imágenes
   viejas no se podían leer nunca, la pasada fallaba siempre en ellas y las demás no se re-verificaban hasta que vencieran (3 días).

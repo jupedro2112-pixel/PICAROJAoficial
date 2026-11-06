@@ -336,6 +336,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `dup_account` (`_dupAccountCheck`; la IP NO cuenta). Sin NINGÚN regalo: guard central `girox.setGiftGuard` en `creditGift`/`creditUserBalance` (un regalo
   NUEVO tiene que pasar por esas funciones; sólo devoluciones de plata propia o la Bonificación manual van con `noGiftGuard`) y `resolveAutoBonus` sin bono.
   Carga y retira normal; la app muestra arriba la cuenta principal (`dupMain`). Desmarcar: caso del cliente en Alertas de estafa. Test `scripts/test-dup-account.js`.
+  **#1022:** también por MISMO TITULAR de la transferencia (CUIT de persona o nombre completo, `_personCuit`/`_personName`). La secundaria sale de los
+  números de publicidad: `acquisitionCampaign` ⇒ `acquisitionDupCampaign` (vuelve al desmarcar). Un conteo nuevo de publicidad sigue usando `acquisitionCampaign`.
 - **ALERTAS DE ESTAFA (#873):** `src/services/fraudRadar.js` (reglas + puntaje + caso). Una señal nueva de estafa va como regla ahí (con
   evidencia). **#993 ANTIFRAUDE AUTOMÁTICO:** `_fraudAutoApply` (server.js) bloquea solo con puntaje ≥ `Config['fraudAuto'].blockScore` (90) Y una regla
   de CONDUCTA (`FRAUD_BEHAVIOR_RULES`; una regla nueva de conducta va a esa lista), y deja en observación (retiros sin pago automático) desde 60.

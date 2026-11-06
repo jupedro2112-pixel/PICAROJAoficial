@@ -684,6 +684,7 @@ const userSchema = new mongoose.Schema({
   // #992 CUENTA SECUNDARIA: mismo teléfono / celular / notificaciones que una cuenta MÁS VIEJA (la principal). Sin ningún regalo; la app le
   // muestra arriba cuál es su cuenta principal. `dupCleared` = el admin la desmarcó (no se vuelve a marcar sola).
   duplicateOf: { type: { userId: String, username: String, reason: String, at: Date }, default: null },
+  acquisitionDupCampaign: { type: String, default: null }, // #1022: campaña de una cuenta SECUNDARIA (sacada de los números de publicidad; vuelve al quitar la marca)
   dupCleared: { type: { by: String, at: Date }, default: null },
   dailyRoulettePendingPct: { type: Number, default: 0 },
   dailyRoulettePendingLabel: { type: String, default: null },

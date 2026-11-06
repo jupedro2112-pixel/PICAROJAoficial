@@ -28,9 +28,9 @@ const bankMovementSchema = new mongoose.Schema({
   accountId: { type: String, default: null },
 
   // Partes
-  fromName: { type: String, default: null },
+  fromName: { type: String, default: null, index: true }, // #1022
   fromCBU: { type: String, default: null, index: true },
-  fromCUIT: { type: String, default: null },
+  fromCUIT: { type: String, default: null, index: true }, // #1022: cuenta secundaria por mismo titular
   toName: { type: String, default: null },
   toCBU: { type: String, default: null },
   toCUIT: { type: String, default: null },
