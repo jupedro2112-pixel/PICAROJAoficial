@@ -3437,9 +3437,10 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                     <h2>📒 Historial de números</h2>
                     <button class="refresh-btn" onclick="loadPhoneLog()" title="Refrescar">🔄</button>
                 </div>
-                <p style="font-size:12.5px;color:var(--p-muted,#777);margin:0 0 10px;">Cada número de celular que un cliente dejó o confirmó, con fecha y cómo lo cargó: <b>SMS</b> (verificado con código), <b>sin SMS</b> (confirmó "sí, es correcto" con los SMS apagados) o <b>histórico</b> (ya estaba antes de este registro). Nunca se borra: si el cliente cambia el número, quedan los dos.</p>
+                <p style="font-size:12.5px;color:var(--p-muted,#777);margin:0 0 10px;"><b>Todos</b> los números de celular de los clientes, verificados o no: <b>✅ SMS</b> = lo verificó con el código · <b>✖ sin SMS</b> = lo dejó sin verificar (confirmó "sí, es correcto" con los SMS apagados, o ya estaba cargado sin verificar). "Desde" dice de dónde salió (retiro, registro, perfil, histórico…). Nunca se borra: si el cliente cambia el número, quedan los dos.</p>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
                     <input type="search" id="phoneLogQ" placeholder="Buscar por usuario o número…" style="flex:1 1 220px;" onkeydown="if(event.key==='Enter')loadPhoneLog()">
+                    <select id="phoneLogVia" onchange="loadPhoneLog()" style="width:auto;"><option value="">Todos</option><option value="sms">✅ Con SMS (verificados)</option><option value="nosms">✖ Sin SMS (no verificados)</option></select>
                     <button class="btn-primary btn-small" onclick="loadPhoneLog()">Buscar</button>
                     <button class="btn-secondary btn-small" onclick="phoneLogChangePin()" title="Cambiar la clave de esta sección">🔑 Clave</button>
                     <span id="phoneLogTotal" style="font-size:12px;color:var(--p-muted,#777);"></span>

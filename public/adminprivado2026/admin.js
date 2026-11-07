@@ -6307,15 +6307,16 @@ async function loadPhoneLog() {
     const box = document.getElementById('phoneLogBox'); if (!box) return;
     if (!currentAdmin || currentAdmin.role !== 'admin') { box.textContent = 'Sólo el administrador general.'; return; }
     const q = (document.getElementById('phoneLogQ') || {}).value || '';
-    const path = '/api/admin/phone-log?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '');
+    const via = (document.getElementById('phoneLogVia') || {}).value || '';
+    const path = '/api/admin/phone-log?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '') + (via ? '&via=' + via : '');
     try {
         let r = await _phoneLogFetch(path);
         if (r.status === 428) { if (!(await _phoneLogSetup())) { box.textContent = '🔒 Sin clave: tocá 🔄 para crearla.'; return; } r = await _phoneLogFetch(path); }
         if (r.status === 423) { const pin = window.prompt('🔒 Clave del historial de números:', ''); if (!pin) { box.textContent = '🔒 Protegido con clave: tocá 🔄 para ingresarla.'; return; } sessionStorage.setItem('phonelog_pin', pin); r = await _phoneLogFetch(path); if (r.status === 423) { sessionStorage.removeItem('phonelog_pin'); box.textContent = '❌ Clave incorrecta: tocá 🔄 para probar de nuevo.'; return; } }
         const j = await r.json(); if (!r.ok) { box.textContent = j.error || 'No se pudo cargar'; return; }
-        const t = document.getElementById('phoneLogTotal'); if (t) t.textContent = j.total + ' números en total · mostrando ' + j.rows.length;
+        const t = document.getElementById('phoneLogTotal'); if (t) t.textContent = j.total + ' números · ✅ ' + j.sms + ' con SMS · ✖ ' + j.nosms + ' sin SMS · mostrando ' + j.rows.length;
         if (!j.rows.length) { box.textContent = q ? 'Sin resultados para "' + q + '".' : 'Todavía no hay números registrados.'; return; }
-        const via = (v) => v === 'sms' ? '<span style="color:#1f7a3d;font-weight:700;">SMS</span>' : (v === 'nosms' ? '<span style="color:#b26b00;font-weight:700;">sin SMS</span>' : '<span style="color:#777;">histórico</span>');
+        const via = (v) => v === 'sms' ? '<span style="color:#1f7a3d;font-weight:700;">✅ SMS · verificado</span>' : '<span style="color:#b26b00;font-weight:700;">✖ sin SMS · no verificado</span>';
         box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><tr style="text-align:left;color:var(--p-muted,#777);font-size:11.5px;text-transform:uppercase;"><th style="padding:6px;">Usuario</th><th style="padding:6px;">Número</th><th style="padding:6px;">Cómo</th><th style="padding:6px;">Desde</th><th style="padding:6px;">Fecha</th></tr>' +
             j.rows.map((x) => '<tr style="border-top:1px solid var(--p-line,#e4e4e7);"><td style="padding:6px;"><b>' + escapeHtml(x.username || x.userId || '') + '</b></td><td style="padding:6px;font-family:monospace;font-size:13.5px;">' + escapeHtml(x.phone) + '</td><td style="padding:6px;">' + via(x.via) + '</td><td style="padding:6px;color:var(--p-muted,#777);">' + escapeHtml(x.source || '') + '</td><td style="padding:6px;white-space:nowrap;">' + (x.at ? new Date(x.at).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : '') + '</td></tr>').join('') + '</table>';
     } catch (_) { box.textContent = 'Error de conexión'; }

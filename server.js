@@ -77,7 +77,14 @@ const HgcashCharge = require('./src/models/HgcashCharge');
 const PendingPayout = require('./src/models/PendingPayout');
 const PhoneLog = require('./src/models/PhoneLog'); // #1028: historial de números (panel → 📒 Historial de números)
 // #1028: cada número que un cliente deja/confirma queda en el historial (fire-and-forget).
-function _phoneLog(u, phone, via, source) { try { if (!u || !u.id || !phone) return; PhoneLog.create({ userId: String(u.id), username: u.username || null, phone: String(phone).trim(), via: via || 'nosms', source: source || null, at: new Date() }).catch(() => {}); } catch (_) {} }
+function _phoneLog(u, phone, via, source) {
+  try {
+    if (!u || !phone || (!u.id && !u.username)) return;
+    const ins = (id, username) => PhoneLog.create({ userId: String(id), username: username || null, phone: String(phone).trim(), via: via || 'nosms', source: source || null, at: new Date() }).catch(() => {});
+    if (u.id) return ins(u.id, u.username);
+    User.findOne({ username: u.username }).select('id username').lean().then((x) => x && ins(x.id, x.username)).catch(() => {});
+  } catch (_) {}
+}
 // #1028 (owner): con los SMS APAGADOS el celular sigue siendo OBLIGATORIO para retirar, pero sin código: el cliente lo escribe, confirma
 // "sí, es correcto" en el mismo cuadro y queda guardado (phoneVerified sigue en false; User.phoneNoSms deja constancia).
 async function _phoneConfirmNoSms(userId, phoneRaw, source) {
@@ -5163,6 +5170,7 @@ app.post('/api/auth/register', authLimiter, registerIpLimiter, async (req, res) 
     // CORREGIDO: El mensaje de bienvenida se envía desde el cliente (app.js) con el formato actualizado incluyendo CBU
     // No enviamos mensaje de bienvenida desde el servidor para evitar duplicados y usar el formato correcto
 
+    if (hasPhone && normalizedPhone) _phoneLog(newUser, normalizedPhone, 'sms', 'registro'); // #1028
     // Crear chat status
     await ChatStatus.create({
       userId: userId,
@@ -6720,6 +6728,7 @@ app.post('/api/auth/change-password', authMiddleware, authLimiter, async (req, r
       user.smsConsent = true;
       // Mantener `whatsapp` sincronizado para compatibilidad con vistas que lo siguen leyendo.
       user.whatsapp = requestedPhone;
+      _phoneLog(user, requestedPhone, 'sms', 'cambio de clave'); // #1028
     }
 
     // Defensa contra robo de token: si NO es un cambio de teléfono (donde el
@@ -13587,7 +13596,7 @@ async function initializeData() {
   // quickEntrySms queda como esté) y regalos de bienvenida sólo para publicidad y referidos (organicWelcomeGifts=false). El tilde del panel sigue mandando después.
   try { if (!(await getConfig('mig975OpenReg', null))) { await Config.set('registrationMode', 'quick', 'mig#975'); await Config.set('organicWelcomeGifts', false, 'mig#975'); await Config.set('mig975OpenReg', new Date().toISOString(), 'startup-migration'); logger.info('[mig975] registro abierto (entrada rápida) sin regalos de bienvenida para el orgánico'); } } catch (e) { logger.warn('[mig975] ' + e.message); }
   try { if (!(await getConfig('mig1022DupAds', null))) { const r = await User.updateMany({ role: 'user', duplicateOf: { $ne: null }, dupCleared: null, acquisitionCampaign: { $nin: [null, ''] } }, [{ $set: { acquisitionDupCampaign: '$acquisitionCampaign', acquisitionCampaign: null } }]); await Config.set('mig1022DupAds', new Date().toISOString(), 'mig#1022'); logger.info(`[mig1022] ${r.modifiedCount || 0} cuentas secundarias fuera de los números de publicidad`); } } catch (e) { logger.warn('[mig1022] ' + e.message); } // #1022
-  try { if (!(await getConfig('mig1028PhoneLog', null))) { const cur = User.find({ role: 'user', phone: { $nin: [null, ''] } }).select('id username phone phoneVerified createdAt').lean().cursor(); let buf = [], n = 0; for await (const u of cur) { buf.push({ userId: String(u.id), username: u.username || null, phone: String(u.phone).trim(), via: 'historico', source: u.phoneVerified ? 'verificado antes' : 'sin verificar', at: u.createdAt || new Date() }); if (buf.length >= 500) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; buf = []; } } if (buf.length) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; } await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); logger.info(`[mig1028] historial de números: ${n} números que ya estaban`); } } catch (e) { logger.warn('[mig1028] ' + e.message); } // #1028
+  try { if (!(await getConfig('mig1028PhoneLog', null))) { const cur = User.find({ role: 'user', $or: [{ phone: { $nin: [null, ''] } }, { whatsapp: { $nin: [null, ''] } }] }).select('id username phone whatsapp phoneVerified createdAt').lean().cursor(); let buf = [], n = 0; for await (const u of cur) { const ph = String(u.phone || u.whatsapp || '').trim(); if (!ph) continue; buf.push({ userId: String(u.id), username: u.username || null, phone: ph, via: u.phoneVerified && u.phone ? 'sms' : 'nosms', source: u.phoneVerified && u.phone ? 'histórico · verificado por SMS' : (u.phone ? 'histórico · sin verificar' : 'histórico · whatsapp sin verificar'), at: u.createdAt || new Date() }); if (buf.length >= 500) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; buf = []; } } if (buf.length) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; } await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); logger.info(`[mig1028] historial de números: ${n} números que ya estaban`); } } catch (e) { logger.warn('[mig1028] ' + e.message); } // #1028
   // #974: textos del extra por instalar y del cartel de primera carga: de "% EXTRA" a monto fijo y tope (sólo si siguen con el texto viejo).
   try { if (!(await getConfig('mig974WelcomeCaps', null))) {
     const r1 = await Command.updateOne({ name: '/sys_install_gift_offer', response: /\{pct\}%/ }, { $set: { response: "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo." } });
@@ -22281,10 +22290,10 @@ app.use('/api/admin/phone-log', authMiddleware, adminMiddleware, async (req, res
 app.get('/api/admin/phone-log', async (req, res) => {
   try {
     const q = String((req.query && req.query.q) || '').trim().slice(0, 40); const limit = Math.min(1000, Math.max(20, Number(req.query.limit) || 300));
-    const f = {}; if (q) { const dig = q.replace(/\D/g, ''); f.$or = [{ username: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }]; if (dig.length >= 4) f.$or.push({ phone: { $regex: dig.split('').join('\\D*') } }); }
+    const via = String((req.query && req.query.via) || ''); const f = via === 'sms' || via === 'nosms' ? { via } : {}; if (q) { const dig = q.replace(/\D/g, ''); f.$or = [{ username: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }]; if (dig.length >= 4) f.$or.push({ phone: { $regex: dig.split('').join('\\D*') } }); }
     const rows = await PhoneLog.find(f).sort({ at: -1 }).limit(limit).select('userId username phone via source at').lean();
-    const total = await PhoneLog.estimatedDocumentCount();
-    res.json({ success: true, total, rows: rows.map((r) => ({ userId: r.userId, username: r.username, phone: r.phone, via: r.via, source: r.source, at: r.at })) });
+    const total = await PhoneLog.estimatedDocumentCount(); const sms = await PhoneLog.countDocuments({ via: 'sms' });
+    res.json({ success: true, total, sms, nosms: Math.max(0, total - sms), rows: rows.map((r) => ({ userId: r.userId, username: r.username, phone: r.phone, via: r.via, source: r.source, at: r.at })) });
   } catch (e) { logger.warn('[phone-log] ' + e.message); res.status(500).json({ error: 'No se pudo cargar' }); }
 });
 // #971 COHORTES: de los que se registraron cada mes (últimos 6), cuántos cargaron alguna vez y cuántos cargaron en el mes 0, +1, +2, +3.

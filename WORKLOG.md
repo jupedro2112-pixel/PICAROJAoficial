@@ -18,8 +18,10 @@
   false, dup-check #992); la VIEJA llama `verify-phone/send-otp`, que con SMS apagados guarda igual y responde `PHONE_ALREADY_OWN` (la app sigue el
   retiro sin código). `POST /api/withdrawal/request` con SMS apagados exige número cargado (`user.phone`), no verificado.
 - **📒 Historial de números** (`src/models/PhoneLog.js`, permanente): fila por cada número que un cliente deja/confirma: `via` sms (código) ·
-  nosms (confirmó sin código) · historico (migración `mig1028PhoneLog`: los números que ya estaban en User). Hooks: verify-phone/confirm,
-  entrada rápida con SMS, confirm-nosms. Panel → menú abajo de todo → 🔐 Privado → "📒 Historial de números 🔒" (sólo admin): usuario, número,
+  nosms (confirmó sin código o ya estaba cargado SIN verificar). **Owner (2º pedido): TODOS los números, verificados o no, aclarando cuál mandó
+  SMS** ⇒ la migración `mig1028PhoneLog` carga los que ya estaban (`phone` o `whatsapp`) como sms / nosms con `source` "histórico · …"; filtro
+  Todos / ✅ con SMS / ✖ sin SMS y conteos arriba. Hooks: registro con SMS, cambio de clave con teléfono nuevo, verify-phone/confirm (perfil/retiro),
+  entrada rápida con SMS, confirm-nosms y send-otp con SMS apagados. admin SW v241. Panel → menú abajo de todo → 🔐 Privado → "📒 Historial de números 🔒" (sólo admin): usuario, número,
   cómo, desde, fecha; búsqueda por usuario o número. CLAVE PROPIA `Config['phoneLogPinHash']` (header `x-phonelog-pin`): la primera vez que se
   entra la crea el admin (el owner pidió una clave puntual; NO va en el código ni acá). Rutas `GET/POST /api/admin/phone-log-pin`, `GET /api/admin/phone-log`.
 
