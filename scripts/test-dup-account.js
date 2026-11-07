@@ -72,7 +72,7 @@ const girox = require(path.join(ROOT, 'src/services/giroxService.js'));
 const SERVER = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
 function extract(re) { const m = re.exec(SERVER); if (!m) throw new Error('no está ' + re); let i = SERVER.indexOf(') {', m.index) + 2, d = 0, j = i, q = null, esc = false; for (; j < SERVER.length; j++) { const c = SERVER[j]; if (q) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === q) q = null; continue; } if (c === '"' || c === "'" || c === '`') { q = c; continue; } if (c === '/' && SERVER[j + 1] === '/') { j = SERVER.indexOf('\n', j); continue; } if (c === '{') d++; else if (c === '}') { d--; if (!d) break; } } return SERVER.slice(m.index, j + 1); }
 const msgDefault = /const DUP_ACCOUNT_MSG_DEFAULT = ('.*');/.exec(SERVER)[1];
-const src = `const DUP_ACCOUNT_MSG_DEFAULT = ${msgDefault};\nconst _dupGuardCache = new Map();\n` + extract(/^function _telTailRegex\(/m) + '\n' + extract(/^function _dupPairReason\(/m) + '\n' + extract(/^async function _dupAccountCheck\(/m) + '\nreturn { _dupAccountCheck, _dupPairReason, DUP_ACCOUNT_MSG_DEFAULT };';
+const src = `const DUP_ACCOUNT_MSG_DEFAULT = ${msgDefault};\nconst _dupGuardCache = new Map();\n` + extract(/^function _telTailRegex\(/m) + '\n' + extract(/^function _dupPairReason\(/m) + '\n' + extract(/^function _personCuit\(/m) + '\n' + extract(/^function _personName\(/m) + '\n' + extract(/^async function _dupAccountCheck\(/m) + '\nreturn { _dupAccountCheck, _dupPairReason, DUP_ACCOUNT_MSG_DEFAULT };';
 const env = () => new Function('User', 'logger', 'require', '_emitAdminOnlyChatNote', 'renderSystemCommand', '_sendUserSystemMessage', src)(
   User, { info() {}, warn() {}, error() {} }, (p) => (/BankMovement$/.test(p) ? BankMovement : require(p)),
   async (id, un, t) => { NOTES.push({ un, t }); }, async (n, d, v) => d.replace(/\{(\w+)\}/g, (_, k) => v[k]), async (u, t, o) => { SENT.push({ un: u.username, t, o }); });
@@ -138,7 +138,7 @@ caso('Guard de regalos: creditGift / creditUserBalance frenados para la secundar
   girox.setGiftGuard(null);
 });
 caso('server.js: cargas siguen (resolveAutoBonus devuelve sin bono), hgcash chequea el CBU antes del bono, excepciones marcadas', async () => {
-  assert.ok(/await _dupAccountCheck\(user, 'cbu', \{ cbu: movement && movement\.fromCBU \}\);[^\n]*\n\s*const _auto = await resolveAutoBonus\(/.test(SERVER));
+  assert.ok(/await _dupAccountCheck\(user, 'cbu', \{ cbu: movement && movement\.fromCBU, cuit: movement && movement\.fromCUIT, name: movement && movement\.fromName \}\);[^\n]*\n\s*const _auto = await resolveAutoBonus\(/.test(SERVER)); // #1022
   const rab = extract(/^async function resolveAutoBonus\(/m);
   assert.ok(/await _dupAccountCheck\(user, 'deposit'\);[\s\S]{0,200}if \(_dup && _dup\.username\)[^\n]*return none;/.test(rab));
   assert.ok(/vip-payoutref-bonus-\$\{payout\.id\}`, \{ noGiftGuard: true \}\)/.test(SERVER));
