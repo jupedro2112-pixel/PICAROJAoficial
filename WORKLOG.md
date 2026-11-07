@@ -4,7 +4,16 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-06**
+> **Última actualización: 2026-11-07**
+
+## Sesión 2026-11-07
+
+### 1027. "La gente quiere retirar y pide SMS igual" con los SMS apagados — la app vieja no conoce el interruptor (2026-11-07)
+- **Causa:** el modal de retiro decide en el NAVEGADOR si pide el celular (`currentUser.phoneVerified`) antes de llamar al server. La app nueva (v660)
+  mira `smsOff` de `/api/withdrawal/account`, pero la PWA no se publicó desde la v658: los clientes tienen la app vieja, que ignora ese campo.
+- **Fix (server):** con los SMS apagados `/api/withdrawal/account` responde `phoneVerified:true` ⇒ la app vieja también saltea el paso del SMS
+  (`withdrawOtp` ya venía en false). No cambia el registro del cliente; sólo lo que ve el modal mientras los SMS estén apagados.
+- Pendiente del owner: PUBLICAR la PWA (v660) para que la app muestre el aviso correcto en "olvidé mi clave" / entrar por SMS.
 
 ## Sesión 2026-11-06
 

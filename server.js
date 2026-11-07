@@ -14587,7 +14587,9 @@ app.get('/api/withdrawal/account', authMiddleware, async (req, res) => {
         alias: acc.alias || '',
         savedAt: acc.savedAt || null
       },
-      phoneVerified: user.phoneVerified === true,
+      // #1027: con los SMS APAGADOS se responde phoneVerified:true para que también la app VIEJA (sin `smsOff`, decide pedir el celular antes de
+      // llamar al server) saltee el paso del SMS. Sólo afecta al modal de retiro: el registro del usuario no cambia.
+      phoneVerified: user.phoneVerified === true || !(await getSmsEnabled()),
       smsOff: !(await getSmsEnabled()), // #1023: la app no pide verificar el teléfono para retirar
       phone: user.phone || user.whatsapp || null
     });
