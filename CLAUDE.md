@@ -282,7 +282,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   **#1023 SMS APAGABLES:** `Config['smsEnabled']` (panel → Registro de clientes → 📲 Usar SMS, default ON). Todo código pasa por el envoltorio
   `generateAndSendOTP` (nunca `_otpSendRaw`); un chequeo NUEVO de teléfono verificado tiene que saltearse con `!(await getSmsEnabled())` o la gente queda trabada.
   **#1028:** con SMS apagados el celular sigue OBLIGATORIO para retirar pero sin código (`_phoneConfirmNoSms`, `User.phoneNoSms`, app: "¿Es correcto?");
-  todo número que un cliente deja pasa por `_phoneLog()` → `PhoneLog` (panel → 📒 Historial de números, abajo de todo, clave propia `phoneLogPinHash`).
+  un número cargado sin código NUNCA queda `phoneVerified` (si cambia, se pierde la verificación) y "mismo teléfono" en `_dupPairReason` sólo cuenta
+  si la cuenta más vieja lo verificó por SMS; todo número que un cliente deja pasa por `_phoneLog()` → `PhoneLog` (panel → 📒 Historial de números, abajo de todo, clave propia `phoneLogPinHash`).
   **#566/#814 → #1010 RETIROS 100% AUTOMÁTICOS:** todo retiro se paga SOLO por hgcash al pedirlo vía `_payPendingPayout` (misma función que el
   botón Pagar). Sólo va a Confirmación de pagos lo que frena el ANTIFRAUDE (`_fraudCheckUser`: bloqueo / observación / 'unchecked' / bono, retiro
   grande tras un regalo, juego espejo) o si `payoutReview.autoBelow` está apagado / hgcash sin configurar. Al frenarse: `_notifyWithdrawHold`

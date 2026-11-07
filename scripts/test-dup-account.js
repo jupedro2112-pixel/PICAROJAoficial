@@ -79,7 +79,7 @@ const env = () => new Function('User', 'logger', 'require', '_emitAdminOnlyChatN
 
 const casos = []; const caso = (n, fn) => casos.push({ n, fn });
 caso('Mismo TELÉFONO: la más nueva queda secundaria de la más vieja, con aviso al cliente y nota interna', async () => {
-  reset([{ id: 'a', username: 'picanico51', phone: '+54 9 11 5555-1234', createdAt: day(1) }, { id: 'b', username: 'nico2', phone: '1155551234', createdAt: day(20) }]);
+  reset([{ id: 'a', username: 'picanico51', phone: '+54 9 11 5555-1234', phoneVerified: true, createdAt: day(1) }, { id: 'b', username: 'nico2', phone: '1155551234', createdAt: day(20) }]);
   const r = await env()._dupAccountCheck({ id: 'b' }, 'test');
   assert.deepStrictEqual(r, { main: 'picanico51', marked: ['nico2'] });
   const b = User.rows.find((u) => u.id === 'b');
@@ -87,6 +87,11 @@ caso('Mismo TELÉFONO: la más nueva queda secundaria de la más vieja, con avis
   assert.strictEqual(User.rows.find((u) => u.id === 'a').duplicateOf, null, 'la principal no se marca');
   assert.strictEqual(SENT.length, 1); assert.ok(/picanico51/.test(SENT[0].t) && /NO tiene bonos/.test(SENT[0].t) && /volver a tu cuenta principal/.test(SENT[0].t));
   assert.strictEqual(SENT[0].o.push.data.kind, 'personal'); assert.strictEqual(NOTES.length, 1);
+});
+caso('Teléfono de la cuenta VIEJA sin verificar por SMS ⇒ NO marca (rev. #1029: un número tipeado sin código no deja secundario a otro)', async () => {
+  reset([{ id: 'a', username: 'vieja', phone: '1155551234', phoneVerified: false, createdAt: day(1) }, { id: 'b', username: 'nueva', phone: '+54 9 11 5555-1234', phoneVerified: true, createdAt: day(20) }]);
+  assert.strictEqual(await env()._dupAccountCheck({ id: 'a' }, 'phone'), null);
+  assert.strictEqual(User.rows[1].duplicateOf, null); assert.strictEqual(SENT.length, 0);
 });
 caso('Chequeo desde la cuenta VIEJA también marca a la nueva (no a la vieja)', async () => {
   reset([{ id: 'a', username: 'vieja', deviceIds: ['dev-1'], createdAt: day(1) }, { id: 'b', username: 'nueva', deviceIds: ['dev-9', 'dev-1'], createdAt: day(5) }]);
@@ -116,7 +121,7 @@ caso('Sin coincidencias reales (teléfono parecido, otro número; IP no cuenta) 
   assert.strictEqual(await env()._dupAccountCheck({ id: 'b' }, 'test'), null); assert.strictEqual(SENT.length, 0);
 });
 caso('Desmarcada por el admin (dupCleared) ⇒ no se vuelve a marcar; y el aviso sale UNA sola vez', async () => {
-  reset([{ id: 'a', username: 'p', phone: '1155551234', createdAt: day(1) }, { id: 'b', username: 's', phone: '1155551234', createdAt: day(9), dupCleared: { by: 'admin', at: day(10) } }, { id: 'c', username: 't', phone: '1155551234', createdAt: day(12) }]);
+  reset([{ id: 'a', username: 'p', phone: '1155551234', phoneVerified: true, createdAt: day(1) }, { id: 'b', username: 's', phone: '1155551234', createdAt: day(9), dupCleared: { by: 'admin', at: day(10) } }, { id: 'c', username: 't', phone: '1155551234', createdAt: day(12) }]);
   const e = env(); await e._dupAccountCheck({ id: 'c' }, 'test'); await e._dupAccountCheck({ id: 'c' }, 'test');
   assert.strictEqual(User.rows[1].duplicateOf, null); assert.strictEqual(User.rows[2].duplicateOf.username, 'p'); assert.strictEqual(SENT.length, 1);
 });

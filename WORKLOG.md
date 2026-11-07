@@ -8,6 +8,16 @@
 
 ## Sesión 2026-11-07
 
+### Revisión de seguridad antes de subir (#1020 → #1029) — 4 arreglos
+- Revisión independiente del diff completo + `node --check` de todo lo tocado + 19/19 scripts de test (se actualizó `test-dup-account.js`
+  a los helpers de #1022 y se agregó un caso). Hallazgos corregidos:
+  1. **ALTO** `_phoneConfirmNoSms`: un cliente ya verificado podía cargar el número de OTRO sin código y quedaba "verificado" con ese número
+     (el dueño real no podía retirar ni recuperar la clave). Ahora, si el número cambia, `phoneVerified` pasa a false (sin SMS nada queda verificado).
+  2. **MEDIO** `_dupPairReason`: "mismo teléfono" sólo cuenta si la cuenta MÁS VIEJA del par lo verificó por SMS (`phoneVerified`), así nadie
+     deja a otro cliente como secundario tipeando su número con los SMS apagados.
+  3. `mig1028PhoneLog` escribe la marca ANTES del recorrido (N instancias arrancando juntas duplicaban el historial).
+  4. Regla de publicista con tope 0 ⇒ sigue valiendo el tope único por regalo (`giftMaxArs`), ya no queda sin tope.
+
 ### #1029 — "Primera 100% y segunda 50% de corrido": diagnóstico y arreglo
 - Prueba del owner (usuario de landing): 1ª carga $1.000 → bono 100% ✅. Después aparecían dos "50%": (1) el EXTRA por instalar la app
   ($1.000, que es el MONTO FIJO de $5.000 topeado a la carga) cuya nota interna decía "50% EXTRA… (50% de su primera carga)" por un texto

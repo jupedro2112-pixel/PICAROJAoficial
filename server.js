@@ -93,8 +93,11 @@ async function _phoneConfirmNoSms(userId, phoneRaw, source) {
   const key = normalizePhoneKey(phone);
   const taken = await User.findOne({ phoneKey: key, phoneVerified: true, id: { $ne: userId } }).select('_id').lean();
   if (taken) return { ok: false, status: 400, code: 'PHONE_TAKEN', error: 'Este número ya está vinculado a otra cuenta. Ingresá con esa cuenta o usá otro número.' };
-  const u = await User.findOne({ id: userId }).select('id username phone').lean(); if (!u) return { ok: false, status: 404, error: 'Usuario no encontrado' };
-  await User.updateOne({ id: userId }, { $set: { phone, phoneKey: key, phoneVerificationPending: false, phoneNoSms: { at: new Date(), phone, source: source || null } } });
+  const u = await User.findOne({ id: userId }).select('id username phone phoneKey phoneVerified').lean(); if (!u) return { ok: false, status: 404, error: 'Usuario no encontrado' };
+  // Revisión #1029: un número cargado SIN código nunca queda "verificado". Si el cliente cambia el número, pierde la verificación anterior
+  // (si no, uno verificado podía apropiarse del número de otro y dejarlo sin retiros ni recupero de clave).
+  const changed = (u.phoneKey || normalizePhoneKey(u.phone || '')) !== key;
+  await User.updateOne({ id: userId }, { $set: Object.assign({ phone, phoneKey: key, phoneVerificationPending: false, phoneNoSms: { at: new Date(), phone, source: source || null } }, changed ? { phoneVerified: false } : {}) });
   _phoneLog(u, phone, 'nosms', source);
   _dupAccountCheck({ id: userId }, 'phone').catch(() => {}); // #992
   return { ok: true, phone };
@@ -1855,7 +1858,10 @@ const DUP_ACCOUNT_MSG_DEFAULT = '⚠️ Detectamos que ya tenés otra cuenta con
 function _telTailRegex(tel) { return String(tel).slice(-8).split('').join('\\D*') + '\\D*$'; }
 function _dupPairReason(a, b) {
   const ta = String(a.phone || '').replace(/\D/g, '').slice(-10); const tb = String(b.phone || '').replace(/\D/g, '').slice(-10);
-  if (ta.length === 10 && ta === tb) return 'mismo teléfono';
+  // Revisión #1029: el teléfono cuenta sólo si la cuenta MÁS VIEJA del par lo verificó por SMS; un número tipeado sin código (SMS apagados)
+  // no puede dejar a otro cliente como secundario.
+  const older = new Date(a.createdAt || 0) <= new Date(b.createdAt || 0) ? a : b;
+  if (ta.length === 10 && ta === tb && older.phoneVerified === true) return 'mismo teléfono';
   if ((a.deviceIds || []).some((d) => (b.deviceIds || []).includes(d))) return 'mismo celular';
   const tk = (u) => [].concat(u.fcmToken ? [u.fcmToken] : [], (u.fcmTokens || []).map((t) => t && t.token).filter(Boolean));
   const ka = tk(a); if (ka.length && tk(b).some((t) => ka.includes(t))) return 'mismas notificaciones';
@@ -1874,7 +1880,7 @@ function _personName(x) {
 async function _dupAccountCheck(userIn, origin, opts = {}) {
   try {
     if (!userIn || !userIn.id) return null;
-    const F = 'id username phone deviceIds fcmToken fcmTokens createdAt role duplicateOf dupCleared isBlocked acquisitionCampaign';
+    const F = 'id username phone phoneVerified deviceIds fcmToken fcmTokens createdAt role duplicateOf dupCleared isBlocked acquisitionCampaign';
     const u = await User.findOne({ id: userIn.id }).select(F).lean(); if (!u || u.role !== 'user') return null;
     const or = []; const tel = String(u.phone || '').replace(/\D/g, '').slice(-10);
     if (Array.isArray(u.deviceIds) && u.deviceIds.length) or.push({ deviceIds: { $in: u.deviceIds } });
@@ -13605,7 +13611,7 @@ async function initializeData() {
   // quickEntrySms queda como esté) y regalos de bienvenida sólo para publicidad y referidos (organicWelcomeGifts=false). El tilde del panel sigue mandando después.
   try { if (!(await getConfig('mig975OpenReg', null))) { await Config.set('registrationMode', 'quick', 'mig#975'); await Config.set('organicWelcomeGifts', false, 'mig#975'); await Config.set('mig975OpenReg', new Date().toISOString(), 'startup-migration'); logger.info('[mig975] registro abierto (entrada rápida) sin regalos de bienvenida para el orgánico'); } } catch (e) { logger.warn('[mig975] ' + e.message); }
   try { if (!(await getConfig('mig1022DupAds', null))) { const r = await User.updateMany({ role: 'user', duplicateOf: { $ne: null }, dupCleared: null, acquisitionCampaign: { $nin: [null, ''] } }, [{ $set: { acquisitionDupCampaign: '$acquisitionCampaign', acquisitionCampaign: null } }]); await Config.set('mig1022DupAds', new Date().toISOString(), 'mig#1022'); logger.info(`[mig1022] ${r.modifiedCount || 0} cuentas secundarias fuera de los números de publicidad`); } } catch (e) { logger.warn('[mig1022] ' + e.message); } // #1022
-  try { if (!(await getConfig('mig1028PhoneLog', null))) { const cur = User.find({ role: 'user', $or: [{ phone: { $nin: [null, ''] } }, { whatsapp: { $nin: [null, ''] } }] }).select('id username phone whatsapp phoneVerified createdAt').lean().cursor(); let buf = [], n = 0; for await (const u of cur) { const ph = String(u.phone || u.whatsapp || '').trim(); if (!ph) continue; buf.push({ userId: String(u.id), username: u.username || null, phone: ph, via: u.phoneVerified && u.phone ? 'sms' : 'nosms', source: u.phoneVerified && u.phone ? 'histórico · verificado por SMS' : (u.phone ? 'histórico · sin verificar' : 'histórico · whatsapp sin verificar'), at: u.createdAt || new Date() }); if (buf.length >= 500) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; buf = []; } } if (buf.length) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; } await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); logger.info(`[mig1028] historial de números: ${n} números que ya estaban`); } } catch (e) { logger.warn('[mig1028] ' + e.message); } // #1028
+  try { if (!(await getConfig('mig1028PhoneLog', null))) { await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); /* primero la marca: una sola instancia */ const cur = User.find({ role: 'user', $or: [{ phone: { $nin: [null, ''] } }, { whatsapp: { $nin: [null, ''] } }] }).select('id username phone whatsapp phoneVerified createdAt').lean().cursor(); let buf = [], n = 0; for await (const u of cur) { const ph = String(u.phone || u.whatsapp || '').trim(); if (!ph) continue; buf.push({ userId: String(u.id), username: u.username || null, phone: ph, via: u.phoneVerified && u.phone ? 'sms' : 'nosms', source: u.phoneVerified && u.phone ? 'histórico · verificado por SMS' : (u.phone ? 'histórico · sin verificar' : 'histórico · whatsapp sin verificar'), at: u.createdAt || new Date() }); if (buf.length >= 500) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; buf = []; } } if (buf.length) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; } await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); logger.info(`[mig1028] historial de números: ${n} números que ya estaban`); } } catch (e) { logger.warn('[mig1028] ' + e.message); } // #1028
   // #974: textos del extra por instalar y del cartel de primera carga: de "% EXTRA" a monto fijo y tope (sólo si siguen con el texto viejo).
   try { if (!(await getConfig('mig974WelcomeCaps', null))) {
     const r1 = await Command.updateOne({ name: '/sys_install_gift_offer', response: /\{pct\}%/ }, { $set: { response: "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo." } });
@@ -15799,7 +15805,7 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   // primera carga no pasa por el tope; todas las demás fuentes sí. El rollover ×5 es el global de siempre (Config['bonusRolloverX']).
   // #974: la primera carga tiene su propio tope (Config['firstDepositCapArs'], 0 = libre) y 0% sobre el resto.
   const _fdCap = c.source === 'first_deposit' ? await getFirstDepositCapArs(user) : 0;
-  const _pubCap = c.source === 'first_deposit' ? (await _pubWelcomeFor(user)) : null; const _pubCapSet = !!(_pubCap && _pubCap.capArs != null); // #1024
+  const _pubCap = c.source === 'first_deposit' ? (await _pubWelcomeFor(user)) : null; const _pubCapSet = !!(_pubCap && _pubCap.capArs > 0); // #1024 · rev. #1029: con tope 0 ("sin tope") sigue el tope único por regalo
   const cfg = c.source === 'first_deposit' ? Object.assign({}, await getBonusCapConfig(), _fdCap > 0 ? { enabled: true, capArs: _fdCap, restPct: (_pubCapSet && _pubCap.restPct) || 0 } : { enabled: false }) : await getBonusCapConfig(); // #1024: % sobre el excedente del publicista
   // Lote: _loteBonusAmount (#172, mismo tope, mismo resultado que bonusWithCap);
   // el resto de las fuentes: bonusWithCap.
