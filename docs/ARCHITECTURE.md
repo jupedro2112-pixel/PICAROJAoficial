@@ -1812,3 +1812,12 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
   `CompleteRegistration` con `eventID = metaEventId` (dedupe con la CAPI `reg_<id>`).
 - `metaCapiService`: `_capiDestinations` deduplica por `pixelId` (panel gana); `buildUserData` cae a `userInfo.clientIp/clientUserAgent`.
 
+### #1028 — Celular obligatorio sin SMS + Historial de números (2026-11-07)
+- `_phoneConfirmNoSms(userId, phone, source)` (server.js, junto a `_phoneLog`): valida, rechaza número verificado en otra cuenta (`PHONE_TAKEN`),
+  guarda `phone/phoneKey/phoneNoSms`, loguea `PhoneLog{via:'nosms'}`, dispara `_dupAccountCheck`. La usan `POST /api/auth/phone/confirm-nosms`
+  (app nueva) y `verify-phone/send-otp` con SMS apagados (app vieja; responde `PHONE_ALREADY_OWN` para que siga el retiro).
+- `/api/withdrawal/account` → `{phoneVerified: verificado || (smsOff && phone), phoneOnFile, smsOff}`; `/api/withdrawal/request` con SMS apagados
+  exige `user.phone`. withdraw.js: `_phoneOnFile`, `_paintPhoneStep()`, `_askNoSmsConfirm()` (cuadro "¿Es correcto este número?").
+- `PhoneLog` (userId, username, phone, via sms|nosms|historico, source, at). Migración `mig1028PhoneLog` carga los números existentes.
+  Panel: `#phoneLogSection`, `loadPhoneLog` con clave propia (`x-phonelog-pin`, 428 PIN_SETUP la primera vez, 423 PIN_REQUIRED, bloqueo 6 intentos).
+

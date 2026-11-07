@@ -336,6 +336,12 @@ document.addEventListener('change', function (ev) {
 <span>📈</span>
 <span>Ingresos diarios 🔒</span>
 </a>
+<!-- #1028 (owner): abajo de todo, con clave propia -->
+<div class="nav-group-title" style="padding:13px 16px 5px;font-size:9.5px;font-weight:900;letter-spacing:1.2px;color:#888;text-transform:uppercase;">🔐 Privado</div>
+<a href="#" class="nav-item" data-section="phoneLog" title="Historial de números de celular que cargaron los clientes (con clave propia)">
+<span>📒</span>
+<span>Historial de números 🔒</span>
+</a>
             </nav>
             <div class="sidebar-footer">
                 <span id="adminName">Admin</span>
@@ -734,7 +740,7 @@ document.addEventListener('change', function (ev) {
                     <div style="border:1px solid var(--p-line, #e4e4e7);border-radius:12px;padding:12px;margin-bottom:10px;">
                         <h4 style="margin:0 0 4px;">📲 Usar SMS <span id="regSmsOnState" style="font-weight:700;font-size:12.5px;"></span></h4>
                         <label style="margin:0 0 6px;display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="regSmsOnChk" style="width:auto;"> <b>SMS encendidos</b> (lo normal)</label>
-                        <p style="margin:0 0 8px;font-size:12.5px;line-height:1.5;">Si los SMS fallan (no les llega el código), <b>destildalo y guardá</b>: no se manda ningún código y nadie queda trabado. Registro y entrada rápida: entran sólo con el nombre. Retiros: sin verificar el celular. "Olvidé mi clave" y entrar por SMS: les dice que escriban a Soporte (texto <i>/sys_sms_off</i> en COMANDOS). Cuando vuelvan, tildalo de nuevo.</p>
+                        <p style="margin:0 0 8px;font-size:12.5px;line-height:1.5;">Si los SMS fallan (no les llega el código), <b>destildalo y guardá</b>: no se manda ningún código y nadie queda trabado. Registro y entrada rápida: entran sólo con el nombre. Retiros: el celular sigue siendo <b>obligatorio</b>, pero sin código: lo escriben, confirman "¿es correcto?" en el mismo cuadro y queda guardado (se ve en 📒 Historial de números, abajo de todo del menú). "Olvidé mi clave" y entrar por SMS: les dice que escriban a Soporte (texto <i>/sys_sms_off</i> en COMANDOS). Cuando vuelvan, tildalo de nuevo.</p>
                         <button class="btn-primary btn-small" onclick="saveSmsEnabled()">Guardar SMS</button>
                     </div>
 
@@ -3425,6 +3431,21 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                 </div>
             </section>
             <!-- #770 (owner): GASTOS — se cargan acá (pagando por la API del banco o registrando) y el cierre los descuenta y los explica -->
+            <!-- #1028: 📒 Historial de números (clave propia, sólo admin) -->
+            <section id="phoneLogSection" class="section">
+                <div class="panel-header">
+                    <h2>📒 Historial de números</h2>
+                    <button class="refresh-btn" onclick="loadPhoneLog()" title="Refrescar">🔄</button>
+                </div>
+                <p style="font-size:12.5px;color:var(--p-muted,#777);margin:0 0 10px;">Cada número de celular que un cliente dejó o confirmó, con fecha y cómo lo cargó: <b>SMS</b> (verificado con código), <b>sin SMS</b> (confirmó "sí, es correcto" con los SMS apagados) o <b>histórico</b> (ya estaba antes de este registro). Nunca se borra: si el cliente cambia el número, quedan los dos.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                    <input type="search" id="phoneLogQ" placeholder="Buscar por usuario o número…" style="flex:1 1 220px;" onkeydown="if(event.key==='Enter')loadPhoneLog()">
+                    <button class="btn-primary btn-small" onclick="loadPhoneLog()">Buscar</button>
+                    <button class="btn-secondary btn-small" onclick="phoneLogChangePin()" title="Cambiar la clave de esta sección">🔑 Clave</button>
+                    <span id="phoneLogTotal" style="font-size:12px;color:var(--p-muted,#777);"></span>
+                </div>
+                <div id="phoneLogBox" style="overflow-x:auto;">Cargando…</div>
+            </section>
             <section id="gastosSection" class="section">
                 <div class="panel-header">
                     <h2>💸 Gastos</h2>

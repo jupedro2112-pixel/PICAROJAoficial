@@ -5082,6 +5082,7 @@ function switchSection(section) {
     if (section === 'apiFailures') loadApiFailures(); // #1020
     if (section === 'cargasAuto') loadCargasAuto(); // #763
     if (section === 'gastos') { datosIaGate('Gastos').then(function (ok) { if (ok) loadGastos(); }); } // #770 clave
+    if (section === 'phoneLog') loadPhoneLog(); // #1028 clave propia
     if (section === 'roulette') loadRouletteAdmin();
     if (section === 'automations') loadAutomations();
     if (section === 'bonusStrategy') loadBonusStrategy();
@@ -6287,6 +6288,39 @@ async function savePublisherWelcome() {
 }
 async function pwDelete(code) { await _pwSend({ code, pct: null, capArs: null }); }
 window.pwPick = pwPick; window.pwEdit = pwEdit; window.pwPreview = pwPreview; window.pwDelete = pwDelete;
+// ===== #1028: 📒 Historial de números — clave PROPIA (header x-phonelog-pin; sessionStorage phonelog_pin). Sólo admin general.
+async function _phoneLogFetch(path, opts) { const pin = sessionStorage.getItem('phonelog_pin') || ''; const o = Object.assign({}, opts || {}); o.headers = Object.assign({ 'x-phonelog-pin': pin }, o.headers || {}); return authFetch(path, o); }
+async function _phoneLogSetup() {
+    const p1 = window.prompt('🔑 Esta sección no tiene clave todavía. Creá la clave del historial de números (4 a 32 caracteres):', ''); if (!p1) return false;
+    const p2 = window.prompt('Repetí la clave:', ''); if (p2 !== p1) { showToast('Las claves no coinciden', 'error'); return false; }
+    const r = await authFetch('/api/admin/phone-log-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: p1 }) }); const j = await r.json();
+    if (!r.ok) { showToast(j.error || 'No se pudo crear la clave', 'error'); return false; }
+    sessionStorage.setItem('phonelog_pin', p1); showToast('🔑 Clave creada', 'success'); return true;
+}
+async function phoneLogChangePin() {
+    const cur = window.prompt('Clave actual:', ''); if (cur == null) return;
+    const p1 = window.prompt('Clave nueva (4 a 32 caracteres):', ''); if (!p1) return;
+    const r = await authFetch('/api/admin/phone-log-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: p1, current: cur }) }); const j = await r.json();
+    if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } sessionStorage.setItem('phonelog_pin', p1); showToast('🔑 Clave cambiada', 'success');
+}
+async function loadPhoneLog() {
+    const box = document.getElementById('phoneLogBox'); if (!box) return;
+    if (!currentAdmin || currentAdmin.role !== 'admin') { box.textContent = 'Sólo el administrador general.'; return; }
+    const q = (document.getElementById('phoneLogQ') || {}).value || '';
+    const path = '/api/admin/phone-log?limit=300' + (q ? '&q=' + encodeURIComponent(q) : '');
+    try {
+        let r = await _phoneLogFetch(path);
+        if (r.status === 428) { if (!(await _phoneLogSetup())) { box.textContent = '🔒 Sin clave: tocá 🔄 para crearla.'; return; } r = await _phoneLogFetch(path); }
+        if (r.status === 423) { const pin = window.prompt('🔒 Clave del historial de números:', ''); if (!pin) { box.textContent = '🔒 Protegido con clave: tocá 🔄 para ingresarla.'; return; } sessionStorage.setItem('phonelog_pin', pin); r = await _phoneLogFetch(path); if (r.status === 423) { sessionStorage.removeItem('phonelog_pin'); box.textContent = '❌ Clave incorrecta: tocá 🔄 para probar de nuevo.'; return; } }
+        const j = await r.json(); if (!r.ok) { box.textContent = j.error || 'No se pudo cargar'; return; }
+        const t = document.getElementById('phoneLogTotal'); if (t) t.textContent = j.total + ' números en total · mostrando ' + j.rows.length;
+        if (!j.rows.length) { box.textContent = q ? 'Sin resultados para "' + q + '".' : 'Todavía no hay números registrados.'; return; }
+        const via = (v) => v === 'sms' ? '<span style="color:#1f7a3d;font-weight:700;">SMS</span>' : (v === 'nosms' ? '<span style="color:#b26b00;font-weight:700;">sin SMS</span>' : '<span style="color:#777;">histórico</span>');
+        box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><tr style="text-align:left;color:var(--p-muted,#777);font-size:11.5px;text-transform:uppercase;"><th style="padding:6px;">Usuario</th><th style="padding:6px;">Número</th><th style="padding:6px;">Cómo</th><th style="padding:6px;">Desde</th><th style="padding:6px;">Fecha</th></tr>' +
+            j.rows.map((x) => '<tr style="border-top:1px solid var(--p-line,#e4e4e7);"><td style="padding:6px;"><b>' + escapeHtml(x.username || x.userId || '') + '</b></td><td style="padding:6px;font-family:monospace;font-size:13.5px;">' + escapeHtml(x.phone) + '</td><td style="padding:6px;">' + via(x.via) + '</td><td style="padding:6px;color:var(--p-muted,#777);">' + escapeHtml(x.source || '') + '</td><td style="padding:6px;white-space:nowrap;">' + (x.at ? new Date(x.at).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : '') + '</td></tr>').join('') + '</table>';
+    } catch (_) { box.textContent = 'Error de conexión'; }
+}
+window.loadPhoneLog = loadPhoneLog; window.phoneLogChangePin = phoneLogChangePin;
 window.saveSmsEnabled = saveSmsEnabled; window.loadPublisherWelcome = loadPublisherWelcome; window.savePublisherWelcome = savePublisherWelcome;
 // #589: Página de la app (dominio público) editable
 async function loadPublicBaseUrl() {

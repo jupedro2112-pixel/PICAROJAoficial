@@ -16,6 +16,42 @@ VIP.withdraw = (function () {
     let _pendingWithdraw = null; // { titular, cbu, alias, amount, saveData }
     let _otpMode = 'phone';      // #382: 'phone' = verificar teléfono (una vez) · 'withdraw' = código de ESTE retiro
     let _smsOff = false; // #1023
+    let _phoneOnFile = false; // #1028: con SMS apagados alcanza con tener el celular cargado (confirmado sin código)
+    // #1028: textos del paso del celular según haya SMS o no
+    function _paintPhoneStep() {
+        try {
+            const sub = _el('withdrawOtpPhoneSub'); if (!sub) return;
+            const p = sub.querySelector('p'); const btn = _el('withdrawOtpSendBtn');
+            if (p) p.textContent = _smsOff ? '📱 Para retirar necesitamos tu número de celular. Escribilo y confirmalo: no te mandamos ningún código.' : '🔒 Por seguridad, para retirar tenés que verificar tu teléfono por SMS. Es por única vez.';
+            if (btn) btn.textContent = _smsOff ? '➡️ Continuar' : '📱 Enviar código SMS';
+            const c = _el('withdrawNoSmsConfirm'); if (c) c.style.display = 'none';
+        } catch (_) {}
+    }
+    // #1028: "¿Es correcto este número?" en el mismo cuadro (sin SMS). Sí ⇒ se guarda y sigue el retiro.
+    function _askNoSmsConfirm(fullPhone) {
+        const sub = _el('withdrawOtpPhoneSub'); if (!sub) return;
+        let c = _el('withdrawNoSmsConfirm');
+        if (!c) { c = document.createElement('div'); c.id = 'withdrawNoSmsConfirm'; c.style.cssText = 'margin-top:12px;padding:12px 14px;border-radius:10px;border:1px solid var(--p-red,#e60023);background:var(--p-soft,#f5f5f7);'; sub.appendChild(c); }
+        c.innerHTML = '<p style="margin:0 0 10px;font-weight:700;">¿Es correcto este número?</p><p style="margin:0 0 12px;font-size:20px;font-weight:900;letter-spacing:.5px;" id="withdrawNoSmsPhone"></p>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="btn btn-primary" id="withdrawNoSmsYes" style="flex:1;">✅ Sí, es correcto</button><button type="button" class="btn btn-secondary" id="withdrawNoSmsNo" style="flex:1;">✏️ Corregir</button></div>';
+        _el('withdrawNoSmsPhone').textContent = fullPhone;
+        c.style.display = '';
+        _el('withdrawNoSmsNo').onclick = function () { c.style.display = 'none'; try { _el('withdrawOtpPhone').focus(); } catch (_) {} };
+        _el('withdrawNoSmsYes').onclick = async function () {
+            const yb = _el('withdrawNoSmsYes'); yb.disabled = true; yb.textContent = 'Guardando…';
+            try {
+                const res = await fetch(`${VIP.config.API_URL}/api/auth/phone/confirm-nosms`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${VIP.state.currentToken}` }, body: JSON.stringify({ phone: fullPhone, source: 'retiro' }) });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    _phoneOnFile = true; if (VIP.state.currentUser) VIP.state.currentUser.phone = fullPhone;
+                    c.style.display = 'none'; _showStep('form'); await _doWithdraw(); return;
+                }
+                if (data && data.code === 'SMS_ON') { _smsOff = false; _paintPhoneStep(); c.style.display = 'none'; await sendWithdrawOtp(); return; } // volvieron los SMS mientras tanto
+                _showError('withdrawOtpPhoneError', data.error || 'No se pudo guardar el número. Probá de nuevo.'); c.style.display = 'none';
+            } catch (_) { _showError('withdrawOtpPhoneError', 'Error de conexión.'); }
+            finally { yb.disabled = false; yb.textContent = '✅ Sí, es correcto'; }
+        };
+    }
     function _otpRequired() { if (_smsOff) return false; try { const d = VIP.home && VIP.home.platformsData; return !(d && d.withdrawOtp === false); } catch (_) { return true; } }
 
     function _el(id) { return document.getElementById(id); }
@@ -152,7 +188,9 @@ VIP.withdraw = (function () {
                 if (VIP.state.currentUser && typeof data.phoneVerified === 'boolean') {
                     VIP.state.currentUser.phoneVerified = data.phoneVerified;
                 }
-                _smsOff = data.smsOff === true; // #1023: SMS apagados desde el panel ⇒ no se pide verificar el teléfono
+                _smsOff = data.smsOff === true; // #1023: SMS apagados desde el panel ⇒ sin código
+                _phoneOnFile = data.phoneOnFile === true; // #1028
+                _paintPhoneStep();
             }
         } catch (e) { /* no bloquea: el formulario sigue usable */ }
 
@@ -215,7 +253,7 @@ VIP.withdraw = (function () {
         // Para retirar, la cuenta debe tener el teléfono verificado por SMS.
         // Si todavía no lo verificó, se abre el paso de verificación SMS antes
         // de procesar el retiro (el registro de inicio es sin SMS, opcional).
-        const verified = _smsOff || (VIP.state.currentUser && VIP.state.currentUser.phoneVerified === true); // #1023
+        const verified = (VIP.state.currentUser && VIP.state.currentUser.phoneVerified === true) || (_smsOff && _phoneOnFile); // #1023 · #1028: sin SMS el celular sigue siendo obligatorio (sin código)
         if (!verified) {
             _otpMode = 'phone';
             _clearError('withdrawOtpPhoneError');
@@ -272,6 +310,7 @@ VIP.withdraw = (function () {
         try { const fx = VIP.auth.phoneFix(prefix, number); if (fx.error) { _showError('withdrawOtpPhoneError', fx.error); return; } fullPhone = fx.phone; }
         catch (_) { fullPhone = prefix + number.replace(/[\s\-().]/g, '').replace(/^0+/, ''); }
 
+        if (_smsOff) { _askNoSmsConfirm(fullPhone); return; } // #1028: sin SMS ⇒ "¿Es correcto este número?" en el mismo cuadro
         if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
         try {
             const res = await fetch(`${VIP.config.API_URL}/api/auth/verify-phone/send-otp`, {
@@ -301,7 +340,7 @@ VIP.withdraw = (function () {
         } catch (err) {
             _showError('withdrawOtpPhoneError', 'Error de conexión.');
         } finally {
-            if (btn) { btn.disabled = false; btn.textContent = '📱 Enviar código SMS'; }
+            if (btn) { btn.disabled = false; btn.textContent = _smsOff ? '➡️ Continuar' : '📱 Enviar código SMS'; }
         }
     }
 

@@ -8,6 +8,21 @@
 
 ## Sesión 2026-11-07
 
+### 1028. SMS apagados: el celular sigue OBLIGATORIO para retirar (sin código, se confirma en el cuadro) + 📒 Historial de números con clave — PWA v661, admin SW v240 (2026-11-07)
+- **Owner:** "si se desactiva hace que todos los teléfonos queden verificados [#1027]; en vez de sacar todo, que completen el teléfono obligatorio
+  pero sin SMS, preguntarle en el mismo cuadro si el teléfono está ok, y armá en el panel abajo de todo con clave un historial de números con el
+  nombre del usuario y el número". Reemplaza el parche #1027.
+- **Retiro con SMS apagados:** `/api/withdrawal/account` → `phoneVerified` true sólo si YA tiene número (`phoneOnFile`), `smsOff`. Sin número la app
+  pide el celular: la NUEVA (v661) muestra "¿Es correcto este número? ✅ Sí / ✏️ Corregir" y confirma con `POST /api/auth/phone/confirm-nosms`
+  (`_phoneConfirmNoSms`: valida, rechaza si otra cuenta lo tiene verificado, guarda `phone`/`phoneKey`/`User.phoneNoSms`, `phoneVerified` sigue
+  false, dup-check #992); la VIEJA llama `verify-phone/send-otp`, que con SMS apagados guarda igual y responde `PHONE_ALREADY_OWN` (la app sigue el
+  retiro sin código). `POST /api/withdrawal/request` con SMS apagados exige número cargado (`user.phone`), no verificado.
+- **📒 Historial de números** (`src/models/PhoneLog.js`, permanente): fila por cada número que un cliente deja/confirma: `via` sms (código) ·
+  nosms (confirmó sin código) · historico (migración `mig1028PhoneLog`: los números que ya estaban en User). Hooks: verify-phone/confirm,
+  entrada rápida con SMS, confirm-nosms. Panel → menú abajo de todo → 🔐 Privado → "📒 Historial de números 🔒" (sólo admin): usuario, número,
+  cómo, desde, fecha; búsqueda por usuario o número. CLAVE PROPIA `Config['phoneLogPinHash']` (header `x-phonelog-pin`): la primera vez que se
+  entra la crea el admin (el owner pidió una clave puntual; NO va en el código ni acá). Rutas `GET/POST /api/admin/phone-log-pin`, `GET /api/admin/phone-log`.
+
 ### 1027. "La gente quiere retirar y pide SMS igual" con los SMS apagados — la app vieja no conoce el interruptor (2026-11-07)
 - **Causa:** el modal de retiro decide en el NAVEGADOR si pide el celular (`currentUser.phoneVerified`) antes de llamar al server. La app nueva (v660)
   mira `smsOff` de `/api/withdrawal/account`, pero la PWA no se publicó desde la v658: los clientes tienen la app vieja, que ignora ese campo.

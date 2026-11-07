@@ -75,6 +75,23 @@ const comprobanteAi = require('./src/services/comprobanteAiService');
 const BankMovement = require('./src/models/BankMovement');
 const HgcashCharge = require('./src/models/HgcashCharge');
 const PendingPayout = require('./src/models/PendingPayout');
+const PhoneLog = require('./src/models/PhoneLog'); // #1028: historial de números (panel → 📒 Historial de números)
+// #1028: cada número que un cliente deja/confirma queda en el historial (fire-and-forget).
+function _phoneLog(u, phone, via, source) { try { if (!u || !u.id || !phone) return; PhoneLog.create({ userId: String(u.id), username: u.username || null, phone: String(phone).trim(), via: via || 'nosms', source: source || null, at: new Date() }).catch(() => {}); } catch (_) {} }
+// #1028 (owner): con los SMS APAGADOS el celular sigue siendo OBLIGATORIO para retirar, pero sin código: el cliente lo escribe, confirma
+// "sí, es correcto" en el mismo cuadro y queda guardado (phoneVerified sigue en false; User.phoneNoSms deja constancia).
+async function _phoneConfirmNoSms(userId, phoneRaw, source) {
+  const phone = String(phoneRaw || '').trim();
+  if (!validateInternationalPhone(phone)) return { ok: false, status: 400, error: 'Número de celular inválido.' };
+  const key = normalizePhoneKey(phone);
+  const taken = await User.findOne({ phoneKey: key, phoneVerified: true, id: { $ne: userId } }).select('_id').lean();
+  if (taken) return { ok: false, status: 400, code: 'PHONE_TAKEN', error: 'Este número ya está vinculado a otra cuenta. Ingresá con esa cuenta o usá otro número.' };
+  const u = await User.findOne({ id: userId }).select('id username phone').lean(); if (!u) return { ok: false, status: 404, error: 'Usuario no encontrado' };
+  await User.updateOne({ id: userId }, { $set: { phone, phoneKey: key, phoneVerificationPending: false, phoneNoSms: { at: new Date(), phone, source: source || null } } });
+  _phoneLog(u, phone, 'nosms', source);
+  _dupAccountCheck({ id: userId }, 'phone').catch(() => {}); // #992
+  return { ok: true, phone };
+}
 const hgcashPay = require('./src/services/hgcashService');
 const pdfImage = require('./src/services/pdfImageService');
 const { generateReferralCode } = require('./src/utils/referralCode');
@@ -5807,7 +5824,7 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
     let accessToken = null;
     try { accessToken = new URL(out.body.accessUrl).searchParams.get('acceso'); } catch (_) {}
     if (verifiedPhone) { // #541: el celular verificado queda en la cuenta (igual que el registro con SMS)
-      try { User.findOne({ username: out.body.username }).select('id').lean().then((nu) => nu && setTimeout(() => _dupAccountCheck(nu, 'quick-entry').catch(() => {}), 3000)).catch(() => {}); /* #992 */ await User.updateOne({ username: out.body.username }, { $set: { phone: verifiedPhone, phoneKey: normalizePhoneKey(verifiedPhone), phoneVerified: true, phoneVerificationPending: false } }); } catch (e) { logger.warn(`[quick-entry] no se pudo guardar el celular verificado de ${out.body.username}: ${e.message}`); }
+      try { User.findOne({ username: out.body.username }).select('id').lean().then((nu) => nu && setTimeout(() => _dupAccountCheck(nu, 'quick-entry').catch(() => {}), 3000)).catch(() => {}); /* #992 */ await User.updateOne({ username: out.body.username }, { $set: { phone: verifiedPhone, phoneKey: normalizePhoneKey(verifiedPhone), phoneVerified: true, phoneVerificationPending: false } }); _phoneLog({ id: null, username: out.body.username }, verifiedPhone, 'sms', 'entrada'); /* #1028 */ } catch (e) { logger.warn(`[quick-entry] no se pudo guardar el celular verificado de ${out.body.username}: ${e.message}`); }
     }
     res.status(201).json({ success: true, username: out.body.username, password: out.body.password, accessToken, platforms: out.body.platforms || [] });
   } catch (e) { logger.error('[quick-entry] ' + e.message); res.status(500).json({ error: 'Error del servidor. Probá de nuevo.' }); }
@@ -7688,6 +7705,15 @@ const FAKE_NUMBER_PATTERNS = /^(\d)\1+$|^1234567890$|^0987654321$|^12345678$|^01
 //   2) confirm con phone + otp → marca al usuario como verificado y destraba retiros
 // Una vez verificado phoneVerificationPending pasa a false definitivamente.
 // ============================================
+// #1028: la app NUEVA, con los SMS apagados: el cliente escribe el celular, ve "¿Es correcto?" y confirma ⇒ queda cargado sin código.
+app.post('/api/auth/phone/confirm-nosms', authMiddleware, sensitiveLimiter, async (req, res) => {
+  try {
+    if (await getSmsEnabled()) return res.status(409).json({ error: 'Los SMS están activos: verificá tu número con el código.', code: 'SMS_ON' });
+    const r = await _phoneConfirmNoSms(req.user.userId, req.body && req.body.phone, String((req.body && req.body.source) || 'retiro').slice(0, 20));
+    if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code });
+    res.json({ success: true, phone: r.phone, phoneVerified: false, noSms: true });
+  } catch (e) { logger.error(`confirm-nosms: ${e.message}`); res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.post('/api/auth/verify-phone/send-otp', authMiddleware, sensitiveLimiter, smsIpLimiter, async (req, res) => {
   try {
     const { phone } = req.body || {};
@@ -7727,6 +7753,11 @@ app.post('/api/auth/verify-phone/send-otp', authMiddleware, sensitiveLimiter, sm
       });
     }
 
+    if (!(await getSmsEnabled())) { // #1028: sin SMS el número queda cargado y confirmado acá mismo; PHONE_ALREADY_OWN hace que la app vieja siga el retiro
+      const r = await _phoneConfirmNoSms(req.user.userId, normalizedPhone, 'retiro');
+      if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code });
+      return res.status(400).json({ success: false, code: 'PHONE_ALREADY_OWN', noSms: true, phone: normalizedPhone, error: 'Número guardado (sin SMS).' });
+    }
     const result = await generateAndSendOTP(normalizedPhone, 'verify-phone');
     if (!result.success) {
       return res.status(429).json({ error: result.error });
@@ -7790,6 +7821,7 @@ app.post('/api/auth/verify-phone/confirm', authMiddleware, sensitiveLimiter, asy
     user.phoneVerificationPending = false;
     user.smsConsent = true;
     await user.save();
+    _phoneLog(user, normalizedPhone, 'sms', 'perfil'); // #1028
     _dupAccountCheck(user, 'phone').catch(() => {}); // #992
 
     res.json({
@@ -13555,6 +13587,7 @@ async function initializeData() {
   // quickEntrySms queda como esté) y regalos de bienvenida sólo para publicidad y referidos (organicWelcomeGifts=false). El tilde del panel sigue mandando después.
   try { if (!(await getConfig('mig975OpenReg', null))) { await Config.set('registrationMode', 'quick', 'mig#975'); await Config.set('organicWelcomeGifts', false, 'mig#975'); await Config.set('mig975OpenReg', new Date().toISOString(), 'startup-migration'); logger.info('[mig975] registro abierto (entrada rápida) sin regalos de bienvenida para el orgánico'); } } catch (e) { logger.warn('[mig975] ' + e.message); }
   try { if (!(await getConfig('mig1022DupAds', null))) { const r = await User.updateMany({ role: 'user', duplicateOf: { $ne: null }, dupCleared: null, acquisitionCampaign: { $nin: [null, ''] } }, [{ $set: { acquisitionDupCampaign: '$acquisitionCampaign', acquisitionCampaign: null } }]); await Config.set('mig1022DupAds', new Date().toISOString(), 'mig#1022'); logger.info(`[mig1022] ${r.modifiedCount || 0} cuentas secundarias fuera de los números de publicidad`); } } catch (e) { logger.warn('[mig1022] ' + e.message); } // #1022
+  try { if (!(await getConfig('mig1028PhoneLog', null))) { const cur = User.find({ role: 'user', phone: { $nin: [null, ''] } }).select('id username phone phoneVerified createdAt').lean().cursor(); let buf = [], n = 0; for await (const u of cur) { buf.push({ userId: String(u.id), username: u.username || null, phone: String(u.phone).trim(), via: 'historico', source: u.phoneVerified ? 'verificado antes' : 'sin verificar', at: u.createdAt || new Date() }); if (buf.length >= 500) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; buf = []; } } if (buf.length) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; } await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); logger.info(`[mig1028] historial de números: ${n} números que ya estaban`); } } catch (e) { logger.warn('[mig1028] ' + e.message); } // #1028
   // #974: textos del extra por instalar y del cartel de primera carga: de "% EXTRA" a monto fijo y tope (sólo si siguen con el texto viejo).
   try { if (!(await getConfig('mig974WelcomeCaps', null))) {
     const r1 = await Command.updateOne({ name: '/sys_install_gift_offer', response: /\{pct\}%/ }, { $set: { response: "🎁 ¡{username}, instalando la app te regalamos *${monto} EXTRA en fichas*!\n\nEs un regalo por tu primera carga de ${carga}. Tenés {dias} días.\n\n👉 Podés instalarla ahora y cargarlo al instante, o seguir jugando y cargarlo después: te queda un botón abajo en la app. No perdés el ritmo." } });
@@ -14587,10 +14620,12 @@ app.get('/api/withdrawal/account', authMiddleware, async (req, res) => {
         alias: acc.alias || '',
         savedAt: acc.savedAt || null
       },
-      // #1027: con los SMS APAGADOS se responde phoneVerified:true para que también la app VIEJA (sin `smsOff`, decide pedir el celular antes de
-      // llamar al server) saltee el paso del SMS. Sólo afecta al modal de retiro: el registro del usuario no cambia.
-      phoneVerified: user.phoneVerified === true || !(await getSmsEnabled()),
-      smsOff: !(await getSmsEnabled()), // #1023: la app no pide verificar el teléfono para retirar
+      // #1028: con los SMS APAGADOS el celular sigue siendo obligatorio pero sin código. phoneVerified:true si YA tiene un número cargado (así la app
+      // VIEJA, que decide sola si pide el celular, no lo vuelve a pedir); sin número ⇒ false y la app pide el celular (la vieja lo guarda vía
+      // send-otp → PHONE_ALREADY_OWN; la nueva lo confirma en el cuadro con /api/auth/phone/confirm-nosms). El registro del cliente no cambia.
+      phoneVerified: user.phoneVerified === true || (!(await getSmsEnabled()) && !!user.phone),
+      phoneOnFile: !!user.phone,
+      smsOff: !(await getSmsEnabled()), // #1023/#1028
       phone: user.phone || user.whatsapp || null
     });
   } catch (error) {
@@ -14766,7 +14801,7 @@ async function _withdrawalRequestHandler(req, res) {
     // Para retirar, la cuenta debe tener el teléfono verificado por SMS.
     // El registro es sin SMS, pero el retiro siempre exige verificación.
     if (user.isBlocked === true || user.isActive === false) return res.status(403).json({ error: 'Tu cuenta no puede retirar en este momento. Escribinos por Soporte.', code: 'ACCOUNT_BLOCKED' }); // #954
-    if (user.phoneVerified !== true && !req._testBypass && (await getSmsEnabled())) { // #714: la prueba del tester no exige teléfono · #1023: con SMS apagado no se exige
+    if (user.phoneVerified !== true && !req._testBypass && ((await getSmsEnabled()) || !user.phone)) { // #714: el tester no · #1023/#1028: con SMS apagados alcanza con tener el celular cargado (sin código)
       return res.status(400).json({
         error: 'Para retirar tu premio necesitás verificar tu teléfono por SMS.',
         code: 'PHONE_VERIFICATION_REQUIRED'
@@ -22215,6 +22250,42 @@ app.use('/api/admin/inicio', authMiddleware, adminMiddleware, async (req, res, n
     if (pin) _pinCheck(req, false);
     return res.status(423).json({ error: 'INICIO está protegido con clave.', code: 'PIN_REQUIRED' });
   } catch (_) { return res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #1028 (owner): 📒 HISTORIAL DE NÚMEROS (panel, abajo de todo) con CLAVE PROPIA: Config['phoneLogPinHash'] (sha256; la carga el admin desde la
+// sección la primera vez — NUNCA en código ni docs). Header `x-phonelog-pin`. Lista username + número + fecha + cómo (SMS / sin SMS / histórico).
+let _phoneLogPinCache = { at: 0, hash: undefined };
+async function _phoneLogPinHash() { if (_phoneLogPinCache.hash !== undefined && Date.now() - _phoneLogPinCache.at < 60000) return _phoneLogPinCache.hash; let h = null; try { h = await getConfig('phoneLogPinHash', null); } catch (_) {} _phoneLogPinCache = { at: Date.now(), hash: h || null }; return _phoneLogPinCache.hash; }
+app.get('/api/admin/phone-log-pin', authMiddleware, adminMiddleware, async (req, res) => { res.json({ enabled: !!(await _phoneLogPinHash()), canEdit: req.user.role === 'admin' }); });
+app.post('/api/admin/phone-log-pin', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const pin = String((req.body && req.body.pin) || '').trim(), cur = String((req.body && req.body.current) || '').trim();
+    if (!/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
+    const h = await _phoneLogPinHash(); if (h && _sha(cur) !== h) return res.status(403).json({ error: 'La clave actual no coincide.' });
+    await Config.set('phoneLogPinHash', _sha(pin), req.user.username); _phoneLogPinCache = { at: 0, hash: undefined };
+    logger.info(`[phone-log] clave ${h ? 'cambiada' : 'creada'} por ${req.user.username}`);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.use('/api/admin/phone-log', authMiddleware, adminMiddleware, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const h = await _phoneLogPinHash(); if (!h) return res.status(428).json({ error: 'Creá la clave del historial de números.', code: 'PIN_SETUP' });
+    const pin = String(req.get('x-phonelog-pin') || '');
+    if (pin && _pinLocked(req)) return res.status(429).json({ error: 'Demasiados intentos con la clave. Esperá 15 minutos.', code: 'PIN_LOCKED' });
+    if (pin && _sha(pin) === h) { _pinCheck(req, true); return next(); }
+    if (pin) _pinCheck(req, false);
+    return res.status(423).json({ error: 'El historial de números está protegido con clave.', code: 'PIN_REQUIRED' });
+  } catch (_) { return res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.get('/api/admin/phone-log', async (req, res) => {
+  try {
+    const q = String((req.query && req.query.q) || '').trim().slice(0, 40); const limit = Math.min(1000, Math.max(20, Number(req.query.limit) || 300));
+    const f = {}; if (q) { const dig = q.replace(/\D/g, ''); f.$or = [{ username: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }]; if (dig.length >= 4) f.$or.push({ phone: { $regex: dig.split('').join('\\D*') } }); }
+    const rows = await PhoneLog.find(f).sort({ at: -1 }).limit(limit).select('userId username phone via source at').lean();
+    const total = await PhoneLog.estimatedDocumentCount();
+    res.json({ success: true, total, rows: rows.map((r) => ({ userId: r.userId, username: r.username, phone: r.phone, via: r.via, source: r.source, at: r.at })) });
+  } catch (e) { logger.warn('[phone-log] ' + e.message); res.status(500).json({ error: 'No se pudo cargar' }); }
 });
 // #971 COHORTES: de los que se registraron cada mes (últimos 6), cuántos cargaron alguna vez y cuántos cargaron en el mes 0, +1, +2, +3.
 let _inicioCohortCache = { at: 0, v: null };
