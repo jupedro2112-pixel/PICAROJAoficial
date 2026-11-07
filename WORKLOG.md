@@ -8,6 +8,16 @@
 
 ## Sesión 2026-11-07
 
+### #1029 — "Primera 100% y segunda 50% de corrido": diagnóstico y arreglo
+- Prueba del owner (usuario de landing): 1ª carga $1.000 → bono 100% ✅. Después aparecían dos "50%": (1) el EXTRA por instalar la app
+  ($1.000, que es el MONTO FIJO de $5.000 topeado a la carga) cuya nota interna decía "50% EXTRA… (50% de su primera carga)" por un texto
+  viejo; (2) el mensaje "¿SABÍAS QUE PODÉS OBTENER OTRO 50% EN TU PRÓXIMA CARGA? Sumate a la Comunidad…" = comando `/sys_recover_100`,
+  que se manda después de CADA carga (manual y hgcash) con el texto que había en la base. La 2ª carga ($2.000) entró SIN bono: ningún 50%
+  se acreditó de corrido. El bono de SEGUNDA carga (50%) sigue como pide el owner: 24 h después de la 1ª, con chat + push, vale 72 h.
+- Arreglos: nota interna del extra por instalar dice el monto fijo (no "50%"); one-shot `mig1029RecoverOff` vacía `/sys_recover_100` si
+  promete "otro X%" / "próxima carga" / "Comunidad" (se puede volver a escribir en COMANDOS; vacío = no se manda).
+
+
 ### 1028. SMS apagados: el celular sigue OBLIGATORIO para retirar (sin código, se confirma en el cuadro) + 📒 Historial de números con clave — PWA v661, admin SW v240 (2026-11-07)
 - **Owner:** "si se desactiva hace que todos los teléfonos queden verificados [#1027]; en vez de sacar todo, que completen el teléfono obligatorio
   pero sin SMS, preguntarle en el mismo cuadro si el teléfono está ok, y armá en el panel abajo de todo con clave un historial de números con el

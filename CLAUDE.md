@@ -373,6 +373,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **RETIROS EN PROCESO (#1014):** Pagos a confirmar muestra también los `paying` de +10 min; para esos sólo se CONSULTA al banco (nunca pagar/rechazar: hg puede haberlo enviado).
 - **UN RETIRO POR CLIENTE (#1008):** pagar un retiro llama `_closeOtherPayouts` (anula los otros pendientes seguros del cliente); un flujo nuevo
   que marque un retiro pagado tiene que llamarla. Pagos a confirmar muestra una tarjeta por cliente.
+- **MENSAJE TRAS CADA CARGA (#1029):** `/sys_recover_100` se manda después de TODA carga (manual y hgcash) si tiene texto; nunca prometer ahí
+  un % "en la próxima carga" (el 50% real es el de SEGUNDA carga, a las 24 h con aviso). Vacío = no se manda.
 - **BONOS SÓLO EN SLOTS (#1007):** los textos viejos aclaran "se juega en slots"; desde #1010 el owner pidió NO agregarlo en los avisos nuevos.
 - **OFICINA (#1013) ELIMINADA (#1015):** saturó la base al cambiar el día (armaba informes pesados en cada refresco). Nunca hacer cálculos pesados dentro de una ruta de lectura: sólo cron con lock.
 - **BANCO AUTOMÁTICO BLINDADO (#1012):** `getConfig` devuelve el default si la base falla ⇒ NUNCA leer→mezclar→guardar `Config['hgcash']` entero

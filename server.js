@@ -1974,7 +1974,9 @@ async function maybeOfferInstallGift(userIn, { amount, platform = null, source =
     const md = { kind: 'install_gift_offer', amount: gift, baseAmount: base, pct: cfg.fixedArs > 0 ? null : cfg.pct, expiresAt: expiresAt.toISOString() };
     await _sendUserSystemMessage(user, text, { metadata: md, push: { title: `🎁 $${vars.monto} extra por instalar la app`, body: `Instalá la app y cargá $${vars.monto} extra en fichas.` } });
     await _emitAdminOnlyChatNote(user.id, user.username,
-      `🎁 ${cfg.pct}% EXTRA por instalar la app OFRECIDO: $${vars.monto} (${cfg.pct}% de su primera carga de $${vars.carga}; tope $${cfg.capArs.toLocaleString('es-AR')}). Vence en ${cfg.days} días. Se acredita SOLA cuando reclama desde la app instalada: no hay que hacer nada.`
+      (cfg.fixedArs > 0 // #1029: con monto fijo la nota decía "50%" y confundía (parecía un bono del 50% de corrido)
+        ? `🎁 EXTRA por instalar la app OFRECIDO: $${vars.monto} (monto fijo de $${cfg.fixedArs.toLocaleString('es-AR')}, nunca más que su primera carga de $${vars.carga}). Vence en ${cfg.days} días.`
+        : `🎁 ${cfg.pct}% EXTRA por instalar la app OFRECIDO: $${vars.monto} (${cfg.pct}% de su primera carga de $${vars.carga}; tope $${cfg.capArs.toLocaleString('es-AR')}). Vence en ${cfg.days} días.`) + ` Se acredita SOLA cuando reclama desde la app instalada: no hay que hacer nada.`
     ).catch(() => {});
     logger.info(`[install-gift] ofrecida user=${user.username} gift=$${gift} base=$${base} via=${source || '?'}`);
     return true;
@@ -13442,6 +13444,13 @@ async function initializeData() {
       if (w3 && /Para cargar usá la \*Carga automática\* de arriba/.test(String(w3.response || ''))) { await Command.updateOne({ name: '/sys_welcome' }, { $set: { response: SUPPORT_WELCOME_TEXT } }); console.log('✅ /sys_welcome: "ya te respondemos en breve" (#599)'); }
       const r100 = await Command.findOne({ name: '/sys_recover_100' }).lean();
       if (r100 && /reclamar el 100%/.test(String(r100.response || ''))) { await Command.updateOne({ name: '/sys_recover_100' }, { $set: { response: '' } }); console.log('✅ /sys_recover_100 vaciado (#599)'); }
+      // #1029 (owner 2026-11-07): ese comando se manda después de CADA carga y en producción tenía "¿SABÍAS QUE PODÉS OBTENER OTRO 50% EN TU
+      // PRÓXIMA CARGA? Sumate a la Comunidad…" ⇒ parecía un 50% de corrido tras la 1ª carga. El 50% real es el de SEGUNDA carga (24 h, con aviso).
+      if (!(await getConfig('mig1029RecoverOff', null))) {
+        const r = await Command.updateOne({ name: '/sys_recover_100', response: { $regex: /OTRO\s+\d+\s*%|PR[OÓ]XIMA CARGA|Comunidad/i } }, { $set: { response: '' } });
+        await Config.set('mig1029RecoverOff', new Date().toISOString(), 'startup-migration');
+        if (r && r.modifiedCount) console.log('✅ /sys_recover_100 vaciado (#1029): prometía otro % en la próxima carga después de cada carga');
+      }
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
     // #273 (owner 2026-10-17): "agregá 33 reseñas y que en total promedie 4,7 estrellas". Se siembran UNA
   // vez (flag en Config) como reseñas aprobadas: 26×5 + 4×4 + 3×3 = 155 puntos / 33 = 4,70. Usuarios
