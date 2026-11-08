@@ -162,7 +162,8 @@
     function _toastShort() { try { VIP.ui.showToast('📸 Comprobante ENTERO: titular, CUIT, fecha y hora, monto y N° de operación. Si no se ven, no se acredita.', 'info'); } catch (_) {} }
     function pickReceipt(source) {
         const force = _lsGet(RG_FORCE) === '1';
-        if (_inCasino() || (_lsGet(RG_OFF) === '1' && !force)) {
+        // #1032: dentro del casino la guía también se muestra (se mueve adentro del overlay, ver guideOpen); si igual no se ve, selector directo.
+        if (_lsGet(RG_OFF) === '1' && !force) {
             _toastShort();
             _openPicker();
             return;
@@ -177,15 +178,33 @@
             return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && r.top < (window.innerHeight || 99999) && r.bottom > 0;
         } catch (_) { return true; }
     }
+    // #1032 (owner: "el cartel aparecía afuera del menú de Girox"): el overlay del casino (#casinoOverlay, z-index 99999 sobre toda la app)
+    // tapaba la ventana. Con el casino abierto la ventana se MUEVE adentro del overlay mientras está abierta y vuelve a su lugar al cerrar.
+    let _rgHome = null;
+    function _rgMoveIn(m) {
+        try {
+            const ov = document.getElementById('casinoOverlay');
+            if (!_inCasino() || !ov || m.parentNode === ov) return;
+            if (!_rgHome) _rgHome = { parent: m.parentNode, next: m.nextSibling };
+            ov.appendChild(m);
+        } catch (_) {}
+    }
+    function _rgMoveBack(m) {
+        try {
+            if (!_rgHome || !m || m.parentNode === _rgHome.parent) return;
+            if (_rgHome.next && _rgHome.next.parentNode === _rgHome.parent) _rgHome.parent.insertBefore(m, _rgHome.next); else _rgHome.parent.appendChild(m);
+        } catch (_) {}
+    }
     function guideOpen(source) {
         _rgSource = source || '';
         const cb = _el('rgSkip'); if (cb) cb.checked = false;
         const m = _el('rcptGuideModal');
         if (!m) { _toastShort(); _openPicker(); return; }
+        _rgMoveIn(m);
         try { VIP.ui.showModal('rcptGuideModal'); } catch (_) { m.classList.remove('hidden'); }
         if (!_modalVisible(m)) { guideClose(); _toastShort(); _openPicker(); }
     }
-    function guideClose() { try { VIP.ui.hideModal('rcptGuideModal'); } catch (_) {} }
+    function guideClose() { try { VIP.ui.hideModal('rcptGuideModal'); } catch (_) {} try { _rgMoveBack(_el('rcptGuideModal')); } catch (_) {} }
     // "Elegir la foto": guarda la preferencia, limpia el forzado y abre el selector EN EL MISMO toque (iOS exige gesto del usuario).
     function guideGo() {
         const cb = _el('rgSkip'); if (cb && cb.checked) _lsSet(RG_OFF, '1');

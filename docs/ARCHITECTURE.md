@@ -990,6 +990,12 @@ VIPCARGAS con su JWT, y el cliente nunca más necesita conocer su clave del casi
   → slot del día → pool (`ACTIVE_KEYS` + `ACTIVE_THEMES`: favoritos, semana, fueguito, sorteos sólo con `ctx.sorteosOn`) con 3-4 redacciones por tema;
   "juegos" rota 3 fotos por día (`GAME_PHOTOS`). Links nuevos de historias en `stories.js`: `app:fueguito`, `app:sorteos`. Un tema nuevo va a THEMES /
   ACTIVE_THEMES + ALTS y, si lleva dibujo propio, a `_glyph` (estilo page) e `ICONS` (premium). Test `scripts/test-story-segments.js`.
+  **#1032 (2026-11-08) — INICIO con cargar/retirar adentro:** en modo `play` el bloque `#pvActions` (index.html, fuera de `#entryView`) tiene
+  ¿Dónde jugás? plegable (`pvFold('plats')`, chips `#pvPlats` pintados por `_pvPaint`, misma lógica que `_basicPaint`), CARGÁ AQUÍ (`#evCtaTop`, panel
+  `#pvLoadPanel`) y RETIRAR (`#pvWdBtn`, panel `#pvWdPanel`) desplegables con `playToggle` (uno a la vez; caché `_bvCbu` compartida con el básico) y
+  la explicación `#pvSvcHead` → `#entryServices` plegable (`vip_pv_fold`). `autoTap` en play despliega el panel. Ya nada del Inicio salta a `'full'`
+  (el home viejo `#homeFull` sigue existiendo para el menú intermedio). La guía del comprobante se mueve adentro de `#casinoOverlay` mientras el
+  casino está abierto (`_rgMoveIn/_rgMoveBack`): cualquier ventana nueva que deba verse dentro del casino tiene que hacer lo mismo o vivir en el overlay.
   **#1030 (2026-11-08) — GUÍA ANTES DE ADJUNTAR (PWA):** TODOS los caminos para adjuntar (botones "Comprobante aquí" / `autoload.sendReceipt`,
   clip del chat en app.js, tarjeta CBU `chat.attachFromCard`, acceso rápido 'comprobante' de ui.js) pasan por `VIP.autoload.pickReceipt(source)`:
   abre `#rcptGuideModal` (3 pasos + ejemplo SVG "así sí / así no" + lista de datos) y "📎 Elegir la foto" (`guideGo`) abre `#fileInput` en el

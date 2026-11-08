@@ -358,6 +358,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **HISTORIAS: PARTIDOS con LLAVE (#909, 2026-10-24):** los partidos del día salen sólo con `Config['storyAutoMatches']` (panel → Historias
   automáticas → ⚽; #968: ENCENDIDA por pedido del owner el 2026-10-24). Rotación de temas: cursor ×5 por día +
   redacciones alternativas `ALTS` (un tema nuevo va a `THEMES` y a `ALTS`). Cada historia se publica aislada; diagnóstico `Config['storyAutoDiag']`.
+- **INICIO CON CARGAR/RETIRAR ADENTRO (#1032):** en el menú completo (`play`) CARGÁ AQUÍ y RETIRAR son paneles desplegables (`#pvActions`, `playToggle`);
+  nada del Inicio salta a `setHomeMode('full')`. Una ventana (`.modal`) que deba verse con el casino abierto se mueve adentro de `#casinoOverlay` (ver `_rgMoveIn`).
 - **GUÍA ANTES DE ADJUNTAR EL COMPROBANTE (#1030, 2026-11-08):** todo botón que adjunte un comprobante llama `VIP.autoload.pickReceipt(src)`
   (muestra `#rcptGuideModal` con 3 pasos + ejemplo y abre `#fileInput` en el mismo toque), nunca `fileInput.click()` directo. Los avisos
   `receipt_unreadable`/`receipt_to_agent` del chat llevan el botón "Reenviar el comprobante bien" (`guideOpen('resend')`).

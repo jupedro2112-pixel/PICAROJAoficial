@@ -8,6 +8,21 @@
 
 ## Sesión 2026-11-08
 
+### 1032. INICIO (menú completo): ¿Dónde jugás? plegable + CARGÁ AQUÍ / RETIRAR desplegables + explicación resumible; guía del comprobante adentro del casino — PWA v665 (2026-11-08)
+- **Owner:** "que en todos los menús tengan el botón de retiro y recarga por separado; sacar donde te lleva de menú completo a cargar y retirar y que
+  esté todo en el menú completo: elegir plataforma, poder minimizar eso, cargar, retirar y la explicación también que se pueda resumir".
+- **Inicio (modo play):** el botón "⚡ CARGÁ AHORA" que saltaba al home viejo (`setHomeMode('full')`) se reemplazó por el bloque `#pvActions`:
+  cabecera plegable "🎰 ¿Dónde jugás?" (`pvFold('plats')`, chips `#pvPlats` con la misma pinta del básico; plegada muestra "Jugás en Girox · tocá para
+  cambiar") · **CARGÁ AQUÍ** (`#evCtaTop`, conserva el id: `_paintFirstLoad` y la guía de 1ª carga siguen pintándolo) con panel `#pvLoadPanel` (alias /
+  CBU / titular con Copiar, pasos, nota de 1ª carga, Adjuntar comprobante) · **RETIRAR** (`#pvWdBtn`) con panel `#pvWdPanel` (mínimo, pasos, "Retirar
+  ahora" → modal de retiro). Uno abierto a la vez (`playToggle`), INICIO los cierra (`_pvClose`). "Carga auto" de la barra (`autoTap`) en el Inicio
+  despliega CARGÁ AQUÍ en vez de saltar. La explicación "Todo lo que ofrecemos" es un botón plegable (`pvFold('svc')`). Lo plegado se recuerda en
+  `localStorage vip_pv_fold`. Se repinta al cargar /api/platforms. El básico queda igual (comparte `_bvCbu`).
+- **Guía del comprobante en el casino:** la causa del #1031 era el overlay `#casinoOverlay` (z-index 99999, fixed) que tapaba la ventana (el contenedor
+  de la app queda debajo). Ahora, con el casino abierto, `guideOpen` MUEVE `#rcptGuideModal` adentro del overlay y `guideClose` lo devuelve a su lugar;
+  la guía vuelve a mostrarse también en Girox directo / Carga rápida. Sigue el fallback: si no queda visible, selector directo.
+- Sin node_modules: validado con `node --check`. Probar en producción: Inicio (plegar/desplegar, Copiar alias, Adjuntar) y la guía dentro del casino.
+
 ### 1031. URGENTE: la guía del comprobante salía fuera del casino (Girox directo) y el botón parecía no andar — PWA v664 (2026-11-08)
 - **Owner:** "el cartel está apareciendo afuera del menú de Girox cuando estás en ese menú, error grave; la gente no ve el cartel cuando quiere
   adjuntar y parece que el botón no funciona".

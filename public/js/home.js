@@ -134,6 +134,7 @@
             try { const i = _el('messageInput'); if (i) i.blur(); } catch (_) {}
             renderEntryTabs();
             _entryLoad();
+            try { _pvPaint(); } catch (_) {} // #1032: plataformas + mínimos del Inicio
             try { if (_el('evFavs')) _favLoad(); } catch (_) {} // #840
         } else if (mode === 'easy' || mode === 'basic') {
             _entryUnload();
@@ -191,6 +192,7 @@
         try {
             const lp = _el('bvLoadPanel'), wp = _el('bvWdPanel'); const lb = document.querySelector('#basicView .bv-load'), wb = document.querySelector('#basicView .bv-wd');
             if (lp) lp.hidden = true; if (wp) wp.hidden = true; if (lb) lb.setAttribute('aria-expanded', 'false'); if (wb) wb.setAttribute('aria-expanded', 'false');
+            _pvClose(); // #1032
         } catch (_) {}
         setHomeMode(_modeFor(getMenuPref()));
         _afterPref(getMenuPref()); // #670: con Girox directo, Inicio vuelve a abrir la plataforma
@@ -233,6 +235,7 @@
     // #512: MENÚ BÁSICO — saludo + saldo, CARGAR, RETIRAR, chips de plataforma (fija la preferida) y "Entrar a jugar".
     // #636: usuario con logo en la franja del saldo del completo
     function _paintBsUser() { try { const u = VIP.state && VIP.state.currentUser && VIP.state.currentUser.username; const b = _el('bsUserName'); if (b) b.textContent = u || '—'; } catch (_) {} }
+    let _bvCbu = null; // caché de alias/CBU (básico e Inicio, #1032)
     function _basicPaint() {
         _paintBsUser();
         try { const u = VIP.state && VIP.state.currentUser && VIP.state.currentUser.username; const h = _el('basicHello'); if (h) h.textContent = u || 'Hola'; } catch (_) {} // #627: sólo el nombre, con el ícono 👤
@@ -245,13 +248,69 @@
     async function basicPick(id, isSoon) {
         if (isSoon) { try { VIP.ui.showToast('Pronto: esta plataforma se habilita en breve', 'info'); } catch (_) {} return; }
         try { await setPreferred(id); } catch (_) {}
-        _basicPaint();
+        _basicPaint(); try { _pvPaint(); } catch (_) {}
     }
-    // #516: paneles desplegables del básico (uno abierto a la vez); al abrir CARGAR se cargan CBU/alias y mínimos
-    let _bvCbu = null;
+    // ---------------- #1032: INICIO (completo) con ¿Dónde jugás? plegable + CARGÁ AQUÍ / RETIRAR desplegables + explicación resumible ----------------
+    const PV_FOLD_KEY = 'vip_pv_fold'; // {plats:bool, svc:bool} = abierto/cerrado, se recuerda en el teléfono
+    function _pvFoldGet() { try { return JSON.parse(localStorage.getItem(PV_FOLD_KEY) || '{}') || {}; } catch (_) { return {}; } }
+    function _pvFoldApply() {
+        const f = _pvFoldGet();
+        const ph = _el('pvPlatsHead'), pb = _el('pvPlats'), sh = _el('pvSvcHead'), sb = _el('entryServices');
+        const platsOpen = f.plats !== false, svcOpen = f.svc !== false;
+        if (ph) ph.setAttribute('aria-expanded', platsOpen ? 'true' : 'false'); if (pb) pb.hidden = !platsOpen;
+        if (sh) sh.setAttribute('aria-expanded', svcOpen ? 'true' : 'false'); if (sb) sb.hidden = !svcOpen;
+    }
+    function pvFold(key) {
+        const f = _pvFoldGet(); const cur = f[key] !== false; f[key] = !cur;
+        try { localStorage.setItem(PV_FOLD_KEY, JSON.stringify(f)); } catch (_) {}
+        _pvFoldApply();
+    }
+    function _pvPaint() {
+        const box = _el('pvPlats'); if (!box) return;
+        const defId = (_platforms && _platforms.defaultPlatform) || 'girox'; const pref = (_platforms && _platforms.preferredPlatform) || null;
+        const soon = (p) => p.connected === false && p.id !== defId && p.id !== 'girox';
+        const list = _withPicaroja(_entryList());
+        box.innerHTML = list.map((p) => { const on = pref ? pref === p.id : p.id === defId; return '<button type="button" class="bv-chip plat-' + _esc(p.id) + (on ? ' on' : '') + (soon(p) ? ' soon' : '') + '" onclick="VIP.home.pvPick(\'' + _esc(p.id) + '\',' + (soon(p) ? 'true' : 'false') + ')">' + (p.logoUrl ? '<img src="' + _esc(p.logoUrl) + '" alt="">' : '') + '<b>' + _esc(/^jugaygana$/i.test(p.name || '') ? 'Jugaygana' : (p.name || p.id)) + '</b>' + (soon(p) ? '<small>Pronto</small>' : (on ? '<small>✓</small>' : '')) + '</button>'; }).join('');
+        // Cabecera: con el bloque plegado se ve cuál está elegida
+        try { const chosen = list.find((p) => (pref ? pref === p.id : p.id === defId)); const sub = _el('pvPlatsSub'); if (sub) sub.textContent = chosen ? ('Jugás en ' + (/^jugaygana$/i.test(chosen.name || '') ? 'Jugaygana' : (chosen.name || chosen.id)) + ' · tocá para cambiar') : 'Elegí la plataforma'; } catch (_) {}
+        try { const md = _platforms && _platforms.minDepositArs; if (md > 0) { const e = _el('pvMinDep'); if (e) e.textContent = _m$(md); } const mw = _platforms && _platforms.withdrawMinArs; if (mw > 0) { ['pvMinWd', 'pvMinWdTag'].forEach((id) => { const e2 = _el(id); if (e2) e2.textContent = _m$(mw); }); } } catch (_) {}
+        _pvFoldApply();
+    }
+    async function pvPick(id, isSoon) {
+        if (isSoon) { try { VIP.ui.showToast('Pronto: esta plataforma se habilita en breve', 'info'); } catch (_) {} return; }
+        try { await setPreferred(id); } catch (_) {}
+        _pvPaint(); try { _basicPaint(); } catch (_) {}
+    }
+    function _pvClose() {
+        const lp = _el('pvLoadPanel'), wp = _el('pvWdPanel'), lb = _el('evCtaTop'), wb = _el('pvWdBtn');
+        if (lp) lp.hidden = true; if (wp) wp.hidden = true; if (lb) lb.setAttribute('aria-expanded', 'false'); if (wb) wb.setAttribute('aria-expanded', 'false');
+    }
+    // Uno abierto a la vez; al abrir CARGAR se traen alias/CBU (misma caché _bvCbu del básico) y se pintan las notas de 1ª carga.
+    async function playToggle(which) {
+        const lp = _el('pvLoadPanel'), wp = _el('pvWdPanel'), lb = _el('evCtaTop'), wb = _el('pvWdBtn');
+        if (!lp || !wp) return;
+        const openLoad = which === 'load' ? lp.hidden : false, openWd = which === 'wd' ? wp.hidden : false;
+        lp.hidden = !openLoad; wp.hidden = !openWd; if (lb) lb.setAttribute('aria-expanded', openLoad ? 'true' : 'false'); if (wb) wb.setAttribute('aria-expanded', openWd ? 'true' : 'false');
+        if (openLoad) {
+            if (!_bvCbu) { try { const r = await fetch(VIP.config.API_URL + '/api/config/cbu', { headers: { Authorization: 'Bearer ' + VIP.state.currentToken } }); if (r.ok) _bvCbu = await r.json(); } catch (_) {} }
+            const c = _bvCbu || {}; const set = (id, v) => { const e = _el(id); if (e) e.textContent = v || 'no disponible'; };
+            set('pvAlias', c.alias); set('pvCbu', c.number || c.cbu); set('pvTitular', c.titular); set('pvBank', c.bank);
+            try { _fdNotesPaint(); } catch (_) {}
+            try { if (VIP.pixel && VIP.pixel.enabled) VIP.pixel.track('InitiateCheckout', { content_name: 'home_load_panel' }); } catch (_) {}
+            setTimeout(() => { try { lp.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {} }, 50);
+        }
+        if (openWd) setTimeout(() => { try { wp.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {} }, 50);
+    }
+    // #516: paneles desplegables del básico (uno abierto a la vez); al abrir CARGAR se cargan CBU/alias y mínimos (_bvCbu se declara arriba, #1032)
     // #583 (owner): en el menú BÁSICO, "Carga auto" expande el panel de CARGAR (alias, CBU, pasos) en la MISMA pantalla; en los
     // otros menús va al inicio completo (carga automática), como siempre.
     function autoTap() {
+        // #1032 (owner): en el Inicio (completo) "Carga auto" despliega CARGÁ AQUÍ acá mismo, sin saltar al home viejo.
+        if (_homeMode === 'play' && _el('pvLoadPanel')) {
+            if (_el('pvLoadPanel').hidden) playToggle('load');
+            try { setTimeout(() => { const el = _el('pvLoadPanel'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 150); } catch (_) {}
+            return;
+        }
         if (_homeMode === 'basic') {
             const lp = _el('bvLoadPanel');
             if (lp && lp.hidden) basicToggle('load');
@@ -2149,6 +2208,7 @@
             if (!r.ok) return _platforms;
             _platforms = await r.json();
             try { _paintPlatNav(); } catch (_) {} // #620
+            try { if (_homeMode === 'play') _pvPaint(); } catch (_) {} // #1032: chips y mínimos del Inicio con los datos reales
             _platformsAt = Date.now();
         } catch (_) {}
         return _platforms;
@@ -2852,7 +2912,8 @@
         }
     } catch (_) {}
 
-    VIP.home = { supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+    VIP.home = {
+        playToggle, pvFold, pvPick, // #1032 supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,
