@@ -27767,10 +27767,19 @@ async function _storyAutoCtx(dayKey) {
       winners = rows.filter((r) => !bad.has(r._id) && !/test|prueba/i.test(r.username || '')).slice(0, 3).map((r) => ({ username: r.username, amount: Math.round(r.amount) }));
     } catch (_) {}
     let games = []; try { games = await storyAuto.popularSlots(); } catch (_) {}
-    act = { dayKey, winners, games };
+    // #1030 (owner: "de cuál premio se pagó grande"): el retiro más alto pagado en los últimos 7 días (sin bloqueados / secundarias / observación / pruebas).
+    let weekTop = null;
+    try {
+      const rows = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: new Date(d1.getTime() - 7 * 86400000), $lt: d1 }, amount: { $gte: 10000 } } }, { $sort: { amount: -1 } }, { $limit: 8 }, { $project: { userId: 1, username: 1, amount: 1 } }]);
+      const bad = new Set((await User.find({ id: { $in: rows.map((r) => r.userId) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudReview.status': 'watch' }] }).select('id').lean()).map((u) => u.id));
+      const r = rows.find((x) => !bad.has(x.userId) && !/test|prueba/i.test(x.username || ''));
+      if (r) weekTop = { username: r.username, amount: Math.round(r.amount) };
+    } catch (_) {}
+    act = { dayKey, winners, games, weekTop };
     try { await Config.set('storyActiveCtx', act, 'historias-auto'); } catch (_) {}
   }
-  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: [3], rolloverX, winners: act.winners || [], games: act.games || [] }; // #968 · #978: SEMANAL (miércoles), fuerte
+  let sorteosOn = false; try { sorteosOn = (await _sorteosCfg()).enabled === true; } catch (_) {} // #1030: historia del sorteo sólo si está encendido
+  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: [3], rolloverX, winners: act.winners || [], games: act.games || [], weekTop: act.weekTop || null, sorteosOn }; // #968 · #978: SEMANAL (miércoles), fuerte
 }
 // #909 (owner 2026-10-23: "no vamos a publicar aún los partidos de fútbol, quiero ir primero con publicaciones explicando la app"):
 // los PARTIDOS del día salen sólo con la llave `Config['storyAutoMatches']` encendida (panel → Historias automáticas → ⚽ Partidos).

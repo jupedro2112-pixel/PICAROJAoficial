@@ -8,6 +8,21 @@
 
 ## Sesión 2026-11-08
 
+### 1030-b. HISTORIAS: "cómo mandar el comprobante" fija + rotación más novedosa para los ACTIVOS — PWA v663, admin SW v242 (2026-11-08)
+- **Owner:** "importante agregar en las historias explicación en 1 historia de cómo subir el comprobante bien detallado" y "rotación de historias para
+  clientes ya activos: fotos más novedosas, cuál premio se pagó grande, juego del día, de la semana, explicación; para los nuevos el servicio; una vez
+  activo, historias más novedosas que les guste ver sin que canse siempre lo mismo".
+- **Comprobante (`storyAutopilot.js`, tema `comprobante` + 2 redacciones en `ALTS`):** texto detallado (3 pasos, datos que tienen que verse, qué pantalla
+  no sirve) con foto propia (`icon:'comprobante'`, glyph nuevo en `storyImage._glyph` + `ICONS`). NUEVOS: fija TODOS los días en el 2º lugar (después de
+  Soporte), fuera del rotativo. ACTIVOS: cada 3 días (`dayN % 3`), redacción rotando.
+- **Activos, más novedad (`planActive`):** Soporte (ahora 4 redacciones) · 🏆 ganadores de AYER o, si no hubo, 💰 **PREMIO GRANDE de la semana**
+  (`ctx.weekTop`: retiro más alto pagado en 7 días, `_storyAutoCtx`, sin bloqueados/secundarias/observación/pruebas, nombre tapado; kind `premio`) ·
+  🎰 slot del día · pool con temas nuevos **🔥 fueguito** (link `app:fueguito` → `VIP.fire.showFireModal`) y **🎟️ sorteos** (sólo con `ctx.sorteosOn` =
+  `Config['sorteos'].enabled`; link `app:sorteos` → `VIP.sorteos.open('mensual')`) + 3-4 redacciones por tema (reembolso, vip, referidos, juegos, deportes,
+  retiro, misiones) · el tema "juegos" cambia las 3 FOTOS según el día (`GAME_PHOTOS` del repo + catálogo). Glyphs nuevos `fuego` y `ticket`.
+- Panel → Cronograma → Historias automáticas: el texto explica qué ve cada segmento. Tests `scripts/test-story-segments.js` 17/17 (8 casos nuevos).
+  Fotos verificadas con inkscape (comprobante, fueguito, sorteo, premio). `STORY_IMG_VER` no cambia (las historias viejas no cambian de dibujo).
+
 ### 1030. GUÍA con ejemplo antes de adjuntar el comprobante + botón "Reenviar" en el aviso de ilegible — PWA v662 (2026-11-08)
 - **Owner:** "en adjuntar comprobante mandan mal la foto muchas veces y traba la atención: antes de subir la foto dar una explicación breve de cómo
   compartirla y un ejemplo, sin que trabe la forma de avanzar; y si la carga mal que le avise que envíe bien su comprobante, detallando qué se

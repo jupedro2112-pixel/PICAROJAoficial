@@ -108,7 +108,22 @@ const ICONS = {
   juegos: (o) => slotMachine(o && o.gameName),
   deportes: () => `<circle cx="${cx}" cy="${cy}" r="150" fill="#fff" stroke="${BLACK}" stroke-width="10"/><polygon points="${cx},${cy - 55} ${cx + 52},${cy - 17} ${cx + 32},${cy + 45} ${cx - 32},${cy + 45} ${cx - 52},${cy - 17}" fill="${BLACK}"/>` +
     [[0, -150], [143, -46], [88, 121], [-88, 121], [-143, -46]].map(([dx, dy]) => `<line x1="${cx + dx * .37}" y1="${cy + dy * .37}" x2="${cx + dx * .86}" y2="${cy + dy * .86}" stroke="${BLACK}" stroke-width="10"/>`).join(''),
-  regalo: (o) => gift(o && o.badge)
+  regalo: (o) => gift(o && o.badge),
+  // #1030: comprobante completo (tarjeta con los datos y tilde verde) · fueguito (llama con "×N") · ticket del sorteo
+  comprobante: () => `<rect x="${cx - 230}" y="${cy - 190}" width="400" height="380" rx="34" fill="#fff" stroke="${BLACK}" stroke-width="6"/>` +
+    `<text x="${cx - 30}" y="${cy - 135}" text-anchor="middle" font-family="${FONT}" font-size="26" font-weight="800" fill="${BLACK}">COMPROBANTE</text>` +
+    `<line x1="${cx - 200}" y1="${cy - 112}" x2="${cx + 140}" y2="${cy - 112}" stroke="${GRAY}" stroke-width="4"/>` +
+    [['Titular', 'Juan Pérez'], ['CUIT', '20-12345678-9'], ['Fecha y hora', '08/11 · 14:32'], ['Monto', '$ 5.000'], ['N° operación', '48213977']].map(([l, v], i) => { const y = cy - 80 + i * 52;
+      return `<text x="${cx - 200}" y="${y}" font-family="${FONT}" font-size="20" font-weight="700" fill="${MUTED}">${l.toUpperCase()}</text><text x="${cx + 140}" y="${y}" text-anchor="end" font-family="${FONT}" font-size="${i === 3 ? 30 : 23}" font-weight="900" fill="${i === 3 ? RED : BLACK}">${v}</text>`; }).join('') +
+    `<circle cx="${cx + 190}" cy="${cy + 150}" r="68" fill="${GREEN}"/><path d="M${cx + 158},${cy + 150} l22,22 l44,-48" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>`,
+  fuego: () => `<path d="M${cx},${cy - 190} C${cx + 40},${cy - 110} ${cx + 150},${cy - 90} ${cx + 150},${cy + 30} A150,150 0 0 1 ${cx - 150},${cy + 30} C${cx - 150},${cy - 60} ${cx - 60},${cy - 90} ${cx - 40},${cy - 150} C${cx - 20},${cy - 110} ${cx},${cy - 120} ${cx},${cy - 190} Z" fill="${RED}"/>` +
+    `<path d="M${cx},${cy - 60} C${cx + 20},${cy - 20} ${cx + 80},${cy - 10} ${cx + 80},${cy + 60} A80,80 0 0 1 ${cx - 80},${cy + 60} C${cx - 80},${cy + 10} ${cx - 30},${cy - 10} ${cx},${cy - 60} Z" fill="#ffb703"/>` +
+    `<circle cx="${cx + 170}" cy="${cy - 130}" r="64" fill="${BLACK}"/><text x="${cx + 170}" y="${cy - 112}" text-anchor="middle" font-family="${FONT}" font-size="44" font-weight="900" fill="#fff">×3</text>`,
+  ticket: () => `<path d="M${cx - 260},${cy - 110} h520 a30,30 0 0 0 0,60 v100 a30,30 0 0 0 0,60 h-520 a30,30 0 0 0 0,-60 v-100 a30,30 0 0 0 0,-60 z" fill="${RED}"/>` +
+    `<line x1="${cx + 90}" y1="${cy - 95}" x2="${cx + 90}" y2="${cy + 95}" stroke="#fff" stroke-width="5" stroke-dasharray="14 12"/>` +
+    `<text x="${cx - 85}" y="${cy - 30}" text-anchor="middle" font-family="${FONT}" font-size="26" font-weight="800" fill="#ffd166">SORTEO DEL MES</text>` +
+    `<text x="${cx - 85}" y="${cy + 42}" text-anchor="middle" font-family="${FONT}" font-size="64" font-weight="900" fill="#fff">N° 0427</text>` +
+    `<text x="${cx + 175}" y="${cy + 12}" text-anchor="middle" font-family="${FONT}" font-size="54" font-weight="900" fill="#fff">🎟️</text>`
 };
 
 // Tarjeta de PARTIDO: cancha oscura con los dos escudos, VS, liga, hora y estadio.
@@ -200,6 +215,15 @@ function _glyph(kind, color) {
     regalo: `<rect x="${x - 86}" y="${c - 30}" width="172" height="124" rx="14" fill="#fff"/><rect x="${x - 100}" y="${c - 70}" width="200" height="50" rx="12" fill="#ffe7a8"/><rect x="${x - 15}" y="${c - 70}" width="30" height="164" fill="${color}"/><path d="M${x},${c - 70} C${x - 70},${c - 140} ${x - 110},${c - 80} ${x},${c - 70} C${x + 110},${c - 80} ${x + 70},${c - 140} ${x},${c - 70} Z" fill="none" stroke="#ffe7a8" stroke-width="14"/>`,
     como: wt('1·2·3', 74, 26),
     juegos: wt('777', 96, 34),
+    // #1030: comprobante (tarjeta con renglones y tilde verde) · fueguito (llama) · ticket del sorteo
+    comprobante: `<rect x="${x - 66}" y="${c - 100}" width="132" height="180" rx="16" fill="#fff"/>` +
+      [0, 1, 2, 3].map((i) => `<rect x="${x - 46}" y="${c - 72 + i * 34}" width="${i === 3 ? 56 : 92}" height="12" rx="6" fill="${color || RED}" opacity="${i === 3 ? 1 : .55}"/>`).join('') +
+      `<circle cx="${x + 56}" cy="${c + 66}" r="34" fill="${GREEN}" stroke="#fff" stroke-width="6"/><path d="M${x + 40},${c + 66} l11,11 l23,-25" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>`,
+    fuego: `<path d="M${x},${c - 108} C${x + 24},${c - 60} ${x + 86},${c - 48} ${x + 86},${c + 22} A86,86 0 0 1 ${x - 86},${c + 22} C${x - 86},${c - 30} ${x - 36},${c - 48} ${x - 24},${c - 84} C${x - 12},${c - 60} ${x},${c - 70} ${x},${c - 108} Z" fill="#fff"/>` +
+      `<path d="M${x},${c - 30} C${x + 12},${c - 6} ${x + 44},${c} ${x + 44},${c + 40} A44,44 0 0 1 ${x - 44},${c + 40} C${x - 44},${c + 12} ${x - 16},${c} ${x},${c - 30} Z" fill="${color || RED}"/>`,
+    ticket: `<path d="M${x - 100},${c - 60} h200 a18,18 0 0 0 0,36 v48 a18,18 0 0 0 0,36 h-200 a18,18 0 0 0 0,-36 v-48 a18,18 0 0 0 0,-36 z" fill="#fff"/>` +
+      `<line x1="${x + 40}" y1="${c - 50}" x2="${x + 40}" y2="${c + 50}" stroke="${color || RED}" stroke-width="4" stroke-dasharray="8 8"/>` +
+      `<text x="${x - 30}" y="${c + 14}" text-anchor="middle" font-family="${FONT}" font-size="40" font-weight="900" fill="${color || RED}">N°</text>`,
     deportes: `<circle cx="${x}" cy="${c}" r="98" fill="#fff"/><polygon points="${x},${c - 36} ${x + 34},${c - 11} ${x + 21},${c + 29} ${x - 21},${c + 29} ${x - 34},${c - 11}" fill="${DARK}"/>` +
       [[0, -98], [93, -30], [58, 79], [-58, 79], [-93, -30]].map(([dx, dy]) => `<line x1="${x + dx * .38}" y1="${c + dy * .38}" x2="${x + dx * .9}" y2="${c + dy * .9}" stroke="${DARK}" stroke-width="8"/>`).join('')
   };

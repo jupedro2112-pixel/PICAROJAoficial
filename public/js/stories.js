@@ -116,7 +116,10 @@
                 deportes: () => { if (VIP.ui.casinoGoTo && VIP.ui.casinoGoTo('/sports')) return; try { VIP.ui._casinoGamePath = '/sports'; } catch (_) {} VIP.home.openPlatform('girox', { embed: true }); }, // #854: mismo ingreso que favoritos
                 juegos: () => VIP.home.openPlatform('girox', { embed: true }),
                 retirar: () => { try { VIP.home.casinoWithdraw(); } catch (_) { VIP.withdraw.openWithdrawModal(); } },
-                vip: () => VIP.home.openVipLevels() }; // #646: verificar (Perfil → teléfono) y soporte
+                vip: () => VIP.home.openVipLevels(), // #646: verificar (Perfil → teléfono) y soporte
+                // #1030: historias de los activos — fueguito (racha) y sorteo del mes
+                fueguito: () => { try { VIP.fire.showFireModal(); } catch (_) { VIP.home.setHomeMode('full'); } },
+                sorteos: () => { try { VIP.sorteos.open('mensual'); } catch (_) { VIP.home.setHomeMode('full'); } } };
             const appKey = /^app:(\w+)$/i.exec(s.linkUrl || '');
             // #827: "app:play:/play/<agg>/<juego>" → casino directo en ESE juego (slot de la semana).
             const playPath = /^app:play:(\/play\/[\w.\/-]+)$/i.exec(s.linkUrl || '');

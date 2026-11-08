@@ -118,17 +118,28 @@ const THEMES = [
   { key: 'deportes', title: '⚽ Deportes en vivo', text: 'Fútbol argentino, Libertadores, Champions, Premier y mucho más. Apostá antes y durante el partido desde Deportes.', link: 'app:deportes', label: 'Ir a Deportes ›', bg: '#14532d', img: { style: 'page', accent: '#16a34a', kicker: 'Deportes', icon: 'deportes', h1: 'Apostá al fútbol en', h2: 'vivo', bullets: [['★', 'Fútbol argentino', 'Liga, Copa y la Selección'], ['✦', 'Copas internacionales', 'Libertadores, Champions y más'], ['✓', 'Antes y durante', 'Apostá mientras se juega']], cta: 'Ir a deportes' } },
   { key: 'app', title: '📲 Llevá Pica Roja en el celu', text: 'Instalá la app: entrás en un toque, te llegan los avisos de bonos y tenés todo a mano.', link: 'app:instalar', label: 'Instalar la app ›', bg: '#334155', img: { style: 'page', accent: '#e60023', kicker: 'Instalá la app', icon: 'app', h1: 'Llevá Pica Roja', h2: 'en tu celu', bullets: [['✓', 'Entrás en un toque', 'Con tu sesión iniciada'], ['★', 'Te avisamos todo', 'Cargas, retiros y bonos'], ['$', 'Regalos para la app', 'Bonos para los que la tienen']], cta: 'Instalar la app' } },
   { key: 'seguro', title: '🔒 Tu cuenta, segura', text: 'Verificación por SMS y retiros sólo a cuentas a tu nombre. Tu plata y tus datos, cuidados.', link: 'app:verificar', label: 'Verificar mi celular ›', bg: '#0c4a6e', img: { style: 'page', accent: '#0284c7', kicker: 'Tu cuenta, segura', icon: 'seguro', h1: 'Verificá tu', h2: 'teléfono', bullets: [['✓', 'Verificación por SMS', 'Sólo vos confirmás tus retiros'], ['$', 'Retiros a tu nombre', 'Sólo a cuentas tuyas'], ['★', 'Datos cuidados', 'Tu plata y tus datos protegidos']], cta: 'Verificar mi celular' } },
-  { key: 'primera', title: '🎁 Bienvenida para los nuevos', text: 'Si es tu primera carga, te sumamos un {pct}% extra automático. 🆕 Actualizado: el bono se juega sólo en SLOTS.', link: 'app:cargar', label: 'Hacer mi primera carga ›', bg: '#be123c', img: { style: 'page', accent: '#e60023', kicker: 'Bienvenida', icon: 'regalo', h1: 'Tu primera carga con', h2: '+{pct}% extra', bullets: [['$', '+{pct}% automático', 'En tu primera carga'], ['★', 'Después, más regalos', 'Instalando la app y activando notificaciones'], ['✓', 'Todos los días', 'Se suman jugadores nuevos']], cta: 'Hacer mi primera carga', note: 'El bono se juega ×{rx} (rollover) para retirarlo' } }
+  { key: 'primera', title: '🎁 Bienvenida para los nuevos', text: 'Si es tu primera carga, te sumamos un {pct}% extra automático. 🆕 Actualizado: el bono se juega sólo en SLOTS.', link: 'app:cargar', label: 'Hacer mi primera carga ›', bg: '#be123c', img: { style: 'page', accent: '#e60023', kicker: 'Bienvenida', icon: 'regalo', h1: 'Tu primera carga con', h2: '+{pct}% extra', bullets: [['$', '+{pct}% automático', 'En tu primera carga'], ['★', 'Después, más regalos', 'Instalando la app y activando notificaciones'], ['✓', 'Todos los días', 'Se suman jugadores nuevos']], cta: 'Hacer mi primera carga', note: 'El bono se juega ×{rx} (rollover) para retirarlo' } },
+  // #1030 (owner 2026-11-08): "importante: una historia que explique bien detallado cómo subir el comprobante". FIJA todos los días para los
+  // NUEVOS (2º lugar) y cada 3 días para los ACTIVOS. Sale del rotativo (`rot`) porque ya tiene su lugar.
+  { key: 'comprobante', title: '📸 Cómo mandar el comprobante', text: 'Para que tu carga entre SOLA, el comprobante tiene que leerse completo:\n1️⃣ App de tu banco o billetera → Movimientos.\n2️⃣ Tocá la transferencia → «Ver / Compartir comprobante».\n3️⃣ Mandá esa captura ENTERA, sin recortar.\nTiene que verse: titular, CUIT, fecha y hora, monto y N° de operación.', link: 'app:cargar', label: 'Cargar ahora ›', bg: '#9a3412', img: { style: 'page', accent: '#e60023', kicker: 'Cómo mandar el comprobante', icon: 'comprobante', h1: 'Que tu carga', h2: 'entre sola', bullets: [['1', 'App del banco → Movimientos', 'Tocá la transferencia que hiciste'], ['2', '«Ver / Compartir comprobante»', 'Captura ENTERA, sin recortar'], ['3', 'Que se vea todo', 'Titular, CUIT, fecha y hora, monto, N° op.']], cta: 'Cargar ahora', note: 'La pantalla «Transferencia realizada» NO sirve: no trae esos datos' } },
 ];
 // #1003 (owner 2026-11-01): "para los NUEVOS, historias informativas del servicio; para los que ya son ACTIVOS, más rotación de contenido
 // así no se cansan". NEW_KEYS = lo que ve quien todavía no cargó; los activos rotan por ACTIVE_KEYS + estos temas propios.
-const NEW_KEYS = ['como', 'carga', 'retiro', 'seguro', 'app', 'primera', 'reembolso'];
+const NEW_KEYS = ['como', 'carga', 'retiro', 'seguro', 'app', 'primera', 'reembolso', 'comprobante']; // #1030: comprobante (fija, 2º lugar)
 const ACTIVE_KEYS = ['reembolso', 'misiones', 'vip', 'referidos', 'juegos', 'deportes', 'favoritos', 'semana', 'retiro'];
 const ACTIVE_THEMES = [
   { key: 'favoritos', title: '⭐ Tus juegos, a un toque', text: 'En el Inicio tenés tus juegos favoritos: agregá los que más te gustan y entrá directo, sin buscar.', link: 'app:juegos', label: 'Ver mis juegos ›', bg: '#9d174d', img: { style: 'page', accent: '#e60023', kicker: 'Tus favoritos', icon: 'app', h1: 'Tus juegos', h2: 'a un toque', bullets: [['★', 'Armá tu lista', 'Desde el Inicio de la app'], ['✓', 'Entrás directo', 'Sin buscar el juego'], ['$', 'Cargá y jugá', 'Tus fichas al instante']], cta: 'Ver mis juegos' } },
+  // #1030 (owner): "para los activos historias más novedosas, que les guste verlas sin que canse": fueguito (racha con premio), sorteo con
+  // tickets (sólo si está encendido: ctx.sorteosOn) y el premio grande de la semana (ctx.weekTop, lo arma planActive).
+  { key: 'fueguito', title: '🔥 Fueguito: tu racha con premio', text: 'Cada carga suma un fueguito 🔥. Llegás al hito, cumplís el rollover y cobrás el premio del tramo. Mirá tu racha en la app: el fueguito está arriba, al lado del saldo.', link: 'app:fueguito', label: 'Ver mi fueguito ›', bg: '#9a3412', img: { style: 'page', accent: '#ea580c', kicker: 'Fueguito', icon: 'fuego', h1: 'Tu racha', h2: 'con premio', bullets: [['1', 'Cada carga suma', 'Un fueguito por carga'], ['2', 'Llegá al hito', 'Y cumplí el rollover del tramo'], ['$', 'Cobrás el premio', 'Se acredita en tu cuenta']], cta: 'Ver mi fueguito' } },
+  { key: 'sorteos', title: '🎟️ Sorteo del mes con tickets', text: 'Cada carga y cada día que jugás te dan tickets numerados para el sorteo del mes, y con tus puntos competís por el 2° y 3° premio. Anotate desde la app y mirá tus números.', link: 'app:sorteos', label: 'Ver el sorteo ›', bg: '#4c1d95', img: { style: 'page', accent: '#7c3aed', kicker: 'Sorteo del mes', icon: 'ticket', h1: 'Tus tickets', h2: 'para el sorteo', bullets: [['1', 'Tickets numerados', 'Por cargar y por jugar cada día'], ['2', 'Ranking de puntos', '2° y 3° premio por constancia'], ['✓', 'Transparente', 'El número ganador se publica con su huella']], cta: 'Ver el sorteo' } },
   { key: 'semana', title: '📅 Tu semana en Pica Roja', text: 'Misiones nuevas, reembolso semanal y el slot más jugado: entrá a la app y fijate qué tenés para esta semana.', link: 'app:misiones', label: 'Ver mi semana ›', bg: '#4c1d95', img: { style: 'page', accent: '#7c3aed', kicker: 'Esta semana', icon: 'misiones', h1: 'Tu semana', h2: 'con premios', bullets: [['🎯', 'Misiones nuevas', 'Se acreditan solas al cumplirlas'], ['%', 'Reembolso semanal', 'Parte de lo que jugaste vuelve'], ['★', 'Niveles VIP', 'Cada nivel trae su regalo']], cta: 'Ver mi semana' } }
 ];
 const ACTIVE_ALTS = {
+  fueguito: [{ title: '🔥 ¿Cómo va tu racha?', text: 'Cada carga prende un fueguito más. Entrá a la app y fijate cuánto te falta para el próximo premio del tramo.' },
+    { title: '🏁 Premio por constancia', text: 'El fueguito premia a los que siguen: llegá al hito, cumplí el rollover y el premio es tuyo. Mirá tu racha arriba del saldo.' }],
+  sorteos: [{ title: '🎲 ¿Ya tenés tus tickets?', text: 'Cada carga y cada día jugando suman tickets para el sorteo del mes. Mirá tus números en la app y anotate si todavía no lo hiciste.' },
+    { title: '🏆 El sorteo del mes se acerca', text: 'Tus tickets ya están numerados. Cuanto más jugás, más tenés. El 1° premio sale por sorteo público; el 2° y 3° por ranking.' }],
   favoritos: [{ title: '🎰 Entrá directo a tu juego', text: 'Guardá tus slots favoritos en el Inicio y abrilos en un toque cada vez que entrás.' }],
   semana: [{ title: '🗓️ ¿Qué tenés esta semana?', text: 'Revisá tus misiones, tu reembolso y tu nivel VIP: todo lo de la semana está en la app.' }]
 };
@@ -141,21 +152,32 @@ const ALTS = {
   carga: [{ title: '🕐 Cargá a cualquier hora', text: 'De día o de madrugada: transferís, mandás la foto y la carga entra sola en minutos. No dependés de nadie.' },
     { title: '📸 Una foto y listo', text: 'Sacale captura al comprobante y mandala por la app: el sistema la lee y acredita tus fichas automáticamente.' }],
   retiro: [{ title: '🏦 Tu premio, en tu banco', text: 'Pedí el retiro desde la app y la plata va a tu CBU a tu nombre. Simple, directo y seguro.' },
-    { title: '💸 Retirar es fácil', text: 'Entrá a Retirar premio, elegí el monto y listo: lo ves en tu cuenta bancaria. Sin trámites raros.' }],
+    { title: '💸 Retirar es fácil', text: 'Entrá a Retirar premio, elegí el monto y listo: lo ves en tu cuenta bancaria. Sin trámites raros.' },
+    { title: '⚡ Retiros automáticos', text: 'Pedís el retiro y el pago sale solo por banco, en minutos, a una cuenta a tu nombre. Te llega el comprobante al chat.' }],
   reembolso: [{ title: '🔁 Parte de lo que jugás, vuelve', text: 'Todos los días podés reclamar tu reembolso desde la app. Entrá a Reembolso y tocá reclamar.' },
-    { title: '🎯 ¿Ya reclamaste tu reembolso?', text: 'Cada día tenés un reembolso esperándote en la app. Se acredita al toque cuando lo reclamás.' }],
+    { title: '🎯 ¿Ya reclamaste tu reembolso?', text: 'Cada día tenés un reembolso esperándote en la app. Se acredita al toque cuando lo reclamás.' },
+    { title: '📆 Diario, semanal y mensual', text: 'Tenés tres reembolsos: el de ayer, el de la semana y el del mes. Los reclamás desde la app y se acreditan solos. No dejes ninguno sin cobrar.' }],
   soporte: [{ title: '💬 Hablá con una persona', text: 'Nuestro equipo te responde desde el chat de Soporte de la app, todos los días. Contanos qué pasó y lo resolvemos.' },
-    { title: '🛟 ¿Tenés una duda? Escribinos', text: 'En Soporte te atiende gente real: cargas, retiros, bonos o lo que necesites.' }],
+    { title: '🛟 ¿Tenés una duda? Escribinos', text: 'En Soporte te atiende gente real: cargas, retiros, bonos o lo que necesites.' },
+    { title: '🙋 Estamos del otro lado', text: 'Una carga que no entró, un retiro que querés seguir, una duda con un bono: escribí en Soporte y una persona del equipo te responde.' },
+    { title: '⏱️ Respuesta rápida, todos los días', text: 'El chat de Soporte de la app está atendido por personas, de día y de noche. No te quedes con la duda: escribinos.' }],
+  comprobante: [{ title: '✅ Que tu carga entre sola', text: 'El sistema lee tu comprobante sólo si está completo. Desde la app del banco: Movimientos → tocá la transferencia → «Ver comprobante» → captura ENTERA. Tiene que verse quién envía, CUIT, fecha y hora, monto y N° de operación. La pantalla «Transferencia realizada» NO sirve.' },
+    { title: '📸 El comprobante correcto, en 3 pasos', text: '1️⃣ Abrí la app de tu banco (Mercado Pago, Ualá, Brubank…) → Movimientos.\n2️⃣ Tocá la transferencia y elegí «Compartir comprobante».\n3️⃣ Mandalo entero, sin recortar, desde «Comprobante aquí».\nSin titular, CUIT, fecha y hora, monto y N° de operación no se puede acreditar.' }],
   misiones: [{ title: '🏁 Misiones con premio', text: 'Jugando completás misiones semanales y sumás extra automático. Mirá cuáles tenés activas en la app.' },
-    { title: '🎯 Nuevas misiones esta semana', text: 'Entrá a Misiones y fijate qué te falta para el premio de la semana. Se acredita solo al completarla.' }],
+    { title: '🎯 Nuevas misiones esta semana', text: 'Entrá a Misiones y fijate qué te falta para el premio de la semana. Se acredita solo al completarla.' },
+    { title: '🗓️ Lunes a domingo, con premio', text: 'Las misiones se renuevan cada semana: cargar varios días, llegar a un total, probar un juego. Cumplís y el premio entra solo.' }],
   vip: [{ title: '👑 Subí de nivel', text: 'Cada nivel VIP desbloquea beneficios y un regalo al subir. Cuanto más jugás, más alto llegás.' },
-    { title: '💎 ¿En qué nivel estás?', text: 'Mirá tu nivel VIP en la app y cuánto te falta para el siguiente. Cada escalón trae su regalo.' }],
+    { title: '💎 ¿En qué nivel estás?', text: 'Mirá tu nivel VIP en la app y cuánto te falta para el siguiente. Cada escalón trae su regalo.' },
+    { title: '🏅 De Bronce a Black', text: 'La escalera VIP tiene 19 niveles y cada uno desbloquea un regalo al subir. Entrá a Niveles VIP y fijate cuánto te falta.' }],
   referidos: [{ title: '🔗 Tu link, tu comisión', text: 'Compartí tu link de referidos: por cada amigo que juega ganás una comisión, todos los meses.' },
-    { title: '👥 Traé a tus amigos', text: 'Invitá con tu link y ganá por lo que juegan tus referidos. Lo cobrás directo en tu cuenta.' }],
+    { title: '👥 Traé a tus amigos', text: 'Invitá con tu link y ganá por lo que juegan tus referidos. Lo cobrás directo en tu cuenta.' },
+    { title: '💵 Comisión todos los meses', text: 'Tus referidos juegan, vos cobrás: la comisión se acredita sola el día 1 de cada mes. Compartí tu link desde Referidos.' }],
   juegos: [{ title: '🎰 Lo que más se juega hoy', text: 'Gates of Olympus, Sweet Bonanza, Sugar Rush y los clásicos de siempre te esperan en 1Girox.' },
-    { title: '🍀 ¿Ya probaste estos?', text: 'Los slots favoritos de la comunidad están a un toque desde la app. Entrá y elegí el tuyo.' }],
+    { title: '🍀 ¿Ya probaste estos?', text: 'Los slots favoritos de la comunidad están a un toque desde la app. Entrá y elegí el tuyo.' },
+    { title: '🎲 Para cambiar de aire', text: 'Si siempre jugás al mismo, probá otro de los más jugados: Big Bass Bonanza, Starlight Princess, Zeus Rush Fever o Mines. Están en 1Girox.' }],
   deportes: [{ title: '🏟️ Apostá en vivo', text: 'Fútbol argentino, Champions, Libertadores y más. Apostá antes y durante el partido desde Deportes.' },
-    { title: '⚽ Tu equipo juega, vos jugás', text: 'Entrá a Deportes en la app y apostá en vivo con cuotas que cambian minuto a minuto.' }],
+    { title: '⚽ Tu equipo juega, vos jugás', text: 'Entrá a Deportes en la app y apostá en vivo con cuotas que cambian minuto a minuto.' },
+    { title: '🏆 Copas, ligas y clásicos', text: 'Libertadores, Champions, Premier, la liga argentina y los clásicos del fin de semana: todo en Deportes, antes y durante el partido.' }],
   app: [{ title: '📲 Instalá la app', text: 'Con la app instalada entrás en un toque y te llegan los avisos de bonos y novedades. Mirá cómo en Perfil.' },
     { title: '🔔 No te pierdas nada', text: 'Instalá Pica Roja en el celu: avisos de bonos, acceso directo y todo a mano.' }],
   seguro: [{ title: '🛡️ Jugá tranquilo', text: 'Celular verificado por SMS y retiros sólo a cuentas a tu nombre. Tu cuenta está protegida.' },
@@ -223,13 +245,16 @@ function planDay(dayKey, matches, ctx) {
   //    nunca son los de ayer. Y cada vuelta completa del catálogo (`cycle`) usa OTRA redacción del tema (ALTS), así tampoco se repite el texto.
   // #931 (owner): "siempre quiero que vaya del lado de la atención" ⇒ el primer lugar de cada día es SIEMPRE Soporte/atención (con sus
   //    redacciones rotando); los otros 4 rotan por el resto del catálogo.
-  const rot = themes.filter((t) => t.key !== 'soporte' && (ctx.segmented === false || NEW_KEYS.includes(t.key))); const sop = themes.find((t) => t.key === 'soporte'); // #1003: los 5 de siempre = para los NUEVOS
+  const rot = themes.filter((t) => t.key !== 'soporte' && t.key !== 'comprobante' && (ctx.segmented === false || NEW_KEYS.includes(t.key))); const sop = themes.find((t) => t.key === 'soporte'); // #1003: los 5 de siempre = para los NUEVOS
+  const comp = themes.find((t) => t.key === 'comprobante'); // #1030: fija en el 2º lugar (todos los días para los nuevos)
+  const compItem = (v) => { const alts = ALTS.comprobante || []; const tt = v > 0 && alts[v - 1] ? Object.assign({}, comp, alts[v - 1]) : comp; return { kind: 'servicio', theme: 'comprobante', variant: v, title: tt.title, text: tt.text, link: comp.link, label: comp.label, bg: comp.bg, img: comp.img ? Object.assign({}, comp.img) : null }; };
   const n = rot.length;
   // paso 5 por día aunque se usen 4: con 12 temas (coprimos) hay 12 combinaciones distintas y los de hoy nunca son los de ayer (4/día ⇒ sólo 3)
   const STEP = SLOTS.length;
   let ti = (dayN * STEP) % n;
   const cycle = Math.floor((dayN * STEP) / n);
   if (sop && !out[0]) { const alts = ALTS.soporte || []; const v = dayN % (alts.length + 1); const tt = v > 0 && alts[v - 1] ? Object.assign({}, sop, alts[v - 1]) : sop; out[0] = { kind: 'servicio', theme: 'soporte', variant: v, title: tt.title, text: tt.text, link: sop.link, label: sop.label, bg: sop.bg, img: sop.img ? Object.assign({}, sop.img) : null }; }
+  if (comp && !out[1]) out[1] = compItem(dayN % ((ALTS.comprobante || []).length + 1));
   for (let i = 0; i < SLOTS.length; i++) {
     if (out[i]) continue;
     let t = rot[ti % n]; ti++;
@@ -250,6 +275,7 @@ function planDay(dayKey, matches, ctx) {
 
 /** #1003: las 5 de los clientes ACTIVOS (ya cargaron): Soporte primero (#931), los GANADORES de ayer (retiros grandes pagados, usuario
  *  enmascarado; sólo si hay), el SLOT DEL DÍA (rota por los más jugados del catálogo) y temas que rotan con sus redacciones. Slots 'a0'..'a4'. */
+const GAME_PHOTOS = ['/images/games/jokers-jewels.jpg', '/images/games/gates-of-olympus-1000.jpg', '/images/games/sweet-bonanza-2500.jpg', '/images/games/sugar-rush-1000.jpg', '/images/games/big-bass-bonanza.jpg', '/images/games/starlight-princess-1000.jpg', '/images/games/zeus-rush-fever.jpg', '/images/games/buffalo-king-untamed.jpg', '/images/games/mines.jpg', '/images/games/jokers-jewels-hold-spin.jpg']; // #1030
 const MASK = (u) => { u = String(u || ''); return u.length <= 3 ? u.slice(0, 1) + '**' : u.slice(0, 2) + '***' + u.slice(-1); };
 function planActive(dayKey, ctx, hasMatches, themes, pct) {
   const dayN = Math.floor(new Date(dayKey + 'T12:00:00Z').getTime() / 86400000);
@@ -257,7 +283,19 @@ function planActive(dayKey, ctx, hasMatches, themes, pct) {
   const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
   const sop = themes.find((t) => t.key === 'soporte');
   if (sop) { const alts = ALTS.soporte || []; const v = (dayN + 1) % (alts.length + 1); const tt = v > 0 && alts[v - 1] ? Object.assign({}, sop, alts[v - 1]) : sop; T(0, { kind: 'servicio', theme: 'soporte', variant: v, title: tt.title, text: tt.text, link: sop.link, label: sop.label, bg: sop.bg, img: sop.img ? Object.assign({}, sop.img) : null }); }
+  // #1030: la explicación del comprobante también para los activos, cada 3 días (sin cansar), con su redacción rotando.
+  const comp = themes.find((t) => t.key === 'comprobante');
+  if (comp && dayN % 3 === 0) { const alts = ALTS.comprobante || []; const v = Math.floor(dayN / 3) % (alts.length + 1); const tt = v > 0 && alts[v - 1] ? Object.assign({}, comp, alts[v - 1]) : comp; T(0, { kind: 'servicio', theme: 'comprobante', variant: v, title: tt.title, text: tt.text, link: comp.link, label: comp.label, bg: comp.bg, img: comp.img ? Object.assign({}, comp.img) : null }); }
   const w = (ctx.winners || []).filter((x) => Number(x.amount) > 0).slice(0, 3);
+  // #1030 (owner: "de cuál premio se pagó grande"): sin ganadores de ayer, el PREMIO GRANDE de la semana (el retiro más alto pagado en 7 días).
+  const top = ctx.weekTop && Number(ctx.weekTop.amount) > 0 ? ctx.weekTop : null;
+  if (!w.length && top) {
+    T(0, { kind: 'premio', title: `💰 Premio grande pagado: ${money(top.amount)}`.slice(0, 60),
+      text: `${MASK(top.username)} retiró ${money(top.amount)} esta semana, directo a su cuenta en minutos. Acá los premios se pagan de verdad, todos los días. ¿Sos el próximo? 🍀`,
+      link: 'app:juegos', label: 'Jugar ahora ›', bg: '#713f12',
+      img: { style: 'page', accent: '#b45309', kicker: 'Premio grande de la semana', icon: 'vip', h1: 'Cobró', h2: money(top.amount),
+        bullets: [['★', MASK(top.username) + ' · ' + money(top.amount), 'El retiro más alto de la semana'], ['✓', 'Directo a su cuenta', 'En minutos, como siempre'], ['$', 'El próximo podés ser vos', 'Cargá y jugá desde la app']], cta: 'Jugar ahora', note: 'Nombre tapado por privacidad · dato real' } });
+  }
   if (w.length) {
     T(0, { kind: 'ganadores', title: `🏆 Los que cobraron ayer: hasta ${money(w[0].amount)}`.slice(0, 60),
       text: w.map((x, i) => `${['🥇', '🥈', '🥉'][i]} ${MASK(x.username)} retiró ${money(x.amount)}`).join('\n') + '\nRetiros reales, directo a su cuenta. ¿Sos el próximo? 🍀',
@@ -272,13 +310,16 @@ function planActive(dayKey, ctx, hasMatches, themes, pct) {
       link: 'app:play:' + g.path, label: 'Jugar ' + String(g.name).slice(0, 22) + ' ›', bg: '#9d174d', game: g,
       img: { style: 'page', accent: '#e60023', kicker: 'El slot del día', photos: [g.image || ''], h1: g.name, h2: 'el de hoy', bullets: [['★', g.name, g.provider || 'De los más jugados'], ['✓', 'Elegido para hoy', 'Cambia todos los días'], ['$', 'Entrá directo', 'Un toque y estás jugando']], cta: 'Jugar ahora' } });
   }
-  const pool = themes.filter((t) => ACTIVE_KEYS.includes(t.key) && !(t.key === 'deportes' && hasMatches)).concat(ACTIVE_THEMES);
+  const pool = themes.filter((t) => ACTIVE_KEYS.includes(t.key) && !(t.key === 'deportes' && hasMatches)).concat(ACTIVE_THEMES.filter((t) => t.key !== 'sorteos' || ctx.sorteosOn === true));
   const n = pool.length; let ti = (dayN * 3) % n; const cycle = Math.floor((dayN * 3) / n);
   while (out.length < SLOTS.length && n) {
     const t = pool[ti % n]; ti++;
     const alts = ALTS[t.key] || ACTIVE_ALTS[t.key] || []; const v = (cycle + 1) % (alts.length + 1);
     const tt = v > 0 && alts[v - 1] ? Object.assign({}, t, alts[v - 1]) : t;
-    T(0, { kind: 'servicio', theme: t.key, variant: v, title: tt.title, text: tt.text.replace('{pct}', String(pct)), link: t.link, label: t.label, bg: t.bg, img: t.img ? Object.assign({}, t.img) : null });
+    let im = t.img ? Object.assign({}, t.img) : null;
+    // #1030: fotos que cambian: el tema "juegos" muestra 3 fotos distintas según el día (rotan sobre las del repo y las del catálogo).
+    if (t.key === 'juegos' && im) { const ph = GAME_PHOTOS.concat((ctx.games || []).map((g) => g && g.image).filter(Boolean)); if (ph.length >= 3) { const o = (dayN * 3) % ph.length; im.photos = [0, 1, 2].map((k) => ph[(o + k) % ph.length]); } }
+    T(0, { kind: 'servicio', theme: t.key, variant: v, title: tt.title, text: tt.text.replace('{pct}', String(pct)), link: t.link, label: t.label, bg: t.bg, img: im });
   }
   return out;
 }

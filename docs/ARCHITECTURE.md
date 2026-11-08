@@ -984,6 +984,12 @@ VIPCARGAS con su JWT, y el cliente nunca más necesita conocer su clave del casi
   (`autoCharged` / `reviewStatus:'confirmed'`), no se manda `/sys_receipt_duplicate`: nota interna "reenvió… todavía NO se acreditó" y, si el
   envío está completo y el original sigue pendiente, `/sys_receipt_already_pending`. `/sys_receipt_unreadable` y `/sys_receipt_to_agent` explican
   CÓMO sacar el comprobante completo (Movimientos → la transferencia → Ver/Compartir comprobante; la pantalla "Transferencia realizada" no sirve).
+  **#1030-b — HISTORIAS: comprobante fija + activos más novedosos (`storyAutopilot.js`):** tema `comprobante` (texto ≤300 detallado, 2 ALTS,
+  glyph propio) FIJO en el 2º lugar de los NUEVOS todos los días (fuera de `rot`) y cada 3 días para los ACTIVOS. `planActive`: Soporte → [comprobante]
+  → ganadores de ayer o `kind:'premio'` (PREMIO GRANDE de la semana, `ctx.weekTop` de `_storyAutoCtx`, cacheado por día en `Config['storyActiveCtx']`)
+  → slot del día → pool (`ACTIVE_KEYS` + `ACTIVE_THEMES`: favoritos, semana, fueguito, sorteos sólo con `ctx.sorteosOn`) con 3-4 redacciones por tema;
+  "juegos" rota 3 fotos por día (`GAME_PHOTOS`). Links nuevos de historias en `stories.js`: `app:fueguito`, `app:sorteos`. Un tema nuevo va a THEMES /
+  ACTIVE_THEMES + ALTS y, si lleva dibujo propio, a `_glyph` (estilo page) e `ICONS` (premium). Test `scripts/test-story-segments.js`.
   **#1030 (2026-11-08) — GUÍA ANTES DE ADJUNTAR (PWA):** TODOS los caminos para adjuntar (botones "Comprobante aquí" / `autoload.sendReceipt`,
   clip del chat en app.js, tarjeta CBU `chat.attachFromCard`, acceso rápido 'comprobante' de ui.js) pasan por `VIP.autoload.pickReceipt(source)`:
   abre `#rcptGuideModal` (3 pasos + ejemplo SVG "así sí / así no" + lista de datos) y "📎 Elegir la foto" (`guideGo`) abre `#fileInput` en el
