@@ -984,6 +984,14 @@ VIPCARGAS con su JWT, y el cliente nunca más necesita conocer su clave del casi
   (`autoCharged` / `reviewStatus:'confirmed'`), no se manda `/sys_receipt_duplicate`: nota interna "reenvió… todavía NO se acreditó" y, si el
   envío está completo y el original sigue pendiente, `/sys_receipt_already_pending`. `/sys_receipt_unreadable` y `/sys_receipt_to_agent` explican
   CÓMO sacar el comprobante completo (Movimientos → la transferencia → Ver/Compartir comprobante; la pantalla "Transferencia realizada" no sirve).
+  **#1030 (2026-11-08) — GUÍA ANTES DE ADJUNTAR (PWA):** TODOS los caminos para adjuntar (botones "Comprobante aquí" / `autoload.sendReceipt`,
+  clip del chat en app.js, tarjeta CBU `chat.attachFromCard`, acceso rápido 'comprobante' de ui.js) pasan por `VIP.autoload.pickReceipt(source)`:
+  abre `#rcptGuideModal` (3 pasos + ejemplo SVG "así sí / así no" + lista de datos) y "📎 Elegir la foto" (`guideGo`) abre `#fileInput` en el
+  MISMO toque (iOS exige gesto del usuario). No traba: casilla "no volver a mostrar" (`localStorage vip_rcpt_guide_off`) y link "es otra foto"
+  (`guideOther`, selector directo). Los mensajes de sistema `receipt_unreadable` / `receipt_to_agent` se pintan con pill + botón "Reenviar el
+  comprobante bien" (`guideOpen('resend')`) y, si son de las últimas 2 h, marcan `vip_rcpt_guide_force` para que la guía vuelva a salir aunque
+  esté desactivada (se limpia al elegir la foto). Un botón NUEVO de adjuntar comprobante llama `pickReceipt`, nunca `fileInput.click()` directo.
+  One-shot `mig1030ReceiptText`: `/sys_receipt_unreadable` suma "👇 Tocá «Reenviar el comprobante bien» acá abajo".
   **#908 (2026-10-24) — REENVÍOS del mismo comprobante:** la cola agrupa con `_sameReceipt(a, b)` (mismo cliente y misma imagen /
   misma `dedupeKey` / mismo monto sin un N° de operación distinto / ambos sin monto): la ficha es el primer envío, los otros van en
   `repeats[]` (+`sentTimes`). Al resolver la ficha (auto, Confirmar, Rechazar) `_depositReviewCloseRepeats` cierra los demás como

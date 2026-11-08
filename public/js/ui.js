@@ -1327,6 +1327,7 @@ VIP.ui.casinoQuickAction = function(action, arg) {
       try { if (VIP.ui.loadAndShowCBU) VIP.ui.loadAndShowCBU(); } catch (e) {}
       break;
     case 'comprobante': {
+      if (VIP.autoload && typeof VIP.autoload.pickReceipt === 'function') { VIP.autoload.pickReceipt('quick'); break; } // #1030: guía previa
       const a = document.getElementById('attachBtn');
       if (a) a.click();
       break;

@@ -132,15 +132,56 @@
 
     function sendReceipt() {
         // #808 (owner): aviso en TODOS los botones de adjuntar: el comprobante con todos los datos visibles o se rechaza.
-        try { VIP.ui.showToast('📸 Mandá el comprobante con TODOS los datos visibles (titular, CUIT, fecha y hora, monto y N° de operación). Si no se ven, la carga se rechaza.', 'info'); } catch (_) {}
-        // Abre el selector de foto del chat: el comprobante viaja por el chat de
-        // soporte y la auto-carga hgcash lo matchea.
-        const a = _el('attachBtn');
-        if (a) a.click();
-        VIP.ui.showToast('📎 Elegí la foto del comprobante: la carga entra sola.', 'info');
+        // #1030: ese aviso ahora es la GUÍA previa (pickReceipt); el toast queda sólo para quien la desactivó.
+        pickReceipt('button');
         // Pixel: el cliente va a depositar.
         try { if (VIP.pixel && VIP.pixel.enabled) VIP.pixel.track('InitiateCheckout', { content_name: 'autoload_receipt' }); } catch (_) {}
     }
+
+    // ---- #1030 (owner 2026-11-08): GUÍA antes de adjuntar el comprobante ----
+    // Todos los caminos para adjuntar (botones "Comprobante aquí", clip del chat, tarjeta CBU, acceso rápido, botón
+    // "Reenviar" del aviso de ilegible) pasan por pickReceipt(): muestra una vez la explicación breve + ejemplo y con UN toque
+    // ("Elegir la foto") sigue al selector del sistema. No traba: casilla "no volver a mostrar" (vip_rcpt_guide_off) y link
+    // "es otra foto" que abre el selector directo. Si el server avisó comprobante ilegible (chat.js marca vip_rcpt_guide_force)
+    // la guía vuelve a salir aunque la haya desactivado.
+    const RG_OFF = 'vip_rcpt_guide_off', RG_FORCE = 'vip_rcpt_guide_force';
+    let _rgSource = '';
+    function _lsGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
+    function _lsSet(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_) {} }
+    function _openPicker() {
+        // El selector de archivo es el del chat: el comprobante viaja por el chat de soporte y la auto-carga hgcash lo matchea.
+        const fi = document.getElementById('fileInput');
+        if (fi) { try { fi.click(); return; } catch (_) {} }
+        const a = _el('attachBtn'); if (a) a.click();
+    }
+    function pickReceipt(source) {
+        const force = _lsGet(RG_FORCE) === '1';
+        if (_lsGet(RG_OFF) === '1' && !force) {
+            try { VIP.ui.showToast('📸 Comprobante ENTERO: titular, CUIT, fecha y hora, monto y N° de operación. Si no se ven, no se acredita.', 'info'); } catch (_) {}
+            _openPicker();
+            return;
+        }
+        guideOpen(source || 'pick');
+    }
+    function guideOpen(source) {
+        _rgSource = source || '';
+        const cb = _el('rgSkip'); if (cb) cb.checked = false;
+        const m = _el('rcptGuideModal');
+        if (!m) { _openPicker(); return; }
+        try { VIP.ui.showModal('rcptGuideModal'); } catch (_) { m.classList.remove('hidden'); }
+    }
+    function guideClose() { try { VIP.ui.hideModal('rcptGuideModal'); } catch (_) {} }
+    // "Elegir la foto": guarda la preferencia, limpia el forzado y abre el selector EN EL MISMO toque (iOS exige gesto del usuario).
+    function guideGo() {
+        const cb = _el('rgSkip'); if (cb && cb.checked) _lsSet(RG_OFF, '1');
+        _lsSet(RG_FORCE, null);
+        guideClose();
+        _openPicker();
+    }
+    // "Es otra foto, no un comprobante": selector directo, sin tocar las preferencias.
+    function guideOther() { guideClose(); _openPicker(); }
+    // chat.js la llama al recibir un aviso reciente de comprobante ilegible / pasado a un agente.
+    function guideForce() { _lsSet(RG_FORCE, '1'); }
 
     // ---- captura ----
     function _wrap(ctx, text, x, y, maxW, lineH) {
@@ -250,5 +291,6 @@
         if (!_loading) _loading = _loadCbu().finally(() => { _loading = null; });
         return _loading.then((c) => { if (c) _cbu = c; return _cbu; });
     }
-    VIP.autoload = { init, refresh, getCbu, ensureCbu, togglePassword, saveManualPassword, copy, sendReceipt, saveCapture, hidePreview, rememberPassword, forgetPassword, getPassword, appLink };
+    VIP.autoload = { init, refresh, getCbu, ensureCbu, togglePassword, saveManualPassword, copy, sendReceipt, saveCapture, hidePreview, rememberPassword, forgetPassword, getPassword, appLink,
+        pickReceipt, guideOpen, guideClose, guideGo, guideOther, guideForce /* #1030 */ };
 })();

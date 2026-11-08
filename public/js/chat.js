@@ -93,6 +93,16 @@ VIP.chat = (function () {
             return `<div class="dep-pill dep-wait">⏳ ${md.escalated ? 'Un agente la está revisando' : 'En verificación · se acredita sola'}</div>`;
         }
         if (md.kind === 'receipt_duplicate') return '<div class="dep-pill dep-dup">⚠️ Comprobante ya usado · no se acredita</div>';
+        // #1030 (owner): comprobante ilegible / incompleto ⇒ botón "Reenviar" que abre la GUÍA (cómo compartirlo + ejemplo) y de ahí el selector.
+        // Si el aviso es reciente, la guía vuelve a salir aunque el cliente la haya desactivado.
+        if (md.kind === 'receipt_unreadable' || md.kind === 'receipt_to_agent') {
+            try {
+                const ts = new Date(message.timestamp || 0).getTime();
+                if (ts && Date.now() - ts < 2 * 3600 * 1000 && VIP.autoload && VIP.autoload.guideForce) VIP.autoload.guideForce();
+            } catch (_) {}
+            const pill = md.kind === 'receipt_to_agent' ? '<div class="dep-pill dep-wait">🙋 Lo revisa un agente</div>' : '<div class="dep-pill dep-rej">📸 Comprobante incompleto o ilegible</div>';
+            return `${pill}<div class="plat-choice rg-resend"><button type="button" class="plat-btn plat-play-now" onclick="VIP.autoload.guideOpen('resend')">📎 Reenviar el comprobante bien</button></div>`;
+        }
         // #384: respuesta automática de Soporte con botón al sector (carga automática / retirar premio).
         if (md.kind === 'go_section' || (md.target === 'terms' && md.label)) { // #702: + refund (info de reembolso) y terms (Bases y condiciones, dentro de la app)
             const t = String(md.target || 'full');
@@ -119,6 +129,7 @@ VIP.chat = (function () {
     // la plataforma, 'manual' (lo cargó un agente a mano) o un texto ya armado.
     // #364: el botón de la tarjeta CBU abre el selector de archivo (mismo que el clip de abajo).
     function attachFromCard() {
+        if (VIP.autoload && typeof VIP.autoload.pickReceipt === 'function') { VIP.autoload.pickReceipt('cbu_card'); return; } // #1030: guía previa
         const fi = document.getElementById('fileInput');
         if (fi) { try { fi.click(); return; } catch (_) {} }
         const b = document.getElementById('attachBtn'); if (b) b.click();

@@ -4,7 +4,26 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-07**
+> **Última actualización: 2026-11-08**
+
+## Sesión 2026-11-08
+
+### 1030. GUÍA con ejemplo antes de adjuntar el comprobante + botón "Reenviar" en el aviso de ilegible — PWA v662 (2026-11-08)
+- **Owner:** "en adjuntar comprobante mandan mal la foto muchas veces y traba la atención: antes de subir la foto dar una explicación breve de cómo
+  compartirla y un ejemplo, sin que trabe la forma de avanzar; y si la carga mal que le avise que envíe bien su comprobante, detallando qué se
+  necesita para leerlo, si no es legible, etc."
+- **Antes de subir (PWA):** `#rcptGuideModal` (index.html) con 3 pasos (app del banco → Movimientos → "Ver/Compartir comprobante" → captura
+  entera), dos ejemplos SVG ("✅ Así sí" = comprobante con titular/CUIT/fecha y hora/monto/N° de operación · "❌ Así no" = pantalla
+  "¡Transferencia realizada!") y la lista de datos. Botón rojo "📎 Elegir la foto del comprobante" abre el selector en el mismo toque.
+  Para no trabar: casilla "Ya sé cómo, no volver a mostrar" (`localStorage vip_rcpt_guide_off`) y link "Es otra foto, no un comprobante" (selector
+  directo). Lógica en `autoload.js` (`pickReceipt / guideOpen / guideGo / guideOther / guideForce`); TODOS los caminos de adjuntar pasan por
+  `pickReceipt` (botones "Comprobante aquí", clip del chat, tarjeta CBU, acceso rápido). Estilos `.rg-*` en pin.css por tokens (modo nocturno OK).
+- **Si la mandó mal:** el server ya avisaba con `/sys_receipt_unreadable` (qué datos faltan y cómo sacar el comprobante; 2º fallo en 1 h ⇒ agente,
+  #825/#1011). Ahora en la app ese aviso lleva pill "📸 Comprobante incompleto o ilegible" + botón "📎 Reenviar el comprobante bien" que abre la guía;
+  si el aviso es reciente (2 h) la guía vuelve a salir aunque el cliente la haya desactivado (`vip_rcpt_guide_force`). One-shot
+  `mig1030ReceiptText` agrega al texto "👇 Tocá «Reenviar el comprobante bien» acá abajo" (editable en COMANDOS).
+- Validado con `node --check` (server.js y los 4 js tocados). Sin node_modules: no se pudo ver en pantalla; probar en producción el modal en un
+  celular chico (grilla de ejemplos a 360 px) y que el selector de fotos abra en iPhone desde "Elegir la foto".
 
 ## Sesión 2026-11-07
 

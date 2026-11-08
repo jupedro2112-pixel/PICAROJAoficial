@@ -3038,3 +3038,38 @@ html[data-theme="dark"] .srt-tk-list summary { color: var(--srt-lite); }
 .wd-hold-bar[hidden] { display: none !important; }
 .wd-hold-bar small { color: var(--p-muted); font-size: 11.5px; line-height: 1.35; }
 .wd-hold-bar.is-review { border-color: var(--p-red); background: var(--p-red-soft); }
+
+/* #1030 (owner 2026-11-08): GUÍA antes de adjuntar el comprobante (#rcptGuideModal). Todo por tokens --p-* (modo nocturno incluido). */
+.rg-modal .modal-content.rg-card { max-width: 400px !important; padding: 22px 18px 16px !important; text-align: left; }
+.rg-modal .modal-header { margin-bottom: 10px; }
+.rg-modal .modal-header h2 { font-size: 19px !important; }
+.rg-steps { margin: 0 0 12px; padding: 0 0 0 22px; color: var(--p-text-2); font: 500 13.5px/1.4 var(--p-font); }
+.rg-steps li { margin: 0 0 7px; }
+.rg-steps li::marker { color: var(--p-red); font-weight: 800; }
+.rg-examples { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 10px; }
+.rg-ex { margin: 0; padding: 8px 8px 6px; border-radius: 14px; background: var(--p-surface); border: 1px solid var(--p-border); text-align: center; }
+.rg-ex svg { width: 100%; height: auto; display: block; max-height: 150px; }
+.rg-ex figcaption { margin-top: 6px; font: 800 12px var(--p-font); }
+.rg-ok { border-color: var(--p-green-line); background: var(--p-green-soft); }
+.rg-ok figcaption { color: var(--p-green); }
+.rg-bad { border-color: #ffc2cb; background: var(--p-red-soft); }
+.rg-bad figcaption { color: var(--p-red); }
+.rg-ex .rg-s-bg { fill: var(--p-card); stroke: var(--p-border-hi); stroke-width: 1; }
+.rg-ex .rg-s-h { fill: var(--p-text); font: 800 8.5px var(--p-font); }
+.rg-ex .rg-s-line { stroke: var(--p-border); stroke-width: 1; }
+.rg-ex .rg-s-l { fill: var(--p-muted); font: 700 6px var(--p-font); letter-spacing: .3px; text-transform: uppercase; }
+.rg-ex .rg-s-v { fill: var(--p-text); font: 700 8px var(--p-font); }
+.rg-ex .rg-s-amt { font-size: 11px; font-weight: 900; }
+.rg-ex .rg-s-ok { fill: var(--p-green-soft); stroke: var(--p-green); stroke-width: 2; }
+.rg-ex .rg-s-tick { fill: none; stroke: var(--p-green); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.rg-ex .rg-s-btn { fill: var(--p-text); }
+.rg-ex .rg-s-btnt { fill: var(--p-inv); font: 700 7px var(--p-font); }
+.rg-need { font: 500 12.5px/1.4 var(--p-font); color: var(--p-text-2); background: var(--p-surface); border-radius: 12px; padding: 9px 11px; margin: 0 0 12px; }
+.rg-need b { color: var(--p-text); font-weight: 800; }
+.btn.rg-go { width: 100%; background: var(--p-red) !important; color: #fff !important; border: 0 !important; border-radius: 999px !important; font: 800 15px var(--p-font) !important; padding: 13px 14px !important; box-shadow: none !important; }
+.rg-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 10px; }
+.rg-skip { display: inline-flex; align-items: center; gap: 7px; color: var(--p-muted); font: 500 12px var(--p-font); cursor: pointer; }
+.rg-skip input { accent-color: var(--p-red); width: 15px; height: 15px; margin: 0; }
+.rg-other { background: none; border: 0; color: var(--p-muted); font: 600 12px var(--p-font); text-decoration: underline; cursor: pointer; padding: 4px 6px; }
+.rg-resend { margin-top: 6px; }
+@media (max-width: 360px) { .rg-examples { gap: 6px; } .rg-steps { font-size: 13px; } }

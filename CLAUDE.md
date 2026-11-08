@@ -358,6 +358,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **HISTORIAS: PARTIDOS con LLAVE (#909, 2026-10-24):** los partidos del día salen sólo con `Config['storyAutoMatches']` (panel → Historias
   automáticas → ⚽; #968: ENCENDIDA por pedido del owner el 2026-10-24). Rotación de temas: cursor ×5 por día +
   redacciones alternativas `ALTS` (un tema nuevo va a `THEMES` y a `ALTS`). Cada historia se publica aislada; diagnóstico `Config['storyAutoDiag']`.
+- **GUÍA ANTES DE ADJUNTAR EL COMPROBANTE (#1030, 2026-11-08):** todo botón que adjunte un comprobante llama `VIP.autoload.pickReceipt(src)`
+  (muestra `#rcptGuideModal` con 3 pasos + ejemplo y abre `#fileInput` en el mismo toque), nunca `fileInput.click()` directo. Los avisos
+  `receipt_unreadable`/`receipt_to_agent` del chat llevan el botón "Reenviar el comprobante bien" (`guideOpen('resend')`).
 - **COMPROBANTES REPETIDOS (#908):** la cola de Cargas pendientes agrupa reenvíos (`_sameReceipt`) y al resolver una ficha
   `_depositReviewCloseRepeats` cierra los demás como `duplicate`. Un flujo nuevo que confirme/rechace un comprobante pendiente tiene que llamarla.
 - **SORTEOS (#915 → #981 v2):** `src/services/sorteos.js` (reglas puras, test `scripts/test-sorteos-rules.js`) + `_sorteoTickOne` (20 min, stats batch

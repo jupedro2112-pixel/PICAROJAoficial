@@ -404,6 +404,8 @@ function setupEventListeners() {
         // File attach & paste
         const attachBtn = document.getElementById('attachBtn');
         if (attachBtn) attachBtn.addEventListener('click', () => {
+            // #1030: el clip también pasa por la guía del comprobante (tiene "es otra foto" para saltearla).
+            if (VIP.autoload && typeof VIP.autoload.pickReceipt === 'function') { VIP.autoload.pickReceipt('clip'); return; }
             const fi = document.getElementById('fileInput');
             if (fi) fi.click();
         });

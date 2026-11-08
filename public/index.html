@@ -1704,6 +1704,55 @@
                     <div class="modal-actions" style="margin-top:10px;"><button type="button" class="btn btn-secondary" style="width:100%;" onclick="hideModal('easyPlatModal')">Cerrar</button></div>
                 </div>
             </div>
+            <!-- #1030 (owner 2026-11-08): GUÍA ANTES DE ADJUNTAR EL COMPROBANTE. "Mandan mal la foto muchas veces y traba la atención: antes de subir
+                 la foto dar una explicación breve de cómo compartirla y un ejemplo, sin trabar el avance". Se abre desde TODOS los botones de
+                 adjuntar (autoload.pickReceipt); un toque más y sigue al selector de fotos. Casilla "no volver a mostrar" (localStorage
+                 vip_rcpt_guide_off); si el server avisa comprobante ilegible (chat, kind receipt_unreadable) vuelve a mostrarse igual. -->
+            <div id="rcptGuideModal" class="modal hidden refund-simple profile-modal rg-modal" onclick="if(event.target === this) VIP.autoload.guideClose()">
+                <div class="modal-content rg-card" onclick="event.stopPropagation()">
+                    <button type="button" onclick="VIP.autoload.guideClose()" class="rs-close" aria-label="Cerrar">✕</button>
+                    <div class="modal-header"><h2>📸 Cómo mandar el comprobante</h2><p>Se acredita solo cuando se leen todos los datos. Son 3 pasos.</p></div>
+                    <ol class="rg-steps">
+                        <li><b>Abrí la app de tu banco o billetera</b> (Mercado Pago, Ualá, Brubank, Naranja X…) y entrá a <b>Movimientos</b> o <b>Actividad</b>.</li>
+                        <li>Tocá la transferencia y elegí <b>«Ver comprobante»</b> o <b>«Compartir comprobante»</b>.</li>
+                        <li>Mandá esa captura <b>entera, sin recortar</b>, con el botón rojo de abajo.</li>
+                    </ol>
+                    <div class="rg-examples">
+                        <figure class="rg-ex rg-ok">
+                            <svg viewBox="0 0 150 196" aria-hidden="true">
+                                <rect class="rg-s-bg" x="1" y="1" width="148" height="194" rx="12"/>
+                                <text class="rg-s-h" x="75" y="22" text-anchor="middle">Comprobante de transferencia</text>
+                                <line class="rg-s-line" x1="14" y1="32" x2="136" y2="32"/>
+                                <text class="rg-s-l" x="14" y="50">De</text><text class="rg-s-v" x="14" y="62">Juan Pérez</text>
+                                <text class="rg-s-l" x="14" y="80">CUIT/CUIL</text><text class="rg-s-v" x="14" y="92">20-12345678-9</text>
+                                <text class="rg-s-l" x="14" y="110">Fecha y hora</text><text class="rg-s-v" x="14" y="122">08/11/2026 · 14:32</text>
+                                <text class="rg-s-l" x="14" y="140">Monto</text><text class="rg-s-v rg-s-amt" x="14" y="153">$ 5.000,00</text>
+                                <text class="rg-s-l" x="14" y="170">Para</text><text class="rg-s-v" x="14" y="182">PICA ROJA · CBU 000…</text>
+                                <text class="rg-s-l" x="88" y="170">N° operación</text><text class="rg-s-v" x="88" y="182">48213977</text>
+                            </svg>
+                            <figcaption>✅ Así sí</figcaption>
+                        </figure>
+                        <figure class="rg-ex rg-bad">
+                            <svg viewBox="0 0 150 196" aria-hidden="true">
+                                <rect class="rg-s-bg" x="1" y="1" width="148" height="194" rx="12"/>
+                                <circle class="rg-s-ok" cx="75" cy="62" r="24"/>
+                                <path class="rg-s-tick" d="M63 62 l8 8 l16 -18"/>
+                                <text class="rg-s-h" x="75" y="108" text-anchor="middle">¡Transferencia realizada!</text>
+                                <text class="rg-s-v rg-s-amt" x="75" y="134" text-anchor="middle">$ 5.000</text>
+                                <rect class="rg-s-btn" x="30" y="156" width="90" height="22" rx="11"/>
+                                <text class="rg-s-btnt" x="75" y="171" text-anchor="middle">Volver al inicio</text>
+                            </svg>
+                            <figcaption>❌ Así no: le faltan los datos</figcaption>
+                        </figure>
+                    </div>
+                    <div class="rg-need">Tiene que verse: <b>👤 quién envía · 🪪 CUIT/CUIL · 🕒 fecha y hora · 💵 monto · 🔢 N° de operación</b>. Si no se ve o está borroso, no se puede acreditar.</div>
+                    <button type="button" class="btn btn-primary rg-go" onclick="VIP.autoload.guideGo()">📎 Elegir la foto del comprobante</button>
+                    <div class="rg-foot">
+                        <label class="rg-skip"><input type="checkbox" id="rgSkip"> Ya sé cómo, no volver a mostrar</label>
+                        <button type="button" class="rg-other" onclick="VIP.autoload.guideOther()">Es otra foto, no un comprobante</button>
+                    </div>
+                </div>
+            </div>
             <!-- #488 (owner): cartel de entrada BONO DE PRIMERA CARGA (X% · Y% instalando la app) con el logo de la marca; sólo para quien
                  todavía no cargó. Una vez por sesión (sessionStorage vip_fd_seen). home.js: maybeFirstDepositPopup / fdGo / fdClose. -->
             <div id="fdModal" class="modal hidden refund-simple profile-modal fd-modal" onclick="if(event.target === this) VIP.home.fdClose()">
@@ -2653,7 +2702,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v661</div>
+                    <div class="pf-build" id="appBuildTag">app v662</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2682,7 +2731,7 @@
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v661</div> <!-- #790: espejo de #appBuildTag -->
+                <div class="pf-build pf-build-min" id="pfBuildMini">app v662</div> <!-- #790: espejo de #appBuildTag -->
                 <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
                 <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>
