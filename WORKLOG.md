@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-08
 
+### 1034. FIX URGENTE: "Cambiar menú" y ~100 funciones de la app no respondían desde v665 — PWA v668 (2026-11-08)
+- **Owner:** "estoy queriendo cambiar de menú y no abre el botón, revisá bien". Causa: en #1032 agregué `playToggle, pvFold, pvPick, // #1032 `
+  AL FRENTE de la primera línea de `VIP.home = {`, que era una sola línea larga con ~100 exports (`supportFaqOpen … openMenuChooser, chooseMenu,
+  goHome, openProfile, basicPick, setHomeMode …`): el `//` la convirtió en comentario. Sintaxis válida, por eso `node --check` y la revisión no lo
+  vieron. Afectaba v665/v666/v667: Cambiar menú, Inicio, Perfil, menú básico, carga rápida, etc. (todo lo que llamaba `VIP.home.X` desde el HTML).
+- **Fix:** la línea nueva queda sola y los exports originales en la siguiente. Nuevo test `scripts/test-vip-exports.js`: cruza toda llamada
+  `VIP.<ns>.<fn>(` del HTML y los js contra los exports reales de cada namespace (brace-matching, IIFE `return {}`, `Object.assign`); `ui` y
+  `campaign` se saltean (forma de export que el parser no lee). **Correrlo siempre que se toque un objeto de exports de la PWA.**
+
 ### 1033. SONDEO DE SEGURIDAD completo + correcciones — PWA v667, admin SW v243 (2026-11-08)
 - **Owner:** "después de subir quiero que hagamos un sondeo de toda seguridad y ver que esté todo ok" → "ok hacelo ahora". Cuatro revisiones
   independientes (lo tocado hoy · rutas/permisos del panel · flujo de retiros · regalos/comprobantes/cuentas secundarias), sólo lectura, y

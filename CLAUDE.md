@@ -490,6 +490,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 1. Leer `WORKLOG.md` al iniciar.
 2. Hacer el cambio. Validar sintaxis (`node --check` en archivos tocados — no hay
    node_modules local, así que no se puede correr el server; sólo syntax check).
+   **Si tocás un objeto de exports de la PWA (`VIP.x = {…}` / `return {…}`), correr `node scripts/test-vip-exports.js` (#1034: un `//`
+   al frente de la línea de exports de `VIP.home` dejó sin funcionar Cambiar menú y medio home; la sintaxis era válida).**
    En cambios de la PWA: bumpear `CACHE_VERSION` de `public/firebase-messaging-sw.js` **y** el texto
    `app vNNN` de `#appBuildTag` en `public/index.html` (mismo número; es la versión visible en Perfil, #309).
    **El bump del SW es OBLIGATORIO en cualquier cambio de js/css (#634):** `server.js` sirve `/js/bundle.js?v=<CACHE_VERSION>` y
