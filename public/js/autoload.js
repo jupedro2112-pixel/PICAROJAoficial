@@ -187,12 +187,15 @@
             if (!_inCasino() || !ov || m.parentNode === ov) return;
             if (!_rgHome) _rgHome = { parent: m.parentNode, next: m.nextSibling };
             ov.appendChild(m);
+            // Blindaje: adentro del overlay nada lo tapa (la barra, Carga rápida y las burbujas van de z-index 6 a 10; el casino vive en 99999).
+            m.style.position = 'fixed'; m.style.inset = '0'; m.style.zIndex = '100005';
         } catch (_) {}
     }
     function _rgMoveBack(m) {
         try {
             if (!_rgHome || !m || m.parentNode === _rgHome.parent) return;
             if (_rgHome.next && _rgHome.next.parentNode === _rgHome.parent) _rgHome.parent.insertBefore(m, _rgHome.next); else _rgHome.parent.appendChild(m);
+            m.style.position = ''; m.style.inset = ''; m.style.zIndex = '';
         } catch (_) {}
     }
     function guideOpen(source) {

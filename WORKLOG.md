@@ -22,6 +22,9 @@
   de la app queda debajo). Ahora, con el casino abierto, `guideOpen` MUEVE `#rcptGuideModal` adentro del overlay y `guideClose` lo devuelve a su lugar;
   la guía vuelve a mostrarse también en Girox directo / Carga rápida. Sigue el fallback: si no queda visible, selector directo.
 - Sin node_modules: validado con `node --check`. Probar en producción: Inicio (plegar/desplegar, Copiar alias, Adjuntar) y la guía dentro del casino.
+- **Owner (aclaración):** "la explicación del comprobante que está en completo y básico no aparece más en el menú Girox; quiero que aparezca pero ADENTRO de
+  Girox". Es lo que hace esta versión (en la v664 estaba apagada adentro del casino de urgencia). Al moverla al overlay se le ponen estilos propios
+  (fixed, inset 0, z-index 100005) para que ni la barra ni Carga rápida la tapen. PWA v666.
 
 ### 1031. URGENTE: la guía del comprobante salía fuera del casino (Girox directo) y el botón parecía no andar — PWA v664 (2026-11-08)
 - **Owner:** "el cartel está apareciendo afuera del menú de Girox cuando estás en ese menú, error grave; la gente no ve el cartel cuando quiere
