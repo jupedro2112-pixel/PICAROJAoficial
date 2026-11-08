@@ -1863,3 +1863,13 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
 - **Historias:** `_storyAutoCtx` filtra `titular:'PRUEBA TEST'` y `role≠'user'` en ganadores y `weekTop`; `MASK` = 1 letra hasta 6 caracteres.
 - **PWA:** `closeCasinoFrame` (wrapper en home.js) llama `VIP.autoload.guideClose()`; `_rgMoveIn` devuelve el modal si no está en el casino;
   `guideClose` limpia `vip_rcpt_guide_force`.
+
+### #1036 — Aviso semanal del sorteo (2026-11-08)
+- `SORTEO_NUDGE = { storyHour: 10, pushHours: [12, 19], windowH: 2, sinceDays: 30, key: 'mensual' }` + `_sorteoNudgeTick(force)` (server.js).
+  Lunes ART (`_schedArtKey(_artMonday(now)) === today`); idempotencia por día/franja en `Config['sorteoNudgeLast']` (`story`, `push[h]`) y lock
+  `_cronClaim('sorteonudge')`. Audiencia: `_sorteoNudgeAudience(key, días)` = `Transaction` real en N días − `SorteoEntry.distinct('userId',{key})`,
+  filtrada por rol/bloqueo/`duplicateOf`/`fraudFlags`. Historia: `Story.create` con `autoKind:'sorteo-nudge'`, `audience:'active'`, imagen vía
+  `_storyAutoImgSpec({img:{style:'page', icon:'ticket', bullets:[[sym, t, sub]…]}})`. Push: `sendNotificationToUsernames(..., {url:'/?open=sorteos',
+  kind:'promo', tag:'sorteo-nudge-<día>'})`; app.js abre `VIP.sorteos.open('mensual')` con `?open=sorteos` (también desde el SW `vip-open`).
+- Centro de avisos: `getNotifCenterConfig().sorteoNudge`, PUT acepta la clave, GET devuelve `sorteoNudgeLast`; `POST …/sorteo-nudge/run` (admin) fuerza.
+  Panel: `tog('sorteoNudge', …)` + `ncSorteoNudgeNow()`. Apagar: tilde o `SORTEO_NUDGE_DISABLED=1`.

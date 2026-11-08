@@ -8,6 +8,18 @@
 
 ## Sesión 2026-11-08
 
+### 1036. Aviso semanal del sorteo del iPhone (lunes): historia + push a quien juega y no se anotó — PWA v670, admin SW v244 (2026-11-08)
+- **Owner:** "subir a historias y mandarle notificaciones durante el día a todos los que están participando pero no se anotaron en el sorteo del
+  iPhone; programarlo para dar un aviso semanal todos los lunes".
+- `_sorteoNudgeTick` (server.js, al lado del aviso de la ruleta; cada 10 min, lock `sorteonudge`): cada LUNES (ART) · **10 h** historia para
+  clientes ACTIVOS (`audience:'active'`, `autoKey sn-<día>`, foto estilo página con el ticket, link `app:sorteos`, "Sorteo del <premio>: ¿ya te
+  anotaste?") · **12 h y 19 h** push `kind:'promo'` (respeta Perfil → avisos y fatiga) a quien tiene carga real en 30 días y NO tiene `SorteoEntry`
+  del mensual (`_sorteoNudgeAudience`; sin bloqueados / secundarias / marcas); la de las 19 sólo a los que siguen sin anotarse. Abre `/?open=sorteos`
+  (app.js, como `open=roulette`). Premio = `sorteos.mensual.prizes[0].name`. Se apaga solo si los sorteos o el mensual están apagados.
+- Centro de avisos: tilde `notifCenter.sorteoNudge` (default ON) + botón **▶ Mandar ahora** (`POST /api/admin/inicio/notif-center/sorteo-nudge/run`,
+  sólo admin: manda historia + push ya, cualquier día) + último resultado (`Config['sorteoNudgeLast']`: día, franjas hechas, sin anotarse, push).
+- Decisión: la push NO pasa por el tope diario del Centro (el owner pidió avisos "durante el día"); sí respeta "sólo lo mío / ninguno".
+
 ### 1035. Inicio: RETIRAR con la misma altura que CARGÁ AQUÍ — PWA v669 (2026-11-08)
 - **Owner (captura):** "el de retirar está más ancho y no sirve". Causa: el `<span id="pvMinWdTag">` del monto heredaba `.bv-btn span
   {display:flex; flex-direction:column}` y partía "Retiro mínimo / $5.000 / a tu CBU" en 3 líneas. Ahora es `<b class="md-amt">` (como en

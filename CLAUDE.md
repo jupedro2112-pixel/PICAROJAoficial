@@ -461,7 +461,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **CENTRO DE AVISOS (#971, 2026-10-24):** TODO lo automático que le llega al cliente sale de un solo lugar (panel → Cronograma → 🧭 Centro de avisos,
   `Config['notifCenter']`): RECORRIDO por cliente (`src/services/retentionJourney.js` + `_journeyTick` al mediodía: nuevos / enfriando / inactivos /
   perdidos / lejanos, un paso por día, regalos crecientes, fichas según valor del cliente; marca `User.journey.sent`), autopiloto, aviso del reembolso,
-  ofertas de bienvenida, historia con bono (ahora a las 12:30; ese día el autopiloto no manda), historia "pagos de la semana" (lunes). Reglas viejas
+  ofertas de bienvenida, historia con bono (ahora a las 12:30; ese día el autopiloto no manda), historia "pagos de la semana" (lunes), **aviso semanal del
+  sorteo (#1036: lunes 10 h historia para activos + push 12 h/19 h a quien cargó en 30 días y no se anotó, `_sorteoNudgeTick`, tilde `sorteoNudge`)**. Reglas viejas
   (NotificationRule) APAGADAS por defecto. **Tope único:** `monthlyCap` (cuenta todos los lotes) + `dailyCap: 1` en `_resolveNotifBatchAudience`
   (`_notifDayCounts`). **Excepción (owner 2026-11-01):** los avisos de reembolso y del giro gratis van `kind:'system'` y salen aunque el cliente
   haya elegido "ninguno" (retención). Un aviso automático NUEVO tiene que salir por `_createNotifBatchFromBody` (hereda topes) o, si es push directa, pasar

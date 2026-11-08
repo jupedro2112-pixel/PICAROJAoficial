@@ -28506,6 +28506,79 @@ async function _rouletteNudgeTick(force) {
   } catch (e) { logger.warn('[ruleta-aviso] ' + e.message); return null; } finally { _rlNudgeRunning = false; if (_rlClaimed) { _rlClaimed = false; _cronRelease('roulettenudge'); } } // revisión: cada cliente se marca al avisarle (lastAt) ⇒ soltar el lock no repite
 }
 setTimeout(() => { _rouletteNudgeTick().catch(() => {}); setInterval(() => { _rouletteNudgeTick().catch(() => {}); }, 15 * 60 * 1000); }, 8 * 60 * 1000);
+// #1036 (owner 2026-11-08): "subir a historias y mandarle notificaciones durante el día a todos los que están participando pero no se anotaron en
+// el sorteo del iPhone; programarlo para dar un aviso semanal todos los lunes". Cada LUNES (hora argentina):
+//   · 10 h  → historia para clientes ACTIVOS (audience 'active') con foto: "Sorteo del <premio>: ¿ya te anotaste?" (link app:sorteos).
+//   · 12 h y 19 h → push (kind 'promo': respeta Perfil → avisos y la fatiga) a quien CARGÓ en los últimos 30 días y NO tiene SorteoEntry del
+//     mensual; la segunda sólo a los que siguen sin anotarse. Sin bloqueados / secundarias / marcas de fraude. Abre /?open=sorteos.
+// Tilde en Centro de avisos (`notifCenter.sorteoNudge`), botón "Mandar ahora" (force = todo junto, cualquier día). Idempotente por día y
+// franja en Config['sorteoNudgeLast'] + lock multi-instancia. Se apaga solo si los sorteos o el mensual están apagados.
+const SORTEO_NUDGE = { storyHour: 10, pushHours: [12, 19], windowH: 2, sinceDays: 30, key: 'mensual' };
+let _snRunning = false;
+async function _sorteoNudgeAudience(key, sinceDays) {
+  const since = new Date(Date.now() - sinceDays * 86400000);
+  const ids = (await Transaction.distinct('userId', Object.assign({ timestamp: { $gte: since } }, SCHED_ADAPTER.realDepositMatch()))).filter(Boolean);
+  if (!ids.length) return [];
+  const joined = new Set(await SorteoEntry.distinct('userId', { key }));
+  const rest = ids.filter((id) => !joined.has(id)); if (!rest.length) return [];
+  return User.find({ id: { $in: rest }, role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, duplicateOf: null, 'fraudFlags.0': { $exists: false } }).select('id username').lean();
+}
+async function _sorteoNudgeTick(force) {
+  if (_snRunning || process.env.SORTEO_NUDGE_DISABLED === '1') return null; _snRunning = true; let claimed = false;
+  try {
+    const now = new Date(); const today = _schedArtKey(now); const hourArt = (now.getUTCHours() + 21) % 24;
+    const isMonday = _schedArtKey(_artMonday(now)) === today;
+    if (!force && !isMonday) return null;
+    const nc = await getNotifCenterConfig(); if (!force && nc.sorteoNudge === false) return null;
+    const cfg = await _sorteosCfg(); const srt = cfg && cfg[SORTEO_NUDGE.key];
+    if (!cfg || !cfg.enabled || !srt || !srt.enabled) return force ? { error: 'El sorteo mensual está apagado.' } : null;
+    const prize = String(((srt.prizes || [])[0] || {}).name || 'iPhone').trim();
+    const last = (await getConfig('sorteoNudgeLast', null)) || {}; const st = last.day === today ? last : { day: today, story: null, push: {} };
+    const slots = [];
+    if (force || (hourArt >= SORTEO_NUDGE.storyHour && hourArt < SORTEO_NUDGE.storyHour + SORTEO_NUDGE.windowH)) { if (force || !st.story) slots.push('story'); }
+    for (const h of SORTEO_NUDGE.pushHours) if (force || (hourArt >= h && hourArt < h + SORTEO_NUDGE.windowH)) { if (force || !st.push[String(h)]) slots.push(String(h)); }
+    if (!slots.length) return null;
+    if (!(await _cronClaim('sorteonudge', 30 * 60000))) return null; claimed = true;
+    const out = { day: today, at: now.toISOString(), prize, done: [] };
+    // Historia (activos)
+    if (slots.includes('story')) {
+      const autoKey = `sn-${today}` + (force && st.story ? '-f' + Date.now() : '');
+      if (!(await Story.exists({ autoKey }))) {
+        const it = { title: `📱 Sorteo del ${prize}: ¿ya te anotaste?`.slice(0, 60),
+          text: `Si cargás y jugás ya estás sumando puntos y tickets… pero para GANAR el ${prize} hay que ANOTARSE (una sola vez, gratis). Requisitos: app instalada, notificaciones, Telegram, celular y una carga. Tocá y anotate ahora 👇`.slice(0, 300),
+          link: 'app:sorteos', label: 'Anotarme al sorteo', kind: 'sorteo-nudge', audience: 'active',
+          img: { style: 'page', icon: 'ticket', h1: 'Sorteo del', h2: prize, bullets: [['1', 'Te anotás UNA vez', 'Es gratis, desde la app'], ['2', 'Cargás y jugás como siempre', 'Cada día con carga suma tickets'], ['★', 'El 1° premio sale por ticket', 'Si no estás anotado, no participás']], note: 'Si ya jugás, no te quedes afuera: anotate hoy' } };
+        let autoImg = null; try { autoImg = await _storyAutoImgSpec(it); } catch (_) { autoImg = null; }
+        const newId = uuidv4();
+        try {
+          await Story.create({ id: newId, title: it.title, text: it.text, mediaType: autoImg ? 'image' : 'none', mediaUrl: autoImg ? _storyImgUrl(newId) : '', autoImg: autoImg || null, autoImgVer: autoImg ? STORY_IMG_VER : null,
+            bgColor: autoImg ? '#ffffff' : '#06070d', linkUrl: it.link, linkLabel: it.label, durationSec: 7, hours: 24, publishedAt: now, expiresAt: new Date(now.getTime() + 24 * 3600 * 1000), isActive: true,
+            autoKey, autoKind: it.kind, audience: it.audience, createdBy: 'automático' });
+          out.done.push('historia'); st.story = { at: now.toISOString(), id: newId };
+        } catch (e) { if (!(e && e.code === 11000)) logger.warn('[sorteo-aviso] historia: ' + e.message); }
+      }
+    }
+    // Push (12 h y 19 h): sólo a quien sigue sin anotarse
+    const pushSlots = slots.filter((x) => x !== 'story');
+    if (pushSlots.length) {
+      const users = await _sorteoNudgeAudience(SORTEO_NUDGE.key, SORTEO_NUDGE.sinceDays);
+      const h = pushSlots[pushSlots.length - 1]; const second = String(h) === String(SORTEO_NUDGE.pushHours[SORTEO_NUDGE.pushHours.length - 1]);
+      const title = `📱 Sorteo del ${prize}`;
+      const body = second ? `Último aviso de hoy: jugás pero no estás anotado. Anotate gratis en 1 toque y entrá al sorteo.` : `Jugás pero todavía no estás anotado. Anotate gratis en 1 toque y entrá al sorteo del ${prize}.`;
+      let sent = 0;
+      for (let i = 0; i < users.length; i += 500) {
+        const chunk = users.slice(i, i + 500);
+        try { const r = await sendNotificationToUsernames(User, chunk.map((u) => u.username), title, body, { url: '/?open=sorteos', type: 'sorteo_nudge', kind: 'promo', tag: 'sorteo-nudge-' + today }); sent += (r && (r.successCount || r.sent)) || 0; } catch (e) { logger.warn('[sorteo-aviso] push: ' + e.message); }
+      }
+      for (const ps of pushSlots) st.push[ps] = { at: now.toISOString(), candidates: users.length, sent };
+      out.candidates = users.length; out.sent = sent; out.done.push('push ' + pushSlots.join('/') + ' h');
+    }
+    await Config.set('sorteoNudgeLast', Object.assign(st, { lastResult: out }), 'system');
+    logger.info(`[sorteo-aviso] ${today}: ${out.done.join(' + ') || 'nada'}${out.candidates != null ? ` · ${out.candidates} sin anotarse · push ${out.sent}` : ''}`);
+    return out;
+  } catch (e) { logger.warn('[sorteo-aviso] ' + e.message); return force ? { error: e.message } : null; } finally { _snRunning = false; if (claimed) _cronRelease('sorteonudge'); }
+}
+setTimeout(() => { _sorteoNudgeTick().catch(() => {}); setInterval(() => { _sorteoNudgeTick().catch(() => {}); }, 10 * 60 * 1000); }, 9 * 60 * 1000);
 let _newbieRunning = false;
 async function _newbieOffersTick() {
   if (_newbieRunning || process.env.NEWBIE_OFFERS_DISABLED === '1') return;
@@ -28561,7 +28634,7 @@ async function getJourneyTuning() { let t = null; try { t = await getConfig('jou
 async function getNotifCenterConfig() {
   let c = {}; try { c = (await getConfig('notifCenter', null)) || {}; } catch (_) {}
   const cap = Math.round(Number(c.monthlyCap));
-  return { monthlyCap: Number.isFinite(cap) && cap >= 2 && cap <= 60 ? cap : null, dailyCap: 1, journey: c.journey !== false, refundReminder: c.refundReminder !== false, winnersStory: c.winnersStory !== false, legacyRules: c.legacyRules === true, rouletteReminder: c.rouletteReminder !== false };
+  return { monthlyCap: Number.isFinite(cap) && cap >= 2 && cap <= 60 ? cap : null, dailyCap: 1, journey: c.journey !== false, refundReminder: c.refundReminder !== false, winnersStory: c.winnersStory !== false, legacyRules: c.legacyRules === true, rouletteReminder: c.rouletteReminder !== false, sorteoNudge: c.sorteoNudge !== false /* #1036 */ };
 }
 // Estado de TODOS los clientes (una agregación de cargas reales de la vida + 90 días) ⇒ segmento y paso de hoy. No escribe nada.
 async function _journeyScan(now) {
@@ -28666,11 +28739,11 @@ app.get('/api/admin/inicio/notif-center', authMiddleware, adminMiddleware, async
       const s = await _journeyScan(new Date());
       _journeyPreview = { at: Date.now(), v: { total: s.total, segments: s.segments, steps: s.picks.map((g) => ({ id: g.pick.step.id, name: g.pick.step.name, segment: g.pick.segment, gift: g.pick.giftType, amount: g.pick.amount, n: g.users.length, sample: g.users.slice(0, 5).map((x) => x.username) })) } };
     }
-    const [journeyLast, refundLast, newbie, optOut, rouletteLast] = await Promise.all([getConfig('journeyLast', null), getConfig('refundRemindLast', null), getNewbieOffersConfig(),
-      User.aggregate([{ $match: { role: 'user', 'notifPrefs.level': { $in: ['mine', 'none'] } } }, { $group: { _id: '$notifPrefs.level', n: { $sum: 1 } } }]), getConfig('rouletteNudgeLast', null)]);
+    const [journeyLast, refundLast, newbie, optOut, rouletteLast, sorteoNudgeLast] = await Promise.all([getConfig('journeyLast', null), getConfig('refundRemindLast', null), getNewbieOffersConfig(),
+      User.aggregate([{ $match: { role: 'user', 'notifPrefs.level': { $in: ['mine', 'none'] } } }, { $group: { _id: '$notifPrefs.level', n: { $sum: 1 } } }]), getConfig('rouletteNudgeLast', null), getConfig('sorteoNudgeLast', null)]);
     res.json({ success: true, config: nc, cap: ap.cap, autopilot: { enabled: ap.enabled, time: ap.time, hours: ap.hours, parts: ap.parts },
       steps: retentionJourney.STEPS.map((s) => ({ id: s.id, segment: s.segment, day: s.day, name: s.name, capped: s.capped, gift: s.gift, title: s.title, text: s.text })),
-      tiers: retentionJourney.VALUE_TIERS, segmentLabels: retentionJourney.SEGMENT_LABELS, preview: _journeyPreview.v, journeyLast, refundLast, rouletteLast, newbie,
+      tiers: retentionJourney.VALUE_TIERS, segmentLabels: retentionJourney.SEGMENT_LABELS, preview: _journeyPreview.v, journeyLast, refundLast, rouletteLast, sorteoNudgeLast /* #1036 */, newbie,
       storyBonusDays: [3], optOut: Object.fromEntries(optOut.map((o) => [o._id, o.n])) });
   } catch (e) { logger.error('[notif-center] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
@@ -28682,11 +28755,16 @@ app.put('/api/admin/inicio/notif-center', authMiddleware, adminMiddleware, async
       if (c != null && (!Number.isFinite(c) || c < 2 || c > 60)) return res.status(400).json({ error: 'El tope mensual va de 2 a 60 (o vacío = automático).' });
       capChanged = (cur.monthlyCap || null) !== c; next.monthlyCap = c;
     }
-    for (const k of ['journey', 'refundReminder', 'winnersStory', 'legacyRules', 'rouletteReminder']) if (typeof b[k] === 'boolean') next[k] = b[k];
+    for (const k of ['journey', 'refundReminder', 'winnersStory', 'legacyRules', 'rouletteReminder', 'sorteoNudge' /* #1036 */]) if (typeof b[k] === 'boolean') next[k] = b[k];
     await Config.set('notifCenter', next, req.user.username || 'admin');
     let reprogrammed = 0; if (capChanged) { reprogrammed = await _autopilotClearFuture().catch(() => 0); } // el autopiloto se reprograma solo con el tope nuevo
     res.json({ success: true, config: await getNotifCenterConfig(), reprogrammed });
   } catch (e) { logger.error('[notif-center] put: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #1036: probar / mandar ahora el aviso semanal del sorteo (historia + push a quien juega y no se anotó), sin esperar al lunes.
+app.post('/api/admin/inicio/notif-center/sorteo-nudge/run', authMiddleware, adminMiddleware, async (req, res) => {
+  try { if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' }); const r = await _sorteoNudgeTick(true); res.json({ success: true, result: r }); }
+  catch (e) { logger.error('[sorteo-aviso] run: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/inicio/notif-center/run', authMiddleware, adminMiddleware, async (req, res) => {
   try { const out = await _journeyTick(true); res.json({ success: true, result: out }); } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
