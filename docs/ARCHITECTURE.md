@@ -1878,3 +1878,42 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
   kind:'promo', tag:'sorteo-nudge-<día>'})`; app.js abre `VIP.sorteos.open('mensual')` con `?open=sorteos` (también desde el SW `vip-open`).
 - Centro de avisos: `getNotifCenterConfig().sorteoNudge`, PUT acepta la clave, GET devuelve `sorteoNudgeLast`; `POST …/sorteo-nudge/run` (admin) fuerza.
   Panel: `tog('sorteoNudge', …)` + `ncSorteoNudgeNow()`. Apagar: tilde o `SORTEO_NUDGE_DISABLED=1`.
+
+
+## #1038 — 📒 Anotar movimientos (ingresos / egresos del banco que no son cargas ni retiros) y cierre por cuenta
+
+**Para qué:** el owner mete plata en la cuenta de pagos cuando falta ("fondeo") o paga algo por fuera (publicista, comisión) y eso no quedaba
+asentado ⇒ el cierre no cuadraba. Ahora cualquier agente lo anota desde el pie del **Chat completo** (`#cajaBar` → `#cajaModal`, admin.js
+`cajaOpen/cajaLoad/cajaSave/cajaFilePicked/cajaVerify/cajaDelete/cajaReceipt`).
+
+**Modelo:** reutiliza `Expense` (#770/#904): `kind` 'fondeo' = INGRESO · 'gasto' = EGRESO; `account` 'main' (banco principal hgcash) ·
+'external' (otra cuenta / efectivo) · `<id>` de `Config['bankAccounts']`; `source:'caja'`; `receipt {data (select:false), mime, name, size}`;
+`bankMatch {status: pending|matched|unmatched|na, movementId, externalId, amount, date, party, checks, checkedAt, note}`. Registros viejos sin
+`account`: `_expAccount(g)` ⇒ `paidVia:'hgcash'` → main, si no external. `BankMovement.matchStatus` suma `'caja'` (entrada que es un fondeo
+anotado: el auto-cargador no la toca) y `cajaExpenseId`. `DailyClose.fondeosBanco` (fondeos que entraron a la principal).
+
+**Rutas (staff completo, no están en `STAFF_DENY_MUTATIONS`):** `GET /api/admin/caja-movimientos?days=` (sin el comprobante; `hoy`, `accounts`,
+`apiOk`, `isAdmin`) · `POST` {kind ingreso|egreso, amount, concept ≥3, party, account, dateKey ≤ hoy y ≤ 45 d, receipt data URL imagen/PDF ≤ 5 MB
+(obligatorio salvo admin), force} ⇒ crea, cruza con el banco al instante y recalcula el cierre del día; igual tipo+monto+día en 10 min ⇒ 409
+`DUP_CAJA` · `GET :id/receipt` (sirve la imagen/PDF) · `POST :id/verify` (re-busca) · `DELETE :id` (sólo admin; una entrada 'caja' vuelve a
+`no_match`). `POST /api/admin/gastos` acepta `account` y cruza igual si es a mano en la principal.
+
+**Cruce con el banco `_cajaBankVerify(exp, {noLive})`:** `account !== 'main'` ⇒ `na`. Si es principal: dirección Inbound (fondeo) / Outbound
+(gasto); candidatos en `BankMovement` con el mismo monto ±$1 entre `dateKey − 1 d` y `+ 2 d`, estado no rechazado, no cruzados con otra
+anotación (`taken`). Entradas: matchStatus en pending/no_match/needs_review/ignored/error/caja (nunca las acreditadas a un cliente); con 2+
+iguales y `toName` del agente, se prefiere la que coincide por `_nameMatch`. Salidas: fuera las de retiros (`PendingPayout.id` =
+`externalId`, `hgTransactionId`) y cash-outs propios (`_CAJA_OUR_EXT` = gasto-/refund-/devol/vip-). Sin candidatos ⇒ `hgcashPay.listMovements`
+sobre la ventana: el movimiento que coincide se guarda en `BankMovement` (topic 'CAJA', entrada ⇒ 'caja', salida ⇒ 'ignored', `cajaExpenseId`).
+Se elige el más cercano al mediodía del día; la entrada se marca 'caja'; nota si había varios. Sin nada ⇒ `unmatched` y `_cajaVerifyTick`
+(cada 10 min, lock `cajaverify`, 3 días, 3 consultas a la API por pasada) lo vuelve a intentar y recalcula el cierre al encontrarlo.
+
+**Cierre:** `_closeReconcile` separa por cuenta: `sistema.fondeosMain/fondeosExt/gastosMain/gastosExt/gastosMainVistos/cajaNoVisto(N)`;
+`banco.entradasCaja`, `banco.entradasSinAcreditarNeto` (= sin acreditar − la parte que explican los fondeos principales no cruzados todavía).
+Causas: `fondeo` = min(fondeosMain, entradasCaja + sinAcreditar) (+1) · `in_sin_acreditar` = neto · `gastos_banco` = gastos principales por API
+**o** anotados y vistos (−1; antes sólo API, y un gasto a mano desde la principal quedaba como "Otras salidas") · `out_otras` descuenta eso ·
+`caja_no_vista` (impacto 0, severidad media). Items: `fondeos`/`gastos` con `cuenta` y `banco`, `movimientosCaja`. `_closeCheck` suma
+`caja_banco` (falla si hay anotaciones principales no vistas) y usa `entradasSinAcreditarNeto`. `_closeEnsure` copia `fondeosBanco` =
+fondeosMain y `gastosBanco` = gastosMainVistos y **vuelve a correr `_closeApply`** (antes el resultado usaba fondeos/gastos de la pasada
+anterior). `_closeApply`: `difIn = bankIn − fondeosBanco − (dep − depSec)`, `difOut = bankOut − (retiros − pagosExternos − paySec) − gastosBanco`,
+`diferencia = (bankIn − bankOut) − (dep − depSec − retiros + paySec) − (pagosExternos + fondeosBanco) + gastosBanco`. Lo externo va al
+resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `scripts/test-caja-movimientos.js`.

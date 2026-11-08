@@ -575,7 +575,38 @@ document.addEventListener('change', function (ev) {
                         </div>
                     </div>
                 </div>
+            <!-- #1038 (owner): Anotar movimientos — ingresos / egresos del banco que no son cargas ni retiros, para que el cierre cuadre -->
+                <div class="caja-bar" id="cajaBar">
+                    <button class="btn btn-primary btn-sm" onclick="cajaOpen()">📒 Anotar movimientos</button>
+                    <span class="caja-bar-hint">Entró o salió plata del banco que NO es una carga ni un retiro (fondeo, pago externo, comisión…): anotalo con el comprobante y el cierre lo cruza con el banco.</span>
+                    <span id="cajaBarToday" class="caja-bar-today"></span>
+                </div>
             </section>
+            <div id="cajaModal" class="modal hidden" onclick="if(event.target===this)cajaClose()"><div class="modal-content caja-modal" onclick="event.stopPropagation()">
+                <div class="caja-head"><h3>📒 Anotar movimientos del banco</h3><button class="btn btn-secondary btn-sm" onclick="cajaClose()">✕</button></div>
+                <p class="caja-intro">Sirve para lo que NO es una carga de cliente ni un retiro: plata que se puso en la cuenta para pagar (fondeo), un pago que hicimos por fuera, una comisión, un ingreso externo. Decí por qué cuenta pasó y adjuntá el comprobante: si fue por el banco principal, el sistema busca ese movimiento en el banco y el cierre lo toma.</p>
+                <div class="caja-form">
+                    <div class="caja-tipo">
+                        <label class="caja-tipo-btn in"><input type="radio" name="cajaTipo" value="ingreso" checked> ⬇️ INGRESO<small>entró plata</small></label>
+                        <label class="caja-tipo-btn out"><input type="radio" name="cajaTipo" value="egreso"> ⬆️ EGRESO<small>salió plata</small></label>
+                    </div>
+                    <label>Monto $<input type="number" id="cajaAmount" min="1" step="1" placeholder="0" inputmode="numeric"></label>
+                    <label>¿Por qué cuenta pasó?<select id="cajaAccount"><option value="main">🏦 Banco principal (la cuenta de hgcash)</option><option value="external">🔁 Externo: otra cuenta / efectivo (no pasa por el banco)</option></select></label>
+                    <label>Detalle (qué fue)<input type="text" id="cajaConcept" maxlength="120" placeholder="ej. fondeo para pagar retiros · pago a publicista · comisión del banco"></label>
+                    <label>De quién / a quién (opcional)<input type="text" id="cajaParty" maxlength="80" placeholder="nombre del que mandó o del que cobró"></label>
+                    <label>Fecha<input type="date" id="cajaDate"></label>
+                    <div class="caja-file">
+                        <input type="file" id="cajaFile" accept="image/*,application/pdf" style="display:none" onchange="cajaFilePicked(this)">
+                        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('cajaFile').click()">📎 Adjuntar comprobante</button>
+                        <span id="cajaFileName" class="caja-file-name">Obligatorio para los agentes (foto o PDF)</span>
+                        <img id="cajaFilePrev" class="caja-file-prev hidden" alt="">
+                    </div>
+                    <div class="caja-actions"><button class="btn btn-primary" id="cajaSaveBtn" onclick="cajaSave()">✅ Anotar</button><span id="cajaMsg" class="caja-msg"></span></div>
+                </div>
+                <div class="caja-list-h"><b>Últimos 7 días</b><small id="cajaListSub"></small><button class="btn btn-secondary btn-sm" onclick="cajaLoad()">🔄</button></div>
+                <div id="cajaList" class="caja-list">Cargando…</div>
+            </div></div>
+
 
             <!-- Users Section -->
             <section id="usersSection" class="section">

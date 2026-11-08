@@ -14,6 +14,15 @@ const schema = new mongoose.Schema({
   // #904 (owner): 'fondeo' = plata que ENTRA a la cuenta de pagos ("se stockeó para pagos $1.650.000"): el cierre la toma como INGRESO y
   // explica con ella la entrada al banco. 'gasto' = lo de siempre (sale plata y se descuenta del resultado).
   kind: { type: String, enum: ['gasto', 'fondeo'], default: 'gasto', index: true },
+  // #1038 (owner 2026-11-08, "Anotar movimientos"): por qué cuenta pasó la plata. 'main' = banco principal (hgcash: tiene que verse en el
+  // extracto ⇒ se cruza con BankMovement/API), 'external' = otra cuenta / efectivo (no pasa por el banco), '<id>' = cuenta secundaria de
+  // Config['bankAccounts']. null = registro viejo (se interpreta: paidVia 'hgcash' ⇒ main, si no external).
+  account: { type: String, default: null, index: true },
+  source: { type: String, default: 'panel' },      // 'caja' = anotado desde el botón del Chat completo
+  // Comprobante (foto / PDF) como data URL; no viaja en los listados (select:false).
+  receipt: { data: { type: String, default: null, select: false }, mime: { type: String, default: null }, name: { type: String, default: null }, size: { type: Number, default: 0 } },
+  // Cruce con el banco: { status: 'pending' | 'matched' | 'unmatched' | 'na', movementId, externalId, amount, date, checkedAt, checks, note }
+  bankMatch: { type: mongoose.Schema.Types.Mixed, default: null },
   status: { type: String, enum: ['paid', 'paying', 'failed'], default: 'paid', index: true },
   hgId: { type: String, default: null },
   hgError: { type: String, default: null },

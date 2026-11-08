@@ -21671,6 +21671,167 @@ app.post('/api/admin/cleanup-tests', authMiddleware, adminMiddleware, async (req
 });
 // #770 (owner): GASTOS — "que se cargue directo desde el admin, abajo de Cargas automáticas, con la API completando CBU y poniendo
 // datos, así en el cierre puede figurar bien en detalle". Sólo admin general + clave de Datos (está en la lista del gate).
+
+// ===== #1038 (owner 2026-11-08): ANOTAR MOVIMIENTOS (caja) =====
+// "A veces ingresa plata por falta de plata o pagan algo externo y no queda asentado en ningún lado": botón 📒 Anotar movimientos al pie del
+// Chat completo (lo usan también depositor/withdrawer). Cada anotación es un Expense (kind 'fondeo' = ingreso · 'gasto' = egreso) con la CUENTA
+// por la que pasó la plata, el comprobante y el cruce con el banco: si fue por la cuenta PRINCIPAL se busca el movimiento en BankMovement
+// (webhook/poll) y, si no está, en la API del banco (listMovements); si es externo / secundaria no pasa por el banco y queda 'na'.
+// El cierre (_closeReconcile / _closeApply) toma: fondeos del banco principal ⇒ explican entradas sin acreditar · gastos que salieron de este
+// banco ⇒ explican salidas · externos ⇒ sólo al resultado. Lo anotado y NO visto en el banco deja el control del cierre en "revisar".
+function _expAccount(g) { return (g && g.account) || (g && g.paidVia === 'hgcash' ? 'main' : 'external'); }
+const _CAJA_OUR_EXT = /^(gasto-|refund-|devol|vip-)/i; // externalID de cash-outs propios (gastos por API, devoluciones): nunca son "otro egreso"
+async function _cajaBankVerify(exp, opts) {
+  opts = opts || {};
+  const prev = (exp.bankMatch && typeof exp.bankMatch === 'object') ? exp.bankMatch : {};
+  const checks = (Number(prev.checks) || 0) + 1; const now = new Date();
+  const save = async (bm) => { bm.checks = checks; bm.checkedAt = now.toISOString(); await Expense.updateOne({ id: exp.id }, { $set: { bankMatch: bm } }); return bm; };
+  const acc = _expAccount(exp);
+  if (acc !== 'main') return save({ status: 'na', note: acc === 'external' ? 'externo: no pasa por el banco principal' : 'cuenta secundaria: no pasa por el banco principal' });
+  const dir = exp.kind === 'fondeo' ? 'Inbound' : 'Outbound';
+  const amt = Math.round(Number(exp.amount) || 0); if (!(amt > 0)) return save({ status: 'unmatched', note: 'monto inválido' });
+  const d0 = new Date(String(exp.dateKey) + 'T03:00:00.000Z'); const from = new Date(d0.getTime() - 86400000), to = new Date(Math.min(d0.getTime() + 2 * 86400000, now.getTime() + 3600000));
+  const mid = d0.getTime() + 12 * 3600000;
+  // movimientos ya cruzados con OTRA anotación
+  const taken = new Set((await Expense.find({ id: { $ne: exp.id }, 'bankMatch.movementId': { $nin: [null, ''] } }).select('bankMatch').lean()).map((x) => String((x.bankMatch || {}).movementId || '')).filter(Boolean));
+  const q = { direction: dir, amount: { $gte: amt - 1, $lte: amt + 1 }, $or: [{ date: { $gte: from, $lte: to } }, { date: null, createdAt: { $gte: from, $lte: to } }] };
+  if (dir === 'Inbound') q.matchStatus = { $in: ['pending', 'no_match', 'needs_review', 'ignored', 'error', 'caja', null] };
+  let cands = (await BankMovement.find(q).select('movementId externalId amount date createdAt status matchStatus fromName fromCUIT toName cajaExpenseId').limit(40).lean())
+    .filter((m) => !/reject|fail|cancel|error/i.test(String(m.status || '')) && !taken.has(String(m.movementId)) && (!m.cajaExpenseId || m.cajaExpenseId === exp.id));
+  if (dir === 'Outbound') {
+    // afuera lo que salió por un retiro (PendingPayout) o un cash-out propio (gasto por API, devolución)
+    const extIds = cands.map((m) => m.externalId).filter(Boolean), mIds = cands.map((m) => m.movementId);
+    const paid = extIds.length || mIds.length ? await PendingPayout.find({ $or: [{ id: { $in: extIds } }, { hgTransactionId: { $in: mIds.concat(extIds) } }] }).select('id hgTransactionId').lean() : [];
+    const payoutIds = new Set(paid.flatMap((p) => [p.id, p.hgTransactionId]).filter(Boolean).map(String));
+    cands = cands.filter((m) => !(m.externalId && (payoutIds.has(String(m.externalId)) || _CAJA_OUR_EXT.test(String(m.externalId)))) && !payoutIds.has(String(m.movementId)));
+  } else if (cands.length > 1 && exp.toName) {
+    // varias entradas iguales el mismo día: si el agente dijo DE QUIÉN vino, preferir la que coincide por nombre
+    const byName = cands.filter((m) => m.fromName && _nameMatch(exp.toName, m.fromName)); if (byName.length) cands = byName;
+  }
+  // #1038: si NO está en BankMovement, preguntar a la API del banco por la ventana (sólo cuando hay token y no se pidió "sin API")
+  if (!cands.length && !opts.noLive && hgcashPay.isEnabled()) {
+    try {
+      const accId = await resolveHgcashAccountId();
+      if (accId) {
+        const lm = await hgcashPay.listMovements({ accountId: accId, from, to: new Date(Math.min(to.getTime(), now.getTime())) });
+        if (lm.ok) {
+          const want = dir === 'Inbound' ? 'in' : 'out';
+          for (const it of lm.items || []) {
+            if (it.direction !== want || Math.abs((it.amount || 0) - amt) > 1) continue;
+            const p = it.raw || {}; const id = String(p.id || it.id || ''); if (!id || taken.has(id)) continue;
+            if (dir === 'Outbound' && p.externalID && _CAJA_OUR_EXT.test(String(p.externalID))) continue;
+            if (dir === 'Outbound' && p.externalID && (await PendingPayout.exists({ $or: [{ id: String(p.externalID) }, { hgTransactionId: id }] }))) continue;
+            if (await BankMovement.exists({ movementId: id })) continue; // está pero no calificó arriba (acreditada a un cliente, etc.)
+            const doc = { movementId: id, externalId: p.externalID || p.externalId || null, coelsaCode: p.coelsaCode || p.coelsa || null, amount: it.amount || amt, amountRaw: p.amount != null ? String(p.amount) : null, currency: p.currency || null,
+              direction: dir, status: p.status || it.status || null, type: p.type || null, accountId: p.accountId || accId, fromName: p.fromName || null, fromCBU: p.fromCBU || null, fromCUIT: p.fromCUIT || null,
+              toName: p.toName || null, toCBU: p.toCBU || null, toCUIT: p.toCUIT || null, date: it.date || (p.date ? new Date(p.date) : null), timezone: p.timezone || null, topic: 'CAJA', eventType: 'caja-verify', raw: p };
+            try { await BankMovement.create({ ...doc, matchStatus: dir === 'Inbound' ? 'caja' : 'ignored', cajaExpenseId: exp.id, createdAt: new Date() }); } catch (e) { if (!(e && e.code === 11000)) throw e; }
+            const fresh = await BankMovement.findOne({ movementId: id }).select('movementId externalId amount date createdAt status matchStatus fromName fromCUIT toName cajaExpenseId').lean(); if (fresh) cands.push(fresh);
+            logger.info(`[caja] ${exp.id}: movimiento ${dir} $${amt} encontrado por la API del banco (no había llegado por webhook)`);
+            break;
+          }
+        }
+      }
+    } catch (e) { logger.warn('[caja] consulta API del banco: ' + e.message); }
+  }
+  if (!cands.length) return save({ status: 'unmatched', note: dir === 'Inbound' ? 'la entrada todavía no se ve en el banco principal' : 'la salida todavía no se ve en el banco principal' });
+  cands.sort((a, b) => Math.abs(((a.date || a.createdAt) || now).getTime() - mid) - Math.abs(((b.date || b.createdAt) || now).getTime() - mid));
+  const m = cands[0];
+  // consumir el movimiento: una ENTRADA cruzada con un fondeo no es carga de nadie (el auto-cargador no la toca); una salida queda marcada
+  if (dir === 'Inbound') await BankMovement.updateOne({ movementId: m.movementId, matchStatus: { $in: ['pending', 'no_match', 'needs_review', 'ignored', 'error', 'caja', null] } }, { $set: { matchStatus: 'caja', cajaExpenseId: exp.id } });
+  else await BankMovement.updateOne({ movementId: m.movementId }, { $set: { cajaExpenseId: exp.id } });
+  return save({ status: 'matched', movementId: m.movementId, externalId: m.externalId || null, amount: Math.round(Number(m.amount) || 0), date: (m.date || m.createdAt || now).toISOString(), party: (dir === 'Inbound' ? m.fromName : m.toName) || null, note: cands.length > 1 ? 'había ' + cands.length + ' movimientos iguales: se tomó el más cercano a la fecha (verificar)' : null });
+}
+// Re-verificación: lo anotado en la cuenta principal que todavía no se vio en el banco (hasta 3 días; después queda como "no visto" en el cierre).
+let _cajaVerifyRunning = false;
+async function _cajaVerifyTick() {
+  if (_cajaVerifyRunning) return; _cajaVerifyRunning = true;
+  try {
+    if (!(await _cronClaim('cajaverify', 9 * 60000))) return;
+    const list = await Expense.find({ status: { $ne: 'failed' }, account: 'main', 'bankMatch.status': { $in: ['pending', 'unmatched'] }, createdAt: { $gte: new Date(Date.now() - 3 * 86400000) } }).sort({ createdAt: 1 }).limit(30).lean();
+    let hit = 0; const days = new Set();
+    for (const exp of list) { try { const bm = await _cajaBankVerify(exp, { noLive: hit >= 3 }); if (bm.status === 'matched') { hit++; days.add(exp.dateKey); } } catch (e) { logger.warn('[caja] verify ' + exp.id + ': ' + e.message); } }
+    for (const dk of days) { try { await _closeEnsure(dk, true); } catch (_) {} }
+  } catch (e) { logger.warn('[caja] tick ' + e.message); } finally { _cajaVerifyRunning = false; }
+}
+setTimeout(() => { _cajaVerifyTick().catch(() => {}); setInterval(() => { _cajaVerifyTick().catch(() => {}); }, 10 * 60000); }, 7 * 60000);
+function _cajaItem(g, accs) {
+  const acc = _expAccount(g); const accName = acc === 'main' ? 'Banco principal' : acc === 'external' ? 'Externo (otra cuenta / efectivo)' : (((accs || []).find((a) => a.id === acc) || {}).name || acc);
+  return { id: g.id, dateKey: g.dateKey, tipo: g.kind === 'fondeo' ? 'ingreso' : 'egreso', amount: Math.round(Number(g.amount) || 0), concept: g.concept, party: g.toName || null, account: acc, accountName: accName,
+    paidVia: g.paidVia, status: g.status, source: g.source || 'panel', createdBy: g.createdBy || null, createdAt: g.createdAt, hasReceipt: !!(g.receipt && g.receipt.mime), receiptMime: (g.receipt && g.receipt.mime) || null, bankMatch: g.bankMatch || (acc === 'main' ? { status: 'pending' } : { status: 'na' }) };
+}
+// Listado (también depositor/withdrawer): los últimos N días sin el comprobante (se pide aparte).
+app.get('/api/admin/caja-movimientos', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(60, parseInt(req.query.days, 10) || 7));
+    const since = datosIa.dateKeyART(new Date(Date.now() - days * 86400000)); const hoy = datosIa.dateKeyART(new Date());
+    const items = await Expense.find({ dateKey: { $gte: since }, status: { $ne: 'failed' } }).sort({ createdAt: -1 }).limit(200).lean();
+    const accs = (await _bankAccounts()).filter((a) => a.active !== false);
+    const out = items.map((g) => _cajaItem(g, accs));
+    const sum = (arr) => Math.round(arr.reduce((s, g) => s + g.amount, 0));
+    const hoyI = out.filter((g) => g.dateKey === hoy && g.tipo === 'ingreso'), hoyE = out.filter((g) => g.dateKey === hoy && g.tipo === 'egreso');
+    res.json({ success: true, items: out, hoy: { ingresos: sum(hoyI), egresos: sum(hoyE), n: hoyI.length + hoyE.length }, accounts: accs.map((a) => ({ id: a.id, name: a.name })), apiOk: hgcashPay.isEnabled(), isAdmin: req.user.role === 'admin', hoyKey: hoy });
+  } catch (e) { logger.error('[caja] list ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+const _CAJA_RECEIPT_RE = /^data:(image\/(png|jpe?g|webp|gif|heic|heif)|application\/pdf);base64,([A-Za-z0-9+/=]+)$/;
+app.post('/api/admin/caja-movimientos', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const tipo = b.kind === 'egreso' || b.tipo === 'egreso' ? 'egreso' : (b.kind === 'ingreso' || b.tipo === 'ingreso' ? 'ingreso' : null);
+    if (!tipo) return res.status(400).json({ error: 'Decí si es un INGRESO o un EGRESO' });
+    const amount = Math.round(Number(b.amount) || 0); if (!(amount >= 1 && amount <= 50000000)) return res.status(400).json({ error: 'Monto inválido' });
+    const concept = String(b.concept || '').trim().slice(0, 120); if (concept.length < 3) return res.status(400).json({ error: 'Contá el detalle (qué fue, mínimo 3 letras)' });
+    const party = String(b.party || b.toName || '').trim().slice(0, 80) || null;
+    const accs = await _bankAccounts(); let account = String(b.account || 'main').trim();
+    if (account !== 'main' && account !== 'external' && !accs.some((a) => a.id === account)) return res.status(400).json({ error: 'Cuenta inválida' });
+    const hoy = datosIa.dateKeyART(new Date()); const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(b.dateKey || '')) ? String(b.dateKey) : hoy;
+    if (dateKey > hoy) return res.status(400).json({ error: 'La fecha no puede ser futura' });
+    if (dateKey < datosIa.dateKeyART(new Date(Date.now() - 45 * 86400000))) return res.status(400).json({ error: 'Más de 45 días atrás: pedile al admin que lo cargue desde Gastos' });
+    // comprobante: obligatorio para los agentes (owner: "esos comprobantes que los hagan cargar"); el admin puede anotar sin él
+    let receipt = null; const rd = b.receipt && typeof b.receipt === 'object' ? String(b.receipt.data || '') : String(b.receipt || '');
+    if (rd) {
+      const mm = rd.match(_CAJA_RECEIPT_RE); if (!mm) return res.status(400).json({ error: 'El comprobante tiene que ser una foto (jpg/png/webp) o un PDF' });
+      if (rd.length > 7 * 1024 * 1024) return res.status(400).json({ error: 'El comprobante es muy pesado (máx. 5 MB)' });
+      receipt = { data: rd, mime: mm[1], name: String((b.receipt && b.receipt.name) || 'comprobante').slice(0, 80), size: Math.round(mm[3].length * 0.75) };
+    } else if (req.user.role !== 'admin') return res.status(400).json({ error: 'Adjuntá el comprobante del movimiento (foto o PDF)' });
+    // mismo tipo + monto + día anotado en los últimos 10 min ⇒ pedir confirmación (doble toque)
+    if (b.force !== true) { const dup = await Expense.findOne({ kind: tipo === 'ingreso' ? 'fondeo' : 'gasto', amount, dateKey, createdAt: { $gte: new Date(Date.now() - 10 * 60000) } }).select('id concept').lean(); if (dup) return res.status(409).json({ error: 'Hace menos de 10 minutos se anotó un ' + tipo + ' igual ($' + amount.toLocaleString('es-AR') + ', "' + dup.concept + '"). ¿Es OTRO movimiento?', code: 'DUP_CAJA' }); }
+    const doc = await Expense.create({ id: uuidv4(), kind: tipo === 'ingreso' ? 'fondeo' : 'gasto', dateKey, amount, concept, toName: party, paidVia: 'manual', status: 'paid', account, source: 'caja', receipt, bankMatch: { status: account === 'main' ? 'pending' : 'na', checks: 0 }, createdBy: req.user.username });
+    let bm = null; try { bm = await _cajaBankVerify(doc.toObject ? doc.toObject() : doc, {}); } catch (e) { logger.warn('[caja] verify ' + e.message); }
+    try { await _closeEnsure(dateKey, true); } catch (_) {}
+    logger.info(`[caja] ${req.user.username}: ${tipo} $${amount} "${concept}" cuenta=${account} ${dateKey} banco=${(bm || {}).status || '?'}`);
+    const item = _cajaItem(Object.assign(doc.toObject ? doc.toObject() : doc, { bankMatch: bm || doc.bankMatch }), accs);
+    const msg = !bm || bm.status === 'na' ? 'Anotado. No pasa por el banco principal: va al resultado del cierre tal cual.' : bm.status === 'matched' ? ('Anotado y VISTO en el banco (' + (tipo === 'ingreso' ? 'entrada' : 'salida') + ' de $' + amount.toLocaleString('es-AR') + (bm.party ? ', ' + bm.party : '') + ').') : 'Anotado. Todavía no aparece en el banco: se vuelve a buscar cada 10 min durante 3 días; si no aparece, el cierre lo marca.';
+    res.json({ success: true, item, message: msg });
+  } catch (e) { logger.error('[caja] create ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.get('/api/admin/caja-movimientos/:id/receipt', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const g = await Expense.findOne({ id: String(req.params.id) }).select('+receipt.data receipt').lean();
+    const rd = g && g.receipt && g.receipt.data; if (!rd) return res.status(404).json({ error: 'Sin comprobante' });
+    const mm = String(rd).match(/^data:([^;]+);base64,(.+)$/); if (!mm) return res.status(404).json({ error: 'Comprobante ilegible' });
+    res.set('Content-Type', mm[1]); res.set('Cache-Control', 'private, max-age=600'); res.send(Buffer.from(mm[2], 'base64'));
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/caja-movimientos/:id/verify', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const g = await Expense.findOne({ id: String(req.params.id) }).lean(); if (!g) return res.status(404).json({ error: 'No existe' });
+    const bm = await _cajaBankVerify(g, {}); try { await _closeEnsure(g.dateKey, true); } catch (_) {}
+    res.json({ success: true, item: _cajaItem(Object.assign(g, { bankMatch: bm }), await _bankAccounts()) });
+  } catch (e) { logger.error('[caja] verify ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.delete('/api/admin/caja-movimientos/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el admin general puede borrar una anotación' });
+    const g = await Expense.findOne({ id: String(req.params.id) }).lean(); if (!g) return res.status(404).json({ error: 'No existe' });
+    if (g.paidVia === 'hgcash') return res.status(400).json({ error: 'Se pagó por la API del banco: no se puede borrar' });
+    const mid = g.bankMatch && g.bankMatch.movementId;
+    if (mid) { await BankMovement.updateOne({ movementId: mid, cajaExpenseId: g.id }, { $set: { cajaExpenseId: null, ...(g.kind === 'fondeo' ? { matchStatus: 'no_match' } : {}) } }); }
+    await Expense.deleteOne({ id: g.id }); try { await _closeEnsure(g.dateKey, true); } catch (_) {}
+    logger.info(`[caja] ${req.user.username} borró la anotación ${g.id} (${g.kind} $${g.amount} ${g.dateKey})`);
+    res.json({ success: true });
+  } catch (e) { logger.error('[caja] delete ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.get('/api/admin/gastos', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
@@ -21694,7 +21855,10 @@ app.post('/api/admin/gastos', authMiddleware, adminMiddleware, async (req, res) 
     const toCBU = String(b.toCBU || '').trim().slice(0, 40) || null, toName = String(b.toName || '').trim().slice(0, 80) || null, toCUIT = String(b.toCUIT || '').replace(/\D/g, '').slice(0, 11) || null;
     const payNow = b.payNow === true && kind === 'gasto'; // un fondeo nunca se "paga": sólo se registra
     const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(b.dateKey || '')) ? String(b.dateKey) : datosIa.dateKeyART(new Date());
-    const doc = await Expense.create({ id: uuidv4(), kind, dateKey, amount, concept, toCBU, toName, toCUIT, paidVia: payNow ? 'hgcash' : 'manual', status: payNow ? 'paying' : 'paid', createdBy: req.user.username });
+    // #1038: por qué cuenta pasó (por API ⇒ principal). A mano en la principal ⇒ se cruza con el banco como en Anotar movimientos.
+    const _accs = await _bankAccounts(); let account = payNow ? 'main' : String(b.account || 'external').trim(); if (account !== 'main' && account !== 'external' && !_accs.some((a) => a.id === account)) account = 'external';
+    const doc = await Expense.create({ id: uuidv4(), kind, dateKey, amount, concept, toCBU, toName, toCUIT, paidVia: payNow ? 'hgcash' : 'manual', status: payNow ? 'paying' : 'paid', account, bankMatch: { status: account === 'main' && !payNow ? 'pending' : 'na', checks: 0 }, createdBy: req.user.username });
+    if (!payNow && account === 'main') { try { await _cajaBankVerify(doc.toObject(), {}); } catch (e) { logger.warn('[gastos] verify ' + e.message); } }
     if (payNow) {
       if (!hgcashPay.isEnabled()) { await Expense.deleteOne({ id: doc.id }); return res.status(503).json({ error: 'hgcash no está configurado (token de API).' }); }
       if (!toCBU || !/^(\d{22}|[a-z0-9._-]{6,40})$/i.test(toCBU)) { await Expense.deleteOne({ id: doc.id }); return res.status(400).json({ error: 'Para pagar por la API hace falta el CBU/CVU (22 dígitos) o el alias.' }); }
@@ -22759,8 +22923,11 @@ function _closeApply(doc, cfg) {
   // entró a la cuenta sin ser carga de nadie. Los dos son ingresos de la cuenta que el sistema no tiene como depósito: se restan de la
   // diferencia para que el arqueo dé 0 cuando todo está registrado.
   doc.ingresosExternos = Math.round((doc.pagosExternos || 0) + (doc.fondeos || 0));
-  doc.difIn = Math.round(doc.bankIn - (doc.fondeos || 0) - (doc.depositos - _depSec)); doc.difOut = Math.round(doc.bankOut - (doc.retiros - (doc.pagosExternos || 0) - _paySec));
-  doc.diferencia = Math.round((doc.bankIn - doc.bankOut) - (doc.depositos - _depSec - doc.retiros + _paySec) - doc.ingresosExternos);
+  // #1038: contra el BANCO sólo cuenta lo que pasó por él: fondeos de la principal (fondeosBanco; los externos van al resultado pero no al
+  // extracto) y los gastos que salieron de esta cuenta (gastosBanco: el banco los tiene como salida y el sistema no los tiene como retiro).
+  const _fB = doc.fondeosBanco != null ? Number(doc.fondeosBanco) || 0 : (doc.fondeos || 0), _gB = Number(doc.gastosBanco) || 0;
+  doc.difIn = Math.round(doc.bankIn - _fB - (doc.depositos - _depSec)); doc.difOut = Math.round(doc.bankOut - (doc.retiros - (doc.pagosExternos || 0) - _paySec) - _gB);
+  doc.diferencia = Math.round((doc.bankIn - doc.bankOut) - (doc.depositos - _depSec - doc.retiros + _paySec) - ((doc.pagosExternos || 0) + _fB) + _gB);
   const tol = Math.max(1000, Math.round(doc.depositos * 0.001));
   // #502: si hay saldo del banco al inicio y al fin del día, el arqueo REAL es (saldo fin − saldo inicio) − (depósitos − retiros)
   const bs = doc.bankBalanceStartManual != null ? doc.bankBalanceStartManual : doc.bankBalanceStart, be = doc.bankBalanceEndManual != null ? doc.bankBalanceEndManual : doc.bankBalanceEnd;
@@ -22831,21 +22998,31 @@ async function _closeReconcile(dayKey) {
   const isIn = (m) => String(m.direction || '').toLowerCase() === 'inbound', isOut = (m) => String(m.direction || '').toLowerCase() === 'outbound';
   const ins = inDay.filter(isIn), outs = inDay.filter(isOut);
   const ms = (m) => String(m.matchStatus || '');
-  const bIn = { acreditadas: ins.filter((m) => ['auto_charged', 'manual_charged', 'shadow_matched', 'redirected'].includes(ms(m))), sinAcreditar: ins.filter((m) => ['pending', 'claiming', 'no_match', 'needs_review', 'awaiting_platform', 'error', null, ''].includes(ms(m) || '')), devueltas: ins.filter((m) => ms(m) === 'refunded'), dupIgn: ins.filter((m) => ['duplicate', 'ignored'].includes(ms(m))) };
+  const bIn = { acreditadas: ins.filter((m) => ['auto_charged', 'manual_charged', 'shadow_matched', 'redirected'].includes(ms(m))), sinAcreditar: ins.filter((m) => ['pending', 'claiming', 'no_match', 'needs_review', 'awaiting_platform', 'error', null, ''].includes(ms(m) || '')), devueltas: ins.filter((m) => ms(m) === 'refunded'), dupIgn: ins.filter((m) => ['duplicate', 'ignored'].includes(ms(m))), caja: ins.filter((m) => ms(m) === 'caja') }; // #1038: 'caja' = fondeo anotado
   out.banco.entradas = sum(ins); out.banco.entradasN = ins.length;
   out.banco.entradasAcreditadas = sum(bIn.acreditadas); out.banco.entradasSinAcreditar = sum(bIn.sinAcreditar); out.banco.entradasSinAcreditarN = bIn.sinAcreditar.length;
-  out.banco.entradasDevueltas = sum(bIn.devueltas); out.banco.entradasDupIgn = sum(bIn.dupIgn);
+  out.banco.entradasDevueltas = sum(bIn.devueltas); out.banco.entradasDupIgn = sum(bIn.dupIgn); out.banco.entradasCaja = sum(bIn.caja); out.banco.entradasCajaN = bIn.caja.length; // #1038
   out.banco.salidas = sum(outs); out.banco.salidasN = outs.length;
   out.items.entradasSinAcreditar = bIn.sinAcreditar.slice(0, 50).map((m) => ({ hora: m.date || m.createdAt, de: m.fromName || null, monto: r0(m.amount), estado: ms(m) || 'pendiente' }));
   // ---- GASTOS del día (#770): pagados por la API (salen del banco) o registrados a mano
-  const _gAll = await Expense.find({ dateKey: dayKey, status: { $ne: 'failed' } }).select('amount concept toName paidVia createdBy createdAt hgId kind').lean();
+  const _gAll = await Expense.find({ dateKey: dayKey, status: { $ne: 'failed' } }).select('id amount concept toName paidVia createdBy createdAt hgId kind account source bankMatch').lean();
   const gastos = _gAll.filter((g) => g.kind !== 'fondeo'), fondeos = _gAll.filter((g) => g.kind === 'fondeo'); // #904
   const gBanco = gastos.filter((g) => g.paidVia === 'hgcash'), gMan = gastos.filter((g) => g.paidVia !== 'hgcash');
   out.sistema.gastos = sum(gastos); out.sistema.gastosN = gastos.length; out.sistema.gastosBanco = sum(gBanco); out.sistema.gastosManual = sum(gMan);
+  // #1038: por CUENTA. Principal ⇒ tiene que verse en el banco (API o cruce BankMovement); externo / secundaria ⇒ sólo al resultado.
+  const _bmSt = (g) => ((g.bankMatch || {}).status) || null, _seen = (g) => g.paidVia === 'hgcash' || _bmSt(g) === 'matched';
+  const fondeosMain = fondeos.filter((g) => _expAccount(g) === 'main'), fondeosExt = fondeos.filter((g) => _expAccount(g) !== 'main');
+  const gastosMain = gastos.filter((g) => _expAccount(g) === 'main'), gastosExt = gastos.filter((g) => _expAccount(g) !== 'main');
+  const gastosMainVistos = gastosMain.filter(_seen), gastosMainNoVistos = gastosMain.filter((g) => !_seen(g)), fondeosMainNoVistos = fondeosMain.filter((g) => !_seen(g));
+  out.sistema.fondeosMain = sum(fondeosMain); out.sistema.fondeosExt = sum(fondeosExt); out.sistema.gastosMain = sum(gastosMain); out.sistema.gastosExt = sum(gastosExt);
+  out.sistema.gastosMainVistos = sum(gastosMainVistos); out.sistema.cajaNoVisto = sum(gastosMainNoVistos) + sum(fondeosMainNoVistos); out.sistema.cajaNoVistoN = gastosMainNoVistos.length + fondeosMainNoVistos.length;
   // #904: FONDEOS = plata que el dueño metió en la cuenta de pagos (ingreso). Explican esa parte de las entradas del banco "sin acreditar".
   out.sistema.fondeos = sum(fondeos); out.sistema.fondeosN = fondeos.length;
-  out.items.fondeos = fondeos.slice(0, 20).map((g) => ({ hora: g.createdAt, usuario: '—', monto: r0(g.amount), agente: g.createdBy || null, nota: g.concept || 'Fondeo' }));
-  out.items.gastos = gastos.slice(0, 50).map((g) => ({ hora: g.createdAt, usuario: g.toName || '—', monto: r0(g.amount), agente: g.createdBy || null, nota: (g.concept || '') + (g.paidVia === 'hgcash' ? ' · por API' : ' · a mano') }));
+  const _accLbl = (g) => { const a = _expAccount(g); return a === 'main' ? 'Principal' : a === 'external' ? 'externo' : _accName(a); };
+  const _bankLbl = (g) => _expAccount(g) !== 'main' ? '— no pasa por el banco' : (g.paidVia === 'hgcash' ? '✅ pagado por API' : _bmSt(g) === 'matched' ? '✅ visto en el banco' : '⏳ NO se ve en el banco');
+  out.items.fondeos = fondeos.slice(0, 20).map((g) => ({ hora: g.createdAt, usuario: g.toName || '—', monto: r0(g.amount), agente: g.createdBy || null, cuenta: _accLbl(g), banco: _bankLbl(g), nota: g.concept || 'Fondeo' }));
+  out.items.gastos = gastos.slice(0, 50).map((g) => ({ hora: g.createdAt, usuario: g.toName || '—', monto: r0(g.amount), agente: g.createdBy || null, cuenta: _accLbl(g), banco: _bankLbl(g), nota: (g.concept || '') + (g.paidVia === 'hgcash' ? ' · por API' : ' · a mano') }));
+  out.items.movimientosCaja = _gAll.filter((g) => g.source === 'caja').slice(0, 50).map((g) => ({ hora: g.createdAt, tipo: g.kind === 'fondeo' ? 'INGRESO' : 'EGRESO', monto: r0(g.amount), cuenta: _accLbl(g), agente: g.createdBy || null, banco: _bankLbl(g), nota: (g.concept || '') + (g.toName ? ' · ' + g.toName : '') }));
   // ---- DIFERENCIA y causas (signo: + = el banco tiene MÁS que el sistema = sobrante; − = faltante)
   const dif = r0((out.banco.entradas - out.banco.salidas) - (out.sistema.depositos - out.sistema.retiros));
   out.diferencia = dif; out.sinDatosBanco = inDay.length === 0;
@@ -22856,17 +23033,20 @@ async function _closeReconcile(dayKey) {
   add('dep_sin_cuenta', 'Cargas a mano SIN marcar en qué cuenta entró la plata', out.sistema.depositosSinCuenta, -1, 'El agente no dijo dónde entró la plata. Revisar con quién y por qué se acreditó (lista de abajo).', 'alta');
   add('dep_prueba', 'Cargas de PRUEBA (usuario tester)', out.sistema.depositosPrueba, -1, 'Sólo en el entorno de prueba. En producción tiene que ser $0.', 'media');
   // #904: lo que el dueño registró como FONDEO explica (hasta su monto) las entradas del banco que no son cargas de clientes.
-  const _fondeoExpl = Math.min(out.sistema.fondeos || 0, out.banco.entradasSinAcreditar || 0); out.fondeoNoVistoEnBanco = Math.max(0, (out.sistema.fondeos || 0) - _fondeoExpl);
-  add('fondeo', 'Fondeo de la cuenta de pagos (ingreso registrado en Gastos)', _fondeoExpl, +1, 'Plata que se metió en la cuenta para pagar retiros: se toma como INGRESO del día y explica esa entrada del banco.', 'baja');
-  add('in_sin_acreditar', 'Entradas del banco SIN acreditar a ningún cliente', Math.max(0, (out.banco.entradasSinAcreditar || 0) - _fondeoExpl), +1, 'Plata que entró al banco y no se cargó a nadie (sin match, pendiente o en revisión). Revisar en Cargas pendientes / Movimientos.', 'alta');
+  // #1038: sólo los fondeos del banco PRINCIPAL explican entradas del banco: primero las ya cruzadas ('caja'), después hasta ese monto las "sin acreditar".
+  const _fondeoExpl = Math.min(out.sistema.fondeosMain || 0, (out.banco.entradasCaja || 0) + (out.banco.entradasSinAcreditar || 0)); out.fondeoNoVistoEnBanco = Math.max(0, (out.sistema.fondeosMain || 0) - _fondeoExpl);
+  const _sinAcrNeto = Math.max(0, (out.banco.entradasSinAcreditar || 0) - Math.max(0, _fondeoExpl - (out.banco.entradasCaja || 0))); out.banco.entradasSinAcreditarNeto = _sinAcrNeto;
+  add('fondeo', 'Fondeo / ingreso a la cuenta de pagos (anotado)', _fondeoExpl, +1, 'Plata que entró a la cuenta principal sin ser carga de un cliente (fondeo, pago externo…): se toma como INGRESO del día y explica esa entrada del banco.', 'baja');
+  add('in_sin_acreditar', 'Entradas del banco SIN acreditar a ningún cliente', _sinAcrNeto, +1, 'Plata que entró al banco y no se cargó a nadie (sin match, pendiente o en revisión). Si es un fondeo o un pago que recibimos, anotarlo en 📒 Anotar movimientos (Chat completo).', 'alta');
   add('in_devueltas', 'Entradas devueltas al origen (rebote por carga menor al mínimo)', out.banco.entradasDevueltas, +1, 'Entró y se devolvió: la entrada cuenta en el banco pero la salida de la devolución también. Neutro si la devolución salió el mismo día.', 'baja');
   add('in_dup', 'Entradas duplicadas o ignoradas por el sistema', out.banco.entradasDupIgn, +1, 'El banco las informó pero el sistema las descartó (duplicado o ignorado). Verificar que no sean cargas reales.', 'media');
   add('pago_externo', 'Retiros pagados por BANCO EXTERNO (ingreso: la plata quedó en la cuenta)', out.sistema.pagosExternos, +1, 'Las fichas se descontaron en 1girox (cuenta como retiro) pero se pagó desde otra cuenta: la plata NO salió de este banco. Se toma como INGRESO del día y explica ese sobrante.', 'baja'); // #913
   add('pago_secundaria', 'Retiros pagados desde una cuenta SECUNDARIA', out.sistema.pagosSecundaria, +1, 'Salieron de otra cuenta nuestra (ver "Cuentas"), no del banco principal. Es normal.', 'baja'); // #1001
   add('pago_manual', 'Retiros pagados a mano SIN marcar desde dónde', out.sistema.pagosManual, +1, 'Nadie marcó si salió de la principal, de una secundaria o de otro banco. Verificar en el extracto.', 'alta');
-  add('gastos_banco', 'Gastos pagados por la API del banco (registrados en Gastos)', out.sistema.gastosBanco, -1, 'Salieron del banco como gasto cargado en el panel: explican esa parte de las salidas; se descuentan del resultado del día.', 'baja');
-  const salidasOtras = r0(out.banco.salidas - out.sistema.pagosBanco - out.sistema.pagosMismoBanco - out.banco.entradasDevueltas - out.sistema.gastosBanco); // #1001: los pagados a mano desde la principal ya explican su salida
-  add('out_otras', 'Otras salidas del banco (comisiones, transferencias ajenas a retiros)', salidasOtras, -1, 'Salieron del banco sin ser un retiro de cliente, una devolución ni un gasto registrado: comisiones del banco u otros pagos. Si es un gasto, cargalo en Gastos para que quede explicado.', 'media');
+  add('gastos_banco', 'Gastos / egresos que salieron de este banco (por API o anotados y vistos)', out.sistema.gastosMainVistos, -1, 'Salieron del banco principal como gasto registrado: explican esa parte de las salidas; se descuentan del resultado del día.', 'baja'); // #1038
+  const salidasOtras = r0(out.banco.salidas - out.sistema.pagosBanco - out.sistema.pagosMismoBanco - out.banco.entradasDevueltas - out.sistema.gastosMainVistos); // #1001: los pagados a mano desde la principal ya explican su salida
+  add('out_otras', 'Otras salidas del banco (comisiones, transferencias ajenas a retiros)', salidasOtras, -1, 'Salieron del banco sin ser un retiro de cliente, una devolución ni un gasto registrado: comisiones del banco u otros pagos. Si fue un pago nuestro, anotarlo en 📒 Anotar movimientos (Chat completo) para que quede explicado.', 'media');
+  if (out.sistema.cajaNoVisto) out.causas.push({ clave: 'caja_no_vista', titulo: 'Anotado en la cuenta PRINCIPAL pero el banco todavía no lo muestra', monto: r0(out.sistema.cajaNoVisto), impacto: 0, explica: out.sistema.cajaNoVistoN + ' movimiento(s) anotados como del banco principal que no aparecen en el extracto: puede ser demora del banco (se vuelve a buscar cada 10 min, 3 días) o que la cuenta anotada no era la principal. Ver el comprobante en 📒 Anotar movimientos.', severidad: 'media' }); // #1038
   const explicado = r0(out.causas.reduce((s, c) => s + c.impacto, 0));
   out.explicado = explicado; out.sinExplicar = r0(dif - explicado);
   out.causas.sort((a, b) => Math.abs(b.impacto) - Math.abs(a.impacto));
@@ -22952,7 +23132,7 @@ async function _closeEnsure(dayKey, recalc) {
     try { doc = await DailyClose.create({ id: uuidv4(), ...t }); } catch (e) { if (e && e.code === 11000) doc = await DailyClose.findOne({ dateKey: dayKey }); else throw e; }
   } else if (doc.status !== 'finalizado' || recalc) { Object.assign(doc, t, { recalculatedAt: new Date() }); }
   await _closeAttachBalances(doc); _closeApply(doc, cfg);
-  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); const _ds = (doc.detalle && doc.detalle.sistema) || {}; doc.gastos = Number(_ds.gastos) || 0; doc.pagosExternos = Number(_ds.pagosExternos) || 0; doc.fondeos = Number(_ds.fondeos) || 0; doc.gastosBanco = Number(_ds.gastosBanco) || 0; doc.depositosSecundaria = Number(_ds.depositosSecundaria) || 0; doc.pagosSecundaria = Number(_ds.pagosSecundaria) || 0; _closeApply(doc, cfg); } /* #913: pagos externos + fondeos → arqueo */ catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
+  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); const _ds = (doc.detalle && doc.detalle.sistema) || {}; doc.gastos = Number(_ds.gastos) || 0; doc.pagosExternos = Number(_ds.pagosExternos) || 0; doc.fondeos = Number(_ds.fondeos) || 0; doc.gastosBanco = Number(_ds.gastosMainVistos != null ? _ds.gastosMainVistos : _ds.gastosBanco) || 0; doc.fondeosBanco = Number(_ds.fondeosMain) || 0; /* #1038: lo que pasó por ESTE banco */ doc.depositosSecundaria = Number(_ds.depositosSecundaria) || 0; doc.pagosSecundaria = Number(_ds.pagosSecundaria) || 0; _closeApply(doc, cfg); } /* #913: pagos externos + fondeos → arqueo */ catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
   _closeCheckSet(doc);
   await doc.save(); return doc;
 }
@@ -22963,11 +23143,12 @@ function _closeCheck(doc) {
   const it = (key, label, ok, detail, info) => items.push({ key, label, ok: !!ok, detail: detail || '', info: !!info });
   const hasBank = doc.bankSource === 'api' || doc.bankInManual != null || doc.bankOutManual != null || !d.sinDatosBanco;
   it('banco', 'Datos del banco principal', hasBank, hasBank ? (doc.bankSource === 'api' ? 'por API' : 'cargados a mano') : 'No hay movimientos del banco: si la API falló, cargá a mano "Banco entró / salió" en Ajustes del día.');
-  const sinAcr = Math.max(0, r0(b.entradasSinAcreditar) - r0(Math.min(s.fondeos || 0, b.entradasSinAcreditar || 0)));
+  const sinAcr = b.entradasSinAcreditarNeto != null ? r0(b.entradasSinAcreditarNeto) : Math.max(0, r0(b.entradasSinAcreditar) - r0(Math.min(s.fondeos || 0, b.entradasSinAcreditar || 0))); // #1038
   it('sin_acreditar', 'Transferencias del banco acreditadas a alguien', sinAcr <= tol, sinAcr ? $(sinAcr) + ' entraron al banco y no se cargaron a nadie (Cargas pendientes).' : 'todas');
   const legacy = String(doc.dateKey || '') < '2026-11-02'; // antes de #1001 nadie marcaba la cuenta: en esos días sólo se informa
   it('dep_cuenta', 'Cargas a mano con la cuenta marcada', legacy || !s.depositosSinCuentaN, s.depositosSinCuentaN ? s.depositosSinCuentaN + ' carga(s) por ' + $(s.depositosSinCuenta) + ' sin decir en qué cuenta entró la plata.' : 'todas', legacy && !!s.depositosSinCuentaN);
   it('pago_marca', 'Retiros a mano con "desde dónde se pagó"', !s.pagosManualN, s.pagosManualN ? s.pagosManualN + ' retiro(s) por ' + $(s.pagosManual) + ' sin marcar (principal / secundaria / otro banco).' : 'todos');
+  if (s.cajaNoVistoN) it('caja_banco', 'Movimientos anotados vistos en el banco', false, s.cajaNoVistoN + ' anotado(s) por ' + $(s.cajaNoVisto) + ' como del banco principal que no aparecen en el extracto (📒 Anotar movimientos: revisar comprobante / cuenta).'); else if (s.fondeosMain || s.gastosMain) it('caja_banco', 'Movimientos anotados vistos en el banco', true, 'todos'); // #1038
   it('trabados', 'Ningún retiro trabado "pagando"', !s.pagosTrabadosN, s.pagosTrabadosN ? s.pagosTrabadosN + ' retiro(s) quedaron pagando más de 30 min: revisar en Pagos a confirmar.' : 'ninguno');
   if (hasBank) it('diferencia', 'Diferencia banco − sistema explicada', Math.abs(r0(d.sinExplicar)) <= tol, d.sinExplicar ? 'queda ' + $(d.sinExplicar) + ' sin explicar (ver Posibles causas).' : 'todo explicado');
   if (doc.arqueo && doc.arqueo !== 'sin_datos') it('caja', 'Caja de la principal (saldo 00 hs)', doc.arqueo === 'cuadra', doc.arqueo === 'cuadra' ? 'cuadra' : (doc.arqueo === 'faltante' ? 'faltante ' : 'sobrante ') + $(Math.abs(doc.diferencia || 0)));

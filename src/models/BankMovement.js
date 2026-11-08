@@ -59,15 +59,17 @@ const bankMovementSchema = new mongoose.Schema({
     // awaiting_platform: matcheó y se le PREGUNTÓ al cliente dónde quiere jugar (multi-plataforma
     //   2026-10-16); se carga cuando elige (POST /api/platform-choice) o al vencer el plazo
     //   (_platformChoiceTick → última plataforma elegida / default).
+    // caja (#1038): la entrada es un FONDEO / ingreso anotado en "Anotar movimientos" (Expense.bankMatch) ⇒ no es carga de ningún cliente.
     // redirected: el cliente eligió una plataforma SIN API conectada (ej. Ganamos) → NO se cargó
     //   acá, se lo mandó al link externo de esa plataforma. Queda consumido (nadie lo carga por error).
-    enum: ['pending', 'claiming', 'shadow_matched', 'auto_charged', 'manual_charged', 'no_match', 'ignored', 'error', 'duplicate', 'needs_review', 'awaiting_platform', 'redirected', 'refunded'], // #693: refunded = devuelta al CBU de origen (carga menor al mínimo)
+    enum: ['pending', 'claiming', 'shadow_matched', 'auto_charged', 'manual_charged', 'no_match', 'ignored', 'error', 'duplicate', 'needs_review', 'awaiting_platform', 'redirected', 'refunded', 'caja'], // #693: refunded = devuelta al CBU de origen (carga menor al mínimo)
     default: 'pending',
     index: true
   },
   matchedUserId: { type: String, default: null },
   matchedUsername: { type: String, default: null },
   matchedComprobanteId: { type: String, default: null },
+  cajaExpenseId: { type: String, default: null }, // #1038: Expense (fondeo/gasto anotado) al que se cruzó este movimiento
   chargeError: { type: String, default: null },
   // #693: devolución al CBU de origen (transferencia menor a la carga mínima) por hgcash
   refundedAt: { type: Date, default: null },

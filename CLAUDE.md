@@ -325,6 +325,11 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **CUENTAS DEL CIERRE (#1001):** secundarias en `Config['bankAccounts']`; toda carga a mano lleva `metadata.bankAccount` y todo retiro pagado a mano
   `paidVia` 'same_bank_manual' | 'secondary' (+`paidAccount`) | 'other_bank'. `_closeCheck` da el ✅ OK del cierre (el de hoy se recalcula cada 20 min).
   Test `scripts/test-close-accounts.js`.
+- **📒 ANOTAR MOVIMIENTOS (#1038, 2026-11-08):** pie del Chat completo (todo el staff): ingresos/egresos del banco que NO son cargas ni retiros (fondeo,
+  pago externo, comisión) ⇒ `Expense` con `account` ('main' | 'external' | secundaria), `source:'caja'`, comprobante y `bankMatch` (`_cajaBankVerify`:
+  cruza con `BankMovement` o con la API del banco; entrada cruzada ⇒ `matchStatus:'caja'`, ya no es carga de nadie). Rutas `/api/admin/caja-movimientos*`.
+  El cierre toma por cuenta: sólo lo de la principal explica entradas/salidas del banco; lo externo va al resultado. Un pago o ingreso NUEVO por fuera de
+  cargas/retiros se anota ahí (si no, "Otras salidas" / "sin acreditar"). Nunca leer `Expense` sin considerar `account` (`_expAccount`). Test `scripts/test-caja-movimientos.js`.
 - **CIERRE vs 1GIROX (#888):** `_closeGiroxSide` (cierre → "🎰 1girox"): fichas movidas por la app + caja de 1girox (`listChipRequests`) vs los
   totales del panel de 1girox que carga el owner (`DailyClose.giroxPanel`). Un flujo NUEVO que mueva fichas tiene que dejar Transaction con
   `platform` y el `type` correcto (si no, el cierre con 1girox no cuadra). **AGENTES (#889):** depositor/withdrawer ven 8 secciones

@@ -6026,7 +6026,7 @@ async function cierresDetalle(dk) {
             '<div>Retiros pagados: <b>' + money(c.retiros || 0) + '</b> · ' + (c.retirosN || 0) + '</div>' +
             '<div>Comisión del banco (' + (c.bankCommissionPct != null ? c.bankCommissionPct + '%' : '—') + ' sobre depósitos): <b>' + money(c.bankCommissionArs || 0) + '</b></div>' +
             '<div>Costo por transferencia (' + (c.cargas || 0) + ' × ' + money(c.feePerDeposit == null ? 50 : c.feePerDeposit) + '): <b>' + money(c.feeDepositsArs || 0) + '</b></div>' +
-            '<div>Gastos registrados: <b class="' + (g ? 'cl-warn' : '') + '">' + money(g) + '</b>' + (s.gastosBanco ? ' <small>(' + money(s.gastosBanco) + ' por API del banco)</small>' : '') + '</div>' +
+            '<div>Gastos registrados: <b class="' + (g ? 'cl-warn' : '') + '">' + money(g) + '</b>' + (s.gastosMainVistos || s.gastosBanco ? ' <small>(' + money(s.gastosMainVistos != null ? s.gastosMainVistos : s.gastosBanco) + ' salieron de este banco' + (s.gastosExt ? ' · ' + money(s.gastosExt) + ' externos' : '') + ')</small>' : '') + '</div>' +
             '<div style="border-top:1px solid var(--p-border);margin-top:4px;padding-top:4px"><b>Total gastos: ' + money(c.egresosTotal || 0) + '</b> · <b>RESULTADO: ' + signed(c.resultado || 0) + '</b></div></div>' +
             '<div class="cl-rec-box"><b>🏦 CAJA · saldo del CBU a las 00 hs</b>' +
             '<div>Inicio del día (00 hs): <b>' + (bs != null ? money(bs) : '—') + '</b>' + (c.bankBalanceSource ? ' <small>(' + c.bankBalanceSource + ')</small>' : '') + '</div>' +
@@ -6059,7 +6059,9 @@ async function cierresDetalle(dk) {
         html += lst('Retiros pagados a mano', it.pagosManual, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['via', 'Vía']]);
         html += lst('Retiros pagados por banco externo (ingreso)', it.pagosExternos, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['via', 'Vía']]); // #913
         html += lst('Cargas de prueba', it.depositosPrueba, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['nota', 'Nota']]);
-        html += lst('Gastos del día', it.gastos, [['hora', 'Hora'], ['usuario', 'Destino'], ['monto', 'Monto'], ['agente', 'Cargó'], ['nota', 'Concepto']]); // #770
+        html += lst('Gastos / egresos del día', it.gastos, [['hora', 'Hora'], ['usuario', 'Destino'], ['monto', 'Monto'], ['cuenta', 'Cuenta'], ['banco', 'Banco'], ['agente', 'Cargó'], ['nota', 'Concepto']]); // #770 · #1038
+        html += lst('Fondeos / ingresos anotados', it.fondeos, [['hora', 'Hora'], ['usuario', 'De'], ['monto', 'Monto'], ['cuenta', 'Cuenta'], ['banco', 'Banco'], ['agente', 'Anotó'], ['nota', 'Detalle']]); // #1038
+        html += lst('📒 Anotados desde el Chat completo', it.movimientosCaja, [['hora', 'Hora'], ['tipo', 'Tipo'], ['monto', 'Monto'], ['cuenta', 'Cuenta'], ['banco', 'Banco'], ['agente', 'Anotó'], ['nota', 'Detalle']]); // #1038
         html += _cierresGiroxHtml(dk, d.girox || {}, money, signed); // #888
         html += '<div class="cl-rec-adj"><details><summary>⚙️ Ajustes manuales del día (comisión, banco, saldos 00 hs)</summary>' + _cierresAdjHtml(dk) + '</details></div></div>';
         cell.innerHTML = html;
@@ -6454,6 +6456,91 @@ window.stMakeArt = stMakeArt;
 // ====== #566 CONFIRMACIÓN DE PAGOS (owner): retiros ≥ umbral se revisan (estafa o no) antes de pagar; menores salen solos ======
 let _prItems = [];
 // #770: Gastos
+
+// ===== #1038 (owner 2026-11-08): ANOTAR MOVIMIENTOS (pie del Chat completo) =====
+// Ingresos / egresos del banco que NO son cargas ni retiros (fondeo, pago externo, comisión). Van a Expense con la cuenta y el comprobante;
+// el servidor los cruza con el banco (BankMovement / API) y el cierre los toma (ver _closeReconcile #1038).
+let _cajaReceipt = null, _cajaAccounts = [];
+function cajaOpen() {
+    const d = document.getElementById('cajaDate'); if (d && !d.value) { try { d.value = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10); } catch (_) {} }
+    showModal('cajaModal'); cajaLoad();
+}
+function cajaClose() { hideModal('cajaModal'); }
+function _cajaMoney(n) { return '$' + Math.round(Number(n) || 0).toLocaleString('es-AR'); }
+function _cajaBm(it) {
+    const bm = it.bankMatch || {}; const st = bm.status || (it.account === 'main' ? 'pending' : 'na');
+    if (st === 'na') return '<span class="caja-bm-na">— no pasa por el banco</span>';
+    if (st === 'matched') return '<span class="caja-bm-ok" title="' + escapeHtml((bm.party || '') + (bm.note ? ' · ' + bm.note : '')) + '">✅ visto en el banco' + (bm.party ? ' <small>(' + escapeHtml(bm.party) + ')</small>' : '') + (bm.note ? ' ⚠️' : '') + '</span>';
+    return '<span class="caja-bm-wait" title="Se vuelve a buscar cada 10 min durante 3 días">⏳ no se ve en el banco' + (bm.checks ? ' <small>(' + bm.checks + ' búsq.)</small>' : '') + '</span>';
+}
+async function cajaLoad() {
+    const l = document.getElementById('cajaList'), sub = document.getElementById('cajaListSub'); if (!l) return;
+    try {
+        const r = await authFetch('/api/admin/caja-movimientos?days=7'); const j = await r.json();
+        if (!r.ok) { l.innerHTML = '<div style="color:#ff8080;">' + escapeHtml(j.error || 'Error') + '</div>'; return; }
+        _cajaAccounts = j.accounts || [];
+        const sel = document.getElementById('cajaAccount');
+        if (sel) { Array.from(sel.querySelectorAll('option[data-sec]')).forEach(function (o) { o.remove(); }); _cajaAccounts.forEach(function (a) { const o = document.createElement('option'); o.value = a.id; o.textContent = '🏦 Cuenta secundaria: ' + a.name; o.setAttribute('data-sec', '1'); sel.appendChild(o); }); }
+        const hoy = j.hoy || {}; const tb = document.getElementById('cajaBarToday'); if (tb) tb.textContent = hoy.n ? ('Hoy: ' + hoy.n + ' anotado(s) · ⬇️ ' + _cajaMoney(hoy.ingresos) + ' · ⬆️ ' + _cajaMoney(hoy.egresos)) : '';
+        if (sub) sub.textContent = (j.apiOk ? 'Banco por API conectado: lo del banco principal se verifica solo.' : 'Sin API del banco: lo anotado no se puede verificar automáticamente.');
+        const items = j.items || [];
+        if (!items.length) { l.innerHTML = '<div class="dia-note">Nada anotado en los últimos 7 días.</div>'; return; }
+        l.innerHTML = '<table class="data-table"><thead><tr><th>Día</th><th>Tipo</th><th>Monto</th><th>Detalle</th><th>Cuenta</th><th>Banco</th><th>Por</th><th></th></tr></thead><tbody>' + items.map(function (it) {
+            const isIn = it.tipo === 'ingreso';
+            return '<tr class="' + (isIn ? 'caja-row-in' : 'caja-row-out') + '"><td>' + escapeHtml(it.dateKey) + '</td><td><b>' + (isIn ? '⬇️ INGRESO' : '⬆️ EGRESO') + '</b>' + (it.paidVia === 'hgcash' ? '<br><small>pagado por API</small>' : '') + '</td><td><b>' + _cajaMoney(it.amount) + '</b></td><td>' + escapeHtml(it.concept || '') + (it.party ? '<br><small>' + escapeHtml(it.party) + '</small>' : '') + '</td><td><small>' + escapeHtml(it.accountName || it.account || '') + '</small></td><td>' + _cajaBm(it) + '</td><td><small>' + escapeHtml(it.createdBy || '—') + '</small></td><td style="white-space:nowrap">'
+                + (it.hasReceipt ? '<button class="btn btn-secondary btn-sm" onclick="cajaReceipt(\'' + it.id + '\')" title="Ver comprobante">🧾</button> ' : '')
+                + ((it.bankMatch || {}).status === 'unmatched' || (it.bankMatch || {}).status === 'pending' ? '<button class="btn btn-secondary btn-sm" onclick="cajaVerify(\'' + it.id + '\')" title="Buscar ahora en el banco">🔎</button> ' : '')
+                + (j.isAdmin && it.paidVia !== 'hgcash' ? '<button class="btn btn-secondary btn-sm" onclick="cajaDelete(\'' + it.id + '\')" title="Borrar (sólo admin)">🗑️</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    } catch (_) { l.innerHTML = '<div style="color:#ff8080;">Error de conexión</div>'; }
+}
+function cajaFilePicked(inp) {
+    const f = inp && inp.files && inp.files[0]; const nm = document.getElementById('cajaFileName'), pv = document.getElementById('cajaFilePrev'); _cajaReceipt = null;
+    if (!f) { if (nm) nm.textContent = 'Obligatorio para los agentes (foto o PDF)'; if (pv) pv.classList.add('hidden'); return; }
+    if (nm) nm.textContent = 'Leyendo…';
+    const done = function (dataUrl) { _cajaReceipt = { data: dataUrl, name: f.name }; if (nm) nm.textContent = '📎 ' + f.name + ' (' + Math.round(dataUrl.length * 0.75 / 1024) + ' KB)'; if (pv) { if (/^data:image/.test(dataUrl)) { pv.src = dataUrl; pv.classList.remove('hidden'); } else pv.classList.add('hidden'); } };
+    const rd = new FileReader();
+    rd.onload = function () {
+        const src = String(rd.result || '');
+        if (/^data:application\/pdf/.test(src)) { if (src.length > 7 * 1024 * 1024) { if (nm) nm.textContent = 'El PDF es muy pesado (máx. 5 MB)'; return; } return done(src); }
+        // foto: achicar a 1600 px y JPEG 0.85 para que viaje liviana
+        const img = new Image(); img.onload = function () { try { const sc = Math.min(1, 1600 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); done(c.toDataURL('image/jpeg', 0.85)); } catch (_) { done(src); } };
+        img.onerror = function () { done(src); }; img.src = src;
+    };
+    rd.onerror = function () { if (nm) nm.textContent = 'No se pudo leer el archivo'; };
+    rd.readAsDataURL(f);
+}
+async function cajaSave(force) {
+    const v = function (id) { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+    const tipoEl = document.querySelector('input[name="cajaTipo"]:checked'); const tipo = tipoEl ? tipoEl.value : 'ingreso';
+    const body = { kind: tipo, amount: Number(v('cajaAmount')), concept: v('cajaConcept'), party: v('cajaParty'), account: v('cajaAccount') || 'main', dateKey: v('cajaDate'), receipt: _cajaReceipt, force: force === true };
+    const msg = document.getElementById('cajaMsg'), btn = document.getElementById('cajaSaveBtn');
+    if (!(body.amount > 0)) { showToast('Poné el monto', 'error'); return; }
+    if (body.concept.length < 3) { showToast('Contá el detalle (qué fue)', 'error'); return; }
+    if (!_cajaReceipt && currentAdmin?.role !== 'admin') { showToast('Adjuntá el comprobante', 'error'); return; }
+    if (!_cajaReceipt && !force && !confirm('Vas a anotar sin comprobante. ¿Seguir?')) return;
+    if (msg) msg.textContent = 'Guardando y buscando en el banco…'; if (btn) btn.disabled = true;
+    try {
+        const r = await authFetch('/api/admin/caja-movimientos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json();
+        if (r.status === 409 && j.code === 'DUP_CAJA') { if (btn) btn.disabled = false; if (msg) msg.textContent = ''; if (confirm(j.error)) return cajaSave(true); return; }
+        if (!r.ok) { if (msg) msg.textContent = ''; showToast(j.error || 'Error', 'error'); return; }
+        if (msg) msg.textContent = j.message || 'Anotado'; showToast(j.message || 'Anotado', 'success');
+        ['cajaAmount', 'cajaConcept', 'cajaParty'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
+        _cajaReceipt = null; const fi = document.getElementById('cajaFile'); if (fi) fi.value = ''; cajaFilePicked(null);
+        cajaLoad();
+    } catch (_) { showToast('Error de conexión', 'error'); } finally { if (btn) btn.disabled = false; }
+}
+function cajaReceipt(id) { try { window.open('/api/admin/caja-movimientos/' + encodeURIComponent(id) + '/receipt', '_blank'); } catch (_) {} }
+async function cajaVerify(id) {
+    try { const r = await authFetch('/api/admin/caja-movimientos/' + encodeURIComponent(id) + '/verify', { method: 'POST' }); const j = await r.json(); if (!r.ok) { showToast(j.error || 'Error', 'error'); return; }
+        const st = ((j.item || {}).bankMatch || {}).status; showToast(st === 'matched' ? '✅ Visto en el banco' : st === 'na' ? 'No pasa por el banco principal' : '⏳ Todavía no aparece en el banco', st === 'matched' ? 'success' : 'info'); cajaLoad(); } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function cajaDelete(id) {
+    if (!confirm('¿Borrar esta anotación? El cierre del día se recalcula.')) return;
+    try { const r = await authFetch('/api/admin/caja-movimientos/' + encodeURIComponent(id), { method: 'DELETE' }); const j = await r.json(); if (!r.ok) { showToast(j.error || 'Error', 'error'); return; } showToast('Borrada', 'success'); cajaLoad(); } catch (_) { showToast('Error de conexión', 'error'); }
+}
+// resumen de hoy en la barra al entrar al Chat completo
+document.addEventListener('DOMContentLoaded', function () { setTimeout(function () { try { if (document.getElementById('cajaBar')) authFetch('/api/admin/caja-movimientos?days=1').then(function (r) { return r.json(); }).then(function (j) { const hoy = j.hoy || {}; const tb = document.getElementById('cajaBarToday'); if (tb) tb.textContent = hoy.n ? ('Hoy: ' + hoy.n + ' anotado(s) · ⬇️ ' + _cajaMoney(hoy.ingresos) + ' · ⬆️ ' + _cajaMoney(hoy.egresos)) : ''; }).catch(function () {}); } catch (_) {} }, 4000); });
 async function loadGastos() {
     const l = document.getElementById('gsList'), t = document.getElementById('gsTotals'); if (!l) return;
     l.innerHTML = '<div class="dia-note">Cargando…</div>';

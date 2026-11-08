@@ -8,6 +8,32 @@
 
 ## Sesión 2026-11-08
 
+### 1038. 📒 Anotar movimientos (pie del Chat completo) + cruce con el banco + cierre por cuenta — admin SW v246 (2026-11-08)
+- **Owner:** "un botón abajo del Chat completo que diga Anotar movimientos, para asentar si hubo un ingreso o egreso del banco y detalle, porque
+  hoy a veces ingresa plata por falta de plata o pagan algo externo y no queda asentado; conectalo a cierres para que den perfecto; que carguen el
+  comprobante, si es externo o interno, y vos lo detectás con la API si salió o entró".
+- **Panel (todo el staff: admin, depositor, withdrawer):** barra `#cajaBar` al pie del Chat completo con el botón 📒 y el resumen de hoy; modal
+  `#cajaModal`: INGRESO / EGRESO, monto, **cuenta** (banco principal · externo · secundaria de `bankAccounts`), detalle, de quién / a quién,
+  fecha, **comprobante obligatorio para agentes** (foto achicada a 1600 px o PDF; el admin puede anotar sin él con confirmación), lista de
+  7 días con estado del banco (✅ visto · ⏳ no se ve · — no pasa por el banco), ver comprobante 🧾, re-buscar 🔎, borrar 🗑️ (sólo admin).
+- **Servidor:** las anotaciones son `Expense` (kind 'fondeo' = ingreso · 'gasto' = egreso) con `account`, `source:'caja'`, `receipt` (data URL,
+  `select:false`) y `bankMatch`. Rutas `/api/admin/caja-movimientos` (GET · POST · GET :id/receipt · POST :id/verify · DELETE sólo admin; no está
+  en `STAFF_DENY_MUTATIONS` a propósito). Doble anotación igual en 10 min ⇒ 409 `DUP_CAJA` (el panel pregunta "¿es OTRO?").
+  **Cruce con el banco (`_cajaBankVerify`):** cuenta principal ⇒ busca en `BankMovement` una entrada/salida del mismo monto (±$1) entre el día
+  anterior y dos después (salidas de retiros y cash-outs propios descartadas por `externalId`/PendingPayout; con 2+ entradas iguales elige por
+  el nombre indicado) y, si no está, consulta la API del banco (`listMovements`) y guarda el movimiento. La entrada cruzada pasa a
+  `matchStatus:'caja'` (+ `cajaExpenseId`): ya no es carga de nadie. Externo / secundaria ⇒ `na`. Lo no visto lo re-busca `_cajaVerifyTick`
+  cada 10 min durante 3 días (lock `cajaverify`) y recalcula el cierre al encontrarlo.
+- **Cierre:** `_closeReconcile` separa fondeos y gastos por cuenta (`fondeosMain/Ext`, `gastosMain/Ext`, `gastosMainVistos`, `cajaNoVisto`):
+  sólo lo del banco principal explica entradas (`entradasCaja` + sin acreditar, `entradasSinAcreditarNeto`) y salidas (`gastos_banco` ahora =
+  API **o** anotado y visto; antes un gasto a mano desde la principal inflaba "Otras salidas"); lo externo va sólo al resultado. Causa nueva
+  `caja_no_vista` y control `caja_banco` en el ✅ del cierre. `DailyClose.fondeosBanco` nuevo; `gastosBanco` = lo que salió de este banco.
+  `_closeApply` compara contra el banco con `fondeosBanco` y suma `gastosBanco` a la diferencia (un gasto por API ya no daba diferencia
+  negativa). **Fix de orden:** `_closeEnsure` vuelve a aplicar `_closeApply` después de la conciliación (antes el resultado usaba los
+  fondeos/gastos de la pasada anterior: en el primer cálculo del día daban 0 hasta los 20 min siguientes). `POST /api/admin/gastos` acepta
+  `account` (por API ⇒ principal; a mano en la principal se cruza igual).
+- Tests: `scripts/test-caja-movimientos.js` (nuevo, 8 casos), `test-close-accounts` 9/9, `test-dup-account`, `test-sorteos-server` OK.
+
 ### 1037. Entrega de premios del sorteo: revisión fina y correcciones — PWA v671, admin SW v245 (2026-11-08)
 - **Owner:** "¿está todo verificado que no falle nada cuando entregue premios? es algo importante que tenemos que tener fino". Se leyó el flujo
   completo (emisión de tickets, cierre, huella/semilla, ganadores del ranking, sorteo extra, panel) y se corrigió lo encontrado:
