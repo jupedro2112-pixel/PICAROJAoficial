@@ -1898,6 +1898,9 @@ async function _dupAccountCheck(userIn, origin, opts = {}) {
       const addPayer = (cuit, name) => { const c = _personCuit(cuit); if (c) cuits.add(c); if (_personName(name)) names.add(String(name).trim()); };
       addPayer(opts.cuit, opts.name);
       (await BankMovement.find({ matchedUserId: u.id, direction: { $ne: 'Outbound' } }).select('fromCBU fromCUIT fromName').sort({ createdAt: -1 }).limit(30).lean()).forEach((m) => { if (dig(m.fromCBU).length >= 10) cbus.add(dig(m.fromCBU)); addPayer(m.fromCUIT, m.fromName); });
+      // #1033 (revisión): la carga MANUAL (Cargas pendientes / a mano) no deja BankMovement.matchedUserId ⇒ también cuentan los COMPROBANTES acreditados.
+      const CQ = { $or: [{ bankMatchStatus: { $in: ['auto_charged', 'manual_charged'] } }, { reviewStatus: 'confirmed' }] };
+      try { (await Comprobante.find({ userId: u.id, ...CQ }).select('originCbu originCuit originHolder').sort({ createdAt: -1 }).limit(30).lean()).forEach((c) => { if (dig(c.originCbu).length >= 10) cbus.add(dig(c.originCbu)); addPayer(c.originCuit, c.originHolder); }); } catch (_) {}
       const otherIds = async (q) => (await BankMovement.distinct('matchedUserId', { direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, ...q })).filter(Boolean).slice(0, 20).map(String);
       if (cuits.size) (await otherIds({ fromCUIT: { $in: [...cuits].slice(0, 6).flatMap((c) => [c, c.slice(0, 2) + '-' + c.slice(2, 10) + '-' + c.slice(10)]) } })).forEach((id) => cuitIds.add(id));
       if (names.size) {
@@ -1905,6 +1908,22 @@ async function _dupAccountCheck(userIn, origin, opts = {}) {
         const hits = await BankMovement.find({ direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, fromName: { $in: [...names].slice(0, 6) } }).select('matchedUserId fromName').limit(50).lean();
         hits.filter((m) => want.has(_personName(m.fromName))).forEach((m) => nameIds.add(String(m.matchedUserId)));
       }
+      // #1033: otros clientes cuyos COMPROBANTES acreditados vinieron del mismo CUIT / CBU / titular.
+      try {
+        const cOr = [];
+        if (cuits.size) cOr.push({ originCuit: { $in: [...cuits].slice(0, 6) } });
+        if (cbus.size) cOr.push(...[...cbus].slice(0, 6).map((c) => ({ originCbu: { $regex: c.slice(-14) + '$' } })));
+        if (names.size) cOr.push({ originHolder: { $in: [...names].slice(0, 6) } });
+        if (cOr.length) {
+          const want = new Set([...names].map(_personName));
+          (await Comprobante.find({ userId: { $ne: u.id }, ...CQ, $or: cOr }).select('userId originCuit originCbu originHolder').limit(50).lean()).forEach((c) => {
+            const id = String(c.userId || ''); if (!id) return;
+            if (c.originCuit && cuits.has(_personCuit(c.originCuit))) cuitIds.add(id);
+            else if (dig(c.originCbu).length >= 10 && [...cbus].some((b) => dig(c.originCbu).endsWith(b.slice(-14)))) cbuIds.add(id);
+            else if (c.originHolder && want.has(_personName(c.originHolder))) nameIds.add(id);
+          });
+        }
+      } catch (_) {}
       if (cuitIds.size || nameIds.size) or.push({ id: { $in: [...new Set([...cuitIds, ...nameIds])].slice(0, 30) } });
       if (cbus.size) {
         const ids = await BankMovement.distinct('matchedUserId', { direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, $or: [...cbus].slice(0, 6).map((c) => ({ fromCBU: { $regex: c.slice(-14) + '$' } })) });
@@ -1940,7 +1959,7 @@ async function _dupAccountCheck(userIn, origin, opts = {}) {
   } catch (e) { logger.warn('[dup-account] ' + e.message); return null; }
 }
 girox.setGiftGuard(async (username) => {
-  const hit = _dupGuardCache.get(username); if (hit && Date.now() - hit.ts < 60 * 1000) return hit.why;
+  const hit = _dupGuardCache.get(username); if (hit && Date.now() - hit.ts < (hit.why ? 60 : 5) * 1000) return hit.why; // #1033: el "no" dura 5 s (otra instancia puede marcarla)
   const u = await User.findOne({ username }).select('duplicateOf role').lean();
   const why = u && u.role === 'user' && u.duplicateOf && u.duplicateOf.username ? 'cuenta secundaria de ' + u.duplicateOf.username : null;
   _dupGuardCache.set(username, { why, ts: Date.now() }); return why;
@@ -5963,7 +5982,7 @@ app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async 
 const _loginFails = new Map();
 function _loginKey(u, p) { return String(u || p || '').trim().toLowerCase().slice(0, 64); }
 function _loginLocked(k) { const e = k && _loginFails.get(k); if (!e) return false; if (Date.now() > e.until) { _loginFails.delete(k); return false; } return e.n >= 10; }
-function _loginFail(k) { if (!k) return; const e = _loginFails.get(k) || { n: 0, until: 0 }; e.n++; e.until = Date.now() + 15 * 60000; _loginFails.set(k, e); if (_loginFails.size > 5000) _loginFails.clear(); }
+function _loginFail(k) { if (!k) return; const e = _loginFails.get(k) || { n: 0, until: 0 }; e.n++; e.until = Date.now() + 15 * 60000; _loginFails.set(k, e); if (_loginFails.size > 5000) { let n = 0; for (const kk of _loginFails.keys()) { if (n++ >= 1000) break; _loginFails.delete(kk); } } } // #1033: saca las más viejas (antes clear() reseteaba todos los bloqueos)
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const { username, phone, password, temporaryCode, fbc, fbp, landingUrl } = req.body;
@@ -11305,7 +11324,7 @@ async function _agentDepositHandler(req, res, body) {
       return res.status(400).json({ error: `${platforms.labelOf(_platformId)} no tiene API conectada todavía: no se puede cargar desde acá. Cargalo en su panel o mandale el link al cliente.`, code: 'platform_not_connected', platform: _platformId });
     }
     const _agentBonus = parseFloat(bonus) || 0;
-    const _auto = await resolveAutoBonus(user, parseFloat(amount), req.user.username || 'agente');
+    const _auto = await resolveAutoBonus(user, parseFloat(amount), req.user.username || 'agente', { payer: (body && body._payer) || null }); // #1033
     const _effectiveBonus = _auto.bonus > 0 ? _auto.bonus : _agentBonus;
     const bonusRequested = _effectiveBonus > 0;
     const _depTxId = uuidv4();
@@ -14481,6 +14500,8 @@ async function initializeData() {
 // ============================================
 
 app.post('/api/movements/deposit', authMiddleware, depositorMiddleware, async (req, res) => {
+  // #1033 (seguridad): ruta VIEJA, ningún front la usa. Acreditaba fichas al propio staff sin plata ni Transaction (el cierre con 1girox no lo veía).
+  if (process.env.LEGACY_MOVEMENTS_DEPOSIT !== '1') return res.status(410).json({ error: 'Ruta en desuso.', code: 'GONE' });
   try {
     const amount = Number(req.body && req.body.amount);
     const username = req.user.username;
@@ -14777,12 +14798,24 @@ app.get('/api/admin/users/:userId/payout-hold', authMiddleware, adminMiddleware,
 });
 // #1010: chequeo antifraude de un retiro (puntaje / observación / bloqueo, retiro grande tras un regalo, juego espejo). Devuelve el motivo para
 // frenarlo (why) o unchecked=true si el chequeo no se pudo hacer (API lenta / error): el que llama decide reintentar o mandarlo a una persona.
-async function _withdrawFraudGate(user, amountNum) {
+async function _withdrawFraudGate(user, amountNum, dest) {
   let fraudWhy = null, fraudEv = null, unchecked = false;
     try { const fr = await _fraudCheckUser(user.id, 'retiro'); if (fr && fr.evidence) fraudEv = fr.evidence; if (fr && fr.level) { fraudWhy = (fr.level === 'block' ? 'cuenta BLOQUEADA por el antifraude' : (fr.level === 'unchecked' ? 'el chequeo antifraude no terminó a tiempo (revisalo a mano)' : (fr.level === 'bonus' ? 'posible FRAUDE CON BONOS' : 'en observación del antifraude'))) + (fr.why ? ' (' + fr.why + ')' : ''); } } catch (e) { logger.warn('[antifraude] retiro: ' + e.message); fraudWhy = 'el chequeo antifraude falló (revisalo a mano)'; } // #995: falla ⇒ revisión, nunca pago automático
       // #996: retiro grande a pocas horas de recibir un regalo ⇒ revisión (práctica de las casas grandes: el primer retiro tras un bono lo mira una persona).
-    if (!fraudWhy) { try { const hb = (await getFraudBonusConfig()).holdAfterBonus; if (hb.enabled && amountNum >= hb.minArs) { const g = await Transaction.findOne({ userId: user.id, type: { $in: fraudRadar.GIFT_TX }, createdAt: { $gte: new Date(Date.now() - hb.hours * 3600000) } }).sort({ createdAt: -1 }).select('type amount createdAt').lean(); if (g) { fraudWhy = `retiro a ${Math.max(1, Math.round((Date.now() - new Date(g.createdAt).getTime()) / 3600000))} h de recibir un regalo de $${Math.round(g.amount || 0).toLocaleString('es-AR')} (${g.type}) — revisá que lo haya jugado de verdad`; } } } catch (_) {} }
-    if (!fraudWhy) { const _mw = await _mirrorHitFor(user.username); if (_mw) { fraudWhy = 'posible JUEGO ESPEJO con ' + _mw + ' (ver 🛡️ Antifraude → 🪞 Juego espejo)'; } } // #1004
+    if (!fraudWhy) { try { const hb = (await getFraudBonusConfig()).holdAfterBonus; if (hb.enabled && amountNum >= hb.minArs) { const g = await Transaction.findOne({ userId: user.id, type: { $in: fraudRadar.GIFT_TX }, createdAt: { $gte: new Date(Date.now() - hb.hours * 3600000) } }).sort({ createdAt: -1 }).select('type amount createdAt').lean(); if (g) { fraudWhy = `retiro a ${Math.max(1, Math.round((Date.now() - new Date(g.createdAt).getTime()) / 3600000))} h de recibir un regalo de $${Math.round(g.amount || 0).toLocaleString('es-AR')} (${g.type}) — revisá que lo haya jugado de verdad`; } } } catch (_) { unchecked = true; } } // #1033: si falla la consulta, también 'unchecked' (fail-closed)
+    if (!fraudWhy) { try { const _mw = await _mirrorHitFor(user.username); if (_mw) { fraudWhy = 'posible JUEGO ESPEJO con ' + _mw + ' (ver 🛡️ Antifraude → 🪞 Juego espejo)'; } } catch (_) { unchecked = true; } } // #1004 · #1033 fail-closed
+  // #1033 (revisión): el CBU/alias de DESTINO ya cobró (o está cobrando) en OTRA cuenta ⇒ revisión de una persona (la app promete "a tu nombre";
+  // antes sólo sumaba puntos en fraudRadar y podía salir solo). `dest` = { cbu, alias } del pedido; sin dest (reintento viejo) no aplica.
+  if (!fraudWhy && dest && (dest.cbu || dest.alias)) {
+    try {
+      const tail = String(dest.cbu || '').replace(/\D/g, '').slice(-14); const al = String(dest.alias || '').trim().toLowerCase();
+      const or = []; if (tail.length >= 10) or.push({ cbu: { $regex: tail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$' } }); if (al && al !== 'no tengo' && al.length >= 6) or.push({ alias: { $regex: '^\\s*' + al.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', $options: 'i' } });
+      if (or.length) {
+        const other = await PendingPayout.findOne({ userId: { $ne: user.id }, status: { $in: ['paid', 'paying', 'pending_review'] }, titular: { $ne: 'PRUEBA TEST' }, $or: or }).select('username').lean();
+        if (other) fraudWhy = `el CBU/alias de destino ya cobró en OTRA cuenta (${other.username}): verificá que sea a su nombre`;
+      }
+    } catch (_) { unchecked = true; }
+  }
   if (fraudWhy && /no termin|falló \(revisalo/.test(fraudWhy)) unchecked = true;
   return { why: fraudWhy, evidence: fraudEv, unchecked };
 }
@@ -14809,9 +14842,9 @@ async function _withdrawalRequestHandler(req, res) {
       if (_outage.mode !== 'auto' && (await getBankSettings()).pauseWithdrawals) return res.status(503).json({ error: await renderSystemCommand('/sys_bank_down', BANK_DOWN_DEFAULT, {}), code: 'BANK_OUTAGE' });
     }
 
-    const amountNum = Number(amount);
+    const amountNum = Math.round(Number(amount)); // #1033: entero (1girox redondea a 2 dec. y el banco manda el crudo: sin decimales no hay diferencias de centavos)
     const _wMin = await getWithdrawMinArs(); // #379
-    if (!amountNum || amountNum < _wMin) {
+    if (!Number.isFinite(amountNum) || !amountNum || amountNum < _wMin) {
       return res.status(400).json({ error: 'El monto mínimo de retiro es $' + _wMin.toLocaleString('es-AR') });
     }
 
@@ -15040,7 +15073,7 @@ async function _withdrawalRequestHandler(req, res) {
       let fraudWhy = null; let fraudEv = null;
       // #1010: el chequeo antifraude vive en _withdrawFraudGate (lo reusa el reintento). Si NO se pudo hacer (API lenta) ya no va directo a una
       // persona: se reintenta solo cada 10 min (3 veces, _payoutFraudRecheckTick) y recién ahí queda manual.
-      const _gate = await _withdrawFraudGate(user, amountNum); fraudEv = _gate.evidence; fraudWhy = _gate.why;
+      const _gate = await _withdrawFraudGate(user, amountNum, { cbu: cbuT, alias: aliasT }); fraudEv = _gate.evidence; fraudWhy = _gate.why; // #1033: + destino
       let deferFraud = false;
       if (_gate.unchecked && !needsReview) { deferFraud = true; fraudWhy = null; } else if (fraudWhy) needsReview = true;
       // #1010 (owner): "saquemos las trabas de que tiene que ser cliente y demás para retirar: todo libre para todos, tenemos técnicas de antiestafa" ⇒
@@ -15758,7 +15791,7 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   const none = { pct: 0, bonus: 0, source: null, label: null, claimed: false, rule: '', revert: async () => {} };
   if (!user || !(Number(amount) > 0)) return none;
   try { // #992: cuenta secundaria ⇒ ningún bono en la carga (la carga entra igual). Se re-chequea acá (teléfono, celular, CBU con el que cargó).
-    await _dupAccountCheck(user, 'deposit');
+    await _dupAccountCheck(user, 'deposit', (opts && opts.payer) || {}); // #1033: + titular/CUIT/CBU del comprobante (carga manual)
     const _dup = ((await User.findOne({ id: user.id }).select('duplicateOf').lean()) || {}).duplicateOf;
     if (_dup && _dup.username) { logger.info(`[auto-bonus] ${user.username}: sin bono — cuenta secundaria de ${_dup.username}`); return none; }
   } catch (_) {}
@@ -16305,7 +16338,7 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
     // next_charge = PORCENTAJE extra sobre la próxima carga (ej. 50 → +50%).
     let amount;
     if (bonusType === 'cash') {
-      amount = Math.max(0, Math.round(Number(await getConfig('communityWelcomeBonusAmount', 0)) || 0));
+      amount = _capGift(Math.max(0, Math.round(Number(await getConfig('communityWelcomeBonusAmount', 0)) || 0))); // #1033: tope único por regalo (#1010)
     } else {
       amount = Math.max(0, Math.round(Number(await getConfig('communityWelcomePercent', 100)) || 0));
     }
@@ -16359,7 +16392,10 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
     // 'pending': el cash pasa a 'credited' recién con la plata acreditada.
     // Registro MANUAL (alta por agente) → sin bonos de bienvenida (owner 2026-09-18).
     {
-      const _uSig = await User.findOne({ id: req.user.userId }).select('createdByAgent acquisitionSource').lean();
+      const _uSig = await User.findOne({ id: req.user.userId }).select('createdByAgent acquisitionSource noWelcomeGifts duplicateOf').lean();
+      if (_uSig && (_uSig.noWelcomeGifts === true || (_uSig.duplicateOf && _uSig.duplicateOf.username))) { // #1033: registro abierto sin regalos (#975) / cuenta secundaria (#992)
+        return res.status(400).json({ error: 'Tu cuenta no tiene regalos de bienvenida.', code: 'NO_WELCOME' });
+      }
       if (_uSig && !_welcomeBonusEligible(_uSig)) {
         return res.status(400).json({ error: 'El código de bienvenida es para quienes se registran solos en la app. Tu cuenta la creó un agente, así que no aplica.', code: 'MANUAL_SIGNUP' });
       }
@@ -20782,6 +20818,7 @@ app.post('/api/admin/users/:id/unblock', authMiddleware, adminMiddleware, async 
 // { verified: boolean } — por defecto true.
 app.post('/api/admin/users/:id/verify-phone', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general puede marcar un teléfono como verificado.' }); // #1033: #1028 dice "verificado sólo por SMS"; a mano, sólo el admin
     const { id } = req.params;
     const verified = req.body.verified !== false; // default: true
 
@@ -21300,7 +21337,7 @@ app.get('/api/users/:userId', authMiddleware, async (req, res) => {
     
     // #413 (seguridad): el cliente ve SOLO sus campos públicos (antes '-password' exponía notas internas, tags, IP, tokens FCM…).
     const user = adminRoles.includes(req.user.role)
-      ? await User.findOne({ id: userId }).select('-password').lean()
+      ? await User.findOne({ id: userId }).select('-password -accessLinkHash -installLinks -phoneKey').lean() // #1033: hashes/llaves internas no viajan al panel
       : await User.findOne({ id: userId }).select(USER_PUBLIC_FIELDS).lean();
     
     if (!user) {
@@ -22011,6 +22048,22 @@ app.post('/api/admin/deposit-reviews/:id/confirm', authMiddleware, depositorMidd
     }
     if (c.reviewStatus !== 'pending' || c.autoCharged) return res.status(409).json({ error: 'Esa carga ya fue resuelta (' + (c.reviewResolution || c.reviewStatus || c.bankMatchStatus) + ').' });
     const amount = Number(req.body && req.body.amount) > 0 ? Number(req.body.amount) : Number(c.amount);
+    // #1033 (revisión): comprobante TARDÍO de una transferencia que el banco YA acreditó (sin comprobante legible: fallback de confianza, carga
+    // desde el listado de movimientos) ⇒ sería la segunda carga de la misma plata. Se frena salvo force:true ("Es OTRA transferencia").
+    if (!(req.body && req.body.force === true)) {
+      try {
+        const linked = (await Comprobante.distinct('matchedMovementId', { userId: c.userId, id: { $ne: c.id }, matchedMovementId: { $ne: null } })).filter(Boolean);
+        if (c.matchedMovementId) linked.push(c.matchedMovementId);
+        const or = []; const cId = String(c.coelsaId || '').trim(); if (cId.length >= 6) or.push({ coelsaCode: cId }, { externalId: cId });
+        const t0 = new Date(c.createdAt || Date.now()).getTime();
+        if (Number(c.amount) > 0) or.push({ matchedUserId: c.userId, amount: Number(c.amount), createdAt: { $gte: new Date(t0 - 36 * 3600e3), $lte: new Date(t0 + 36 * 3600e3) } });
+        const hit = or.length ? await BankMovement.findOne({ matchStatus: { $in: ['auto_charged', 'manual_charged'] }, direction: { $ne: 'Outbound' }, movementId: { $nin: linked }, $or: or }).select('movementId amount createdAt matchedUsername coelsaCode').lean() : null;
+        if (hit) {
+          const when = new Date(hit.createdAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+          return res.status(409).json({ error: `El banco YA acreditó una transferencia de $${Math.round(Number(hit.amount) || 0).toLocaleString('es-AR')} a ${hit.matchedUsername || 'este cliente'} el ${when}${hit.coelsaCode ? ' (COELSA ' + hit.coelsaCode + ')' : ''}. Si este comprobante es de ESA transferencia, no se carga de nuevo.`, code: 'BANK_ALREADY_CHARGED' });
+        }
+      } catch (e) { logger.warn(`[deposit-reviews/confirm] chequeo banco ya acreditó: ${e.message}`); }
+    } else logger.warn(`[deposit-reviews/confirm] ${req.user.username} confirmó ${id} con force (dijo que es OTRA transferencia)`);
     if (!(amount > 0)) return res.status(400).json({ error: 'Monto inválido: el comprobante no tiene monto legible, ingresalo a mano.' });
     // #820: si la carga automática lo está procesando en este momento (o espera que el cliente elija plataforma), no se confirma a mano.
     if (['claiming', 'awaiting_platform'].includes(c.bankMatchStatus)) return res.status(409).json({ error: 'La carga automática está procesando este comprobante ahora mismo. Esperá un minuto y refrescá.' });
@@ -22028,7 +22081,7 @@ app.post('/api/admin/deposit-reviews/:id/confirm', authMiddleware, depositorMidd
       const mv = await BankMovement.findOne({ movementId: c.matchedMovementId }).select('movementId coelsaCode externalId').lean();
       if (mv) _reference = `vip-hg-${String(mv.coelsaCode || mv.externalId || '').trim() || mv.movementId}`;
     }
-    await _agentDepositHandler(req, proxy, { userId: c.userId, amount, bonus: Number(req.body && req.body.bonus) || 0, platform: req.body && req.body.platform, description: `Carga automática · confirmada por ${req.user.username || 'agente'}`, _fromReviewId: id, _reference, bankAccount: (req.body && req.body.bankAccount) || await _bankAccountForCbu(c.destCbu) }); // #1001
+    await _agentDepositHandler(req, proxy, { userId: c.userId, amount, bonus: Number(req.body && req.body.bonus) || 0, platform: req.body && req.body.platform, description: `Carga automática · confirmada por ${req.user.username || 'agente'}`, _fromReviewId: id, _reference, _payer: { cbu: c.originCbu, cuit: c.originCuit, name: c.originHolder } /* #1033 */, bankAccount: (req.body && req.body.bankAccount) || await _bankAccountForCbu(c.destCbu) }); // #1001
     if (out.status !== 200 || !out.json || out.json.error) {
       await Comprobante.updateOne({ id }, { $set: { reviewStatus: 'pending', reviewResolution: null, reviewedBy: null, reviewedAt: null } });
       return res.status(out.status && out.status !== 200 ? out.status : 400).json({ error: (out.json && out.json.error) || 'No se pudo cargar' });
@@ -22225,7 +22278,9 @@ app.use('/api/admin/datos-ia', authMiddleware, adminMiddleware, async (req, res,
   try {
     const h = await _datosPinHash(); if (!h) return next();
     const pin = String(req.get('x-datos-pin') || '');
-    if (pin && _sha(pin) === h) return next();
+    if (pin && _pinLocked(req)) return res.status(429).json({ error: 'Demasiados intentos con la clave. Esperá 15 minutos.', code: 'PIN_LOCKED' }); // #1033: faltaba acá (los otros gates ya lo tenían)
+    if (pin && _sha(pin) === h) { _pinCheck(req, true); return next(); }
+    if (pin) _pinCheck(req, false);
     return res.status(423).json({ error: 'Datos IA está protegido con clave.', code: 'PIN_REQUIRED' });
   } catch (_) { return res.status(500).json({ error: 'Error del servidor' }); }
 });
@@ -22305,7 +22360,7 @@ app.use('/api/admin/phone-log', authMiddleware, adminMiddleware, async (req, res
     return res.status(423).json({ error: 'El historial de números está protegido con clave.', code: 'PIN_REQUIRED' });
   } catch (_) { return res.status(500).json({ error: 'Error del servidor' }); }
 });
-app.get('/api/admin/phone-log', async (req, res) => {
+app.get('/api/admin/phone-log', authMiddleware, adminMiddleware, async (req, res) => { // #1033: además del gate de arriba
   try {
     const q = String((req.query && req.query.q) || '').trim().slice(0, 40); const limit = Math.min(1000, Math.max(20, Number(req.query.limit) || 300));
     const via = String((req.query && req.query.via) || ''); const f = via === 'sms' || via === 'nosms' ? { via } : {}; if (q) { const dig = q.replace(/\D/g, ''); f.$or = [{ username: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }]; if (dig.length >= 4) f.$or.push({ phone: { $regex: dig.split('').join('\\D*') } }); }
@@ -22339,7 +22394,7 @@ async function _inicioCohorts(REAL) {
 }
 let _inicioDepCache = { at: 0, v: null }; // #957: distinct sobre TODAS las cargas de la historia, cada request ⇒ 10 min de cache
 async function _inicioDepositors(REAL) { if (_inicioDepCache.v && Date.now() - _inicioDepCache.at < 10 * 60000) return _inicioDepCache.v; const v = await Transaction.distinct('userId', REAL); _inicioDepCache = { at: Date.now(), v }; return v; }
-app.get('/api/admin/inicio/stats', async (req, res) => {
+app.get('/api/admin/inicio/stats', authMiddleware, adminMiddleware, async (req, res) => { // #1033: además del gate de arriba
   try {
     const PendingPayout = require('./src/models/PendingPayout');
     const today = _schedArtKey(new Date());
@@ -24110,7 +24165,7 @@ app.get('/api/admin/shift-review', authMiddleware, adminMiddleware, async (req, 
       pending: payouts.filter((p) => !p.review).length + receipts.filter((r) => !r.review && (r.problem || r.credited)).length });
   } catch (e) { logger.warn('[para-revisar] ' + e.message); res.status(500).json({ error: 'No se pudo cargar' }); }
 });
-app.post('/api/admin/shift-review/:kind/:id', authMiddleware, adminMiddleware, async (req, res) => {
+app.post('/api/admin/shift-review/:kind/:id', authMiddleware, withdrawerMiddleware, async (req, res) => { // #1033: marcar 'sospechoso' pone al cliente en observación: sólo admin/retiros
   try {
     const kind = String(req.params.kind); if (!['payout', 'receipt'].includes(kind)) return res.status(400).json({ error: 'Tipo inválido' });
     const verdict = req.body && req.body.verdict === 'suspicious' ? 'suspicious' : 'ok';
@@ -24389,6 +24444,7 @@ app.post('/api/admin/payouts/review-config', authMiddleware, adminMiddleware, as
 // sin que otro agente lo haya tocado en los últimos 30 min. Los que ya tocaron plata/fichas quedan visibles para resolverlos a mano.
 function _payoutSupersedable(p, now) {
   if (!p || !['pending_review', 'failed'].includes(p.status) || p.deductAtPay !== true || p.debitConfirmed === true) return false;
+  if (/No se pudo descontar/i.test(String(p.error || ''))) return false; // #1033: el descuento pudo haberse hecho (timeout): lo resuelve una persona
   const bankOk = (!p.hgTransactionId && !p.hgTxId) || /fail|error|reject|cancel/i.test(String(p.hgStatus || ''));
   const untouched = !p.paidBy || new Date(p.updatedAt || 0).getTime() < (now || Date.now()) - 30 * 60000;
   return bankOk && untouched;
@@ -24612,6 +24668,15 @@ async function _payoutCancelHandler(req, res) { // #996: con nombre para que "Re
     //    (devolución simple, sin split bonus/comunes).
     if (payout.deductAtPay === true) {
       const W = Number(payout.amount);
+      // #1033 (revisión): "No se pudo descontar" puede ser un timeout con el descuento HECHO en 1girox. Antes de dar por "no descontado" se
+      // repite el withdraw con la MISMA reference: `duplicate:true` ⇒ ya estaba descontado ⇒ se devuelve. Si ahora descuenta de verdad, también.
+      if (payout.debitConfirmed !== true && /No se pudo descontar/i.test(String(payout.error || ''))) {
+        try {
+          const _adR = platforms.getAdapter(payout.platform) || girox;
+          const w = await _adR.withdrawFromUser(payout.username, W, `Retiro confirmado - ${payout.username}`, `vip-payout-${payout.id}`);
+          if (w && w.success) { payout.debitConfirmed = true; await PendingPayout.updateOne({ id }, { $set: { debitConfirmed: true } }); logger.info(`[payout/reject] ${payout.username}: descuento ${w.duplicate ? 'YA hecho' : 'hecho ahora'} (reference estable) ⇒ se devuelve`); }
+        } catch (e) { logger.warn(`[payout/reject] verificación del descuento: ${e.message}`); }
+      }
       if (payout.debitConfirmed === true) {
         let ok = false, data = null;
         // `reference` derivada del payout: la devolución de un retiro rechazado ocurre
@@ -24807,9 +24872,11 @@ app.post('/api/admin/payouts/:id/pay-other-bank', authMiddleware, withdrawerMidd
       }
     }
 
-    // Marcar pagado por OTRO BANCO (atómico). Incluye 'paying' por si recién descontamos arriba.
+    // Marcar pagado por OTRO BANCO (atómico). 'paying' SÓLO si recién descontamos arriba (#1033: antes entraba siempre y un payout que el
+    // reintento automático acababa de reclamar a 'paying' y mandar al banco quedaba además marcado pagado a mano ⇒ pago doble).
+    const _claimedHere = payout.deductAtPay === true && payout.debitConfirmed !== true;
     const paid = await PendingPayout.findOneAndUpdate(
-      { id, status: { $in: ['pending_review', 'failed', 'paying'] } },
+      { id, status: { $in: _claimedHere ? ['paying'] : ['pending_review', 'failed'] } },
       { $set: { status: 'paid', paidVia: _pv, paidAccount: _pacc, paidBy: req.user.username, paidAt: new Date(), error: null } },
       { new: true }
     );
@@ -27762,16 +27829,17 @@ async function _storyAutoCtx(dayKey) {
     const d0 = new Date(new Date(dayKey + 'T00:00:00-03:00').getTime() - 86400000), d1 = new Date(dayKey + 'T00:00:00-03:00');
     let winners = [];
     try {
-      const rows = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: d0, $lt: d1 }, amount: { $gte: 10000 } } }, { $group: { _id: '$userId', username: { $first: '$username' }, amount: { $max: '$amount' } } }, { $sort: { amount: -1 } }, { $limit: 6 }]);
-      const bad = new Set((await User.find({ id: { $in: rows.map((r) => r._id) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudReview.status': 'watch' }] }).select('id').lean()).map((u) => u.id));
+      // #1033 (revisión): fuera los retiros de PRUEBA (titular 'PRUEBA TEST', #762) y las cuentas de staff (Render comparte la base, #779).
+      const rows = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: d0, $lt: d1 }, amount: { $gte: 10000 }, titular: { $ne: 'PRUEBA TEST' } } }, { $group: { _id: '$userId', username: { $first: '$username' }, amount: { $max: '$amount' } } }, { $sort: { amount: -1 } }, { $limit: 6 }]);
+      const bad = new Set((await User.find({ id: { $in: rows.map((r) => r._id) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudReview.status': 'watch' }, { role: { $ne: 'user' } }] }).select('id').lean()).map((u) => u.id));
       winners = rows.filter((r) => !bad.has(r._id) && !/test|prueba/i.test(r.username || '')).slice(0, 3).map((r) => ({ username: r.username, amount: Math.round(r.amount) }));
     } catch (_) {}
     let games = []; try { games = await storyAuto.popularSlots(); } catch (_) {}
     // #1030 (owner: "de cuál premio se pagó grande"): el retiro más alto pagado en los últimos 7 días (sin bloqueados / secundarias / observación / pruebas).
     let weekTop = null;
     try {
-      const rows = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: new Date(d1.getTime() - 7 * 86400000), $lt: d1 }, amount: { $gte: 10000 } } }, { $sort: { amount: -1 } }, { $limit: 8 }, { $project: { userId: 1, username: 1, amount: 1 } }]);
-      const bad = new Set((await User.find({ id: { $in: rows.map((r) => r.userId) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudReview.status': 'watch' }] }).select('id').lean()).map((u) => u.id));
+      const rows = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: new Date(d1.getTime() - 7 * 86400000), $lt: d1 }, amount: { $gte: 10000 }, titular: { $ne: 'PRUEBA TEST' } } }, { $sort: { amount: -1 } }, { $limit: 8 }, { $project: { userId: 1, username: 1, amount: 1 } }]);
+      const bad = new Set((await User.find({ id: { $in: rows.map((r) => r.userId) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudReview.status': 'watch' }, { role: { $ne: 'user' } }] }).select('id').lean()).map((u) => u.id));
       const r = rows.find((x) => !bad.has(x.userId) && !/test|prueba/i.test(x.username || ''));
       if (r) weekTop = { username: r.username, amount: Math.round(r.amount) };
     } catch (_) {}

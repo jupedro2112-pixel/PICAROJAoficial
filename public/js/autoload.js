@@ -184,7 +184,8 @@
     function _rgMoveIn(m) {
         try {
             const ov = document.getElementById('casinoOverlay');
-            if (!_inCasino() || !ov || m.parentNode === ov) return;
+            if (!_inCasino() || !ov) { _rgMoveBack(m); return; } // #1033: fuera del casino siempre en su lugar
+            if (m.parentNode === ov) return;
             if (!_rgHome) _rgHome = { parent: m.parentNode, next: m.nextSibling };
             ov.appendChild(m);
             // Blindaje: adentro del overlay nada lo tapa (la barra, Carga rápida y las burbujas van de z-index 6 a 10; el casino vive en 99999).
@@ -207,7 +208,7 @@
         try { VIP.ui.showModal('rcptGuideModal'); } catch (_) { m.classList.remove('hidden'); }
         if (!_modalVisible(m)) { guideClose(); _toastShort(); _openPicker(); }
     }
-    function guideClose() { try { VIP.ui.hideModal('rcptGuideModal'); } catch (_) {} try { _rgMoveBack(_el('rcptGuideModal')); } catch (_) {} }
+    function guideClose() { try { VIP.ui.hideModal('rcptGuideModal'); } catch (_) {} try { _rgMoveBack(_el('rcptGuideModal')); } catch (_) {} _lsSet(RG_FORCE, null); } // #1033: ya la vio ⇒ se limpia el forzado (antes quedaba pegado)
     // "Elegir la foto": guarda la preferencia, limpia el forzado y abre el selector EN EL MISMO toque (iOS exige gesto del usuario).
     function guideGo() {
         const cb = _el('rgSkip'); if (cb && cb.checked) _lsSet(RG_OFF, '1');

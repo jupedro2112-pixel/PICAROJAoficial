@@ -8,6 +8,50 @@
 
 ## Sesión 2026-11-08
 
+### 1033. SONDEO DE SEGURIDAD completo + correcciones — PWA v667, admin SW v243 (2026-11-08)
+- **Owner:** "después de subir quiero que hagamos un sondeo de toda seguridad y ver que esté todo ok" → "ok hacelo ahora". Cuatro revisiones
+  independientes (lo tocado hoy · rutas/permisos del panel · flujo de retiros · regalos/comprobantes/cuentas secundarias), sólo lectura, y
+  después se corrigió lo confirmado en código. Los 19 `scripts/test-*.js` pasan (dup-account tarda ~3 min porque llama a la API sin mock).
+- **Confirmado OK (no se tocó):** ninguna ruta `/api/admin/*` sin auth; `STAFF_DENY_MUTATIONS` + chequeos de rol cubren las mutaciones sensibles;
+  login con bloqueo por cuenta, sesión 8 h, tokenVersion; sin secretos en el repo (la apiKey de Firebase es pública por diseño); retiros validan
+  `available`, descuento atómico con reference estable, antifraude fail-closed, pagos sólo admin/retiros; webhook hgcash con HMAC fail-closed e
+  idempotencia por `chargeKey`; todos los reclamos de regalos con índice único o `findOneAndUpdate`; `_capGift` en reembolsos/VIP/ruleta/misiones;
+  sin XSS ni inyección en lo de hoy (stories/home/chat/SVG del server), migración del texto del comprobante idempotente.
+- **Corregido (ALTO):**
+  - **Multicuenta por link de publicista cobraba el 100 % de 1ª carga en la carga MANUAL:** `_dupAccountCheck` sólo conocía al pagador por
+    `BankMovement.matchedUserId` (lo deja hgcash, no la carga a mano). Ahora Cargas pendientes → Confirmar manda `_payer` (titular/CUIT/CBU del
+    `Comprobante`) → `_agentDepositHandler` → `resolveAutoBonus(…, {payer})` → `_dupAccountCheck(user,'deposit',payer)`, que además cruza
+    `Comprobante` acreditados (propios y de otros) por `originCuit` / `originCbu` / `originHolder`.
+  - **Comprobante TARDÍO de una transferencia que el banco YA acreditó** (fallback de confianza, carga desde el listado) se podía confirmar como
+    segunda carga: `POST /api/admin/deposit-reviews/:id/confirm` busca `BankMovement` acreditado (mismo COELSA, o mismo cliente + monto ±36 h, sin
+    contar movimientos ya ligados a otro comprobante) ⇒ 409 `BANK_ALREADY_CHARGED`; el panel pregunta "¿es OTRA transferencia?" y reintenta con
+    `force:true` (`drvConfirmFetch`, queda en el log).
+- **Corregido (MEDIO):**
+  - Retiros: "Pagar con otro banco" marcaba `paid` también sobre un `paying` que el reintento automático acababa de mandar al banco (pago doble).
+    Ahora `'paying'` sólo entra si el descuento se hizo en ese mismo request.
+  - Retiros: `failed` con "No se pudo descontar" (timeout con el descuento HECHO en 1girox) ya no es anulable por `_payoutSupersedable`, y al
+    rechazar se repite el withdraw con la misma reference (`duplicate:true` ⇒ estaba descontado ⇒ se devuelve).
+  - Retiros: el CBU/alias de DESTINO que ya cobró en OTRA cuenta manda a revisión (`_withdrawFraudGate(user, amount, dest)`); los sub-chequeos
+    (regalo reciente, juego espejo, destino) son fail-closed (`unchecked`). Monto redondeado a entero y `Number.isFinite`.
+  - Panel: el gate de Datos IA no limitaba intentos de clave (los otros sí) ⇒ `_pinLocked/_pinCheck`; `verify-phone` a mano sólo admin (#1028:
+    verificado = SMS); `shift-review` sólo admin/retiros (marcar sospechoso pone en observación); perfil para el staff sin `accessLinkHash`,
+    `installLinks`, `phoneKey`; `phone-log` e `inicio/stats` con middleware propio además del gate; contador de login saca las más viejas en vez
+    de `clear()`.
+  - `POST /api/movements/deposit` (acreditaba fichas al propio staff sin plata ni Transaction) ⇒ 410 salvo `LEGACY_MOVEMENTS_DEPOSIT=1`.
+  - Referidos: los referidos SECUNDARIOS o bloqueados no generan comisión y la base es `netwin − bonusGranted` (pérdida real, como los reembolsos).
+  - Guard de regalos: el "no es secundaria" se cachea 5 s (antes 60: otra instancia podía marcarla mientras se acreditaba).
+  - Código de bienvenida: sin regalo para `noWelcomeGifts` / secundaria y monto cash con `_capGift`.
+  - Historias: retiros de PRUEBA (`titular:'PRUEBA TEST'`) y cuentas de staff no salen como ganadores ni "premio grande de la semana"; `MASK`
+    deja 1 letra en nombres de hasta 6.
+  - PWA: cerrar el casino con la guía del comprobante abierta la devolvía como cartel fantasma ⇒ `closeCasinoFrame` llama `guideClose`;
+    `_rgMoveIn` fuera del casino siempre la devuelve; `guideClose` limpia el forzado (`vip_rcpt_guide_force`).
+- **Señalado al owner, NO cambiado (decisiones suyas o riesgo aceptado):** depositor puede generar link de acceso / cambiar clave a cualquier
+  cliente (owner 2026-08-03); claves de Datos/INICIO con sha256 sin sal (si se filtra la base se recuperan offline; cambiarlo obliga a recargar
+  las claves); contadores de bloqueo por instancia; con SMS apagados el mismo celular puede estar en N cuentas sin marca (#1028); lock
+  anti-doble-pedido en memoria si Redis cae; movimiento hgcash sin COELSA/externalID sin candado (sólo la red de 8 min); `/api/admin/withdrawal`
+  descuenta a mano sin rastro bancario; media de historias personales accesible por UUID sin auth (sólo la imagen).
+- Test `scripts/test-dup-account.js` actualizado (payer, cruce de comprobantes, `BANK_ALREADY_CHARGED`): 11/11.
+
 ### 1032. INICIO (menú completo): ¿Dónde jugás? plegable + CARGÁ AQUÍ / RETIRAR desplegables + explicación resumible; guía del comprobante adentro del casino — PWA v665 (2026-11-08)
 - **Owner:** "que en todos los menús tengan el botón de retiro y recarga por separado; sacar donde te lleva de menú completo a cargar y retirar y que
   esté todo en el menú completo: elegir plataforma, poder minimizar eso, cargar, retirar y la explicación también que se pueda resumir".

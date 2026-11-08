@@ -2639,6 +2639,7 @@
         if (typeof _origCloseFrame === 'function') {
             VIP.ui.closeCasinoFrame = function () {
                 try { document.body.classList.remove('casino-open'); } catch (_) {}
+                try { if (VIP.autoload && VIP.autoload.guideClose) VIP.autoload.guideClose(); } catch (_) {} // #1033: la guía del comprobante vuelve a su lugar (si no, quedaba fantasma adentro del overlay oculto)
                 return _origCloseFrame.apply(this, arguments);
             };
         }

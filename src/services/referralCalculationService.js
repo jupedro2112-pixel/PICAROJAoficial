@@ -90,7 +90,9 @@ function mapStatsToRevenue(stats) {
     ? [{ key: 'casino', ...casino }, { key: 'sports', ...sports }]
     : [{ key: 'casino', ...casino }];
 
-  const netwin = scope === 'total' ? num(stats.netwin) : num(stats.casinoNetwin);
+  // #1033 (revisión): base = pérdida sobre plata REAL (netwin − bono otorgado en el período), mismo criterio que los reembolsos (#1010):
+  // antes se pagaba comisión sobre pérdidas de fichas regaladas (bono de bienvenida al 100 %).
+  const netwin = (scope === 'total' ? num(stats.netwin) : num(stats.casinoNetwin)) - num(stats.bonusGranted);
   const totalBets = inScope.reduce((a, c) => a + num(c.wagered), 0);
   const totalWins = inScope.reduce((a, c) => a + num(c.payout), 0);
 
@@ -333,7 +335,10 @@ async function calculateCommissionsForPeriod(periodKey, options = {}) {
   const referredQuery = {
     role: 'user',
     isActive: true,
-    referredByUserId: { $ne: null, $exists: true }
+    referredByUserId: { $ne: null, $exists: true },
+    // #1033 (revisión): una cuenta SECUNDARIA (#992) o bloqueada no genera comisión (auto-referido A→B con B marcada).
+    duplicateOf: null,
+    isBlocked: { $ne: true }
   };
   // Si se filtró por referidor, solo buscar referidos de ese referidor
   if (referrerUserId) {

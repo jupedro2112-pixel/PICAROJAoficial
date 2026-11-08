@@ -360,6 +360,11 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   redacciones alternativas `ALTS` (un tema nuevo va a `THEMES` y a `ALTS`). Cada historia se publica aislada; diagnóstico `Config['storyAutoDiag']`.
 - **INICIO CON CARGAR/RETIRAR ADENTRO (#1032):** en el menú completo (`play`) CARGÁ AQUÍ y RETIRAR son paneles desplegables (`#pvActions`, `playToggle`);
   nada del Inicio salta a `setHomeMode('full')`. Una ventana (`.modal`) que deba verse con el casino abierto se mueve adentro de `#casinoOverlay` (ver `_rgMoveIn`).
+- **SONDEO DE SEGURIDAD (#1033, 2026-11-08):** toda carga A MANO que conozca al pagador pasa `_payer {cbu,cuit,name}` a `_agentDepositHandler`
+  (llega a `_dupAccountCheck`, que también cruza `Comprobante` acreditados). Confirmar un comprobante cuya transferencia el banco YA acreditó da
+  409 `BANK_ALREADY_CHARGED` (el panel pide "¿es otra?" y manda `force`). `_withdrawFraudGate(user, amount, dest)`: un chequeo nuevo que falle
+  tiene que poner `unchecked=true` (fail-closed). `pay-other-bank` nunca pisa un `paying` ajeno. Referidos: base `netwin − bonusGranted`, sin
+  secundarias. Historias: nada con `titular:'PRUEBA TEST'` ni cuentas de staff. Lo señalado y NO cambiado está en WORKLOG #1033.
 - **GUÍA ANTES DE ADJUNTAR EL COMPROBANTE (#1030, 2026-11-08):** todo botón que adjunte un comprobante llama `VIP.autoload.pickReceipt(src)`
   (muestra `#rcptGuideModal` con 3 pasos + ejemplo y abre `#fileInput` en el mismo toque), nunca `fileInput.click()` directo. Los avisos
   `receipt_unreadable`/`receipt_to_agent` del chat llevan el botón "Reenviar el comprobante bien" (`guideOpen('resend')`).

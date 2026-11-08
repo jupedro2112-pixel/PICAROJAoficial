@@ -17643,12 +17643,22 @@ async function drvConfirm(id, btn) {
     if (!confirm('¿Confirmar y CARGAR $' + amount.toLocaleString('es-AR') + ' a este cliente?\n\nSe aplican los bonos automáticos de siempre y el cliente la ve como carga automática.')) return;
     btn.disabled = true;
     try {
-        const r = await authFetch('/api/admin/deposit-reviews/' + encodeURIComponent(id) + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, platform }) });
-        const j = await r.json();
+        const { r, j } = await drvConfirmFetch(id, { amount, platform }); // #1033
         if (!r.ok) { showToast(j.error || 'No se pudo cargar', 'error'); btn.disabled = false; return; }
         showToast('✅ Carga acreditada' + (j.deposit && j.deposit.newBalance != null ? ' · saldo $' + j.deposit.newBalance : ''), 'success');
         loadDepositReviews();
     } catch (e) { showToast('Error de conexión', 'error'); btn.disabled = false; }
+}
+// #1033: el server frena el comprobante de una transferencia que el banco YA acreditó (409 BANK_ALREADY_CHARGED); si el agente dice que es OTRA, va con force.
+async function drvConfirmFetch(id, body) {
+    let r = await authFetch('/api/admin/deposit-reviews/' + encodeURIComponent(id) + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let j = await r.json().catch(() => ({}));
+    if (r.status === 409 && j && j.code === 'BANK_ALREADY_CHARGED') {
+        if (!confirm(j.error + '\n\n¿Este comprobante es de OTRA transferencia distinta (otro N° de operación)?\n\nAceptar = cargar igual · Cancelar = no cargar')) return { r, j };
+        r = await authFetch('/api/admin/deposit-reviews/' + encodeURIComponent(id) + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({}, body, { force: true })) });
+        j = await r.json().catch(() => ({}));
+    }
+    return { r, j };
 }
 // #908: un envío agrupado que en realidad es OTRA transferencia: se carga aparte, sin cerrar los demás envíos.
 async function drvConfirmRepeat(id, amount) {
@@ -17656,8 +17666,7 @@ async function drvConfirmRepeat(id, amount) {
     if (!(amt > 0)) { const v = prompt('Monto de esta carga ($):', ''); amt = Number(String(v || '').replace(/[^\d]/g, '')) || 0; if (!(amt > 0)) return; }
     if (!confirm('¿Cargar $' + amt.toLocaleString('es-AR') + ' por este envío como una carga DISTINTA?\n\nSólo si es otra transferencia (otro N° de operación). Si es el mismo comprobante repetido, no: confirmá la ficha principal y este se cierra solo.')) return;
     try {
-        const r = await authFetch('/api/admin/deposit-reviews/' + encodeURIComponent(id) + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, keepRepeats: true }) });
-        const j = await r.json();
+        const { r, j } = await drvConfirmFetch(id, { amount: amt, keepRepeats: true }); // #1033
         if (!r.ok) { showToast(j.error || 'No se pudo cargar', 'error'); return; }
         showToast('✅ Carga acreditada', 'success'); loadDepositReviews();
     } catch (e) { showToast('Error de conexión', 'error'); }
@@ -18910,8 +18919,7 @@ async function spPendConfirm(id, btn) {
     if (!confirm('¿Confirmar y CARGAR $' + amount.toLocaleString('es-AR') + ' a este cliente?\n\nSe aplican los bonos y el rollover de siempre y el cliente la ve como carga automática.')) return;
     btn.disabled = true;
     try {
-        const r = await authFetch('/api/admin/deposit-reviews/' + encodeURIComponent(id) + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount }) });
-        const j = await r.json();
+        const { r, j } = await drvConfirmFetch(id, { amount }); // #1033
         if (!r.ok) { showToast(j.error || 'No se pudo cargar', 'error'); btn.disabled = false; return; }
         showToast('✅ Carga acreditada', 'success');
         if (_spSelected) { spLoadPending(_spSelected.userId); spLoadMessages(_spSelected.userId, true); }

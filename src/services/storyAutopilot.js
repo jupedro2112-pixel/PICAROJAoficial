@@ -276,7 +276,7 @@ function planDay(dayKey, matches, ctx) {
 /** #1003: las 5 de los clientes ACTIVOS (ya cargaron): Soporte primero (#931), los GANADORES de ayer (retiros grandes pagados, usuario
  *  enmascarado; sólo si hay), el SLOT DEL DÍA (rota por los más jugados del catálogo) y temas que rotan con sus redacciones. Slots 'a0'..'a4'. */
 const GAME_PHOTOS = ['/images/games/jokers-jewels.jpg', '/images/games/gates-of-olympus-1000.jpg', '/images/games/sweet-bonanza-2500.jpg', '/images/games/sugar-rush-1000.jpg', '/images/games/big-bass-bonanza.jpg', '/images/games/starlight-princess-1000.jpg', '/images/games/zeus-rush-fever.jpg', '/images/games/buffalo-king-untamed.jpg', '/images/games/mines.jpg', '/images/games/jokers-jewels-hold-spin.jpg']; // #1030
-const MASK = (u) => { u = String(u || ''); return u.length <= 3 ? u.slice(0, 1) + '**' : u.slice(0, 2) + '***' + u.slice(-1); };
+const MASK = (u) => { u = String(u || ''); return u.length <= 6 ? u.slice(0, 1) + '***' : u.slice(0, 2) + '***' + u.slice(-1); }; // #1033: nombres cortos muestran 1 letra (antes 'pablo' → 'pa***o')
 function planActive(dayKey, ctx, hasMatches, themes, pct) {
   const dayN = Math.floor(new Date(dayKey + 'T12:00:00Z').getTime() / 86400000);
   const out = []; const T = (s, x) => out.push(Object.assign({ slot: 'a' + out.length, time: SLOTS[Math.min(out.length, SLOTS.length - 1)], audience: 'active' }, x));

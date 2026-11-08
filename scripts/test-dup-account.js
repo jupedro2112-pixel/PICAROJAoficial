@@ -145,7 +145,14 @@ caso('Guard de regalos: creditGift / creditUserBalance frenados para la secundar
 caso('server.js: cargas siguen (resolveAutoBonus devuelve sin bono), hgcash chequea el CBU antes del bono, excepciones marcadas', async () => {
   assert.ok(/await _dupAccountCheck\(user, 'cbu', \{ cbu: movement && movement\.fromCBU, cuit: movement && movement\.fromCUIT, name: movement && movement\.fromName \}\);[^\n]*\n\s*const _auto = await resolveAutoBonus\(/.test(SERVER)); // #1022
   const rab = extract(/^async function resolveAutoBonus\(/m);
-  assert.ok(/await _dupAccountCheck\(user, 'deposit'\);[\s\S]{0,200}if \(_dup && _dup\.username\)[^\n]*return none;/.test(rab));
+  assert.ok(/await _dupAccountCheck\(user, 'deposit', \(opts && opts\.payer\) \|\| \{\}\);[\s\S]{0,300}if \(_dup && _dup\.username\)[^\n]*return none;/.test(rab)); // #1033: + payer del comprobante
+  // #1033: la carga MANUAL desde Cargas pendientes manda el titular/CUIT/CBU del comprobante y _dupAccountCheck cruza también Comprobantes acreditados.
+  assert.ok(/_payer: \{ cbu: c\.originCbu, cuit: c\.originCuit, name: c\.originHolder \}/.test(SERVER));
+  assert.ok(/resolveAutoBonus\(user, parseFloat\(amount\), req\.user\.username \|\| 'agente', \{ payer: \(body && body\._payer\) \|\| null \}\)/.test(SERVER));
+  const dac = extract(/^async function _dupAccountCheck\(/m);
+  assert.ok(/Comprobante\.find\(\{ userId: u\.id, \.\.\.CQ \}\)/.test(dac) && /Comprobante\.find\(\{ userId: \{ \$ne: u\.id \}, \.\.\.CQ, \$or: cOr \}\)/.test(dac));
+  // #1033: el comprobante tardío de una transferencia que el banco YA acreditó no se confirma sin force.
+  assert.ok(/code: 'BANK_ALREADY_CHARGED'/.test(SERVER));
   assert.ok(/vip-payoutref-bonus-\$\{payout\.id\}`, \{ noGiftGuard: true \}\)/.test(SERVER));
   assert.ok(/noGiftGuard: true, \/\/ #992: la Bonificación MANUAL/.test(SERVER));
   assert.ok(/res\.json\(\{ \.\.\.user, metaMatching, dupMain \}\)/.test(SERVER));

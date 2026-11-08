@@ -1841,3 +1841,25 @@ lote fijo. Excluidos: Bonificación manual, devolución de retiro, referidos, c�
 - `PhoneLog` (userId, username, phone, via sms|nosms|historico, source, at). Migración `mig1028PhoneLog` carga los números existentes.
   Panel: `#phoneLogSection`, `loadPhoneLog` con clave propia (`x-phonelog-pin`, 428 PIN_SETUP la primera vez, 423 PIN_REQUIRED, bloqueo 6 intentos).
 
+### #1033 — Sondeo de seguridad y correcciones (2026-11-08)
+- **Carga manual y cuenta secundaria:** `_agentDepositHandler` recibe `body._payer = {cbu, cuit, name}` (Cargas pendientes → Confirmar lo arma
+  con `Comprobante.originCbu/originCuit/originHolder`) y lo pasa a `resolveAutoBonus(…, {payer})` → `_dupAccountCheck(user, 'deposit', payer)`.
+  `_dupAccountCheck` suma como pagadores propios los `Comprobante` acreditados (`bankMatchStatus` auto/manual_charged o `reviewStatus:'confirmed'`)
+  y busca otros clientes por `originCuit` / `originCbu` (últimos 14) / `originHolder` (`_personName`). Un flujo nuevo de carga a mano que conozca al
+  pagador tiene que pasar `_payer`.
+- **Comprobante tardío:** `POST /api/admin/deposit-reviews/:id/confirm` ⇒ 409 `BANK_ALREADY_CHARGED` si hay `BankMovement` acreditado con el
+  mismo COELSA o mismo cliente + monto ±36 h (excluye movimientos ligados a otro comprobante del cliente y el propio `matchedMovementId`).
+  `force:true` (cualquier staff, con log) lo salta: el panel lo pide con `drvConfirmFetch` ("¿es OTRA transferencia?").
+- **Retiros:** `_withdrawFraudGate(user, amount, dest)`: `dest={cbu, alias}` del pedido; destino que ya cobró/está cobrando en otra cuenta ⇒
+  revisión; cualquier sub-chequeo que falle ⇒ `unchecked` (fail-closed). `pay-other-bank` sólo acepta `paying` si descontó en ese request.
+  `_payoutSupersedable` excluye `failed` con error "No se pudo descontar"; el rechazo de esos repite `withdrawFromUser` con `vip-payout-<id>`
+  antes de decidir si devuelve. Monto del pedido: `Math.round` + `Number.isFinite`.
+- **Panel:** gate `/api/admin/datos-ia` con `_pinLocked/_pinCheck` (6 intentos / 15 min); `verify-phone` sólo admin; `shift-review` con
+  `withdrawerMiddleware`; `GET /api/users/:id` para staff excluye `accessLinkHash installLinks phoneKey`; `phone-log` e `inicio/stats` llevan
+  `authMiddleware, adminMiddleware` propios. `POST /api/movements/deposit` → 410 (`LEGACY_MOVEMENTS_DEPOSIT=1` lo revive).
+- **Referidos:** `referralCalculationService` excluye `duplicateOf≠null` e `isBlocked` y usa `netwin − bonusGranted` como base.
+- **Guard de regalos:** `_dupGuardCache` guarda el "no" 5 s y el "sí" 60 s. **Código de bienvenida:** rechaza `noWelcomeGifts`/secundaria
+  (`NO_WELCOME`) y el cash pasa por `_capGift`.
+- **Historias:** `_storyAutoCtx` filtra `titular:'PRUEBA TEST'` y `role≠'user'` en ganadores y `weekTop`; `MASK` = 1 letra hasta 6 caracteres.
+- **PWA:** `closeCasinoFrame` (wrapper en home.js) llama `VIP.autoload.guideClose()`; `_rgMoveIn` devuelve el modal si no está en el casino;
+  `guideClose` limpia `vip_rcpt_guide_force`.
