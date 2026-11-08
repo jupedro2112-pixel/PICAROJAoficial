@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-08
 
+### 1031. URGENTE: la guía del comprobante salía fuera del casino (Girox directo) y el botón parecía no andar — PWA v664 (2026-11-08)
+- **Owner:** "el cartel está apareciendo afuera del menú de Girox cuando estás en ese menú, error grave; la gente no ve el cartel cuando quiere
+  adjuntar y parece que el botón no funciona".
+- **Fix (`autoload.js`):** con el casino embebido abierto (`body.casino-open`) `pickReceipt` NO abre la guía: toast corto + selector de fotos directo
+  (como siempre). Fuera del casino, después de `showModal` se chequea que la ventana quedó visible (`_modalVisible`: tamaño y posición en pantalla);
+  si no, se cierra y se abre el selector en el mismo toque. Regla: el botón de adjuntar nunca puede "no hacer nada".
+- Pendiente (no urgente): ver por qué dentro del casino el modal quedaba fuera de vista para mostrar la guía también ahí (hoy el casino tiene su
+  propio flujo de Carga rápida).
+
 ### 1030-b. HISTORIAS: "cómo mandar el comprobante" fija + rotación más novedosa para los ACTIVOS — PWA v663, admin SW v242 (2026-11-08)
 - **Owner:** "importante agregar en las historias explicación en 1 historia de cómo subir el comprobante bien detallado" y "rotación de historias para
   clientes ya activos: fotos más novedosas, cuál premio se pagó grande, juego del día, de la semana, explicación; para los nuevos el servicio; una vez

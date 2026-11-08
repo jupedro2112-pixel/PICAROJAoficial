@@ -154,21 +154,36 @@
         if (fi) { try { fi.click(); return; } catch (_) {} }
         const a = _el('attachBtn'); if (a) a.click();
     }
+    // #1031 (owner, URGENTE 2026-11-08): "el cartel aparece afuera del menú de Girox y parece que el botón no funciona". Dentro del casino
+    // embebido (body.casino-open: Girox directo / Carga rápida) la guía NO se muestra: el botón abre el selector directo, como siempre, y el
+    // aviso va como toast. Y en cualquier otro lado, si la ventana no quedó visible (algo la tapa o la oculta) se abre el selector igual,
+    // en el mismo toque: el botón de adjuntar nunca puede "no hacer nada".
+    function _inCasino() { try { return document.body.classList.contains('casino-open'); } catch (_) { return false; } }
+    function _toastShort() { try { VIP.ui.showToast('📸 Comprobante ENTERO: titular, CUIT, fecha y hora, monto y N° de operación. Si no se ven, no se acredita.', 'info'); } catch (_) {} }
     function pickReceipt(source) {
         const force = _lsGet(RG_FORCE) === '1';
-        if (_lsGet(RG_OFF) === '1' && !force) {
-            try { VIP.ui.showToast('📸 Comprobante ENTERO: titular, CUIT, fecha y hora, monto y N° de operación. Si no se ven, no se acredita.', 'info'); } catch (_) {}
+        if (_inCasino() || (_lsGet(RG_OFF) === '1' && !force)) {
+            _toastShort();
             _openPicker();
             return;
         }
         guideOpen(source || 'pick');
     }
+    function _modalVisible(m) {
+        try {
+            const c = m.querySelector('.modal-content') || m;
+            const r = c.getBoundingClientRect();
+            const cs = getComputedStyle(m);
+            return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden' && r.top < (window.innerHeight || 99999) && r.bottom > 0;
+        } catch (_) { return true; }
+    }
     function guideOpen(source) {
         _rgSource = source || '';
         const cb = _el('rgSkip'); if (cb) cb.checked = false;
         const m = _el('rcptGuideModal');
-        if (!m) { _openPicker(); return; }
+        if (!m) { _toastShort(); _openPicker(); return; }
         try { VIP.ui.showModal('rcptGuideModal'); } catch (_) { m.classList.remove('hidden'); }
+        if (!_modalVisible(m)) { guideClose(); _toastShort(); _openPicker(); }
     }
     function guideClose() { try { VIP.ui.hideModal('rcptGuideModal'); } catch (_) {} }
     // "Elegir la foto": guarda la preferencia, limpia el forzado y abre el selector EN EL MISMO toque (iOS exige gesto del usuario).
