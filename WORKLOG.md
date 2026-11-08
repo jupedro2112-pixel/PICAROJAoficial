@@ -8,6 +8,12 @@
 
 ## Sesión 2026-11-08
 
+### 1035. Inicio: RETIRAR con la misma altura que CARGÁ AQUÍ — PWA v669 (2026-11-08)
+- **Owner (captura):** "el de retirar está más ancho y no sirve". Causa: el `<span id="pvMinWdTag">` del monto heredaba `.bv-btn span
+  {display:flex; flex-direction:column}` y partía "Retiro mínimo / $5.000 / a tu CBU" en 3 líneas. Ahora es `<b class="md-amt">` (como en
+  CARGÁ AQUÍ), los dos botones usan `ev-cta-b`/`ev-cta-t` y `.pv-actions .bv-btn.pv-btn` tiene altura fija 64 px con texto en una línea (ellipsis).
+  Regla: adentro de un `.bv-btn` nunca un `<span>` anidado para el monto (usar `<b>`).
+
 ### 1034. FIX URGENTE: "Cambiar menú" y ~100 funciones de la app no respondían desde v665 — PWA v668 (2026-11-08)
 - **Owner:** "estoy queriendo cambiar de menú y no abre el botón, revisá bien". Causa: en #1032 agregué `playToggle, pvFold, pvPick, // #1032 `
   AL FRENTE de la primera línea de `VIP.home = {`, que era una sola línea larga con ~100 exports (`supportFaqOpen … openMenuChooser, chooseMenu,

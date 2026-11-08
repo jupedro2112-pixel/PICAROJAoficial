@@ -3085,7 +3085,9 @@ body.home-play .pv-actions { display: flex; }
 .pv-plats { margin-top: -2px; }
 .pv-plats[hidden] { display: none !important; }
 .pv-actions .bv-panel[hidden], #entryServices[hidden] { display: none !important; }
-.pv-actions .bv-btn.pv-btn { min-height: 64px; padding: 13px 14px; border-radius: 18px; gap: 12px; }
+.pv-actions .bv-btn.pv-btn { height: 64px; min-height: 64px; max-height: 64px; padding: 13px 14px; border-radius: 18px; gap: 12px; } /* #1035: CARGÁ AQUÍ y RETIRAR con la MISMA altura */
+.pv-actions .bv-btn.pv-btn > span { min-width: 0; }
+.pv-actions .bv-btn.pv-btn .ev-cta-b, .pv-actions .bv-btn.pv-btn .ev-cta-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .pv-actions .bv-btn.pv-btn .ev-cta-b { font: 900 17px/1.1 var(--p-font); color: #fff; text-shadow: none; letter-spacing: .3px; }
 .pv-actions .bv-btn.pv-btn .ev-cta-t { font: 600 11px var(--p-font); color: #fff; opacity: .9; margin-top: 2px; text-transform: none; letter-spacing: 0; }
 .pv-actions .bv-btn.pv-btn .ev-cta-t .md-amt { color: #fff; }
