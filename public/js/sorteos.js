@@ -173,7 +173,7 @@
         let h = '<div class="srt-sec"><h3>🎲 Sorteos</h3>';
         for (const m of mids) h += box('💵 Quincenal ' + money(m.amount) + ' · ' + fday(m.date + 'T15:00:00Z'), m.draw, m.status === 'soon' ? 'ese día a las 20 h' : 'hoy a las 20 h');
         h += box('🏆 1° premio · ' + esc(((s.prizes || [])[0] || {}).name || ''), main, 'el ' + fday(s.publishAt));
-        h += '<p class="srt-p srt-muted">Cómo se calcula: ganador = 1 + (sha256(semilla + "|" + sorteo) mod cantidad de tickets). La huella se publica antes; la semilla, el día del sorteo. Si el número es de alguien no anotado, pasa al siguiente.</p></div>';
+        h += '<p class="srt-p srt-muted">Cómo se calcula: ganador = 1 + (sha256(semilla + "|" + sorteo) mod cantidad de tickets). La huella se publica a las 6 h del cierre (ahí se congela la cantidad de tickets); la semilla, dos días después. Si el número es de alguien no anotado, pasa al siguiente.</p></div>';
         return h;
     }
     function winnersList(w) { return '<div class="srt-table">' + w.map((x) => '<div class="srt-row' + (x.me ? ' me' : '') + '"><span class="srt-r">' + ['🥇', '🥈', '🥉'][x.pos - 1] + '</span><span class="srt-n">' + esc(x.name) + (x.me ? ' <i>vos</i>' : '') + '</span><b class="srt-pts">' + num(x.points) + ' pts</b></div>').join('') + '</div>'; }

@@ -8,6 +8,27 @@
 
 ## Sesión 2026-11-08
 
+### 1037. Entrega de premios del sorteo: revisión fina y correcciones — PWA v671, admin SW v245 (2026-11-08)
+- **Owner:** "¿está todo verificado que no falle nada cuando entregue premios? es algo importante que tenemos que tener fino". Se leyó el flujo
+  completo (emisión de tickets, cierre, huella/semilla, ganadores del ranking, sorteo extra, panel) y se corrigió lo encontrado:
+  1. **Registro de sorteos se pisaba:** `Config['sorteoDraws']` se leía→mezclaba→guardaba entero (commit, reveal y extra): dos instancias, o el
+     cron y el panel a la vez, podían perder un sorteo ya hecho (huella publicada o semilla revelada). Ahora `_sorteoDrawSave` escribe `value.<dk>`
+     por campo, el commit es atómico (`seedHash $exists:false`) y el revelado lleva lock (`srtreveal-<dk>`): un solo ganador, un solo aviso.
+  2. **Huella y semilla salían juntas:** el automático recién corría al 4° día después del cierre y ahí publicaba la huella y revelaba la semilla
+     en la misma pasada (no había "huella antes"); además los puntos y tickets seguían moviéndose hasta ese día. Ahora: huella 6 h después del
+     cierre (`SORTEO_FREEZE_H`, el último día ya puntuado) ⇒ período congelado (sin más tickets ni cambios de ranking); semilla 48 h después del
+     mediodía del día 1 (`SORTEO_REVEAL_H`) o cuando el admin la revela. Textos de app/panel/ruta ajustados.
+  3. **Ganadores del ranking (2° y 3°) y del SORTEO EXTRA** no excluían bloqueados, cuentas secundarias ni marcas del antifraude (el de tickets sí).
+     Ahora los tres excluyen lo mismo (+ staff); el siguiente del ranking sube.
+  4. **Sorteo extra sin rastro:** no avisaba al ganador ni dejaba nota al agente (los premios se entregan a mano). Ahora push `kind:'personal'` +
+     nota interna "acreditar con Bonificación manual"; `redo` queda registrado en el acta y en el log.
+- **Verificado OK (sin cambios):** tickets correlativos con contador atómico + índice único (nunca se quitan ni se reasignan; un hueco se salta
+  como "sin ticket"); la semilla no viaja a la app hasta revelarse; el ganador de tickets no anotado / bloqueado / marcado se salta al siguiente
+  (hasta 500); el ganador del 1° no puede repetir en 2°/3°; aviso al ganador + nota interna en el 1° premio y quincenales; rutas de sorteo
+  sólo admin general. Tests `test-sorteos-rules/server/front` OK (mocks del server actualizados a la escritura por campo).
+- **Queda a mano (como está definido):** la acreditación del premio (Bonificación manual) y la entrega física del iPhone; el panel muestra el acta
+  (huella, semilla, ticket ganador, saltos) para publicarla.
+
 ### 1036. Aviso semanal del sorteo del iPhone (lunes): historia + push a quien juega y no se anotó — PWA v670, admin SW v244 (2026-11-08)
 - **Owner:** "subir a historias y mandarle notificaciones durante el día a todos los que están participando pero no se anotaron en el sorteo del
   iPhone; programarlo para dar un aviso semanal todos los lunes".

@@ -28914,18 +28914,37 @@ async function _sorteoIssueTickets(key, periodKey, userId, username, reasons, no
 }
 const _drawKey = (key, periodKey, kind, date) => key + ':' + periodKey + ':' + (kind === 'mid' ? 'mid:' + date : 'main');
 // Publica la HUELLA de una semilla nueva (compromiso) y congela la cantidad de tickets. Idempotente.
+// #1037 (revisión de premios): Config['sorteoDraws'] se escribe POR CAMPO (`value.<dk>`), nunca leer→mezclar→guardar el objeto entero (#1012):
+// dos instancias, o el cron y el panel a la vez, se pisaban y un sorteo ya hecho (huella publicada o semilla revelada) podía perderse.
+async function _sorteoDrawSave(dk, d) {
+  await Config.collection.updateOne({ key: 'sorteodraws' }, { $set: { ['value.' + dk]: d, updatedAt: new Date() } }, { upsert: true });
+  try { Config._cache && Config._cache.clear(); } catch (_) {}
+}
+async function _sorteoDrawGet(dk) { const draws = (await getConfig('sorteoDraws', null)) || {}; return draws[dk] || null; }
 async function _sorteoDrawCommit(key, periodKey, kind, date, by) {
-  const draws = (await getConfig('sorteoDraws', null)) || {}; const dk = _drawKey(key, periodKey, kind, date);
-  if (draws[dk] && draws[dk].seedHash) return draws[dk];
+  const dk = _drawKey(key, periodKey, kind, date);
+  const cur = await _sorteoDrawGet(dk); if (cur && cur.seedHash) return cur;
   const total = await SorteoTicket.countDocuments({ key, periodKey }); const seed = sorteosRules.newSeed();
-  draws[dk] = { kind, key, periodKey, date: date || null, committedAt: new Date().toISOString(), by: by || 'automático', seed, seedHash: sorteosRules.commitHash(seed), total, revealedAt: null, winner: null, method: 'sha256(semilla|sorteo) mod tickets, v2' };
-  await Config.set('sorteoDraws', draws, by || 'system'); return draws[dk];
+  const d = { kind, key, periodKey, date: date || null, committedAt: new Date().toISOString(), by: by || 'automático', seed, seedHash: sorteosRules.commitHash(seed), total, revealedAt: null, winner: null, method: 'sha256(semilla|sorteo) mod tickets, v2' };
+  // Atómico: sólo escribe si TODAVÍA no hay huella para ese sorteo (otra instancia pudo ganar); si el doc no existe, el upsert lo crea.
+  try {
+    const r = await Config.collection.updateOne({ key: 'sorteodraws', ['value.' + dk + '.seedHash']: { $exists: false } }, { $set: { ['value.' + dk]: d, updatedAt: new Date() } }, { upsert: true });
+    try { Config._cache && Config._cache.clear(); } catch (_) {}
+    if (!r.matchedCount && !r.upsertedCount) { const again = await _sorteoDrawGet(dk); if (again && again.seedHash) return again; }
+  } catch (e) { if (e && e.code === 11000) { const again = await _sorteoDrawGet(dk); if (again && again.seedHash) return again; } throw e; }
+  logger.info(`[sorteos] HUELLA publicada ${dk}: ${total} tickets (${by || 'automático'})`);
+  return (await _sorteoDrawGet(dk)) || d;
 }
 // Revela la semilla y calcula el ticket ganador; si el número es de alguien no anotado / bloqueado / marcado, pasa al siguiente.
 async function _sorteoDrawReveal(cfg, key, periodKey, kind, date, by) {
-  let draws = (await getConfig('sorteoDraws', null)) || {}; const dk = _drawKey(key, periodKey, kind, date); let d = draws[dk];
-  if (!d || !d.seedHash) { d = await _sorteoDrawCommit(key, periodKey, kind, date, by); draws = (await getConfig('sorteoDraws', null)) || {}; }
+  const dk = _drawKey(key, periodKey, kind, date); let d = await _sorteoDrawGet(dk);
+  if (!d || !d.seedHash) d = await _sorteoDrawCommit(key, periodKey, kind, date, by);
   if (d.revealedAt) return d;
+  // #1037: un solo revelado (cron + panel o dos instancias a la vez mandaban dos avisos al ganador); el lock se suelta al terminar.
+  const lockName = ('srtreveal-' + dk).replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+  if (!(await _cronClaim(lockName, 10 * 60000))) return d;
+  try {
+  d = (await _sorteoDrawGet(dk)) || d; if (d.revealedAt) return d;
   const total = Number(d.total) || 0; const skipped = []; let winner = null;
   if (total > 0) {
     const joined = new Set((await SorteoEntry.find({ key }).select('userId').lean()).map((e) => e.userId));
@@ -28940,7 +28959,7 @@ async function _sorteoDrawReveal(cfg, key, periodKey, kind, date, by) {
   }
   const s = cfg[key] || {};
   Object.assign(d, { revealedAt: new Date().toISOString(), revealedBy: by || 'automático', winner, skipped, amount: kind === 'mid' ? Number((s.midDraws || {}).amount) || 0 : null, prize: kind === 'main' ? (((s.prizes || [])[0] || {}).name || '') : null, note: total ? null : 'sin tickets emitidos' });
-  draws[dk] = d; await Config.set('sorteoDraws', draws, by || 'system');
+  await _sorteoDrawSave(dk, d); // #1037: por campo
   if (winner) {
     const what = kind === 'mid' ? sorteosRules.money(d.amount) + ' del sorteo quincenal' : 'el 1° premio del ' + (s.title || key) + ' (' + d.prize + ')';
     try { await sendNotificationToUsernames(User, [winner.username], kind === 'mid' ? '🎉 ¡Ganaste el sorteo quincenal!' : '🏆 ¡GANASTE EL 1° PREMIO!', 'Salió tu ticket #' + winner.n + ': ' + what + '. Te escribimos por Soporte para coordinar la entrega.', { url: '/', kind: 'personal', tag: 'sorteo-' + dk }); } catch (_) {}
@@ -28948,12 +28967,19 @@ async function _sorteoDrawReveal(cfg, key, periodKey, kind, date, by) {
   }
   logger.info(`[sorteos] SORTEO ${dk}: ${total} tickets · ganador ${winner ? winner.username + ' #' + winner.n : 'ninguno'} · saltos ${skipped.length}`);
   return d;
+  } finally { _cronRelease(lockName).catch(() => {}); }
 }
 // Automático: al cerrar el período se publica la huella del 1° premio y, 48 h después de la hora de publicación, si nadie lo reveló desde el
 // panel, se revela solo. Quincenales: huella apenas empieza el día, semilla a las 20 h.
+const SORTEO_FREEZE_H = 6, SORTEO_REVEAL_H = 48; // #1037
 async function _sorteoDrawsAuto(cfg, key, p, now) {
   const s = cfg[key];
-  if (p.status === 'closed') { const d = await _sorteoDrawCommit(key, p.periodKey, 'main', null, 'automático'); if (!d.revealedAt && now.getTime() >= p.publishAt.getTime() + 48 * 3600000) await _sorteoDrawReveal(cfg, key, p.periodKey, 'main', null, 'automático'); }
+  // #1037: huella 6 h después del cierre (el último día ya quedó puntuado en las pasadas de 20 min; antes salía recién al 4° día, junto con la
+  // semilla: no había "huella antes"). Semilla: 48 h después del mediodía del día 1 (o cuando el admin la revele desde el panel).
+  if (p.status === 'closed' && now.getTime() >= p.end.getTime() + SORTEO_FREEZE_H * 3600000) {
+    const d = await _sorteoDrawCommit(key, p.periodKey, 'main', null, 'automático');
+    if (!d.revealedAt && now.getTime() >= p.publishAt.getTime() + SORTEO_REVEAL_H * 3600000) await _sorteoDrawReveal(cfg, key, p.periodKey, 'main', null, 'automático');
+  }
   const hourArt = (now.getUTCHours() + 21) % 24; const today = sorteosRules.artDay(now);
   for (const md of sorteosRules.midDrawDates(s, p, now)) {
     if (md.status !== 'due') continue;
@@ -28970,7 +28996,12 @@ function _sorteoDrawPublic(d, userId) {
 async function _sorteoTickOne(cfg, key, now) {
   const s = cfg[key]; const p = sorteosRules.periodOf(s, now);
   if (p.status === 'soon') return { skipped: 'todavía no empezó' };
-  if (p.status === 'closed' && now - p.end > 3 * sorteosRules.DAY) { await _sorteoDrawsAuto(cfg, key, p, now).catch((e) => logger.warn('[sorteos] sorteo auto ' + key + ': ' + e.message)); return { skipped: 'cerrado' }; }
+  // #1037: una vez publicada la HUELLA del 1° premio (congela la cantidad de tickets) el período queda cerrado del todo: no se emiten más tickets
+  // ni cambian los puntos (si no, tickets con número mayor al congelado no podrían ganar y el ranking de 2°/3° se movía después de publicarse).
+  if (p.status === 'closed') {
+    const main = await _sorteoDrawGet(_drawKey(key, p.periodKey, 'main', null));
+    if ((main && main.seedHash) || now - p.end > 3 * sorteosRules.DAY) { await _sorteoDrawsAuto(cfg, key, p, now).catch((e) => logger.warn('[sorteos] sorteo auto ' + key + ': ' + e.message)); return { skipped: 'cerrado' }; }
+  }
   const t0 = Date.now(); const until = new Date(Math.min(now.getTime(), p.end.getTime())); const today = sorteosRules.artDay(until);
   const range = { timestamp: { $gte: p.start, $lte: until } };
   const [deps, dayAgg, entries, prevScores] = await Promise.all([
@@ -29049,7 +29080,13 @@ async function _sorteoTick(opts) {
 setTimeout(() => { _sorteoTick().catch(() => {}); setInterval(() => { _sorteoTick().catch(() => {}); }, 60 * 60 * 1000); }, 3 * 60 * 1000); // #957: cada hora
 const _sorteoSort = { points: -1, wagered: -1, firstDepositAt: 1 };
 async function _sorteoRankOf(key, periodKey, sc) { if (!sc) return null; const better = await SorteoScore.countDocuments({ key, periodKey, $or: [{ points: { $gt: sc.points } }, { points: sc.points, wagered: { $gt: sc.wagered } }] }); return better + 1; }
-async function _sorteoWinners(key, periodKey, excludeUserId) { const f = { key, periodKey, eligible: true, points: { $gt: 0 } }; if (excludeUserId) f.userId = { $ne: excludeUserId }; return SorteoScore.find(f).sort(_sorteoSort).limit(2).lean(); } // #981: 2 por ranking (el 1° va por tickets)
+async function _sorteoWinners(key, periodKey, excludeUserId) { // #981: 2 por ranking (el 1° va por tickets)
+  const f = { key, periodKey, eligible: true, points: { $gt: 0 } }; if (excludeUserId) f.userId = { $ne: excludeUserId };
+  const top = await SorteoScore.find(f).sort(_sorteoSort).limit(12).lean(); if (!top.length) return [];
+  // #1037: fuera bloqueados, cuentas secundarias y marcas del antifraude (igual que el sorteo de tickets): el siguiente del ranking sube.
+  const bad = new Set((await User.find({ id: { $in: top.map((t) => t.userId) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudFlags.0': { $exists: true } }, { role: { $ne: 'user' } }] }).select('id').lean()).map((u) => u.id));
+  return top.filter((t) => !bad.has(t.userId)).slice(0, 2);
+}
 // #939: quiénes entran al SORTEO de $100.000 del mes: cargas >= minDeposits (y anotados sólo si requireJoin).
 function _sorteoExtraFilter(s, periodKey) { const f = { key: s.key || 'mensual', periodKey, deposits: { $gte: Number(s.extra.minDeposits) || 1 } }; if (s.extra.requireJoin) f.eligible = true; return f; }
 async function _sorteoTelegramUrl() { try { const c = (await getConfig('communityConfig')) || {}; return c.inviteUrl || c.channelUrl || c.url || (await getConfig('canalInformativoUrl', '')) || ''; } catch (_) { return ''; } }
@@ -29227,7 +29264,7 @@ app.post('/api/admin/sorteos/:key/draw/:step', authMiddleware, adminMiddleware, 
     const cfg = await _sorteosCfg(); const s = cfg[key]; const b = req.body || {}; const kind = b.kind === 'mid' ? 'mid' : 'main'; const date = kind === 'mid' ? String(b.date || '') : null;
     const pNow = sorteosRules.periodOf(s, new Date()); const periodKey = String(b.periodKey || pNow.periodKey);
     if (kind === 'mid' && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Fecha del sorteo quincenal: AAAA-MM-DD' });
-    if (kind === 'main' && periodKey === pNow.periodKey && pNow.status === 'live' && b.early !== true) return res.status(400).json({ error: 'El período ' + periodKey + ' todavía no cerró: la huella se publica sola al cierre y el sorteo se revela el ' + sorteosRules.fmtDay(pNow.publishAt) + '. Para adelantarlo mandá early:true.' });
+    if (kind === 'main' && periodKey === pNow.periodKey && pNow.status === 'live' && b.early !== true) return res.status(400).json({ error: 'El período ' + periodKey + ' todavía no cerró: la huella se publica sola 6 h después del cierre y la semilla 48 h después del ' + sorteosRules.fmtDay(pNow.publishAt) + '. Para adelantarlo mandá early:true.' });
     const d = step === 'commit' ? await _sorteoDrawCommit(key, periodKey, kind, date, req.user.username) : await _sorteoDrawReveal(cfg, key, periodKey, kind, date, req.user.username);
     res.json({ success: true, draw: d });
   } catch (e) { logger.error('[sorteos] draw/' + req.params.step + ': ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
@@ -29523,16 +29560,25 @@ app.post('/api/admin/sorteos/:key/draw-extra', authMiddleware, adminMiddleware, 
     if (draws[dk] && !(req.body && req.body.redo === true)) return res.status(400).json({ error: 'Ese mes ya se sorteó (' + (draws[dk].winners || []).length + ' ganadores). Mandá redo:true para repetirlo.' });
     const pNow = sorteosRules.periodOf(s, new Date());
     if (periodKey === pNow.periodKey && pNow.status === 'live' && !(req.body && req.body.early === true)) return res.status(400).json({ error: 'El mes ' + periodKey + ' todavía no cerró. El sorteo se hace el día 1 sobre el mes cerrado (' + (pNow.prevKey || '') + '); para adelantarlo mandá early:true.' });
-    const cands = await SorteoScore.find(_sorteoExtraFilter(s, periodKey)).select('userId username deposits').lean();
+    const cands0 = await SorteoScore.find(_sorteoExtraFilter(s, periodKey)).select('userId username deposits').lean();
+    // #1037: sin bloqueados / secundarias / marcas del antifraude (antes podían salir sorteados).
+    const badX = new Set((await User.find({ id: { $in: cands0.map((c) => c.userId) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudFlags.0': { $exists: true } }, { role: { $ne: 'user' } }] }).select('id').lean()).map((u) => u.id));
+    const cands = cands0.filter((c) => !badX.has(c.userId));
     const n = sorteosRules.extraWinners(s.extra, cands.length);
     if (!n) return res.status(400).json({ error: 'Nadie llegó a ' + (Number(s.extra.minDeposits) || 1) + ' cargas en ' + periodKey + ' (' + cands.length + ' cumplen): no hay sorteo.' });
     const seed = crypto.randomBytes(16).toString('hex'); let h = crypto.createHash('sha256').update(seed).digest();
     const arr = cands.slice().sort((a, b) => a.userId < b.userId ? -1 : 1);
     for (let i = arr.length - 1; i > 0; i--) { if (i % 8 === 7) h = crypto.createHash('sha256').update(h).digest(); const j = h.readUInt32BE((i % 8) * 4) % (i + 1); [arr[i], arr[j]] = [arr[j], arr[i]]; }
     const winners = arr.slice(0, n).map((w) => ({ userId: w.userId, username: w.username, amount: Number(s.extra.amount) || 0 }));
-    draws[dk] = { at: new Date().toISOString(), by: req.user.username, seed, candidates: cands.length, minDeposits: Number(s.extra.minDeposits) || 1, amount: Number(s.extra.amount) || 0, winners, early: !!(req.body && req.body.early), method: 'sha256-shuffle-v1' };
-    await Config.set('sorteoDraws', draws, req.user.username);
-    logger.info(`[sorteos] SORTEO EXTRA ${key} ${periodKey}: ${winners.length} ganadores de ${cands.length} (semilla ${seed})`);
+    draws[dk] = { at: new Date().toISOString(), by: req.user.username, seed, candidates: cands.length, excluded: badX.size, minDeposits: Number(s.extra.minDeposits) || 1, amount: Number(s.extra.amount) || 0, winners, early: !!(req.body && req.body.early), redo: !!(req.body && req.body.redo), method: 'sha256-shuffle-v1' };
+    await _sorteoDrawSave(dk, draws[dk]); // #1037: por campo
+    logger.info(`[sorteos] SORTEO EXTRA ${key} ${periodKey}: ${winners.length} ganadores de ${cands.length} (semilla ${seed})${req.body && req.body.redo ? ' · REPETIDO por ' + req.user.username : ''}`);
+    // #1037: los premios se entregan a mano ⇒ aviso al ganador + nota interna en su chat (antes no quedaba rastro para el agente).
+    const what = sorteosRules.money(Number(s.extra.amount) || 0) + ' del ' + (s.extra.title || 'SORTEO EXTRA') + ' (' + (s.title || key) + ' ' + periodKey + ')';
+    for (const w of winners) {
+      try { await _emitAdminOnlyChatNote(w.userId, w.username, '🎁 GANÓ ' + what + '. Acreditarle el premio (Bonificación manual) y avisarle. Sorteo hecho por ' + req.user.username + '.'); } catch (_) {}
+      try { await sendNotificationToUsernames(User, [w.username], '🎉 ¡Saliste sorteado!', 'Ganaste ' + what + '. Te escribimos por Soporte para acreditártelo.', { url: '/', kind: 'personal', tag: 'sorteo-extra-' + dk }); } catch (_) {}
+    }
     res.json({ success: true, draw: draws[dk] });
   } catch (e) { logger.error('[sorteos] draw: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });

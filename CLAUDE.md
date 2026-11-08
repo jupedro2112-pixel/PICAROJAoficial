@@ -373,7 +373,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **SORTEOS (#915 → #981 v2):** `src/services/sorteos.js` (reglas puras, test `scripts/test-sorteos-rules.js`) + `_sorteoTickOne` (20 min, stats batch
   de 1girox; apuesta POR DÍA vía `SorteoScore.cum`) + `SorteoEntry`/`SorteoScore`/`SorteoTicket`/`SorteoCounter`. **1° premio por TICKETS** (números
   correlativos que el cliente ve; sorteo = 1 + sha256(semilla|sorteo) mod total, huella publicada al cierre, revelado manual o automático a las 48 h),
-  2° y 3° por ranking (puntos con techo diario $300.000 + constancia). Tickets NUNCA se quitan ni se reasignan (índice único). Requisitos para anotarse:
+  2° y 3° por ranking (puntos con techo diario $300.000 + constancia). Tickets NUNCA se quitan ni se reasignan (índice único).
+  **#1037:** `Config['sorteoDraws']` se escribe POR CAMPO (`_sorteoDrawSave`, commit atómico, reveal con lock): nunca leer→mezclar→guardar. Huella 6 h
+  después del cierre ⇒ período CONGELADO (no más tickets/puntos); semilla 48 h después del mediodía del día 1. Ganadores (tickets, ranking, extra) sin
+  bloqueados / secundarias / marcas / staff. Requisitos para anotarse:
   app, notificaciones, Telegram, **celular cargado** y una carga. Premios se entregan a mano (push + nota al ganador). Panel → App → Sorteos (🎟️ / 🎲)
   y Principal → "Sorteos: ¿sirven?". Un cambio en las reglas de puntos/tickets pasa por `computePoints` y sus tests, nunca por el motor.
 - **TABLERO DEL NEGOCIO (#1009):** Principal → 📈 Negocio (`/api/admin/inicio/negocio`, lógica en `src/services/businessBoard.js`, test

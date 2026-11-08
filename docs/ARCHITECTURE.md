@@ -1596,9 +1596,14 @@ devuelve puntos (base con techo diario `dayCapArs` × realShare, `dayPts`, `week
 **Motor** (`_sorteoTickOne`): por período, agrega cargas reales (total y por día ART), lee el apostado acumulado de 1girox (`_sorteoStats`), guarda
 `cum[hoy]` y deriva `wag` por día como diferencia entre acumulados consecutivos (los días sin pasada se suman al siguiente). Emite tickets por la
 diferencia entre lo que corresponde y lo ya emitido por origen (`ticketsPlay/Days/Milestones`), reservando bloques en `SorteoCounter` (`$inc`) e
-insertando `SorteoTicket` (único por key+periodKey+n). Después corre `_sorteoDrawsAuto`: commit del 1° premio al cierre, revelado automático a las
-48 h de `publishAt`; quincenales (`midDraws.dates`) commit al empezar el día, revelado a las 20 h. `Config['sorteoDraws']` guarda cada sorteo bajo
-`key:periodKey:main` o `key:periodKey:mid:YYYY-MM-DD` ({ seed, seedHash, total, winner, skipped, revealedAt… }); la app ve la semilla sólo revelada.
+insertando `SorteoTicket` (único por key+periodKey+n). Después corre `_sorteoDrawsAuto`: **#1037:** commit (huella) del 1° premio
+`SORTEO_FREEZE_H` = 6 h después del cierre (el último día ya quedó puntuado) — desde ahí el período está CONGELADO (`_sorteoTickOne` no puntúa ni
+emite más tickets si el main tiene `seedHash`) — y revelado automático `SORTEO_REVEAL_H` = 48 h después de `publishAt` (día 3, 12 h);
+quincenales (`midDraws.dates`) commit al empezar el día, revelado a las 20 h. `Config['sorteoDraws']` guarda cada sorteo bajo
+`key:periodKey:main` o `key:periodKey:mid:YYYY-MM-DD` ({ seed, seedHash, total, winner, skipped, revealedAt… }) y se escribe **por campo**
+(`_sorteoDrawSave` / commit atómico con `value.<dk>.seedHash $exists:false`, nunca el objeto entero, #1012); el revelado va con lock
+`_cronClaim('srtreveal-<dk>')` (un solo aviso al ganador). `_sorteoWinners` (2°/3°) y el SORTEO EXTRA excluyen bloqueados / `duplicateOf` /
+`fraudFlags` / staff; el extra deja nota interna + push a cada ganador. La app ve la semilla sólo revelada.
 
 **Trampas:** tickets nunca bajan (si cambia realShare, se conserva lo emitido); el commit congela `total` — tickets emitidos después no entran a ESE
 sorteo; cambiar `tickets.per`/`dayCap` a mitad de período sólo afecta lo que se emite de ahí en adelante. El ganador del 1° premio se excluye del
