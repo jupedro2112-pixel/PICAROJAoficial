@@ -48,6 +48,7 @@
         if (badge) { badge.textContent = unseen > 9 ? '9+' : String(unseen); badge.style.display = unseen > 0 ? '' : 'none'; }
         const lbl = _el('storiesLbl');
         if (lbl) lbl.textContent = _items.length ? (unseen ? 'Historias' : 'Historias') : 'Historias';
+        const live = _el('storiesLive'); if (live) { live.hidden = !_items.length; live.textContent = unseen ? 'NUEVAS' : 'EN VIVO'; } // #1039
         btn.title = _items.length ? (_items.length + ' historia' + (_items.length === 1 ? '' : 's') + ' activa' + (_items.length === 1 ? '' : 's')) : 'Sin historias por ahora';
     }
 
@@ -295,6 +296,7 @@
         const seen = _seen(); const unseen = _items.filter((s) => !seen.includes(s.id)).length;
         ring.classList.toggle('has-new', unseen > 0);
         const n = _el('lgStoriesCount'); if (n) { n.textContent = String(_items.length); n.style.display = ''; }
+        const lv = _el('lgStoriesLive'); if (lv) lv.textContent = unseen ? 'NUEVAS' : 'EN VIVO'; // #1039
         ring.title = _items.length + ' historia' + (_items.length === 1 ? '' : 's');
         ring.style.display = '';
     }

@@ -1917,3 +1917,22 @@ fondeosMain y `gastosBanco` = gastosMainVistos y **vuelve a correr `_closeApply`
 anterior). `_closeApply`: `difIn = bankIn − fondeosBanco − (dep − depSec)`, `difOut = bankOut − (retiros − pagosExternos − paySec) − gastosBanco`,
 `diferencia = (bankIn − bankOut) − (dep − depSec − retiros + paySec) − (pagosExternos + fondeosBanco) + gastosBanco`. Lo externo va al
 resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `scripts/test-caja-movimientos.js`.
+
+
+## #1039 — Registro abierto con SMS, cliente FIEL, referidos apagables, ingreso premium, sorteo con 7 días
+
+- **Estado fijado por la migración `mig1039OpenRegPremium`** (Config, una vez): registrationMode 'quick' · smsEnabled · quickEntrySms · entryLogin ·
+  referralsEnabled:false · organicWelcomeGifts:false · trustRule {deposits 3, days 7}. Todo editable en Configuración → Registro de clientes.
+- **Cliente fiel:** `_trustRule()` (Config['trustRule']) → `_isTrustedClient(userId)` = ≥ deposits cargas reales (`_REAL_DEP_TRUST`: sin regalos ni
+  PRUEBA) y primera carga hace ≥ days. `_noWelcomeActive(u)` = `noWelcomeGifts===true` && !fiel: es lo que consultan `_welcomeAbuseOf`, el texto de
+  1ª carga sin regalo (`/sys_first_deposit_nogift`) y el código de la Comunidad. El flag `noWelcomeGifts` no se borra: deja de regir. Recorrido:
+  `retentionJourney.isTrusted(state, now)` con `TRUST_RULE` (constantes; el estado del `_journeyTick` trae `firstDepositAt` del aggregate `$min`).
+  La oferta de 2ª carga sigue filtrando `noWelcomeGifts:{$ne:true}` (sólo aplica a quien tiene UNA carga: un fiel nunca califica).
+- **Referidos:** `_referralsEnabled()`. Apagado: `app.use('/api/referrals', …)` 403 `REFERRALS_OFF` (antes de las rutas), `referralCode` ignorado en
+  `/api/auth/register` y `_landingSignupHandler`, `_runMonthlyReferralPayout` sale, landing/info sin `referralPct` ni servicio 'referidos' y
+  `referralsEnabled:false` ⇒ loginhero.js `body.no-ref` (CSS esconde `#referralBtn .ez-ref .svc-ref .lg-sy[data-s=referidos] #quickRefHint
+  #registerReferralGroup .ref-only`; `openReferralModal` avisa). Las rutas admin de referidos siguen (historial / pagos viejos).
+- **Ingreso:** `#lgHero` (hero de marca), `#lgSoon` (`info.soon` = `/sys_entry_soon`, líneas o `|`), `#lgStoriesRing` con `.lg-ring-lbl` +
+  `#lgStoriesLive`; adentro `#storiesLive` en `#navHistorias` (`_paintButton`). Estilos al final de pin.css (bloque #1039), todo con tokens.
+- **Sorteo:** `_sorteoChecksOf` suma `week` (`SORTEO_WEEK_DAYS`=7 desde `user.createdAt`; sin fecha = cumple), `_sorteoMissing` lo incluye,
+  `requirements.week` default true (`sorteos.defaults`), fila en sorteos.js y tilde en el panel.

@@ -126,7 +126,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   acumulativo), bono de nivel VIP y rakeback. **#991 (2026-10-28):** las comisiones de REFERIDOS también son BONO, con rollover ×`Config['referralRolloverX']` (1) vía `creditGift` (si 1girox no acepta ×1 como bono, entran como carga ×1, misma reference). Misiones y reembolso acumulativo usan SIEMPRE el global (`_giftRolloverX`), no su propio número. Validar con `node scripts/test-gift-rollovers.js`.
   **#882/#883 → #976:** TODA carga real (hgcash y manual) va con rollover propio ×`Config['depositRolloverX']` (**1** desde 2026-10-24, antes 3) en
   `_depositWithBonus`; el bono ×5. Retiro mínimo `Config['withdrawMinArs']` $5.000 (#976). Registro abierto (`noWelcomeGifts`): sin fichas gratis ni 2ª
-  carga hasta 5 cargas reales (`retentionJourney.TRUST_DEPOSITS`); desde la 5ª entra a toda la estrategia, sin regalo especial (#977).
+  carga hasta ser CLIENTE FIEL (**#1039:** `Config['trustRule']` = 3 cargas reales + 7 días desde la primera, `_isTrustedClient` / `_noWelcomeActive`;
+  recorrido `retentionJourney.isTrusted`); recién ahí entra a toda la estrategia, sin regalo especial (#977). Un gate de bienvenida NUEVO usa `_noWelcomeActive(u)`, nunca el flag crudo.
   Devoluciones de retiro rechazado: libres (no pasan por ahí). Un flujo nuevo de carga real tiene que usar `_depositWithBonus`.
   El texto de abajo describe el estado anterior (regalo directo ×0): hoy ya no aplica a ningún regalo.
 - **Regalos = BONO 0 "regalo directo" (2026-09-07, v1.10+):** reembolsos, ruleta,
@@ -273,6 +274,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   **#504 ESTRATEGIA:** `Config['strategyClientes']` (segunda carga + misiones). Bono de 2ª carga = `User.secondDepositOffer`, lo consume
   `resolveAutoBonus` (orden: instalar → código → **segunda carga** → ruleta → lote → 1ª carga → auto). Misiones: Transaction tipo `mission`
   (está en `CASHBACK_GIFT_TX_TYPES`), `MissionClaim` único por usuario/misión/semana. Un tipo de regalo nuevo va a esa lista SIEMPRE.
+  **#1039 REFERIDOS APAGABLES:** `Config['referralsEnabled']` (APAGADO desde 2026-11-08 por el owner; tilde en Registro de clientes): la app esconde todo
+  con `body.no-ref`, `/api/referrals/*` da 403, el alta ignora el código y no se paga el mes. Un acceso NUEVO a referidos en la PWA lleva la clase `ref-only`.
   **#529 REFERIDOS 2.0:** para PAGAR o MOSTRAR un % de referidos usar SIEMPRE `referralTierService.resolveReferralRate(user)`
   (override > niveles > plano). `utils/referralRate` es sólo el % plano (fuente única `Config['referralCommissionPct']`). Nada de premios
   en plata por cantidad de referidos (estafable). Pago automático el día 1 (`_runMonthlyReferralPayout`); niveles apagados por defecto.
@@ -304,7 +307,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   Un flujo nuevo de pago por banco debe llamar `_bankPayoutFailed()` / `_bankPayoutOk()` para que la detección automática siga.
   **#975 (2026-10-24): registro ABIERTO sin regalos.** `User.noWelcomeGifts=true` para quien se registra sin link de publicidad ni referido (salvo
   `Config['organicWelcomeGifts']`): `_welcomeAbuseOf` lo devuelve como motivo ⇒ ningún bono de bienvenida (manual y hgcash), ni ofertas de bienvenida,
-  ni pasos del recorrido con `needsWelcome`. Un regalo de bienvenida NUEVO tiene que respetar ese flag. Modo actual: 'quick' + celular por SMS.
+  ni pasos del recorrido con `needsWelcome`. Un regalo de bienvenida NUEVO tiene que respetar ese flag (vía `_noWelcomeActive`, #1039). Modo actual
+  (#1039, 2026-11-08): 'quick' + celular por SMS, `entryLogin` (Iniciar sesión + Crear mi cuenta), hero premium `#lgHero` y tarjeta PRÓXIMAMENTE
+  (`/sys_entry_soon`). Sorteo: requisito `week` (cuenta con 7 días).
   **#421/#748:** `Config['registrationMode']` ('sms' | 'quick' | 'invite', Configuración → Registro de clientes). `'invite'` = SÓLO CON
   INVITACIÓN: `_inviteOnlyBlocks()` rechaza registros sin `referralCode` real ni `campaignCode` activo (texto `/sys_register_invite`); el
   login sigue abierto. Un flujo nuevo de alta tiene que pasar por ese chequeo. En 'quick' la pantalla

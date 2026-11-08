@@ -26,7 +26,7 @@ function defaults() {
   };
   return {
     enabled: true,
-    requirements: { app: true, notif: true, telegram: true, phone: true, deposit: true }, // #981: + número de celular cargado
+    requirements: { app: true, notif: true, telegram: true, phone: true, deposit: true, week: true }, // #981: + número de celular cargado · #1039: + cuenta con 7 días (seguridad)
     mensual: Object.assign({}, base, {
       enabled: true, key: 'mensual', title: 'Sorteo mensual', emoji: '🏆', startMonth: '2026-11',
       milestones: { tenDeposits: 3 },     // 10 cargas en el mes = +3 tickets

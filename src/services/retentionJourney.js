@@ -26,6 +26,16 @@ const VALUE_TIERS = [
 ];
 const MAX_DAYS = 180;      // después de esto no se insiste más
 const TRUST_DEPOSITS = 5;  // #976/#977 (owner): el registro abierto entra a TODA la estrategia (fichas de regalo incluidas) después de 5 cargas reales, sin regalo especial
+// #1039 (owner 2026-11-08): "sin bonos de bienvenida hasta que no sea un cliente FIEL después de una SEMANA" ⇒ fiel = al menos TRUST_RULE.deposits
+// cargas reales Y la primera carga hace ≥ TRUST_RULE.days días (las 5 cargas solas ya no alcanzan: hace falta la semana). Mismo criterio que
+// `_isTrustedClient` en server.js (ahí los números salen de Config['trustRule']; acá quedan los default para el generador aislado).
+const TRUST_RULE = { days: 7, deposits: 3 };
+function isTrusted(state, now) {
+  if (!state || !state.noWelcome) return true;
+  const n = Number(state.deposits) || 0; if (n < TRUST_RULE.deposits) return false;
+  const f = state.firstDepositAt ? new Date(state.firstDepositAt).getTime() : null;
+  return !!f && ((now || new Date()).getTime() - f) >= TRUST_RULE.days * 86400000;
+}
 const UNTRUSTED_PCT = 50;  // antes de eso, los pasos de FICHAS se convierten en +50 % en la próxima carga (tiene que poner plata para cobrarlo)
 const TOLERANCE = 2;       // si el motor no corrió justo ese día, el paso sale hasta 2 días después
 
@@ -99,7 +109,7 @@ function pickStep(state, now, tuning) {
   const ep = c.segment === 'nuevo' ? 'reg' : dayKey(state.lastDepositAt);
   const fits = (st, days) => days >= st.day && days <= st.day + TOLERANCE;
   const cands = [];
-  const trusted = !state.noWelcome || (Number(state.deposits) || 0) >= TRUST_DEPOSITS; // #976
+  const trusted = isTrusted(state, now); // #976 → #1039: cargas + una semana
   for (const st of STEPS) {
     if (st.needsWelcome && state.noWelcome) continue; // #975: registro abierto sin regalos ⇒ no prometer bono de bienvenida
     if (st.segment === 'nuevo' && c.segment === 'nuevo' && fits(st, c.days)) cands.push({ st, key: st.id + '@reg', prio: 2 });
@@ -110,7 +120,7 @@ function pickStep(state, now, tuning) {
   if (!ok.length) return null;
   const tier = valueTier(state.avgDeposit);
   let g = ok[0].st.gift;
-  if (!trusted && g.type === 'fixed') g = { type: 'percent', pct: UNTRUSTED_PCT, hours: g.hours }; // #976: sin fichas gratis hasta las 5 cargas
+  if (!trusted && g.type === 'fixed') g = { type: 'percent', pct: UNTRUSTED_PCT, hours: g.hours }; // #976/#1039: sin fichas gratis hasta ser fiel
   const tn = tuning || {}; const pm = Number(tn.pctMult) > 0 ? Number(tn.pctMult) : 1, cm = Number(tn.chipsMult) > 0 ? Number(tn.chipsMult) : 1;
   const amount = g.type === 'percent' ? Math.max(5, Math.min(200, Math.round(g.pct * pm / 5) * 5)) : g.type === 'fixed' ? Math.max(500, Math.round(tier.chips * (g.mult || 1) * cm / 500) * 500) : 0;
   return { step: ok[0].st, key: ok[0].key, segment: c.segment, days: c.days, tier: tier.key, giftType: g.type, amount, hours: g.hours || 24 };
@@ -143,4 +153,4 @@ function batchBody(pick, usernames, ctx) {
 
 const SEGMENT_LABELS = { nuevo: '🆕 Nuevos sin carga', activo: '🟢 Activos (0–6 d)', enfriando: '🟡 Enfriando (7–13 d)', inactivo: '🟠 Inactivos (14–29 d)', perdido: '🔴 Perdidos (30–89 d)', lejano: '⚫ Lejanos (90–180 d)', olvidado: '⚪ Más de 180 d (sin avisos)' };
 
-module.exports = { STEPS, VALUE_TIERS, MAX_DAYS, TOLERANCE, TRUST_DEPOSITS, UNTRUSTED_PCT, SEGMENT_LABELS, valueTier, classify, pickStep, render, batchBody, dayKey };
+module.exports = { STEPS, VALUE_TIERS, MAX_DAYS, TOLERANCE, TRUST_DEPOSITS, TRUST_RULE, isTrusted, UNTRUSTED_PCT, SEGMENT_LABELS, valueTier, classify, pickStep, render, batchBody, dayKey };

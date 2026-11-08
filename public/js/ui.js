@@ -476,6 +476,7 @@ VIP.ui = (function () {
     }
 
     async function openReferralModal() {
+        if (document.body.classList.contains('no-ref')) { try { showToast('El sistema de referidos no está disponible por ahora.', 'info'); } catch (_) {} return; } // #1039
         showModal('referralModal');
         await loadReferralData(true);
     }

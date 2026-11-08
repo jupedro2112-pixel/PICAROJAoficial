@@ -3096,3 +3096,65 @@ button.ev-sec-t.pv-fold { width: calc(100% - 24px); border: 0; background: none;
 button.ev-sec-t.pv-fold b { flex: 0 1 auto; }
 button.ev-sec-t.pv-fold small { flex: 0 1 auto; margin-top: 0; }
 button.ev-sec-t.pv-fold[aria-expanded="false"] small { display: none; }
+
+/* ══ #1039 (owner 2026-11-08): PANTALLA DE INGRESO PREMIUM (marca) + historias que se entienden + referidos apagables ══ */
+.login-screen:has(.lg-app) { background: radial-gradient(120% 60% at 50% -10%, var(--p-red-soft) 0%, var(--p-bg) 55%); }
+.login-box.lg-app { max-width: 430px; }
+.lg-app .lg-head { padding: 2px 0 0; }
+.lg-app .lg-logo { width: 40px; height: 40px; border-radius: 12px; box-shadow: 0 6px 18px rgba(210, 58, 78, .22); }
+.lg-app .lg-brand b { font-size: 15px; letter-spacing: 1.6px; }
+.lg-app .lg-brand small { font-size: 9.5px; text-transform: uppercase; letter-spacing: .9px; }
+.lg-hero { position: relative; overflow: hidden; border-radius: 22px; padding: 16px 16px 15px; background: linear-gradient(135deg, var(--p-red) 0%, var(--p-red-dark) 100%); color: #fff; box-shadow: 0 10px 28px rgba(177, 42, 60, .28); }
+.lg-hero::after { content: ""; position: absolute; right: -40px; top: -50px; width: 170px; height: 170px; border-radius: 50%; background: rgba(255, 255, 255, .10); }
+.lg-hero::before { content: ""; position: absolute; left: -30px; bottom: -70px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255, 255, 255, .07); }
+.lg-hero-k { display: inline-block; font: 800 9.5px var(--p-font); letter-spacing: 1.6px; text-transform: uppercase; color: rgba(255, 255, 255, .85); background: rgba(255, 255, 255, .14); border-radius: 999px; padding: 4px 9px; margin-bottom: 8px; }
+.lg-hero-t { margin: 0 0 6px; font: 900 22px/1.15 var(--p-font); letter-spacing: -.3px; color: #fff; }
+.lg-hero-t em { font-style: normal; color: #ffe3e8; text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; text-decoration-color: rgba(255, 255, 255, .55); }
+.lg-hero-s { margin: 0; font: 500 12.5px/1.45 var(--p-font); color: rgba(255, 255, 255, .92); }
+body.reg-quick:not(.entry-login) .lg-hero { display: none; }   /* en el registro directo el protagonista es el formulario */
+.lg-app .lg-form { background: var(--p-card); border: 1px solid var(--p-border); border-radius: 22px; padding: 14px 14px 10px; box-shadow: var(--p-shadow); }
+.lg-app .lg-login-h { font: 900 16px var(--p-font); color: var(--p-text); margin: 0 0 8px; letter-spacing: .2px; }
+.lg-app .lg-form .input-group label { font: 700 11.5px var(--p-font); color: var(--p-muted); text-transform: uppercase; letter-spacing: .6px; }
+.lg-app .lg-form .input-group input { background: var(--p-surface) !important; border: 1.5px solid transparent !important; border-radius: 14px !important; padding: 12px 14px !important; font-size: 15px !important; }
+.lg-app .lg-form .input-group input:focus { border-color: var(--p-red) !important; background: var(--p-card) !important; box-shadow: 0 0 0 4px var(--p-red-soft); }
+.lg-app .lg-login-btn { border-radius: 999px !important; padding: 14px !important; font: 900 15px var(--p-font) !important; letter-spacing: .4px; box-shadow: 0 8px 20px rgba(210, 58, 78, .28); }
+.lg-app .lg-login-links { display: flex; flex-direction: column; gap: 6px; align-items: stretch; margin-top: 4px; }
+.lg-app .lg-register-btn { background: var(--p-text) !important; color: var(--p-inv) !important; border-radius: 999px !important; padding: 13px !important; font: 900 14px var(--p-font) !important; letter-spacing: .3px; }
+html[data-theme="dark"] .lg-app .lg-register-btn { background: var(--p-surface-2) !important; color: var(--p-text) !important; }
+.lg-app .lg-login-links .lg-link { align-self: center; }
+.lg-trustrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.lg-trustrow span { display: inline-flex; align-items: center; gap: 5px; font: 700 11px var(--p-font); color: var(--p-text-2); background: var(--p-card); border: 1px solid var(--p-border); border-radius: 999px; padding: 6px 10px; }
+.lg-trustrow span i { width: 7px; height: 7px; border-radius: 50%; background: var(--p-green); display: inline-block; }
+.lg-play-box { background: var(--p-card); border: 1px solid var(--p-border); border-radius: 18px; padding: 10px 12px 12px; }
+.lg-play-h b { font: 900 12.5px var(--p-font); color: var(--p-text); letter-spacing: .2px; } .lg-play-h small { color: var(--p-muted); }
+/* tarjeta PRÓXIMAMENTE */
+.lg-soon { background: var(--p-text); color: var(--p-inv); border-radius: 18px; padding: 12px 14px; }
+html[data-theme="dark"] .lg-soon { background: var(--p-surface-2); color: var(--p-text); }
+.lg-soon-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.lg-soon-h b { font: 900 11px var(--p-font); letter-spacing: 1.4px; } .lg-soon-h small { font: 600 10px var(--p-font); opacity: .7; }
+.lg-soon-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.lg-soon-list li { font: 600 12.5px/1.35 var(--p-font); display: flex; gap: 8px; align-items: flex-start; }
+.lg-soon-list li::before { content: ""; flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--p-red); margin-top: 6px; }
+/* anillo de historias con etiqueta (ingreso) */
+.lg-ring { width: auto !important; height: auto !important; display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px !important; border-radius: 999px; background: var(--p-card) !important; border: 1px solid var(--p-border) !important; }
+.lg-ring-wrap { position: relative; display: inline-flex; flex: 0 0 auto; }
+.lg-app .lg-ring .lg-ring-av { width: 34px; height: 34px; background: linear-gradient(135deg, var(--p-red), #ff8a9a); }
+.lg-ring-lbl { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; font: 800 11px var(--p-font); color: var(--p-text); }
+.lg-ring-lbl small { font: 900 8px var(--p-font); letter-spacing: 1px; color: var(--p-red); display: inline-flex; align-items: center; gap: 3px; }
+.lg-ring-lbl small::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--p-red); animation: lgLiveDot 1.4s ease-in-out infinite; }
+@keyframes lgLiveDot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+/* botón Historias adentro de la app: pill EN VIVO arriba del anillo */
+.header .tn-stories, .casino-topbar .tn-stories { position: relative; overflow: visible !important; }
+.tn-stories .st-live { position: absolute; top: -5px; left: 50%; transform: translateX(-50%); background: var(--p-red); color: #fff; font: 900 6.8px/1 var(--p-font); letter-spacing: .7px; padding: 2px 5px; border-radius: 999px; white-space: nowrap; z-index: 2; border: 1.5px solid var(--p-card); }
+.tn-stories .st-live[hidden] { display: none !important; }
+.tn-stories.has-new .st-live { animation: lgLiveDot 1.4s ease-in-out infinite; }
+/* registro premium */
+.lg-reg-head .lg-brand b { font: 900 16px var(--p-font); color: var(--p-text); } .lg-reg-head .lg-brand small { text-transform: uppercase; letter-spacing: .7px; font-size: 9.5px; }
+.lg-form-reg { background: var(--p-card) !important; border: 1px solid var(--p-border) !important; box-shadow: var(--p-shadow); }
+.lg-quick-l { font: 900 14px var(--p-font) !important; color: var(--p-text) !important; }
+#quickName, #quickPhone, #quickOtp { background: var(--p-surface) !important; border: 1.5px solid transparent !important; border-radius: 14px !important; font-size: 16px !important; }
+#quickName:focus, #quickPhone:focus, #quickOtp:focus { border-color: var(--p-red) !important; background: var(--p-card) !important; box-shadow: 0 0 0 4px var(--p-red-soft); }
+.lg-quick-btn { border-radius: 999px !important; font: 900 15px var(--p-font) !important; letter-spacing: .4px; box-shadow: 0 8px 20px rgba(210, 58, 78, .28); }
+.lg-steps span.on i { background: var(--p-red); color: #fff; }
+/* referidos apagados (#1039): sin accesos ni menciones */
+body.no-ref #referralBtn, body.no-ref .ez-ref, body.no-ref .svc-ref, body.no-ref .lg-sy[data-s="referidos"], body.no-ref #quickRefHint, body.no-ref #registerReferralGroup, body.no-ref .ref-only { display: none !important; }

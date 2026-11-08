@@ -439,9 +439,15 @@
                 <img src="/icons/icon-192x192.png" class="lg-logo" alt="PICA ROJA">
                 <div class="lg-brand"><b>PICA ROJA</b><small>oficial · cargas automáticas</small></div>
                 <!-- #417 (owner): HISTORIAS arriba a la derecha, anillo tipo Instagram (aparece sólo si hay historias; stories.js → loadPublic) -->
-                <button type="button" id="lgStoriesRing" class="lg-ring" style="display:none;" onclick="VIP.stories.open()" title="Historias" aria-label="Ver historias"><span class="lg-ring-av"><img src="/icons/icon-192x192.png" alt=""></span><b id="lgStoriesCount" class="lg-ring-n"></b></button>
+                <button type="button" id="lgStoriesRing" class="lg-ring" style="display:none;" onclick="VIP.stories.open()" title="Historias" aria-label="Ver historias"><span class="lg-ring-wrap"><span class="lg-ring-av"><img src="/icons/icon-192x192.png" alt=""></span><b id="lgStoriesCount" class="lg-ring-n"></b></span><span class="lg-ring-lbl">Historias<small id="lgStoriesLive">EN VIVO</small></span></button><!-- #1039: con etiqueta "Historias · EN VIVO" para que se entienda -->
                 <button id="helpTelegramBtn" type="button" class="lg-tg" title="Soporte por Telegram"><svg viewBox="0 0 24 24" width="16" height="16" fill="#229ed9" style="flex-shrink:0;"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg><span>Telegram</span></button>
             </header>
+            <!-- #1039 (owner 2026-11-08): "el inicio sin iniciar sesión lo veo muy apagado… dale estilo a la marca, premium" ⇒ hero de marca -->
+            <div class="lg-hero" id="lgHero">
+                <span class="lg-hero-k">PICA ROJA · sala de juegos oficial</span>
+                <h1 class="lg-hero-t">Cargás, jugás y retirás <em>en minutos</em>.</h1>
+                <p class="lg-hero-s">Cargas y retiros automáticos las 24 h, reembolsos todos los días y soporte real. Iniciá sesión o creá tu cuenta en menos de un minuto.</p>
+            </div>
             <!-- #530 (owner 2026-10-19): pantalla de REGISTRO con la idea de su landing (landing2.zip): banner del bono, "¿Cuál es tu
                  nombre?" → cuenta automática, línea de confianza, las 3 plataformas con su ícono y los servicios SOLO con título.
                  Fondo blanco (tokens claros forzados en #loginScreen). Los % salen de /api/landing/info (loginhero.js). -->
@@ -527,6 +533,11 @@
                 <div class="lg-play-h"><b>Elegí dónde jugar</b><small>Mismo usuario y clave en todas</small></div>
                 <div class="lg-plats-row lg-plats-tiles" id="lgPlatsRow"></div>
             </div>
+            <!-- #1039 (owner): "agregá el panel de PICA ROJA pronto" ⇒ tarjeta PRÓXIMAMENTE (texto en COMANDOS → /sys_entry_soon; vacío = no se muestra) -->
+            <div class="lg-soon" id="lgSoon" hidden>
+                <div class="lg-soon-h"><b>PICA ROJA · PRÓXIMAMENTE</b><small>Lo que se viene</small></div>
+                <ul id="lgSoonList" class="lg-soon-list"></ul>
+            </div>
             <!-- #530 (owner): "un leve resumen de los sistemas que tenemos, bien resumido, solo con título, sin que moleste" -->
             <div class="lg-sys" aria-label="Lo que incluye">
                 <span class="lg-sy" data-s="carga"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg></i>Carga automática</span>
@@ -545,7 +556,7 @@
                 <button id="registerBtn" class="btn btn-secondary lg-register">📝 Crear mi cuenta</button>
                 <button id="findUserBtn" class="lg-link" onclick="showModal('resetPassModal')">🔑 Olvidé mi contraseña</button>
                 <button type="button" class="lg-link" onclick="if(window.VIP&&VIP.guestSupport)VIP.guestSupport.open()">💬 Soporte</button>
-                <span class="lg-alt-note">Registro: usuario, contraseña y celular verificado por SMS (obligatorio).</span>
+                <span class="lg-alt-note">Registro en un minuto: tu nombre y tu celular verificado por SMS. Sin tarjeta.</span><!-- #1039 -->
             </div>
             <button id="loginReviewsBtn" type="button" hidden aria-hidden="true"></button>
             <div id="errorMessage" class="error-message"></div>
@@ -613,8 +624,8 @@
         <!-- #530: popup de enganche de la landing (una vez por sesión, a los 12 s, sólo si todavía no escribió el nombre) -->
         <div id="lgPop" class="lg-pop" role="dialog" aria-modal="true" aria-label="Tu bono te espera" onclick="if(event.target===this)this.classList.remove('on')">
             <div class="lg-pop-box">
-                <b>¡Esperá! 🎁 Tu bono te espera</b>
-                <p>Creá tu cuenta ahora y activá tu bono de bienvenida. Tarda menos de un minuto.</p>
+                <b>¡Esperá! Tu cuenta está a un paso</b><!-- #1039: sin promesa de bono (registro abierto sin regalos de bienvenida) -->
+                <p>Creala ahora: tu nombre y tu celular, y ya podés cargar y jugar con retiros automáticos. Tarda menos de un minuto.</p>
                 <button type="button" class="btn btn-primary lg-quick-btn" onclick="document.getElementById('lgPop').classList.remove('on');try{document.getElementById('quickName').focus()}catch(e){}">CREAR MI CUENTA</button>
                 <button type="button" class="lg-pop-later" onclick="document.getElementById('lgPop').classList.remove('on')">seguir mirando</button>
             </div>
@@ -696,6 +707,7 @@
             <!-- #361 (owner): HISTORIAS — a la derecha de todo, al lado de Perfil. Anillo tipo historia; con historias
                  nuevas brilla y muestra la cantidad. js/stories.js lo pinta y abre el visor #storyViewer. -->
             <button type="button" class="tn-btn tn-stories" id="navHistorias" onclick="VIP.stories.open()" title="Historias">
+                <span class="st-live" id="storiesLive" hidden>EN VIVO</span><!-- #1039: que se entienda que son historias en vivo -->
                 <span class="tn-ico st-ring"><span class="st-core">▶</span><span class="st-badge" id="storiesBadge" style="display:none;">1</span></span>
                 <span class="tn-lbl" id="storiesLbl">Historias</span>
             </button>
@@ -2732,7 +2744,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v671</div>
+                    <div class="pf-build" id="appBuildTag">app v672</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2761,7 +2773,7 @@
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v671</div> <!-- #790: espejo de #appBuildTag -->
+                <div class="pf-build pf-build-min" id="pfBuildMini">app v672</div> <!-- #790: espejo de #appBuildTag -->
                 <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
                 <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>

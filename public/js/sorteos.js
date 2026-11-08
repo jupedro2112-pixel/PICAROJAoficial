@@ -188,6 +188,7 @@
             row('notif', ck.notif, 'Notificaciones activadas', ck.notif ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.notifications&&VIP.notifications.requestNotificationPermission&&VIP.notifications.requestNotificationPermission()}catch(_){}">Activar ›</button>') +
             row('phone', ck.phone, 'Tu número de celular cargado en el Perfil', ck.phone ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.openProfile()}catch(_){}">Cargarlo ›</button>') +
             row('deposit', ck.deposit, 'Al menos una carga real', ck.deposit ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.easyLoad()}catch(_){}">Cargar ›</button>') +
+            row('week', ck.week !== false, 'Cuenta con al menos 7 días de antigüedad <small>(seguridad: así nadie se anota con una cuenta recién creada)</small>', '') + // #1039
             (req.telegram === false ? '' : '<li class="' + (ck.telegram ? 'ok' : 'no') + '"><i>' + (ck.telegram ? '✅' : '⬜') + '</i><label><input type="checkbox" id="srtTg_' + s.key + '"' + (ck.telegram ? ' checked' : '') + '> Ya me uní al Telegram de PICA ROJA (ahí anunciamos los ganadores)</label>' + tg + '</li>') +
             '</ul><button type="button" class="srt-btn' + (compact ? ' sm' : '') + '" onclick="VIP.sorteos.join(\'' + s.key + '\')">Anotarme al ' + esc(s.title) + '</button></div>';
     }

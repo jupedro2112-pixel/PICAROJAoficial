@@ -8,6 +8,32 @@
 
 ## Sesión 2026-11-08
 
+### 1039. Registro abierto con SMS · ingreso premium · sin referidos · regalos sólo para clientes fieles (3 cargas / 7 días) · sorteo con 7 días — PWA v672, admin SW v247 (2026-11-08)
+- **Owner:** "registro activado para clientes con verificación por SMS, que no tengan sistema de referidos ni bonos de bienvenida hasta ser cliente
+  fiel después de una semana; el inicio de picaroja.com sin iniciar sesión lo veo muy apagado: agregá el panel de PICA ROJA pronto, afiná registro e
+  inicio de sesión, que el botón de historias en vivo se entienda, estilo de marca premium; el sorteo que pida una semana de actividad por seguridad".
+- **Migración de arranque `mig1039OpenRegPremium` (una sola vez; después se toca desde el panel):** `registrationMode:'quick'` (nombre + celular por
+  SMS), `smsEnabled:true`, `quickEntrySms:true`, `entryLogin:true` (la pantalla arranca con Iniciar sesión + Crear mi cuenta), `referralsEnabled:false`,
+  `organicWelcomeGifts:false`, `trustRule {deposits:3, days:7}`.
+- **Cliente FIEL (`_isTrustedClient` / `_noWelcomeActive`, `Config['trustRule']`):** quien se registró desde la página sin link (`noWelcomeGifts`, #975)
+  no recibe regalos de bienvenida hasta tener ≥3 cargas reales Y ≥7 días desde la primera. Gates que ahora lo respetan: `_welcomeAbuseOf` (toda la
+  bienvenida en cargas), texto de 1ª carga sin regalo, código de la Comunidad. Recorrido (`retentionJourney.isTrusted`, `TRUST_RULE`): las fichas de
+  regalo sólo para fieles (antes alcanzaba con 5 cargas sin la semana); el estado del cliente lleva `firstDepositAt`. Panel → Registro de clientes:
+  cargas y días editables.
+- **Referidos apagables (`Config['referralsEnabled']`, `_referralsEnabled`):** apagado ⇒ `/api/landing/info` `referralsEnabled:false` + `referralPct:null` +
+  sin servicio "referidos"; la app pone `body.no-ref` (loginhero.js, corre siempre) y esconde Mis Referidos / accesos / chip / hint del código;
+  `openReferralModal` avisa; `/api/referrals/*` 403 `REFERRALS_OFF`; el alta (`/api/auth/register`, `_landingSignupHandler` ⇒ landing y entrada rápida)
+  ignora `referralCode`; `_runMonthlyReferralPayout` no paga. Tilde en Registro de clientes.
+- **Pantalla de ingreso premium (pin.css #1039):** hero de marca rojo (claim "Cargás, jugás y retirás en minutos"), formulario en tarjeta blanca con
+  inputs redondeados y foco rojo, Iniciar sesión píldora + Crear mi cuenta negro, chips de confianza, caja de plataformas, tarjeta oscura
+  **"PICA ROJA · PRÓXIMAMENTE"** (`/sys_entry_soon`, una novedad por línea; vacío = no se muestra), registro con el mismo estilo, popup sin promesa de
+  bono, nota "Registro en un minuto: tu nombre y tu celular verificado por SMS". El hero se esconde en el registro directo (`reg-quick` sin `entry-login`).
+- **Historias que se entienden:** en el ingreso el anillo pasa a píldora con etiqueta "Historias · EN VIVO" (NUEVAS si hay sin ver, punto rojo que
+  late); adentro de la app el botón Historias lleva la pill roja EN VIVO / NUEVAS arriba del anillo (`#storiesLive`, stories.js).
+- **Sorteo:** requisito nuevo `week` (cuenta con ≥7 días, `SORTEO_WEEK_DAYS`; default encendido en `sorteos.defaults`, tilde en el panel): fila en la
+  app, chequeo en GET y en join (`createdAt` en los selects).
+- Tests: 21/21 scripts OK (`test-retention-journey` actualizado a la regla nueva).
+
 ### 1038. 📒 Anotar movimientos (pie del Chat completo) + cruce con el banco + cierre por cuenta — admin SW v246 (2026-11-08)
 - **Owner:** "un botón abajo del Chat completo que diga Anotar movimientos, para asentar si hubo un ingreso o egreso del banco y detalle, porque
   hoy a veces ingresa plata por falta de plata o pagan algo externo y no queda asentado; conectalo a cierres para que den perfecto; que carguen el

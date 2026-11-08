@@ -3,7 +3,7 @@ const j = require('../src/services/retentionJourney');
 const assert = require('assert');
 const now = new Date('2026-10-24T15:00:00Z'); // 12:00 ART
 const ago = (d) => new Date(now.getTime() - d * 86400000);
-const base = { createdAt: ago(40), deposits: 5, lastDepositAt: ago(1), avgDeposit: 8000, hasApp: true, flagged: false, sent: [] };
+const base = { createdAt: ago(40), deposits: 5, lastDepositAt: ago(1), avgDeposit: 8000, hasApp: true, flagged: false, sent: [], firstDepositAt: ago(30) }; // #1039: primera carga hace 30 días
 assert.strictEqual(j.pickStep(base, now), null, 'activo no recibe nada');
 assert.strictEqual(j.classify(base, now).segment, 'activo');
 let p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7) }), now); assert.strictEqual(p.step.id, 'cool-7'); assert.strictEqual(p.giftType, 'percent'); assert.strictEqual(p.amount, 30);
@@ -31,8 +31,11 @@ assert.strictEqual(j.pickStep({ createdAt: ago(3), deposits: 0, hasApp: true, se
 assert.strictEqual(j.pickStep({ createdAt: ago(10), deposits: 0, hasApp: true, sent: [], noWelcome: true }, now).step.id, 'new-10');
 assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7), deposits: 3, noWelcome: true }), now).step.id, 'cool-7', 'la recuperación sí');
 // #976: registro abierto: sin fichas hasta 5 cargas (se convierten en +50 %); a las 5 cargas, "ya sos de la casa" una sola vez
-p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 3, noWelcome: true }), now); assert.strictEqual(p.step.id, 'inact-21'); assert.strictEqual(p.giftType, 'percent'); assert.strictEqual(p.amount, 50, 'fichas → +50 % sin confianza');
-p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 5, noWelcome: true }), now); assert.strictEqual(p.giftType, 'fixed', 'con 5 cargas ya recibe fichas');
+p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 2, noWelcome: true }), now); assert.strictEqual(p.step.id, 'inact-21'); assert.strictEqual(p.giftType, 'percent'); assert.strictEqual(p.amount, 50, 'fichas → +50 % sin confianza (#1039: 2 cargas no alcanzan aunque pase la semana)');
+p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 5, noWelcome: true }), now); assert.strictEqual(p.giftType, 'fixed', 'con 5 cargas y la primera hace 30 días ya recibe fichas');
+assert.strictEqual(j.isTrusted({ noWelcome: true, deposits: 5, firstDepositAt: ago(2) }, now), false, '#1039: 5 cargas pero la primera hace 2 días: sin fichas hasta la semana');
+p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(21), deposits: 3, noWelcome: true, firstDepositAt: ago(40) }), now); assert.strictEqual(p.giftType, 'fixed', '#1039: 3 cargas + semana = fiel');
+assert.strictEqual(j.isTrusted({ noWelcome: true, deposits: 3, firstDepositAt: ago(6) }, now), false, '#1039: 6 días no alcanza'); assert.strictEqual(j.isTrusted({ noWelcome: true, deposits: 2, firstDepositAt: ago(20) }, now), false, '#1039: 2 cargas no alcanzan'); assert.strictEqual(j.isTrusted({ noWelcome: false, deposits: 0 }, now), true);
 assert.strictEqual(j.pickStep(Object.assign({}, base, { lastDepositAt: ago(1), deposits: 5, noWelcome: true }), now), null, '#977: a las 5 cargas no hay regalo especial, sólo entra a la estrategia');
 // #973: ajuste de la revisión semanal
 p = j.pickStep(Object.assign({}, base, { lastDepositAt: ago(7) }), now, { pctMult: 1.2, chipsMult: 1.5 }); assert.strictEqual(p.amount, 35, '30 % ×1,2 = 36 → 35 (múltiplo de 5)');

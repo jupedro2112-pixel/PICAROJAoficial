@@ -47,6 +47,10 @@
             if (invite) { document.body.classList.add('entry-login'); document.body.classList.remove('reg-quick'); try { const n = _el('lgInviteNote'); if (n) { n.textContent = closed ? (info.registerClosedText || '🔒 Por el momento no estamos abriendo cuentas nuevas.') : (info.registerInviteText || '🔒 El registro es sólo con invitación.'); n.style.display = ''; } } catch (_) {} }
             // #541: SMS obligatorio para registrarse desde el inicio (no por link de publicidad)
             VIP.loginHero.quickSms = !!info.quickEntrySms && !viaAd;
+            // #1039: sistema de referidos apagado ⇒ sin accesos ni menciones (CSS body.no-ref) — también adentro de la app (init corre siempre)
+            document.body.classList.toggle('no-ref', info.referralsEnabled === false);
+            // #1039: tarjeta "PICA ROJA · PRÓXIMAMENTE" (COMANDOS → /sys_entry_soon; una novedad por línea o con |)
+            try { const box = _el('lgSoon'), ul = _el('lgSoonList'); const items = String(info.soon || '').split(/\r?\n|\|/).map((x) => x.trim()).filter(Boolean).slice(0, 6); if (box && ul) { if (items.length) { ul.innerHTML = items.map((t) => '<li>' + _esc(t) + '</li>').join(''); box.hidden = false; } else box.hidden = true; } } catch (_) {}
             if (document.body.classList.contains('reg-quick') && !(VIP.state && VIP.state.currentToken)) showRegister(); // #542
         } catch (_) {}
         VIP.loginHero.ready = true; // #533: app.js espera esto para decidir dónde cae el link de referido

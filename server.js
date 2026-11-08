@@ -1289,8 +1289,8 @@ app.get('/api/landing/info', async (req, res) => {
     // #530: % de bienvenida REAL para el banner de la pantalla de ingreso (nada hardcodeado): primera carga + extra por instalar la app.
     let welcome = null;
     try { const _lc = String((req.query && req.query.c) || '').toUpperCase().trim().slice(0, 40); const fd = await getFirstDepositBonusPct(_lc || null); /* #1024: la landing de cada publicista muestra SU bono */ const ig = await getInstallGiftConfig(); const _lw = _lc ? await _pubWelcomeFor(_lc) : null; welcome = { pct: fd, withApp: fd + (ig && ig.enabled ? ig.pct : 0), capArs: await getFirstDepositCapArs(_lc || null), restPct: (_lw && _lw.capArs != null && _lw.restPct) || 0 }; } catch (_) {}
-    let services = []; try { services = await _landingServices(); } catch (_) {} // #555
-    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ registerClosedText: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), /* #993 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct, welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true && (await getSmsEnabled()), /* #1023 */ smsEnabled: await getSmsEnabled(), services }); // #421/#424/#530/#538/#541/#555
+    let services = []; try { services = await _landingServices(); if (!(await _referralsEnabled())) services = services.filter((x) => x && x.id !== 'referidos'); } catch (_) {} // #555 · #1039
+    res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ registerClosedText: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), /* #993 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct: (await _referralsEnabled()) ? referralPct : null, referralsEnabled: await _referralsEnabled(), soon: await renderSystemCommand('/sys_entry_soon', ENTRY_SOON_DEFAULT, {}), /* #1039 */ welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true && (await getSmsEnabled()), /* #1023 */ smsEnabled: await getSmsEnabled(), services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 
@@ -1827,7 +1827,7 @@ function installGiftLabel(cfg) { return cfg.fixedArs > 0 ? '$' + Math.round(cfg.
 async function _welcomeAbuseOf(userIn) {
   try {
     const u = await User.findOne({ id: userIn.id }).select('id username phone deviceIds fcmToken fcmTokens noWelcomeGifts').lean(); if (!u) return null;
-    if (u.noWelcomeGifts === true) return 'se registró desde la página sin invitación (registro abierto sin regalos de bienvenida)'; // #975
+    if (await _noWelcomeActive(u)) { const r = await _trustRule(); return 'se registró desde la página sin invitación: sin regalos de bienvenida hasta ser cliente fiel (' + r.deposits + ' cargas y ' + r.days + ' días desde la primera)'; } // #975 → #1039
     const or = []; const tel = String(u.phone || '').replace(/\D/g, '').slice(-10);
     if (Array.isArray(u.deviceIds) && u.deviceIds.length) or.push({ deviceIds: { $in: u.deviceIds } });
     const toks = [].concat(u.fcmToken ? [u.fcmToken] : [], (u.fcmTokens || []).map((t) => t && t.token).filter(Boolean));
@@ -4993,7 +4993,8 @@ app.post('/api/upload/presigned-url', authMiddleware, async (req, res) => {
 // Registro de usuario
 app.post('/api/auth/register', authLimiter, registerIpLimiter, async (req, res) => {
   try {
-    const { username, password, email, phone, referralCode, otpCode, campaignCode, utm, fbc, fbp, landingUrl } = req.body;
+    const { username, password, email, phone, referralCode: _referralCodeIn, otpCode, campaignCode, utm, fbc, fbp, landingUrl } = req.body;
+    const referralCode = (await _referralsEnabled()) ? _referralCodeIn : undefined; // #1039: referidos apagados ⇒ el código no vincula
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
@@ -5502,7 +5503,8 @@ async function _landingSignupHandler(req, res) {
     // #993/#994: REGISTRO CERRADO corta todo salvo la landing de un publicista (campaña activa; la entrada rápida entra acá con INGRESO).
     if ((await getRegistrationMode()) === 'closed' && !(await _closedAllowsCampaign(req.body && req.body.campaignCode))) return res.status(403).json({ error: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), code: 'REGISTRATION_CLOSED' });
 
-    const { name, campaignCode, utm, fbc, fbp, landingUrl, referralCode } = req.body || {};
+    const { name, campaignCode, utm, fbc, fbp, landingUrl, referralCode: _referralCodeIn } = req.body || {};
+    const referralCode = (await _referralsEnabled()) ? _referralCodeIn : undefined; // #1039: referidos apagados ⇒ el código no vincula
     // #532 (seguridad/#529): el link de referido (/?ref=CODE) llega hasta acá también en el registro rápido y en la landing.
     // Mismas reglas que /api/auth/register: código existente, de un usuario activo; si no, se ignora sin romper el alta.
     let _referrer = null;
@@ -5802,6 +5804,25 @@ const REGISTER_INVITE_DEFAULT = '🔒 El registro es sólo con invitación, por 
 // #975: ¿el registro abierto (sin publicidad ni referido) lleva regalos de bienvenida? Default NO (owner: "sin ningún beneficio para que no
 // llegue gente a querer estafar; sí promocionar instalar la app para recibir notificaciones, el reembolso y el servicio, pero no regalos").
 async function _organicGiftsAllowed() { try { return (await getConfig('organicWelcomeGifts', false)) === true; } catch (_) { return false; } }
+// #1039 (owner 2026-11-08): "que no tengan bonos de bienvenida hasta que no sea un cliente FIEL después de una SEMANA". Fiel = al menos
+// `deposits` cargas reales Y la primera carga hace ≥ `days` días (Config['trustRule'], panel → Registro de clientes; default 3 cargas / 7 días).
+// `noWelcomeGifts` (#975) queda escrito en la cuenta; lo que cambia es que deja de regir cuando el cliente es fiel (`_noWelcomeActive`).
+const TRUST_RULE_DEFAULT = { days: 7, deposits: 3 };
+async function _trustRule() {
+  try { const v = (await getConfig('trustRule', null)) || {}; return { days: Math.max(1, Math.min(60, parseInt(v.days, 10) || TRUST_RULE_DEFAULT.days)), deposits: Math.max(1, Math.min(20, parseInt(v.deposits, 10) || TRUST_RULE_DEFAULT.deposits)) }; } catch (_) { return Object.assign({}, TRUST_RULE_DEFAULT); }
+}
+const _REAL_DEP_TRUST = { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, description: { $not: /PRUEBA/i } };
+async function _isTrustedClient(userId) {
+  const rule = await _trustRule();
+  const rows = await Transaction.find(Object.assign({ userId: String(userId) }, _REAL_DEP_TRUST)).select('timestamp').sort({ timestamp: 1 }).limit(Math.max(rule.deposits, 1)).lean();
+  if (rows.length < rule.deposits) return false;
+  const first = rows[0] && rows[0].timestamp; return !!first && (Date.now() - new Date(first).getTime()) >= rule.days * 86400000;
+}
+async function _noWelcomeActive(u) { if (!u || u.noWelcomeGifts !== true) return false; try { return !(await _isTrustedClient(u.id)); } catch (_) { return true; } }
+// #1039 (owner): "que no tengan sistema de referidos" ⇒ Config['referralsEnabled'] (default true; apagado por la migración #1039). Apagado: la app
+// esconde Referidos (body.no-ref), /api/referrals/* responde 403 REFERRALS_OFF, el alta ignora el código de referido y no corre el pago mensual.
+async function _referralsEnabled() { try { return (await getConfig('referralsEnabled', true)) !== false; } catch (_) { return true; } }
+const ENTRY_SOON_DEFAULT = '🎟️ Sorteo mensual de un iPhone entre los clientes activos|🎰 Nuevas plataformas de juego|📲 App más rápida, historias y avisos en vivo';
 // #994: con el registro CERRADO sólo pasa el link de un publicista (campaña activa; INGRESO es la orgánica de la página principal).
 async function _closedAllowsCampaign(campaignCode) {
   const camp = String(campaignCode || '').toUpperCase().trim();
@@ -5959,7 +5980,7 @@ app.post('/api/admin/sms-enabled', authMiddleware, adminMiddleware, async (req, 
 });
 app.get('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
   const _rawMode = await getConfig('registrationMode', 'quick'); // #1023: el panel muestra lo elegido (con SMS apagado 'sms' rige como 'quick')
-  res.json({ success: true, smsEnabled: await getSmsEnabled(), mode: _rawMode === 'sms' ? 'sms' : await getRegistrationMode(), organicGifts: await _organicGiftsAllowed(), entryLogin: (await getConfig('entryLogin', false)) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, canEdit: req.user.role === 'admin' }); // #538/#541
+  res.json({ success: true, smsEnabled: await getSmsEnabled(), mode: _rawMode === 'sms' ? 'sms' : await getRegistrationMode(), organicGifts: await _organicGiftsAllowed(), referralsEnabled: await _referralsEnabled(), trustRule: await _trustRule(), /* #1039 */ entryLogin: (await getConfig('entryLogin', false)) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true, canEdit: req.user.role === 'admin' }); // #538/#541
 });
 app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -5971,6 +5992,8 @@ app.post('/api/admin/registration-mode', authMiddleware, adminMiddleware, async 
     if (req.body && typeof req.body.entryLogin === 'boolean') { entryLogin = req.body.entryLogin; await Config.set('entryLogin', entryLogin, req.user.username); } // #553: sólo si viene
     if (req.body && typeof req.body.quickEntrySms === 'boolean') await Config.set('quickEntrySms', req.body.quickEntrySms, req.user.username); // #541
     if (req.body && typeof req.body.organicGifts === 'boolean') await Config.set('organicWelcomeGifts', req.body.organicGifts, req.user.username); // #975
+    if (req.body && typeof req.body.referralsEnabled === 'boolean') { await Config.set('referralsEnabled', req.body.referralsEnabled, req.user.username); logger.warn(`[referral] sistema de referidos ${req.body.referralsEnabled ? 'ENCENDIDO' : 'APAGADO'} por ${req.user.username}`); } // #1039
+    if (req.body && req.body.trustRule && typeof req.body.trustRule === 'object') { const t = req.body.trustRule; const days = parseInt(t.days, 10), deposits = parseInt(t.deposits, 10); if (days >= 1 && days <= 60 && deposits >= 1 && deposits <= 20) await Config.set('trustRule', { days, deposits }, req.user.username); } // #1039
     if (req.body && typeof req.body.smsEnabled === 'boolean') { await Config.set('smsEnabled', req.body.smsEnabled, req.user.username); logger.warn(`[sms] SMS ${req.body.smsEnabled ? 'ENCENDIDOS' : 'APAGADOS'} por ${req.user.username}`); } // #1023
     logger.info(`[registration-mode] ${mode} · pantalla de ingreso: ${entryLogin ? 'INICIAR SESIÓN' : 'registro'} por ${req.user.username}`);
     res.json({ success: true, mode, entryLogin });
@@ -13630,6 +13653,15 @@ async function initializeData() {
   } } catch (e) { logger.warn('[mig976] ' + e.message); }
   // #975 (owner 2026-10-24): "habilitar de vuelta el registro en la página, sin ningún beneficio" ⇒ modo 'quick' (nombre + celular verificado por SMS,
   // quickEntrySms queda como esté) y regalos de bienvenida sólo para publicidad y referidos (organicWelcomeGifts=false). El tilde del panel sigue mandando después.
+  // #1039 (owner 2026-11-08): "registro activado para clientes con verificación por SMS, sin sistema de referidos, sin bonos de bienvenida hasta ser
+  // cliente fiel después de una semana" ⇒ una sola vez: registro 'quick' (nombre + celular por SMS), SMS encendidos, pantalla de ingreso con
+  // Iniciar sesión + Crear mi cuenta, referidos apagados, sin regalos orgánicos, regla de confianza 3 cargas / 7 días. Después se ajusta desde el panel.
+  try { if (!(await getConfig('mig1039OpenRegPremium', null))) {
+    await Config.set('registrationMode', 'quick', 'mig#1039'); await Config.set('smsEnabled', true, 'mig#1039'); await Config.set('quickEntrySms', true, 'mig#1039');
+    await Config.set('entryLogin', true, 'mig#1039'); await Config.set('referralsEnabled', false, 'mig#1039'); await Config.set('organicWelcomeGifts', false, 'mig#1039');
+    await Config.set('trustRule', Object.assign({}, TRUST_RULE_DEFAULT), 'mig#1039'); await Config.set('mig1039OpenRegPremium', new Date().toISOString(), 'mig#1039');
+    logger.info('[mig1039] registro abierto con SMS, referidos apagados, regalos de bienvenida sólo para clientes fieles (3 cargas / 7 días)');
+  } } catch (e) { logger.warn('[mig1039] ' + e.message); }
   try { if (!(await getConfig('mig975OpenReg', null))) { await Config.set('registrationMode', 'quick', 'mig#975'); await Config.set('organicWelcomeGifts', false, 'mig#975'); await Config.set('mig975OpenReg', new Date().toISOString(), 'startup-migration'); logger.info('[mig975] registro abierto (entrada rápida) sin regalos de bienvenida para el orgánico'); } } catch (e) { logger.warn('[mig975] ' + e.message); }
   try { if (!(await getConfig('mig1022DupAds', null))) { const r = await User.updateMany({ role: 'user', duplicateOf: { $ne: null }, dupCleared: null, acquisitionCampaign: { $nin: [null, ''] } }, [{ $set: { acquisitionDupCampaign: '$acquisitionCampaign', acquisitionCampaign: null } }]); await Config.set('mig1022DupAds', new Date().toISOString(), 'mig#1022'); logger.info(`[mig1022] ${r.modifiedCount || 0} cuentas secundarias fuera de los números de publicidad`); } } catch (e) { logger.warn('[mig1022] ' + e.message); } // #1022
   try { if (!(await getConfig('mig1028PhoneLog', null))) { await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); /* primero la marca: una sola instancia */ const cur = User.find({ role: 'user', $or: [{ phone: { $nin: [null, ''] } }, { whatsapp: { $nin: [null, ''] } }] }).select('id username phone whatsapp phoneVerified createdAt').lean().cursor(); let buf = [], n = 0; for await (const u of cur) { const ph = String(u.phone || u.whatsapp || '').trim(); if (!ph) continue; buf.push({ userId: String(u.id), username: u.username || null, phone: ph, via: u.phoneVerified && u.phone ? 'sms' : 'nosms', source: u.phoneVerified && u.phone ? 'histórico · verificado por SMS' : (u.phone ? 'histórico · sin verificar' : 'histórico · whatsapp sin verificar'), at: u.createdAt || new Date() }); if (buf.length >= 500) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; buf = []; } } if (buf.length) { await PhoneLog.insertMany(buf, { ordered: false }).catch(() => {}); n += buf.length; } await Config.set('mig1028PhoneLog', new Date().toISOString(), 'mig#1028'); logger.info(`[mig1028] historial de números: ${n} números que ya estaban`); } } catch (e) { logger.warn('[mig1028] ' + e.message); } // #1028
@@ -13965,6 +13997,13 @@ async function initializeData() {
       description: 'Mensaje que se comparte al invitar amigos (WhatsApp, Telegram, otras apps). Variables: {link} (link de invitación del cliente), {codigo}, {pct} (% máximo de comisión), {username}. Vacío = texto por defecto.',
       type: 'message',
       response: '🎰 Sumate a PICA ROJA con mi link: cargas automáticas en segundos y reembolsos todos los días 👉 {link}'
+    },
+    {
+      // #1039: tarjeta "PICA ROJA · PRÓXIMAMENTE" de la pantalla de ingreso (una novedad por línea o separadas con |)
+      name: '/sys_entry_soon',
+      description: 'PRÓXIMAMENTE en la pantalla de ingreso (sin sesión): lo que se viene, una novedad por línea (o separadas con |). Vacío = no se muestra la tarjeta.',
+      type: 'message',
+      response: ENTRY_SOON_DEFAULT
     },
     {
       // #993: aviso de REGISTRO CERRADO (pantalla de ingreso, landing y respuesta del server)
@@ -16085,8 +16124,8 @@ app.get('/api/first-deposit-promo', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.userId;
     const n = await Transaction.countDocuments({ userId, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } });
-    const _u = await User.findOne({ id: userId }).select('noWelcomeGifts').lean(); // #975
-    if (_u && _u.noWelcomeGifts === true) {
+    const _u = await User.findOne({ id: userId }).select('id noWelcomeGifts').lean(); // #975
+    if (_u && (await _noWelcomeActive(_u))) { // #1039: hasta ser fiel
       const dailyPct = await getDailyRefundPct().catch(() => 0);
       const text = await renderSystemCommand('/sys_first_deposit_nogift', FIRST_DEPOSIT_NOGIFT_DEFAULT, { daily: dailyPct });
       res.set('Cache-Control', 'no-store');
@@ -16392,8 +16431,8 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
     // 'pending': el cash pasa a 'credited' recién con la plata acreditada.
     // Registro MANUAL (alta por agente) → sin bonos de bienvenida (owner 2026-09-18).
     {
-      const _uSig = await User.findOne({ id: req.user.userId }).select('createdByAgent acquisitionSource noWelcomeGifts duplicateOf').lean();
-      if (_uSig && (_uSig.noWelcomeGifts === true || (_uSig.duplicateOf && _uSig.duplicateOf.username))) { // #1033: registro abierto sin regalos (#975) / cuenta secundaria (#992)
+      const _uSig = await User.findOne({ id: req.user.userId }).select('id createdByAgent acquisitionSource noWelcomeGifts duplicateOf').lean();
+      if (_uSig && ((await _noWelcomeActive(_uSig)) || (_uSig.duplicateOf && _uSig.duplicateOf.username))) { // #1039: hasta ser fiel // #1033: registro abierto sin regalos (#975) / cuenta secundaria (#992)
         return res.status(400).json({ error: 'Tu cuenta no tiene regalos de bienvenida.', code: 'NO_WELCOME' });
       }
       if (_uSig && !_welcomeBonusEligible(_uSig)) {
@@ -25586,6 +25625,7 @@ function _referralPrevPeriodKeyART() {
   return `${py}-${String(pm).padStart(2, '0')}`;
 }
 async function _runMonthlyReferralPayout() {
+  if (!(await _referralsEnabled())) { logger.info('[referral] sistema de referidos apagado (#1039): no se paga el mes'); return; }
   const periodKey = _referralPrevPeriodKeyART();
   const key = `referral_autorun_${periodKey}`;
   let claimed = false;
@@ -25675,6 +25715,7 @@ async function _ensureReferralCode(user) {
   return null;
 }
 // Tablero del referidor: link, totales, tabla por referido y NIVEL de comisión.
+app.use('/api/referrals', async (req, res, next) => { try { if (await _referralsEnabled()) return next(); } catch (_) { return next(); } res.status(403).json({ error: 'El sistema de referidos no está disponible por ahora.', code: 'REFERRALS_OFF' }); }); // #1039
 app.get('/api/referrals/dashboard', authMiddleware, referralLiveLimiter, async (req, res) => {
   try {
     const cached = _refDashCache.get(req.user.userId);
@@ -28823,7 +28864,7 @@ async function _journeyScan(now) {
   const since90 = new Date(now.getTime() - 90 * 86400000);
   const [users, agg] = await Promise.all([
     User.find({ role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, createdAt: { $lte: new Date(now.getTime() - 86400000) } }).select('id username createdAt fraudFlags fcmToken fcmTokens fcmTokenContext journey notifPrefs noWelcomeGifts').lean(),
-    Transaction.aggregate([{ $match: SCHED_ADAPTER.realDepositMatch() }, { $group: { _id: '$userId', n: { $sum: 1 }, last: { $max: '$timestamp' }, total: { $sum: '$amount' },
+    Transaction.aggregate([{ $match: SCHED_ADAPTER.realDepositMatch() }, { $group: { _id: '$userId', n: { $sum: 1 }, last: { $max: '$timestamp' }, first: { $min: '$timestamp' }, /* #1039 */ total: { $sum: '$amount' },
       n90: { $sum: { $cond: [{ $gte: ['$timestamp', since90] }, 1, 0] } }, total90: { $sum: { $cond: [{ $gte: ['$timestamp', since90] }, '$amount', 0] } } } }])
   ]);
   const dep = new Map(agg.map((a) => [a._id, a]));
@@ -28831,7 +28872,7 @@ async function _journeyScan(now) {
   for (const u of users) {
     const d = dep.get(u.id);
     const st = { createdAt: u.createdAt, deposits: d ? d.n : 0, lastDepositAt: d ? d.last : null, avgDeposit: d ? (d.n90 ? d.total90 / d.n90 : d.total / d.n) : 0,
-      hasApp: _notifChannelOf(u) === 'app', flagged: _isFlagged(u), sent: (u.journey && u.journey.sent) || [], noWelcome: u.noWelcomeGifts === true };
+      hasApp: _notifChannelOf(u) === 'app', flagged: _isFlagged(u), sent: (u.journey && u.journey.sent) || [], noWelcome: u.noWelcomeGifts === true, firstDepositAt: d ? d.first : null /* #1039 */ };
     const c = retentionJourney.classify(st, now); segments[c.segment] = (segments[c.segment] || 0) + 1;
     if (u.notifPrefs && u.notifPrefs.level === 'none') continue; // pidió no recibir avisos
     const p = retentionJourney.pickStep(st, now, _tuningCache); if (!p) continue;
@@ -29067,9 +29108,12 @@ function _sorteoChecksOf(user, telegramDeclared, hasDeposit) {
   const app = user.fcmTokenContext === 'standalone' || toks.some((t) => t && t.context === 'standalone');
   const notif = !!(user.fcmToken || toks.length);
   const phone = /^\d{10}$/.test(String(user.phone || '').replace(/\D/g, '').slice(-10)); // #981: número de celular cargado (no hace falta verificado)
-  return { app, notif, telegram: !!telegramDeclared, phone, deposit: !!hasDeposit };
+  // #1039 (owner): "que pida una actividad de una semana por sistema de seguridad" ⇒ la cuenta tiene que tener al menos 7 días (sin fecha = vieja).
+  const week = !user.createdAt || (Date.now() - new Date(user.createdAt).getTime()) >= SORTEO_WEEK_DAYS * 86400000;
+  return { app, notif, telegram: !!telegramDeclared, phone, deposit: !!hasDeposit, week };
 }
-function _sorteoMissing(cfg, checks) { const r = cfg.requirements || {}; return ['app', 'notif', 'telegram', 'phone', 'deposit'].filter((k) => r[k] && !checks[k]); }
+const SORTEO_WEEK_DAYS = 7; // #1039
+function _sorteoMissing(cfg, checks) { const r = cfg.requirements || {}; return ['app', 'notif', 'telegram', 'phone', 'deposit', 'week'].filter((k) => r[k] && !checks[k]); }
 // Apostado + bono otorgado por jugador en [start, until] (tramos ≤85 días, lotes de 100). Falla ⇒ null (no se tocan los puntajes).
 async function _sorteoStats(usernames, start, until) {
   const out = {}; const SPAN = 85 * sorteosRules.DAY;
@@ -29276,7 +29320,7 @@ app.get('/api/sorteos', authMiddleware, async (req, res) => {
   try {
     const cfg = await _sorteosCfg(); const now = new Date();
     if (!cfg.enabled) return res.json({ enabled: false, sorteos: [] });
-    const user = await User.findOne({ id: req.user.userId }).select('id username phone fcmToken fcmTokenContext fcmTokens').lean();
+    const user = await User.findOne({ id: req.user.userId }).select('id username phone fcmToken fcmTokenContext fcmTokens createdAt').lean(); // #1039: createdAt
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     const hasDep = !!(await Transaction.findOne(Object.assign({ userId: user.id }, SORTEO_REAL_DEP)).select('_id').lean());
     const entries = await SorteoEntry.find({ userId: user.id }).lean(); const byKey = new Map(entries.map((e) => [e.key, e]));
@@ -29328,13 +29372,13 @@ app.post('/api/sorteos/:key/join', authMiddleware, async (req, res) => {
   try {
     const key = String(req.params.key || ''); if (!SORTEO_KEYS.includes(key)) return res.status(404).json({ error: 'Sorteo inexistente' });
     const cfg = await _sorteosCfg(); if (!cfg.enabled || !cfg[key].enabled) return res.status(400).json({ error: 'Este sorteo no está activo.' });
-    const user = await User.findOne({ id: req.user.userId }).select('id username phone fcmToken fcmTokenContext fcmTokens isBlocked').lean();
+    const user = await User.findOne({ id: req.user.userId }).select('id username phone fcmToken fcmTokenContext fcmTokens isBlocked createdAt').lean(); // #1039: createdAt
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (user.isBlocked) return res.status(403).json({ error: 'Tu cuenta no puede participar.' });
     const hasDep = !!(await Transaction.findOne(Object.assign({ userId: user.id }, SORTEO_REAL_DEP)).select('_id').lean());
     const telegram = !!(req.body && req.body.telegram === true);
     const checks = _sorteoChecksOf(user, telegram, hasDep); const missing = _sorteoMissing(cfg, checks);
-    if (missing.length) { const names = { app: 'instalar la app', notif: 'activar las notificaciones', telegram: 'unirte a nuestro Telegram', phone: 'cargar tu número de celular en el Perfil', deposit: 'hacer al menos una carga' }; return res.status(400).json({ error: 'Te falta: ' + missing.map((m) => names[m]).join(', ') + '.', checks, missing }); }
+    if (missing.length) { const names = { app: 'instalar la app', notif: 'activar las notificaciones', telegram: 'unirte a nuestro Telegram', phone: 'cargar tu número de celular en el Perfil', deposit: 'hacer al menos una carga', week: 'tener la cuenta hace al menos ' + SORTEO_WEEK_DAYS + ' días (seguridad)' }; return res.status(400).json({ error: 'Te falta: ' + missing.map((m) => names[m]).join(', ') + '.', checks, missing }); }
     const ent = await SorteoEntry.findOneAndUpdate({ userId: user.id, key }, { $setOnInsert: { id: uuidv4(), username: user.username, joinedAt: new Date(), checks, source: 'app' }, $set: { telegramDeclared: telegram } }, { upsert: true, new: true }).lean();
     const p = sorteosRules.periodOf(cfg[key], new Date());
     await SorteoScore.updateMany({ key, periodKey: p.periodKey, userId: user.id }, [{ $set: { joined: true, eligible: { $gte: ['$deposits', 1] } } }]).catch(() => {});
