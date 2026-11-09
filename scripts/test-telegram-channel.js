@@ -34,7 +34,7 @@ caso('#1044-d Sorteo en el canal: premios + pasos según los requisitos activos'
 });
 caso('#1055 Canal INFORMATIVO: sin links, sin montos de premios ni regalado, panel de texto con servicio / beneficios / sorteo', () => {
   const t = tg.panelText(S);
-  assert.ok(/CANAL OFICIAL/.test(t) && /TU SERVICIO/.test(t) && /BENEFICIOS/.test(t) && /iPhone/.test(t) && /Entrá desde tu app/.test(t) && t.length < 4096);
+  assert.ok(/Canal oficial/.test(t) && /Servicio PICA ROJA/.test(t) && /<b>Beneficios<\/b>/.test(t) && /iPhone/.test(t) && /en tu app PICA ROJA/.test(t) && !/━/.test(t) && t.length < 4096);
   assert.ok(!/12\.345\.678|2\.345\.000|850\.000|Regalado|Premios pagados|Premio más grande/.test(t), 'sin montos de premios');
   const all = JSON.stringify([tg.panelButtons('https://picaroja.com'), tg.storyButtons({}, 'https://picaroja.com')]);
   assert.ok(!/"url"/.test(all), 'ningún botón con link');
@@ -45,15 +45,17 @@ caso('#1055 Canal INFORMATIVO: sin links, sin montos de premios ni regalado, pan
 caso('#1055 Historias y bono: formato del sorteo, HTML escapado, cómo usar el bono, sin link', () => {
   const st = { title: 'Hoy <b>gratis</b>', text: 'Cargá & ganá', bonusPct: 50, bonusUntil: new Date(Date.now() + 3600000) };
   const c = tg.storyCaption(st);
-  assert.ok(/&lt;B&gt;GRATIS&lt;\/B&gt;/.test(c) && /Cargá &amp; ganá/.test(c) && /BONO \+50%/.test(c) && /CÓMO USARLO/.test(c) && /Entrá desde tu app/.test(c) && c.length <= 1024);
+  assert.ok(/&lt;b&gt;gratis&lt;\/b&gt;/.test(c) && /Cargá &amp; ganá/.test(c) && /\+50% en tu próxima carga/.test(c) && /Reclamar/.test(c) && /Servicio PICA ROJA/.test(c) && !/━/.test(c) && c.length <= 1024);
   assert.ok(!/p\. m\./.test(c), 'hora en 24 h');
-  assert.ok(!/BONO/.test(tg.storyCaption(Object.assign({}, st, { bonusUntil: new Date(Date.now() - 1000) }))), 'bono vencido no se anuncia');
+  assert.ok(!/Bono por tiempo limitado/.test(tg.storyCaption(Object.assign({}, st, { bonusUntil: new Date(Date.now() - 1000) }))), 'bono vencido no se anuncia');
+  const pm = tg.storyCaption({ title: '⚽ HOY: A vs B', autoKind: 'deporte', match: { home: 'Boca', away: 'River', league: 'Liga', hour: '21:00' }, odds: { home: 2.1, away: 3.5 } });
+  assert.ok(/Partido: <b>Boca vs River<\/b>/.test(pm) && /Hora: <b>21:00 hs<\/b>/.test(pm) && /Local <b>2,10<\/b>/.test(pm) && /Deportes/.test(pm), 'info del partido abajo de la foto');
 });
 caso('#1055 Código de Telegram: se canjea en Perfil → Canjear código; agotado SIN lista de ganadores', () => {
   const o = { code: 'ROJAK7M2Q', amount: 5000, maxClaims: 10, rolloverX: 5 };
   const c = tg.dropCaption(o); assert.ok(/ROJAK7M2Q/.test(c) && /Canjear código/.test(c) && /ya cargaron/.test(c) && c.length <= 1024);
   const d = tg.dropDoneCaption({ code: 'ROJAK7M2Q', amount: 5000, full: true, winners: ['juanperez22', 'ana'] });
-  assert.ok(/BONO COMPLETADO/.test(d) && !/ju\*\*\*22|juanperez22/.test(d) && /Entrá desde tu app/.test(d));
+  assert.ok(/BONO COMPLETADO/.test(d) && !/ju\*\*\*22|juanperez22/.test(d) && /Servicio PICA ROJA/.test(d));
 });
 caso('#1055 Server: qué historias van (las del admin + partidos / bono / servicio), sin links, canje desde el Perfil', () => {
   const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
@@ -71,9 +73,9 @@ caso('#1055 Bot por privado: 6 botones, sin links, ranking con usuarios tapados'
   assert.ok(/Canjear código/.test(tg.menuReply('code', S, { drop: { code: 'ROJAX', amount: 5000, maxClaims: 10, left: 3 } }).text));
 });
 caso('#1056 Reembolsos, premio grande (usuario tapado) y tope diario: 1 foto y 2 textos, sin links', () => {
-  for (const [k, l] of [['daily', false], ['weekly', false], ['monthly', true]]) { const t = tg.refundCaption(k, 10, l); assert.ok(/10%/.test(t) && /Reembolsos/.test(t) && /Entrá desde tu app/.test(t) && !/https?:/.test(t) && t.length <= 1024, k); }
-  assert.ok(/ÚLTIMO DÍA/.test(tg.refundCaption('monthly', 5, true)));
-  const w = tg.bigWinCaption('juanperez22', 1500000); assert.ok(/ju\*\*\*22/.test(w) && !/juanperez22/.test(w) && /\$1\.500\.000/.test(w) && /FELICITACIONES/.test(w));
+  for (const [k, l] of [['daily', false], ['weekly', false], ['monthly', true]]) { const t = tg.refundCaption(k, 10, l); assert.ok(/10%/.test(t) && /Reembolsos/.test(t) && /Servicio PICA ROJA/.test(t) && !/https?:/.test(t) && t.length <= 1024, k); }
+  assert.ok(/Último día/.test(tg.refundCaption('monthly', 5, true)));
+  const w = tg.bigWinCaption('juanperez22', 1500000); assert.ok(/ju\*\*\*22/.test(w) && !/juanperez22/.test(w) && /\$1\.500\.000/.test(w) && /Felicitaciones/.test(w));
   const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/const TG_DAY_MAX = \{ photo: 1, text: 2 \}/.test(S2) && /'value\.budget\.day': dk, \[f\]: \{ \$lt: max \}/.test(S2), 'tope atómico');
   for (const re of [/if \(!force && !\(await _tgBudget\(slot\)\)\)/, /_tgQuiet\(c\) \|\| !\(await _tgBudget\('text'\)\)\) return; \/\/ #1056/, /if \(!\(await _tgBudget\('text'\)\)\) return; \/\/ #1056\n  await _tgSorteoPost/, /bigWinSince: pp\.paidAt \}\);\n  if \(!\(await _tgBudget\('text'\)\)\) return;/]) assert.ok(re.test(S2), String(re));

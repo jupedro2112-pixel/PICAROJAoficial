@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1068. Textos del canal de Telegram con el estilo de la captura + info del partido abajo de la foto (2026-11-09)
+- **Owner (captura de referencia, "sin copiar"):** "el formato de sólo texto en el canal que sea este estilo, con la negrita y demás; siempre con nuestro
+  servicio; en las fotos poner abajo la info del partido".
+- `telegramChannel.js`: título en negrita, renglón en blanco, renglones "emoji Dato: valor", un párrafo corto y secciones con título en negrita; sin
+  barras ━━. Todo termina con `svcBlock()` ("Servicio PICA ROJA": cargas y retiros automáticos 24 h, retiros a tu CBU, dónde en la app). Historias,
+  bono, código, bono completado, reembolsos, premio grande, sorteo y panel fijado.
+- Partidos: `_tgPostStory` agrega `autoImg.match` / `odds` a la historia `deporte` y el texto abajo de la foto muestra partido, torneo, hora, estadio
+  y cuotas (con "pueden variar según el horario").
+
 ### 1067. Burbuja de Girox centrada y chica, con el juego visible (2026-11-09)
 - **Owner:** "que quede lo menos molesto y centrado posible". La tarjeta del chat queda centrada a lo ancho, 340 px × hasta 480 px, abajo (arriba de la
   burbuja verde), sin fondo que tape el juego; cabecera y botones más compactos. Fila de servicios en una línea, como estaba. App v707.

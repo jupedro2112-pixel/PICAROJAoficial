@@ -30694,6 +30694,7 @@ async function _tgStoryMedia(st) {
   } catch (e) { logger.warn(`[telegram] foto de la historia ${st.id}: ${e.message}`); return null; }
 }
 async function _tgPostStory(c, st, textOnly) {
+  if (st.autoKind === 'deporte' && !st.match) { try { const f = await Story.findOne({ id: st.id }).select('+autoImg').lean(); const im = f && f.autoImg; if (im && im.match) st = Object.assign({}, st, { match: im.match, odds: im.odds || null }); } catch (_) {} } // #1068: info del partido abajo de la foto
   const extra = { caption: tgChannel.storyCaption(st), parse_mode: 'HTML', reply_markup: tgChannel.storyButtons(st, c.appUrl, c.btn), disable_notification: _tgQuiet(c) };
   const md = textOnly ? null : await _tgStoryMedia(st); // #1056: el bono va como texto (la foto del día es de partidos / historias)
   if (md) { const r = await tgChannel.sendMedia(c.token, md.kind, c.channel, md.media, extra); if (r.ok) return r; logger.warn(`[telegram] foto rechazada (${r.error}); va sólo el texto`); }
