@@ -171,9 +171,23 @@ function dropCaption(o) {
   ].join('\n'), CAPTION_MAX);
 }
 function dropDoneCaption(o) {
-  // #1055 (owner: "tantos datos de premios regalados no"): sin la lista de ganadores.
-  return cut(['🔴 <b>PICA ROJA</b>', '━━━━━━━━━━━━━━', o.full ? `✅ <b>¡SE AGOTÓ EL CÓDIGO ${esc(o.code)}!</b>` : `⏱ <b>TERMINÓ EL CÓDIGO ${esc(o.code)}</b>`,
-    '━━━━━━━━━━━━━━', '🔔 El próximo código sale pronto: activá las notificaciones del canal para no perderlo.'].join('\n'), CAPTION_MAX);
+  // #1055/#1056 (owner: "una vez que se llenó, poner bono completado"): sin lista de ganadores.
+  return cut(['🔴 <b>PICA ROJA</b>', '━━━━━━━━━━━━━━', o.full ? `✅ <b>BONO COMPLETADO</b>\nYa se llenaron los ${Number(o.maxClaims) || 10} lugares del código <code>${esc(o.code)}</code>.` : `⏱ <b>TERMINÓ EL CÓDIGO ${esc(o.code)}</b>`,
+    '━━━━━━━━━━━━━━', '🔔 El próximo sale la semana que viene: activá las notificaciones del canal para no perderlo.', '📲 <b>Entrá desde tu app PICA ROJA</b>'].join('\n'), CAPTION_MAX);
+}
+// #1056 (owner): "mandar mensajes de no te olvides de tu autoreembolso; publicar el semanal cuando está disponible; del mensual lo mismo".
+function refundCaption(kind, pct, last) {
+  const P = Math.round(Number(pct) || 0);
+  const T = kind === 'monthly' ? (last ? '🗓️ ÚLTIMO DÍA DEL REEMBOLSO MENSUAL' : '🗓️ YA ESTÁ TU REEMBOLSO MENSUAL')
+    : kind === 'weekly' ? (last ? '⏰ ÚLTIMO DÍA DEL REEMBOLSO SEMANAL' : '📅 YA ESTÁ TU REEMBOLSO SEMANAL') : '💸 NO TE OLVIDES DE TU REEMBOLSO';
+  const sub = kind === 'monthly' ? `Te devolvemos el <b>${P}%</b> de lo que perdiste el mes pasado.` : kind === 'weekly' ? `Te devolvemos el <b>${P}%</b> de lo que perdiste la semana pasada.` : `Todos los días te devolvemos el <b>${P}%</b> de lo que perdiste ayer.`;
+  return cut(['🔴 <b>PICA ROJA · ' + T + '</b>', '━━━━━━━━━━━━━━', sub, '━━━━━━━━━━━━━━', '📝 <b>CÓMO COBRARLO</b>', '1. Abrí tu app PICA ROJA', '2. Tocá <b>Reembolsos</b>', '3. Reclamalo: entra solo a tu saldo',
+    '━━━━━━━━━━━━━━', last ? '⏳ <b>Hoy es el último día</b> para reclamarlo.' : (kind === 'daily' ? '⏳ El de ayer se reclama hoy.' : '⏳ Tenés unos días para reclamarlo: no lo dejes pasar.'), '📲 <b>Entrá desde tu app PICA ROJA</b>'].join('\n'), CAPTION_MAX);
+}
+// #1056 (owner): "cuando pagamos un premio de más de $1.000.000, publicamos y felicitamos tapando el nombre".
+function bigWinCaption(username, amount) {
+  return cut(['🔴 <b>PICA ROJA · ¡FELICITACIONES! 🏆</b>', '━━━━━━━━━━━━━━', `🎉 <b>${esc(maskUser(username))}</b> cobró <b>${money(amount)}</b>`, '💸 Directo a su CBU, en minutos.',
+    '━━━━━━━━━━━━━━', '¡El próximo puede ser el tuyo!', '📲 <b>Entrá desde tu app PICA ROJA</b>'].join('\n'), CAPTION_MAX);
 }
 const SORTEO_STEPS = [['app', 'Instalá la app de PICA ROJA'], ['notif', 'Activá las notificaciones'], ['telegram', 'Unite a este canal de Telegram'], ['phone', 'Cargá tu celular en Perfil'], ['deposit', 'Hacé una carga'], ['week', 'Tu cuenta tiene que tener 7 días']];
 function sorteoSteps(req) { return SORTEO_STEPS.filter(([k]) => !req || req[k]).map(([, t]) => t).concat(['Entrá a Sorteos en la app y tocá Anotarme']); }
@@ -304,4 +318,4 @@ function menuReply(key, s, o) {
   return { text: '🎰 Cargá, jugá y retirá desde tu app PICA ROJA.' + APP, button: null };
 }
 
-module.exports = { MENU, menuKeyboard, menuKey, menuReply, dropSvg, dropCaption, dropDoneCaption, sorteoSvg, sorteoCaption, sorteoSteps, normalizeButtons, BTN_KEYS, call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };
+module.exports = { refundCaption, bigWinCaption, MENU, menuKeyboard, menuKey, menuReply, dropSvg, dropCaption, dropDoneCaption, sorteoSvg, sorteoCaption, sorteoSteps, normalizeButtons, BTN_KEYS, call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };

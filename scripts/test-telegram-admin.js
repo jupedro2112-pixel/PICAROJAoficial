@@ -20,10 +20,10 @@ const SNAP = { at: new Date('2026-11-09T21:00:00Z'), today: M, todayPrev: Object
   menus: { at: new Date(), byMenu: { girox: { users: 100, back7: 60, depositors: 40, repeat: 20 } }, weeks: [{ regs: 50, firstDep: 20, depositors: 90, chatNewPct: 80 }] },
   weeklyText: 'ANÁLISIS SEMANAL\n• todo bien' };
 
-caso('Menú: 15 botones (con Info), todos responden con texto < 4096 y botones Actualizar / Menú', () => {
-  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 15);
+caso('Menú: 16 botones (con Pauta e Info), todos responden con texto < 4096 y botones Actualizar / Menú', () => {
+  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 16);
   for (const b of k) { assert.ok(/^ad:[a-z]+$/.test(b.callback_data) && b.callback_data.length <= 64); const r = ta.render(b.callback_data.slice(3), SNAP); assert.ok(r && r.text.length < 4096, b.callback_data); assert.ok(r.markup.inline_keyboard[0].some((x) => x.callback_data === 'ad:menu')); }
-  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 15);
+  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 16);
   assert.strictEqual(ta.render('nada', SNAP), null);
 });
 caso('Sin datos (snap vacío) no rompe', () => { for (const [k] of ta.MENU) assert.ok(ta.render(k, {}).text.length > 10, k); assert.ok(ta.dailyReport(null).length > 10 && ta.monthlyReport({}).length > 10); });
@@ -93,6 +93,21 @@ caso('#1051 Claude en Telegram: token de GitHub cifrado, nunca devuelto, verific
   assert.ok(/key: 'claudedev'/.test(S));
   const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
   assert.ok(A.includes("document.getElementById('cdevToken').value = '';\n        if (!r.ok)"), 'el campo del token se vacía al guardar');
+});
+caso('#1056 Pauta y ganancia: costo por cliente, resultado − pauta, sin pauta cargada pide el dato', () => {
+  const M = { deposits: 3000000, withdrawals: 2000000, result: 1000000, registered: 120, firstDeposits: 40 };
+  const b = ta.spendBlock(M, { usd: 1200, ars: 1740000, rate: 1450, days: 1, daysWith: 1 }, 'AYER');
+  assert.ok(/US\$1\.200/.test(b) && /Costo por cliente que cargó: <b>US\$30<\/b>/.test(b) && /−\$740\.000/.test(b) && /−US\$510/.test(b) && /no recupera/.test(b));
+  assert.ok(/sin cargar/.test(ta.spendBlock(M, null, 'AYER')) && /\/gasto/.test(ta.spendBlock(M, null)));
+  const r = ta.spendReport({ at: new Date(), yesterday: M, week: M, weekPrev: M, month: M, spend: {} }, '08/11'); assert.ok(/AYER \(08\/11\)/.test(r) && /CÓMO VENÍS/.test(r) && r.length < 4096);
+  assert.ok(/gastaste en publicidad el 08\/11/.test(ta.askSpendText('08/11')), 'el server reconoce la respuesta por este texto');
+  assert.ok(ta.render('spend', { at: new Date(), yesterday: M }).text.length > 50);
+});
+caso('#1056 Server: pregunta diaria, /gasto atómico sin duplicar el panel, sólo grupos aprobados', () => {
+  const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/gastaste en publicidad el \(\\d\{1,2\}\)\\\/\(\\d\{1,2\}\)/.test(S2), 'regex de la respuesta = texto de la pregunta');
+  assert.ok(/if \(_tgAdminLinked\(c, chat\.id\)\) \{ \/\/ #1056/.test(S2) && /\$pull: \{ value: \{ source: 'telegram', from: dayKey \} \}/.test(S2) && /ya tiene gasto cargado desde el panel/.test(S2));
+  assert.ok(/c\.adminLastSpendAsk !== dk/.test(S2) && /force_reply: true/.test(S2));
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

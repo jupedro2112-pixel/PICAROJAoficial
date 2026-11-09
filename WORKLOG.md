@@ -8,6 +8,22 @@
 
 ## Sesión 2026-11-09
 
+### 1056. Canal de Telegram automático y sin molestar + 💸 Pauta y ganancia en el grupo privado (2026-11-09)
+- **Owner (canal):** "novedades de la app, no te olvides de tu autoreembolso, historias de partidos y servicio; el semanal y el mensual cuando están
+  disponibles; 1 bono semanal de 10 personas × $5.000 con un código y al llenarse 'bono completado'; premio de más de $1.000.000 se publica y se felicita
+  tapando el nombre"; "1 foto y 1-2 textos diarios, siempre información importante, nada de molestar; las fotos de las historias para los partidos; sin link".
+- **Tope diario del canal** (`TG_DAY_MAX` = 1 foto + 2 textos, `_tgBudget` atómico en `telegrambot.value.budget`): la foto del día = partidos DE HOY >
+  historias del admin > servicio (las automáticas de otro día se marcan "no va"); bono = texto; código, sorteo, reembolso y premio grande = texto; lo que
+  no entra queda para otro día. Panel fijado y "✅ BONO COMPLETADO" EDITAN mensajes (no cuentan). Los botones del panel "publicar ahora" no pasan por el tope.
+- **Reembolsos** (`_tgRefundPostTick`, 11-21 h): mensual el 7 y el 15 (último día), semanal los lunes, diario jueves y sábado; antes de las 17 h sólo si
+  quedan los 2 textos (deja lugar al código / sorteo / premio).
+- **Premio grande** (`_tgBigWinTick`): retiro PAGADO ≥ `bigWinMin` ($1.000.000) desde que se activó, usuario tapado, sin pruebas ni staff, cursor antes de publicar.
+- **Código de Telegram SEMANAL** (`everyDays` 7, migración `mig1056tgdrop` de 15 → 7); al llenarse se edita el posteo con "BONO COMPLETADO".
+- **Grupo privado:** botón 💸 Pauta y ganancia (gasto en US$ vs registros, 1ª carga, costo por cliente, resultado − pauta, por cada US$1 cuánto volvió,
+  ayer / 7 días / mes + "cómo venís"). A las 10 h el bot pregunta "¿cuánto gastaste en publicidad el dd/mm?" (si ese día no tiene gasto); se responde al
+  mensaje o con `/gasto 1200 [dd/mm]` (dólares × cotización USDT; "pesos" ⇒ en pesos). Se guarda en `Config['adSpend']` (misma lista de Datos IA, `source:'telegram'`,
+  uno por día, $pull/$push atómico) y si el día ya tiene gasto cargado desde el panel NO se duplica. Panel v273 (código cada 7 días por defecto).
+
 ### 1055. Canal de Telegram INFORMATIVO y SIN LINKS + Info en el grupo privado (2026-11-09)
 - **Owner:** "más informativo, tantos datos de premios regalados no; fotos de las historias y algún texto como el del sorteo cada tanto; cuando hay un bono lo
   mismo con texto; historias de partidos o del servicio, después nada más"; "sacá el link: que la gente entre siempre desde su app"; "los mensajes de la

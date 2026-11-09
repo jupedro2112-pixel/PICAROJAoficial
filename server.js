@@ -30636,7 +30636,7 @@ async function _menuRetCompute() {
 // Lo que NO va al canal: historias personales (audienceUserId), códigos sorpresa (codeDropId: son sólo para quien ya cargó) y las de antes de prenderlo.
 // ============================================
 const tgChannel = require('./src/services/telegramChannel');
-const TG_DEFAULT = { channel: '', appUrl: 'https://picaroja.com', mirror: true, panel: true, gapMin: 90, quietFrom: 23, quietTo: 9 };
+const TG_DEFAULT = { channel: '', appUrl: 'https://picaroja.com', mirror: true, panel: true, gapMin: 90, quietFrom: 23, quietTo: 9, refundPosts: true, bigWin: true, bigWinMin: 1000000, adminSpendAsk: true }; // #1056
 async function _tgCfg() {
   let v = null; try { v = await getConfig('telegramBot', null); } catch (_) {}
   const c = Object.assign({}, TG_DEFAULT, v && typeof v === 'object' ? v : {});
@@ -30691,13 +30691,25 @@ async function _tgStoryMedia(st) {
     return { kind: 'photo', media: { buffer: buf, mime, filename: 'historia.' + (mime.split('/')[1] || 'png').replace('jpeg', 'jpg') } };
   } catch (e) { logger.warn(`[telegram] foto de la historia ${st.id}: ${e.message}`); return null; }
 }
-async function _tgPostStory(c, st) {
+async function _tgPostStory(c, st, textOnly) {
   const extra = { caption: tgChannel.storyCaption(st), parse_mode: 'HTML', reply_markup: tgChannel.storyButtons(st, c.appUrl, c.btn), disable_notification: _tgQuiet(c) };
-  const md = await _tgStoryMedia(st);
+  const md = textOnly ? null : await _tgStoryMedia(st); // #1056: el bono va como texto (la foto del día es de partidos / historias)
   if (md) { const r = await tgChannel.sendMedia(c.token, md.kind, c.channel, md.media, extra); if (r.ok) return r; logger.warn(`[telegram] foto rechazada (${r.error}); va sólo el texto`); }
   return tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: extra.caption, parse_mode: 'HTML', reply_markup: extra.reply_markup, disable_web_page_preview: true, disable_notification: extra.disable_notification });
 }
 const TG_ALWAYS_KINDS = ['deporte', 'bono']; // #1044-d: partidos importantes y la historia con bono siempre van al canal
+// #1056 (owner: "1 foto y 1-2 textos diarios, siempre con información importante, nada de molestar"). Tope POR DÍA (ART) para todo el canal, atómico
+// entre instancias: 'photo' = la historia con foto del día; 'text' = bono, premio grande, código, sorteo, reembolso. Lo que no entra queda para otro día.
+// El panel fijado y el "bono completado" EDITAN mensajes que ya están (no cuentan). Los botones del panel ("publicar ahora") no pasan por acá.
+const TG_DAY_MAX = { photo: 1, text: 2 };
+async function _tgBudget(kind) {
+  const dk = _schedArtKey(new Date()); const f = 'value.budget.' + kind; const max = TG_DAY_MAX[kind] || 1;
+  const a = await Config.collection.updateOne({ key: 'telegrambot', 'value.budget.day': { $ne: dk } }, { $set: { 'value.budget': { day: dk, photo: 0, text: 0 } } });
+  const b = await Config.collection.updateOne({ key: 'telegrambot', 'value.budget.day': dk, [f]: { $lt: max } }, { $inc: { [f]: 1 } });
+  void a; try { Config._cache && Config._cache.clear(); } catch (_) {}
+  return b.modifiedCount === 1;
+}
+async function _tgBudgetLeft(kind) { const c = (await Config.collection.findOne({ key: 'telegrambot' }, { projection: { 'value.budget': 1 } })) || {}; const bg = (c.value && c.value.budget) || {}; return bg.day !== _schedArtKey(new Date()) ? (TG_DAY_MAX[kind] || 1) : Math.max(0, (TG_DAY_MAX[kind] || 1) - (Number(bg[kind]) || 0)); }
 function _tgIsDailyAuto(st) { return /^sa-\d{4}-\d{2}-\d{2}-/.test(String(st.autoKey || '')) && !TG_ALWAYS_KINDS.includes(st.autoKind); }
 function _tgQuiet(c) { const h = _tgArtHour(); return c.quietFrom > c.quietTo ? (h >= c.quietFrom || h < c.quietTo) : (h >= c.quietFrom && h < c.quietTo); }
 const TG_CHANNEL_AUTO_KINDS = ['deporte', 'bono', 'servicio']; // #1055 (owner): partidos, bono y servicio; nada de premios / ganadores / slots
@@ -30712,28 +30724,28 @@ async function _tgMirrorTick(force) {
   const now = new Date();
   const q = _tgStoryQuery(c, now);
   const bonusQ = Object.assign({}, q, { bonusPct: { $gt: 0 }, bonusUntil: { $gt: now } });
-  let st = await Story.findOne(bonusQ).sort({ publishedAt: 1 }).lean(); // con bono: sale enseguida (es por pocas horas)
+  let st = await Story.findOne(bonusQ).sort({ publishedAt: 1 }).lean(); // con bono: sale enseguida (es por pocas horas) — #1056: va como TEXTO
+  let slot = st ? 'text' : 'photo';
   if (!st && !force) {
     if (_tgQuiet(c)) return { ok: false, why: 'horario de silencio' };
     if (c.lastPostAt && now - new Date(c.lastPostAt) < c.gapMin * 60000) return { ok: false, why: 'esperando el espacio entre posteos' };
+    if (!(await _tgBudgetLeft('photo'))) return { ok: false, why: 'ya salió la foto del día (1 por día)' };
   }
-  if (!st) st = await Story.findOne(q).sort({ publishedAt: 1 }).lean();
+  if (!st) {
+    // #1056: automáticas de OTRO día (partidos de ayer…) no van nunca; prioridad: partidos de hoy > las que sube el admin > servicio.
+    const today = _schedArtKey(now);
+    const cands = await Story.find(q).sort({ publishedAt: 1 }).limit(30).lean();
+    const stale = cands.filter((x) => /^sa-/.test(String(x.autoKey || '')) && String(x.autoKey).slice(3, 13) !== today);
+    if (stale.length) await Story.updateMany({ id: { $in: stale.map((x) => x.id) }, tgPostedAt: null }, { $set: { tgPostedAt: now, tgError: 'no va al canal (era de otro día)' } });
+    const ok = cands.filter((x) => !stale.includes(x));
+    const rank = (x) => (x.autoKind === 'deporte' ? 0 : !/^sa-/.test(String(x.autoKey || '')) ? 1 : 2);
+    st = ok.sort((a, b) => rank(a) - rank(b) || new Date(a.publishedAt) - new Date(b.publishedAt))[0] || null;
+  }
   if (!st) return { ok: false, why: 'no hay historias nuevas' };
-  // #1044-d (owner: "1 contenido automático por día"): de las automáticas de la app (sa-…) va al canal UNA por día, rotando cuál; los PARTIDOS
-  // (deporte) y la historia con bono van siempre. Las demás se marcan como "no van al canal" (no se reintentan).
-  if (_tgIsDailyAuto(st)) {
-    const day = String(st.autoKey).slice(3, 13);
-    const sameDay = await Story.find({ autoKey: new RegExp('^sa-' + day + '-'), autoKind: { $nin: TG_ALWAYS_KINDS.concat(['borrada']) }, audienceUserId: null, $or: [{ isActive: true }, { tgMsgId: { $ne: null } }] }).sort({ publishedAt: 1, autoKey: 1 }).select('id tgMsgId').lean();
-    const chosen = sameDay.length ? sameDay[Math.floor(new Date(day + 'T12:00:00Z').getTime() / 86400000) % sameDay.length] : null;
-    const already = sameDay.some((x) => x.tgMsgId);
-    if (already || !chosen || chosen.id !== st.id) {
-      await Story.updateOne({ id: st.id, tgPostedAt: null }, { $set: { tgPostedAt: now, tgError: 'no va al canal (1 automática por día)' } });
-      return { ok: false, why: 'automática salteada (ya va 1 por día)' };
-    }
-  }
+  if (!force && !(await _tgBudget(slot))) return { ok: false, why: slot === 'text' ? 'ya salieron los 2 textos del día' : 'ya salió la foto del día (1 por día)' };
   const claimed = await Story.findOneAndUpdate({ id: st.id, tgPostedAt: null }, { $set: { tgPostedAt: now } });
   if (!claimed) return { ok: false, why: 'ya publicada' };
-  const r = await _tgPostStory(c, st);
+  const r = await _tgPostStory(c, st, slot === 'text');
   if (r.ok) {
     await Story.updateOne({ id: st.id }, { $set: { tgMsgId: (r.result && r.result.message_id) || null, tgError: null } });
     await _tgSet({ lastPostAt: now, lastError: null });
@@ -30819,11 +30831,11 @@ async function _tgPanelTick(force) {
 // (CodeDrop + /api/code-drop/claim: un lugar por persona, reference única, sólo clientes que ya cargaron si `codeDrop.requireDeposit`, guard de
 // cuentas secundarias). El botón abre la app con ?codigo= y se canjea solo al entrar. Al agotarse (o vencer) se avisa en el canal y el botón pasa a
 // "AGOTADO". Config: `telegramBot.drop` { on, amount, maxClaims, everyDays, hours } y `dropNextAt` (próxima salida).
-const TG_DROP_DEFAULT = { on: true, amount: 5000, maxClaims: 10, everyDays: 15, hours: 48 };
+const TG_DROP_DEFAULT = { on: true, amount: 5000, maxClaims: 10, everyDays: 7, hours: 48 }; // #1056 (owner): 1 por SEMANA
 function _tgDropCfg(c) {
   const d = Object.assign({}, TG_DROP_DEFAULT, (c && c.drop && typeof c.drop === 'object') ? c.drop : {});
   const n = (v, def, lo, hi) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : def; };
-  return { on: d.on !== false, amount: n(d.amount, 5000, 500, 15000), maxClaims: n(d.maxClaims, 10, 1, 100), everyDays: n(d.everyDays, 15, 1, 60), hours: n(d.hours, 48, 1, 168) };
+  return { on: d.on !== false, amount: n(d.amount, 5000, 500, 15000), maxClaims: n(d.maxClaims, 10, 1, 100), everyDays: n(d.everyDays, 7, 1, 60), hours: n(d.hours, 48, 1, 168) };
 }
 // Próxima salida: dentro de `days` días, a una hora al azar entre las 12 y las 21 (ART). days = 0 ⇒ hoy (si todavía hay franja) o mañana.
 function _tgDropNextAt(days) {
@@ -30858,9 +30870,13 @@ async function _tgDropLaunch(c, by) {
 async function _tgDropDone(d, winners, full) {
   try {
     const c = await _tgCfg(); if (!c.token || !c.channel) return;
-    if (d.tgMsgId) await tgChannel.call(c.token, 'editMessageReplyMarkup', { chat_id: c.channel, message_id: d.tgMsgId, reply_markup: { inline_keyboard: [[{ text: full ? '❌ AGOTADO' : '⏱ TERMINÓ', callback_data: 'tg:serv' }]] } });
-    const text = tgChannel.dropDoneCaption({ code: d.code, amount: d.amount, full, winners });
-    await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_to_message_id: d.tgMsgId || undefined, allow_sending_without_reply: true });
+    // #1056 (owner: "una vez que se llenó, poner bono completado"; "nada de molestar"): se EDITA el mismo posteo, no sale un mensaje nuevo.
+    if (!d.tgMsgId) return;
+    const text = tgChannel.dropDoneCaption({ code: d.code, amount: d.amount, maxClaims: d.maxClaims, full, winners });
+    const reply_markup = { inline_keyboard: [[{ text: full ? '✅ BONO COMPLETADO' : '⏱ TERMINÓ', callback_data: 'tg:serv' }]] };
+    const r = d.tgKind === 'photo' ? await tgChannel.call(c.token, 'editMessageCaption', { chat_id: c.channel, message_id: d.tgMsgId, caption: text, parse_mode: 'HTML', reply_markup })
+      : await tgChannel.call(c.token, 'editMessageText', { chat_id: c.channel, message_id: d.tgMsgId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup });
+    if (!r.ok) await tgChannel.call(c.token, 'editMessageReplyMarkup', { chat_id: c.channel, message_id: d.tgMsgId, reply_markup });
   } catch (e) { logger.warn('[telegram] aviso de código agotado: ' + e.message); }
 }
 async function _tgDropTick() {
@@ -30871,6 +30887,7 @@ async function _tgDropTick() {
   if (!c.dropNextAt) { await _tgSet({ dropNextAt: _tgDropNextAt(2) }); return; } // revisión: el primero a los 2 días de conectar (no el mismo día)
   if (new Date() < new Date(c.dropNextAt)) return;
   if (await CodeDrop.exists({ createdBy: 'telegram', status: 'active' })) return; // el anterior sigue vivo
+  if (_tgQuiet(c) || !(await _tgBudget('text'))) return; // #1056: si ya salieron los 2 textos del día, va otro día
   await _tgDropLaunch(c, 'automático');
 }
 // ── #1044-d SORTEO EN EL CANAL: los lunes a las 12 h (o con el botón del panel), foto con los premios + los pasos para anotarse. ──
@@ -30889,14 +30906,57 @@ async function _tgSorteoPost(c, force) {
   if (!r.ok) { await _tgSet({ sorteoWeek: null, lastError: 'sorteo: ' + String(r.error).slice(0, 150), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
   return { ok: true };
 }
+// ── #1056 CANAL: avisos de REEMBOLSO (owner: "no te olvides de tu autoreembolso; el semanal cuando está disponible; el mensual lo mismo") — uno por
+// día entre las 11 y las 21 h: mensual el 7 (y el 15, último día) > semanal el lunes (y el martes, último día) > diario. Mismas ventanas que el reclamo.
+async function _tgRefundPostTick() {
+  const c = await _tgCfg(); if (c.refundPosts === false || !c.token || !c.channel) return;
+  const now = new Date(); const h = _tgArtHour(now); const dk = _schedArtKey(now); if (h < 11 || h >= 21 || c.refundPostDay === dk) return;
+  if (!(await _cronClaim('tgrefund', 5 * 60000))) return;
+  const tiers = await getRefundTiersByPeriod(); const mx = (t) => (t || []).reduce((m, x) => Math.max(m, Number(x.pct) || 0), 0);
+  const dom = Number(dk.slice(8, 10)), dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+  let kind = null, last = false;
+  // #1056 (nada de molestar): mensual el 7 y el 15 (último día), semanal los lunes, el diario jueves y sábado.
+  if ((dom === 7 || dom === 15) && mx(tiers.monthly) > 0) { kind = 'monthly'; last = dom === 15; }
+  else if (dow === 1 && mx(tiers.weekly) > 0) kind = 'weekly';
+  else if ((dow === 4 || dow === 6) && mx(tiers.daily) > 0) kind = 'daily';
+  if (!kind) { await _tgSet({ refundPostDay: dk }); return; }
+  if (h < 17 && await _tgBudgetLeft('text') < 2) return; // deja lugar a lo de más prioridad (código, sorteo, premio); a la tarde sale igual si queda
+  if (!(await _tgBudget('text'))) { await _tgSet({ refundPostDay: dk }); return; }
+  await _tgSet({ refundPostDay: dk });
+  const r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: tgChannel.refundCaption(kind, mx(tiers[kind]), last), parse_mode: 'HTML', disable_web_page_preview: true });
+  if (!r.ok) await _tgSet({ lastError: 'aviso de reembolso: ' + String(r.error).slice(0, 140), lastErrorAt: new Date() });
+}
+// #1056 (owner): "cuando pagamos un premio de más de $1.000.000, publicamos y felicitamos tapando el nombre". Retiros PAGADOS ≥ bigWinMin, desde que
+// se activó (no publica los viejos), uno por vez, nunca de noche, sin pruebas ni staff. El cursor avanza ANTES de publicar (nunca dos veces).
+async function _tgBigWinTick() {
+  const c = await _tgCfg(); if (c.bigWin === false || !c.token || !c.channel) return;
+  if (!c.bigWinSince) { await _tgSet({ bigWinSince: new Date() }); return; }
+  if (_tgQuiet(c)) return;
+  if (!(await _cronClaim('tgbigwin', 5 * 60000))) return;
+  const min = Math.max(100000, Number(c.bigWinMin) || 1000000);
+  const pp = await PendingPayout.findOne({ status: 'paid', paidAt: { $gt: new Date(c.bigWinSince) }, amount: { $gte: min } }).sort({ paidAt: 1 }).select('username amount paidAt titular').lean();
+  if (!pp) return;
+  if (!(await _tgBudgetLeft('text'))) return; // #1056: queda para mañana (el cursor no avanza)
+  await _tgSet({ bigWinSince: pp.paidAt });
+  if (!(await _tgBudget('text'))) return;
+  if (/PRUEBA/i.test(String(pp.titular || ''))) return;
+  const u = await User.findOne({ username: pp.username }).select('role').lean(); if (!u || u.role !== 'user') return;
+  const r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: tgChannel.bigWinCaption(pp.username, pp.amount), parse_mode: 'HTML', disable_web_page_preview: true });
+  if (!r.ok) await _tgSet({ lastError: 'premio grande: ' + String(r.error).slice(0, 140), lastErrorAt: new Date() });
+}
+setTimeout(async () => { // #1056: el código de Telegram pasa a ser SEMANAL (estaba cada 15 días)
+  try { if (!(await getConfig('mig1056tgdrop', false))) { await Config.collection.updateOne({ key: 'telegrambot', 'value.drop.everyDays': 15 }, { $set: { 'value.drop.everyDays': 7 } }); await Config.set('mig1056tgdrop', true, 'startup-migration'); } } catch (_) {}
+}, 70 * 1000);
 async function _tgSorteoTick() {
   const c = await _tgCfg(); if (c.sorteoPost === false || !c.token || !c.channel) return;
   const now = new Date(); const dow = new Date(_schedArtKey(now) + 'T12:00:00Z').getUTCDay();
   if (dow !== 1 || _tgArtHour(now) < 12 || _tgArtHour(now) >= 20) return;
   if (!(await _cronClaim('tgsorteo', 5 * 60000))) return;
+  if (c.sorteoWeek === _cdWeekStart(_schedArtKey(now))) return;
+  if (!(await _tgBudget('text'))) return; // #1056
   await _tgSorteoPost(c, false);
 }
-setTimeout(() => { setInterval(() => { _tgDropTick().catch((e) => logger.warn('[telegram] código ' + e.message)); _tgSorteoTick().catch((e) => logger.warn('[telegram] sorteo ' + e.message)); }, 2 * 60000); }, 2 * 60000);
+setTimeout(() => { setInterval(() => { _tgDropTick().catch((e) => logger.warn('[telegram] código ' + e.message)); _tgSorteoTick().catch((e) => logger.warn('[telegram] sorteo ' + e.message)); _tgRefundPostTick().catch((e) => logger.warn('[telegram] reembolso ' + e.message)); _tgBigWinTick().catch((e) => logger.warn('[telegram] premio ' + e.message)); }, 2 * 60000); }, 2 * 60000);
 // ── #1046 GRUPO PRIVADO DE REPORTES (owner: "un grupo privado para ver cómo va todo en PICA ROJA, con botones: reporte semanal, venta diaria,
 // venta mensual, retención… algo completo para ir analizando"). Se VINCULA con un código de un solo uso (panel → Canal de Telegram → 🔒 Grupo de
 // reportes; vence en 15 min; se guarda sólo su hash). Sólo los chats vinculados (`telegramBot.adminChats`) reciben datos: cualquier otro que toque
@@ -30927,6 +30987,12 @@ async function _tgAdminSnapTick(force, moneyOnly) {
     const strip = (m) => { if (!m) return m; const o = Object.assign({}, m); delete o.prev; return o; };
     const snap = { at: now, today: strip(today), todayPrev: strip(todayPrev), yesterday: strip(yesterday), yesterdayPrev: strip(yesterdayPrev), week: strip(week), weekPrev: strip(weekPrev),
       month: strip(month), monthPrev: strip(monthPrev), monthDays: Math.max(1, elapsed / D), monthLen: Math.round((new Date(new Date(m0.getTime() + 32 * D).toISOString().slice(0, 7) + '-01T00:00:00-03:00') - m0) / D) };
+    // #1056: primeras cargas y gasto en pauta (para "💸 Pauta y ganancia").
+    try {
+      const [fy, fw, fwp, fm] = await Promise.all([_bizFirstDeps(y0, t0), _bizFirstDeps(new Date(now.getTime() - 7 * D), now), _bizFirstDeps(new Date(now.getTime() - 14 * D), new Date(now.getTime() - 7 * D)), _bizFirstDeps(m0, now)]);
+      if (snap.yesterday) snap.yesterday.firstDeposits = fy; if (snap.week) snap.week.firstDeposits = fw; if (snap.weekPrev) snap.weekPrev.firstDeposits = fwp; if (snap.month) snap.month.firstDeposits = fm;
+      snap.spend = await _tgSpendSnap(t0, m0);
+    } catch (e) { logger.warn('[telegram reportes] pauta ' + e.message); }
     // Mes anterior completo (para el reporte del día 1): una vez por mes.
     if (prevSnap.lastMonthKey === pmk && prevSnap.lastMonth) Object.assign(snap, { lastMonthKey: pmk, lastMonth: prevSnap.lastMonth, lastMonthPrev: prevSnap.lastMonthPrev });
     else { const ppm0 = new Date(_schedArtKey(new Date(pm0.getTime() - 15 * D)).slice(0, 7) + '-01T00:00:00-03:00'); const [lm, lmp] = await Promise.all([_bizMoney(pm0, m0), _bizMoney(ppm0, pm0)]); Object.assign(snap, { lastMonthKey: pmk, lastMonth: strip(lm), lastMonthPrev: strip(lmp) }); }
@@ -30968,6 +31034,64 @@ async function _tgAdminSnapTick(force, moneyOnly) {
     return snap;
   } finally { _tgSnapRunning = false; }
 }
+// ── #1056 PAUTA (owner: "gasto aprox. 1.000-1.500 USD por día; que me pregunte cuánto gasté ayer y de ahí un análisis de cómo vengo"). El gasto
+// se guarda en la MISMA lista que Datos IA (`Config['adSpend']`, en PESOS, por día; dólares × cotización USDT) con operaciones ATÓMICAS ($pull/$push).
+async function _bizFirstDeps(from, to) { // clientes cuya PRIMERA carga real cae en el período
+  const ids = await Transaction.distinct('userId', Object.assign({}, _BIZ_REAL, { timestamp: { $gte: from, $lt: to } }));
+  if (!ids.length) return 0;
+  const before = await Transaction.distinct('userId', Object.assign({}, _BIZ_REAL, { userId: { $in: ids }, timestamp: { $lt: from } }));
+  return Math.max(0, ids.length - before.length);
+}
+async function _tgUsdRate() { try { const u = await getConfig('usdtRate', null); const r = Number(u && typeof u === 'object' ? u.rate : u); if (r > 0) return r; } catch (_) {} try { const d = await _diaUsdt(true); return Number(d && d.rate) || null; } catch (_) { return null; } }
+async function _tgSpendRange(from, to, rate) { // from/to: días ART (inclusive)
+  const sb = await _diaSpendByDay(from, to); const days = Math.max(1, Math.round((new Date(_schedArtKey(to) + 'T12:00:00Z') - new Date(_schedArtKey(from) + 'T12:00:00Z')) / 86400000) + 1);
+  return { ars: sb.total, usd: rate ? sb.total / rate : 0, rate, days, daysWith: Object.values(sb.byDay).filter((v) => v > 0).length };
+}
+async function _tgSpendSnap(t0, m0) {
+  const D = 86400000; const rate = await _tgUsdRate(); const yEnd = new Date(t0.getTime() - 1);
+  const [yesterday, week, weekPrev, month] = await Promise.all([_tgSpendRange(new Date(t0.getTime() - D), yEnd, rate), _tgSpendRange(new Date(t0.getTime() - 7 * D), yEnd, rate),
+    _tgSpendRange(new Date(t0.getTime() - 14 * D), new Date(t0.getTime() - 7 * D - 1), rate), m0 < t0 ? _tgSpendRange(m0, yEnd, rate) : Promise.resolve({ ars: 0, usd: 0, rate, days: 1, daysWith: 0 })]);
+  return { yesterday, week, weekPrev, month, rate };
+}
+function _tgParseSpend(raw) {
+  const t = String(raw || '').trim(); const m = t.match(/(\d[\d.,]*)/); if (!m) return null;
+  let x = m[1]; if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(x)) x = x.replace(/\./g, '').replace(',', '.'); else if (/,\d{1,2}$/.test(x)) x = x.replace(/\./g, '').replace(',', '.'); else x = x.replace(/,/g, '');
+  const n = Number(x); if (!(n > 0)) return null;
+  const ars = /\b(ars|pesos?)\b/i.test(t) || (/\$\s*\d/.test(t) && !/u\$s|us\$|usd|d[oó]lar/i.test(t));
+  const dm = t.slice(m.index + m[0].length).match(/(\d{1,2})\/(\d{1,2})/);
+  return { amount: n, ars, dm: dm ? [Number(dm[1]), Number(dm[2])] : null };
+}
+const _tgSpendSeen = new Map();
+async function _tgSpendAnswer(c, chatId, raw, dmFromQuestion) {
+  const last = _tgSpendSeen.get(String(chatId)) || 0; if (Date.now() - last < 15000) return; _tgSpendSeen.set(String(chatId), Date.now());
+  const p = _tgParseSpend(raw);
+  if (!p) { await _tgAdminSend(c, chatId, '❓ No entendí el número. Respondé sólo con el monto en dólares, ej: <code>1200</code>'); return; }
+  const now = new Date(); let dayKey = _schedArtKey(new Date(now.getTime() - 86400000));
+  const dm = p.dm || dmFromQuestion;
+  if (dm) { let y = Number(dayKey.slice(0, 4)); let k = `${y}-${String(dm[1]).padStart(2, '0')}-${String(dm[0]).padStart(2, '0')}`; if (k > _schedArtKey(now)) k = `${y - 1}${k.slice(4)}`; if (/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(k)) dayKey = k; }
+  try { // ya cargado desde el panel (Datos IA) para ese día ⇒ no se duplica
+    const arr = (await getConfig('adSpend', [])) || [];
+    if (arr.some((e) => e && e.source !== 'telegram' && !e.campaign && e.from <= dayKey && e.to >= dayKey)) { await _tgAdminSend(c, chatId, `⚠️ El ${dayKey.slice(8, 10)}/${dayKey.slice(5, 7)} ya tiene gasto cargado desde el panel (Datos IA). No lo guardé para no sumarlo dos veces: corregilo ahí.`); return; }
+  } catch (_) {}
+  const rate = await _tgUsdRate();
+  if (!p.ars && !rate) { await _tgAdminSend(c, chatId, '⚠️ No tengo la cotización del dólar: cargala en el panel (Datos IA → cotización USDT) y volvé a mandar el número.'); return; }
+  const usdAmt = p.ars ? (rate ? p.amount / rate : 0) : p.amount; const arsAmt = Math.round(p.ars ? p.amount : p.amount * rate);
+  if (!p.ars && (usdAmt < 1 || usdAmt > 100000)) { await _tgAdminSend(c, chatId, '❓ Ese monto no parece en dólares (entre 1 y 100.000). Si es en pesos, escribí por ejemplo <code>1500000 pesos</code>.'); return; }
+  const entry = { id: uuidv4(), from: dayKey, to: dayKey, campaign: '', amount: arsAmt, note: (p.ars ? 'Telegram: ' : `Telegram: US$${Math.round(usdAmt).toLocaleString('es-AR')} × ${rate} = `) + '$' + arsAmt.toLocaleString('es-AR'), source: 'telegram', createdAt: new Date().toISOString(), createdBy: 'telegram' };
+  await Config.collection.updateOne({ key: 'adspend' }, { $pull: { value: { source: 'telegram', from: dayKey } } }); // un valor por día: el nuevo reemplaza al anterior
+  await Config.collection.updateOne({ key: 'adspend' }, { $push: { value: { $each: [entry], $slice: -500 } }, $set: { updatedAt: new Date(), updatedBy: 'telegram' } }, { upsert: true });
+  try { Config._cache && Config._cache.clear(); } catch (_) {}
+  const lbl = dayKey.slice(8, 10) + '/' + dayKey.slice(5, 7);
+  await _tgAdminSend(c, chatId, `✅ Guardado: <b>US$${Math.round(usdAmt).toLocaleString('es-AR')}</b> (≈ $${arsAmt.toLocaleString('es-AR')}${rate ? ' a $' + rate.toLocaleString('es-AR') : ''}) para el <b>${lbl}</b>. Armo el análisis…`);
+  // Análisis del DÍA cargado + 7 días que terminan ese día + el mes de ese día (una vez por respuesta; sólo desde un grupo aprobado).
+  const D = 86400000; const d0 = new Date(dayKey + 'T00:00:00-03:00'); const d1 = new Date(d0.getTime() + D); const m0 = new Date(dayKey.slice(0, 7) + '-01T00:00:00-03:00');
+  const [mDay, mWeek, mWeekPrev, mMonth, fDay, fWeek, fWeekPrev, fMonth] = await Promise.all([_bizMoney(d0, d1), _bizMoney(new Date(d1.getTime() - 7 * D), d1), _bizMoney(new Date(d1.getTime() - 14 * D), new Date(d1.getTime() - 7 * D)), _bizMoney(m0, d1),
+    _bizFirstDeps(d0, d1), _bizFirstDeps(new Date(d1.getTime() - 7 * D), d1), _bizFirstDeps(new Date(d1.getTime() - 14 * D), new Date(d1.getTime() - 7 * D)), _bizFirstDeps(m0, d1)]);
+  Object.assign(mDay, { firstDeposits: fDay }); Object.assign(mWeek, { firstDeposits: fWeek }); Object.assign(mWeekPrev, { firstDeposits: fWeekPrev }); Object.assign(mMonth, { firstDeposits: fMonth });
+  const sp = { yesterday: await _tgSpendRange(d0, d0, rate), week: await _tgSpendRange(new Date(d1.getTime() - 7 * D), d0, rate), weekPrev: await _tgSpendRange(new Date(d1.getTime() - 14 * D), new Date(d1.getTime() - 7 * D - 1), rate), month: await _tgSpendRange(m0, d0, rate) };
+  const isY = dayKey === _schedArtKey(new Date(now.getTime() - D));
+  await _tgAdminSend(c, chatId, tgAdmin.spendReport({ at: now, yesterday: mDay, week: mWeek, weekPrev: mWeekPrev, month: mMonth, spend: sp }, lbl, isY ? 'AYER' : 'EL DÍA'), tgAdmin.menuMarkup());
+}
 async function _tgAdminSend(c, chatId, text, markup) {
   return tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: markup || undefined });
 }
@@ -30989,6 +31113,13 @@ async function _tgAdminReportsTick() {
     const text = k === 'daily' ? tgAdmin.dailyReport(snap) : k === 'monthly' ? tgAdmin.monthlyReport(snap) : tgAdmin.render('weekly', snap).text;
     for (const ch of c.adminChats) { const r = await _tgAdminSend(c, ch.id, text, tgAdmin.menuMarkup()); if (!r.ok) logger.warn(`[telegram reportes] ${k} a ${ch.id}: ${r.error}`); }
   }
+  // #1056 (owner): "que pregunte cuánto gastaste ayer". A las 10 h, si ayer no tiene gasto cargado (por Telegram o por Datos IA).
+  if (c.adminSpendAsk !== false && h >= 10 && h < 22 && c.adminLastSpendAsk !== dk) {
+    await _tgSet({ adminLastSpendAsk: dk });
+    const yk = _schedArtKey(new Date(now.getTime() - 86400000)); const yd = new Date(yk + 'T12:00:00-03:00');
+    const sb = await _diaSpendByDay(yd, yd).catch(() => ({ total: 0 }));
+    if (!(sb.total > 0)) for (const ch of c.adminChats) await tgChannel.call(c.token, 'sendMessage', { chat_id: ch.id, text: tgAdmin.askSpendText(yk.slice(8, 10) + '/' + yk.slice(5, 7)), parse_mode: 'HTML', reply_markup: { force_reply: true, input_field_placeholder: 'Ej: 1200' } });
+  }
 }
 setTimeout(() => {
   setInterval(() => { _tgAdminSnapTick(false).catch((e) => logger.warn('[telegram reportes] ' + e.message)); }, 15 * 60000);
@@ -31001,6 +31132,15 @@ async function _tgAdminOnMessage(c, msg) {
     const old = c.adminChats.find((x) => String(x.id) === String(chat.id)); await _tgArrPull('adminChats', chat.id); await _tgArrPush('adminChats', Object.assign({}, old, { id: msg.migrate_to_chat_id }), 5); return true;
   }
   if (msg.migrate_to_chat_id && (c.adminPending || []).some((x) => String(x.id) === String(chat.id))) { const old = c.adminPending.find((x) => String(x.id) === String(chat.id)); await _tgArrPull('adminPending', chat.id); await _tgArrPush('adminPending', Object.assign({}, old, { id: msg.migrate_to_chat_id }), 10); return true; }
+  if (_tgAdminLinked(c, chat.id)) { // #1056: respuesta a "¿cuánto gastaste…?" o /gasto 1200 [dd/mm]
+    const rt = msg.reply_to_message; const q = rt && rt.from && rt.from.is_bot ? /gastaste en publicidad el (\d{1,2})\/(\d{1,2})/.exec(String(rt.text || '')) : null;
+    const cmd = /^\/gasto(?:@[A-Za-z0-9_]+)?(?:\s+(.+))?$/i.exec(String(msg.text || '').trim());
+    if (q || cmd) {
+      if (cmd && !cmd[1]) { const yk = _schedArtKey(new Date(Date.now() - 86400000)); await tgChannel.call(c.token, 'sendMessage', { chat_id: chat.id, text: tgAdmin.askSpendText(yk.slice(8, 10) + '/' + yk.slice(5, 7)), parse_mode: 'HTML', reply_markup: { force_reply: true, input_field_placeholder: 'Ej: 1200' } }); return true; }
+      try { await _tgSpendAnswer(c, chat.id, q ? String(msg.text || '') : cmd[1], q ? [Number(q[1]), Number(q[2])] : null); } catch (e) { logger.warn('[telegram pauta] ' + e.message); await _tgAdminSend(c, chat.id, '⚠️ No pude armar el análisis ahora; el gasto quedó guardado si viste el ✅.'); }
+      return true;
+    }
+  }
   const t = String(msg.text || '').trim(); const m = t.match(/^\/(vincular|menu|panel|reportes)(?:@[A-Za-z0-9_]+)?(?:\s+([A-Za-z0-9]{6,12}))?$/i);
   if (!m) return false;
   if (m[1].toLowerCase() === 'vincular') {

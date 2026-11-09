@@ -28,7 +28,7 @@ const MENU = [
   ['alerts', '🚨 Alertas'], ['weekly', '📋 Análisis semanal'],
   ['payouts', '🛡️ Retiros frenados'], ['sorteo', '🎟️ Sorteo'],
   ['ai', '🤖 IA de soporte'], ['menus', '📱 Uso de la app'],
-  ['info', 'ℹ️ Info: qué es cada cosa']
+  ['spend', '💸 Pauta y ganancia'], ['info', 'ℹ️ Info: qué es cada cosa']
 ];
 const KEYS = MENU.map(([k]) => k);
 function menuMarkup() {
@@ -39,7 +39,7 @@ function backMarkup(key) {
   return { inline_keyboard: [[{ text: '🔄 Actualizar', callback_data: 'ad:' + key }, { text: '⬅️ Menú', callback_data: 'ad:menu' }]] };
 }
 function header(title, at) {
-  const t = at ? new Date(at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }) : '';
+  const t = at ? new Date(at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' }) : '';
   return `🔴 <b>PICA ROJA · ${esc(title)}</b>${t ? `\n<i>Datos de las ${t}</i>` : ''}\n${LINE}`;
 }
 // Bloque de plata de un período ({ deposits, depositCount, depositors, withdrawals, withdrawalCount, gifts, result, giftRatio, ticket, registered }).
@@ -56,16 +56,58 @@ function moneyBlock(m, prev, label) {
   L.push(`🆕 Registros nuevos: ${num(m.registered)}${chg(m.registered, p.registered)}`);
   return L.join('\n');
 }
+// #1056 (owner: "gasto aprox. 1.000-1.500 USD por día; que pregunte cuánto gastaste ayer y de ahí un análisis de cómo venís"). sp = { usd, ars, rate, days, daysWith }.
+const usd = (n) => (Number(n) < 0 ? '−US$' : 'US$') + Math.round(Math.abs(Number(n) || 0)).toLocaleString('es-AR');
+function spendBlock(m, sp, label) {
+  if (!m) return '<i>Sin datos todavía.</i>';
+  const L = []; if (label) L.push(`<b>${esc(label)}</b>`);
+  if (!sp || !(sp.ars > 0)) { L.push('💸 Pauta: <i>sin cargar</i> (respondé la pregunta de las 10 h o escribí /gasto 1200)'); }
+  else {
+    L.push(`💸 Pauta: <b>${usd(sp.usd)}</b> (${money(sp.ars)})` + (sp.days > 1 ? ` · ${usd(sp.usd / sp.days)}/día` : '') + (sp.days > 1 && sp.daysWith < sp.days ? ` <i>(cargado ${sp.daysWith} de ${sp.days} días)</i>` : ''));
+  }
+  L.push(`🆕 Registros: ${num(m.registered)} · 1ª carga: ${num(m.firstDeposits)}` + (m.registered ? ` (${pc(m.firstDeposits / m.registered)})` : ''));
+  if (sp && sp.ars > 0) {
+    if (m.registered) L.push(`🎯 Costo por registro: ${usd(sp.usd / m.registered)}`);
+    L.push(`🎯 Costo por cliente que cargó: <b>${m.firstDeposits ? usd(sp.usd / m.firstDeposits) : '—'}</b>`);
+  }
+  L.push(`💰 Cargas: ${money(m.deposits)} · retiros: ${money(m.withdrawals)}`);
+  L.push(`📈 Resultado (cargas − retiros): <b>${money(m.result)}</b>`);
+  if (sp && sp.ars > 0) {
+    const net = (Number(m.result) || 0) - sp.ars;
+    L.push(`🧮 Resultado − pauta: <b>${money(net)}</b>` + (sp.rate ? ` (${usd(net / sp.rate)})` : ''));
+    L.push(`↩️ Por cada US$1 de pauta volvieron ${sp.rate ? 'US$' + ((Number(m.result) || 0) / sp.rate / Math.max(1e-9, sp.usd)).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'} de resultado`);
+    L.push(net >= 0 ? '🟢 La pauta se está pagando sola.' : '🔴 Todavía no recupera lo gastado en pauta.');
+  }
+  return L.join('\n');
+}
+function spendVerdict(s) {
+  const sp = s.spend || {}; const w = s.week || {}, wp = s.weekPrev || {}; const L = [];
+  const cpa = (m, x) => (x && x.usd > 0 && m && m.firstDeposits ? x.usd / m.firstDeposits : null);
+  const c1 = cpa(w, sp.week), c0 = cpa(wp, sp.weekPrev);
+  if (c1 != null && c0 != null) L.push(c1 <= c0 ? `🟢 El costo por cliente nuevo bajó: ${usd(c1)} (antes ${usd(c0)}).` : `🟠 El costo por cliente nuevo subió: ${usd(c1)} (antes ${usd(c0)}).`);
+  if (w.registered && w.firstDeposits != null) { const conv = w.firstDeposits / w.registered; L.push(conv < 0.25 ? `🟠 Sólo ${pc(conv)} de los registros carga: el problema está después del registro (bienvenida, soporte, carga).` : `🟢 ${pc(conv)} de los registros carga.`); }
+  if (sp.week && sp.week.ars > 0) { const net = (Number(w.result) || 0) - sp.week.ars; L.push(net >= 0 ? '🟢 La semana deja ganancia después de la pauta.' : '🔴 La semana todavía no cubre la pauta: mirá regalos y conversión.'); }
+  return L.length ? L.join('\n') : '<i>Cargá el gasto de algunos días para ver cómo venís.</i>';
+}
+function spendReport(s, dayLabel, dayTitle) {
+  s = s || {}; const sp = s.spend || {};
+  return cut([header('PAUTA Y GANANCIA', s.at), spendBlock(s.yesterday, sp.yesterday, (dayTitle || 'AYER') + (dayLabel ? ' (' + dayLabel + ')' : '')), LINE,
+    spendBlock(s.week, sp.week, 'ÚLTIMOS 7 DÍAS'), LINE, spendBlock(s.month, sp.month, 'MES EN CURSO'), LINE, '🧭 <b>CÓMO VENÍS</b>', spendVerdict(s)].join('\n'));
+}
+function askSpendText(dayLabel) {
+  return `💸 <b>¿Cuánto gastaste en publicidad el ${esc(dayLabel)}?</b>\nRespondé a ESTE mensaje con el número en dólares (ej: <code>1200</code>).\n<i>También podés escribir /gasto 1200 cuando quieras (o /gasto 1200 08/11 para otro día).</i>`;
+}
 function render(key, snap) {
   const s = snap || {}; const at = s.at;
   if (key === 'menu') return { text: `${header('PANEL DE CONTROL', at)}\nElegí qué querés ver 👇\n<i>Los números se recalculan cada 15 min (retención, embudo, regalos y campañas cada hora).</i>`, markup: menuMarkup() };
   let text;
-  if (key === 'info') text = [header('CÓMO USAR ESTE GRUPO', at), // #1055 (owner): botonera, info y reportes del negocio en el grupo privado
+  if (key === 'spend') text = spendReport(s).replace(/^.*\n.*\n━+\n/, header('PAUTA Y GANANCIA', at) + '\n');
+  else if (key === 'info') text = [header('CÓMO USAR ESTE GRUPO', at), // #1055 (owner): botonera, info y reportes del negocio en el grupo privado
     '📊 <b>Hoy / 📆 Ayer / 🗓️ 7 días / 📅 Mes</b>: depósitos, retiros, regalos, resultado (plata que queda), clientes que cargaron y registros, comparado con el período anterior.',
     '🔁 <b>Retención</b>: cuántos de los que cargaron vuelven a cargar.', '🪜 <b>Embudo</b>: registro → 1ª carga → 2ª carga, y dónde se pierde más gente.',
     '🎁 <b>Regalos</b>: cuánto cuesta cada regalo y si conviene.', '📣 <b>Campañas</b>: clientes y plata que trae cada publicista.',
     '🚨 <b>Alertas</b>: lo que hay que mirar ya.', '📋 <b>Análisis semanal</b>: el resumen de la semana con lo que conviene cambiar.',
-    '🛡️ <b>Retiros frenados</b>: los que esperan revisión.', '🎟️ <b>Sorteo</b> · 🤖 <b>IA de soporte</b> · 📱 <b>Uso de la app</b>.', LINE,
+    '🛡️ <b>Retiros frenados</b>: los que esperan revisión.', '💸 <b>Pauta y ganancia</b>: lo gastado en publicidad contra lo que entró (costo por cliente, resultado − pauta). Todos los días a las 10 h te pregunto cuánto gastaste ayer.', '🎟️ <b>Sorteo</b> · 🤖 <b>IA de soporte</b> · 📱 <b>Uso de la app</b>.', LINE,
     '📬 <b>REPORTES AUTOMÁTICOS</b>', '▸ Todos los días a las 9 h: cómo cerró ayer', '▸ Los lunes: la semana completa', '▸ El día 1: el mes completo', LINE,
     '<i>Escribí /menu para volver a ver la botonera. Este grupo es PRIVADO: no agregues a nadie que no deba ver los números.</i>'].join('\n');
   else if (key === 'today') text = `${header('HOY', at)}\n${moneyBlock(s.today, s.todayPrev, 'Comparado con ayer a la misma hora')}`;
@@ -158,4 +200,4 @@ function newPairCode() {
   for (let i = 0; i < 8; i++) s += A[b[i] % A.length];
   return s;
 }
-module.exports = { MENU, KEYS, menuMarkup, backMarkup, render, dailyReport, monthlyReport, moneyBlock, newPairCode, money, pc };
+module.exports = { spendBlock, spendReport, askSpendText, MENU, KEYS, menuMarkup, backMarkup, render, dailyReport, monthlyReport, moneyBlock, newPairCode, money, pc };

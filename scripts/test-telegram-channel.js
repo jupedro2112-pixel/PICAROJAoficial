@@ -53,7 +53,7 @@ caso('#1055 Código de Telegram: se canjea en Perfil → Canjear código; agotad
   const o = { code: 'ROJAK7M2Q', amount: 5000, maxClaims: 10, rolloverX: 5 };
   const c = tg.dropCaption(o); assert.ok(/ROJAK7M2Q/.test(c) && /Canjear código/.test(c) && /ya cargaron/.test(c) && c.length <= 1024);
   const d = tg.dropDoneCaption({ code: 'ROJAK7M2Q', amount: 5000, full: true, winners: ['juanperez22', 'ana'] });
-  assert.ok(/SE AGOTÓ/.test(d) && !/ju\*\*\*22|juanperez22/.test(d));
+  assert.ok(/BONO COMPLETADO/.test(d) && !/ju\*\*\*22|juanperez22/.test(d) && /Entrá desde tu app/.test(d));
 });
 caso('#1055 Server: qué historias van (las del admin + partidos / bono / servicio), sin links, canje desde el Perfil', () => {
   const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
@@ -69,6 +69,17 @@ caso('#1055 Bot por privado: 6 botones, sin links, ranking con usuarios tapados'
   for (const [k] of tg.MENU) { const m = tg.menuReply(k, S3, { drop: { code: 'ROJAX', amount: 5000, maxClaims: 10, left: 3 } }); assert.ok(m.text && m.text.length < 4096 && !m.button, k); }
   const r = tg.menuReply('rank', S3, {}).text; assert.ok(/ju\*\*\*22/.test(r) && !/juanperez22/.test(r));
   assert.ok(/Canjear código/.test(tg.menuReply('code', S, { drop: { code: 'ROJAX', amount: 5000, maxClaims: 10, left: 3 } }).text));
+});
+caso('#1056 Reembolsos, premio grande (usuario tapado) y tope diario: 1 foto y 2 textos, sin links', () => {
+  for (const [k, l] of [['daily', false], ['weekly', false], ['monthly', true]]) { const t = tg.refundCaption(k, 10, l); assert.ok(/10%/.test(t) && /Reembolsos/.test(t) && /Entrá desde tu app/.test(t) && !/https?:/.test(t) && t.length <= 1024, k); }
+  assert.ok(/ÚLTIMO DÍA/.test(tg.refundCaption('monthly', 5, true)));
+  const w = tg.bigWinCaption('juanperez22', 1500000); assert.ok(/ju\*\*\*22/.test(w) && !/juanperez22/.test(w) && /\$1\.500\.000/.test(w) && /FELICITACIONES/.test(w));
+  const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/const TG_DAY_MAX = \{ photo: 1, text: 2 \}/.test(S2) && /'value\.budget\.day': dk, \[f\]: \{ \$lt: max \}/.test(S2), 'tope atómico');
+  for (const re of [/if \(!force && !\(await _tgBudget\(slot\)\)\)/, /_tgQuiet\(c\) \|\| !\(await _tgBudget\('text'\)\)\) return; \/\/ #1056/, /if \(!\(await _tgBudget\('text'\)\)\) return; \/\/ #1056\n  await _tgSorteoPost/, /bigWinSince: pp\.paidAt \}\);\n  if \(!\(await _tgBudget\('text'\)\)\) return;/]) assert.ok(re.test(S2), String(re));
+  assert.ok(/editMessageCaption/.test(S2) && /✅ BONO COMPLETADO/.test(S2), 'completado edita el posteo');
+  assert.ok(/era de otro día/.test(S2) && /x\.autoKind === 'deporte' \? 0/.test(S2), 'partidos de hoy primero, nada viejo');
+  assert.ok(/everyDays: 7, hours: 48 \}/.test(S2), 'código semanal');
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);
