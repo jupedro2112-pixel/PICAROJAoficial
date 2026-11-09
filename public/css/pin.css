@@ -3288,3 +3288,13 @@ body:not(.sp-classic) #ctSupport { display: none !important; }
 
 /* #1064 (owner: "que quede en línea recta, que se vea la página de Girox"): se REVIRTIERON #1058 (servicios en varias filas, cinta en 2 líneas, tarjeta
    más alta) y #1060 (centrado con fondo). La burbuja vuelve a como estaba: fila de servicios en UNA línea que se desliza y la tarjeta chica. */
+/* #1067 (owner: "que quede lo menos molesto y centrado posible"; antes "que se vea más chiquito" y "que se vea la página de Girox"): la burbuja
+   queda CENTRADA a lo ancho, más CHICA (340 px × hasta 480 px) y abajo, arriba de la burbuja verde; el juego se sigue viendo alrededor (sin fondo
+   que tape, eso fue #1060 y se descartó). Fila de servicios en una línea, cinta y todo lo demás como estaba. */
+#casinoOverlay > #supportPanel.sp-in-casino { left: 0 !important; right: 0 !important; margin: 0 auto !important; width: min(340px, calc(100vw - 24px)) !important;
+  height: min(480px, calc(100vh - 190px - var(--sat, 0px))) !important; }
+@supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: min(480px, calc(100dvh - 190px - var(--sat, 0px))) !important; } }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar { padding: 6px 10px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar-avatar { width: 30px !important; height: 30px !important; flex: 0 0 30px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-acts button { min-height: 32px !important; font-size: 11px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-bk-row { padding: 2px 8px !important; font-size: 11px !important; }

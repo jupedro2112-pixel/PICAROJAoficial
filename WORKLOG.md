@@ -8,6 +8,10 @@
 
 ## Sesión 2026-11-09
 
+### 1067. Burbuja de Girox centrada y chica, con el juego visible (2026-11-09)
+- **Owner:** "que quede lo menos molesto y centrado posible". La tarjeta del chat queda centrada a lo ancho, 340 px × hasta 480 px, abajo (arriba de la
+  burbuja verde), sin fondo que tape el juego; cabecera y botones más compactos. Fila de servicios en una línea, como estaba. App v707.
+
 ### 1066. Burbuja como estaba (revierte #1065) (2026-11-09)
 - **Owner:** "hacelo como estaba, por favor". pin.css del chat igual al de antes de #1058 (= la captura de producción). App v706.
 
