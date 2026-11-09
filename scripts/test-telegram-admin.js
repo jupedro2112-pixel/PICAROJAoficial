@@ -52,10 +52,24 @@ caso('#1047 Sólo con el token: canal detectado solo (my_chat_member), grupo PEN
   const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/allowed_updates: \['callback_query', 'message', 'my_chat_member'\]/.test(S));
   assert.ok(/if \(st === 'administrator' && !c\.channel\) \{/.test(S), 'canal sólo si no hay uno cargado');
-  assert.ok(/adminPending: pend\.concat/.test(S) && !/adminChats: pend/.test(S), 'un grupo agregado NUNCA queda vinculado sin aprobar');
+  const mcm = S.slice(S.indexOf('async function _tgOnMyChatMember('), S.indexOf("// Botones 'ad:*' del grupo"));
+  assert.ok(/_tgArrPush\('adminPending'/.test(mcm) && !/_tgArrPush\('adminChats'/.test(mcm), 'un grupo agregado NUNCA queda vinculado sin aprobar');
+  assert.ok(!/_tgSet\(\{[^}]*\badmin(Chats|Pending):/.test(S) && !/\bset\.admin(Chats|Pending) =/.test(S), 'listas de grupos sólo con $pull/$push (nunca leer→mezclar→guardar)');
+  assert.ok(/const fresh = c\.tokenSavedAt/.test(S), 'el canal se conecta solo sólo en la 1ª hora del token');
+  assert.ok(/url: TG_WEBHOOK_BASE \+ '\/api\/telegram\/webhook'/.test(S) && /skip: \(req\) => req\.originalUrl === '\/api\/telegram\/webhook'/.test(S));
+  assert.ok(/if \(typeof b\.channel === 'string' && \(b\.channel\.trim\(\) \|\| b\.clearChannel === true\)\)/.test(S), 'guardar sin canal no lo desconecta');
+  assert.ok(/getConfig\('telegramPanelStats', null\)\) \|\| \{\}; \/\/ revisión: nunca calcula en el webhook/.test(S));
   assert.ok(/app\.post\('\/api\/admin\/telegram\/admin-approve', authMiddleware, adminMiddleware, async \(req, res\) => \{ \/\/ #1047\n  if \(req\.user\.role !== 'admin'\)/.test(S));
   assert.ok(/const c = await _tgCfg\(\); if \(c\.token\) await _tgSetWebhook\(c\);/.test(S));
   assert.ok(/if \(u\.my_chat_member\) \{ await _tgOnMyChatMember\(c, u\.my_chat_member\); return; \}/.test(S));
+});
+caso('#1048 Landing: el formulario lee/guarda el bono de 1ª carga (50% por defecto al crear) en la misma regla por campaña', () => {
+  const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
+  const H = fs.readFileSync(path.join(__dirname, '..', 'public', 'adminprivado2026', 'index.html'), 'utf8');
+  for (const id of ['campaignFormWelcomePct', 'campaignFormWelcomeCap', 'campaignFormWelcomeRest']) assert.ok(H.includes('id="' + id + '"'), id);
+  assert.ok(/P\.value = code \? '' : '50'/.test(A) && /_campaignWelcomeSave\(mode === 'create' \? code/.test(A) && /\/api\/admin\/publisher-welcome/.test(A));
+  const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/const fp0 = await getFirstDepositBonusPct\(user\);/.test(S), 'la carga (manual y automática) usa el % del publicista del cliente');
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

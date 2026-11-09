@@ -102,7 +102,7 @@ function bgDefs() {
   return '<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f1923"/><stop offset="1" stop-color="#1a2c38"/></linearGradient>' +
     '<linearGradient id="rd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e60023"/><stop offset="1" stop-color="#ff4d5e"/></linearGradient></defs>';
 }
-function brand(x, y) { return `<rect x="${x}" y="${y - 30}" width="14" height="40" rx="4" fill="url(#rd)"/><text x="${x + 28}" y="${y}" ${FONT} font-size="34" font-weight="bold" fill="#ffffff" letter-spacing="3">PICA ROJA</text>`; }
+function brand(x, y) { return `<rect x="${x}" y="${y - 30}" width="14" height="40" rx="4" fill="#e60023"/><text x="${x + 28}" y="${y}" ${FONT} font-size="34" font-weight="bold" fill="#ffffff" letter-spacing="3">PICA ROJA</text>`; }
 // #1044-c (owner: "arriba la foto de PICA ROJA con el logo en el medio, centrado"): logo (la pica dorada, `logo` = PNG en base64) centrado arriba con el
 // nombre debajo y una línea roja fina. Sin logo (no se pudo leer el archivo) queda sólo el nombre centrado.
 function header(W, y, size, logo, sub) {
@@ -114,7 +114,7 @@ function header(W, y, size, logo, sub) {
   const ty = y + (logo ? size + 52 : 40);
   return img + `<text x="${W / 2}" y="${ty}" text-anchor="middle" ${FONT} font-size="${Math.round(size * 0.3)}" font-weight="bold" fill="#ffffff" letter-spacing="6">PICA ROJA</text>` +
     (sub ? `<text x="${W / 2}" y="${ty + Math.round(size * 0.26)}" text-anchor="middle" ${FONT} font-size="${Math.round(size * 0.17)}" fill="#b1bad3" letter-spacing="4">${xesc(sub)}</text>` : '') +
-    `<rect x="${W / 2 - 60}" y="${ty + (sub ? Math.round(size * 0.26) + 24 : 22)}" width="120" height="6" rx="3" fill="url(#rd)"/>`;
+    `<rect x="${W / 2 - 60}" y="${ty + (sub ? Math.round(size * 0.26) + 24 : 22)}" width="120" height="6" rx="3" fill="#e60023"/>`;
 }
 const SVG_OPEN = (W, H) => `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
 /** Foto cuadrada de una historia SIN foto propia (sólo texto): titular grande, texto y "ENTRÁ AHORA". */
@@ -126,10 +126,10 @@ function storyCardSvg(story, logo) {
   for (const l of b) { body += `<text x="${W / 2}" y="${y}" text-anchor="middle" ${FONT} font-size="40" fill="#b1bad3">${xesc(l)}</text>`; y += 54; }
   const hasBonus = Number(story.bonusPct) > 0;
   const pills = hasBonus
-    ? `<rect x="110" y="880" width="410" height="96" rx="48" fill="url(#rd)"/><text x="315" y="943" text-anchor="middle" ${FONT} font-size="44" font-weight="bold" fill="#fff">BONO +${Math.round(story.bonusPct)}%</text>` +
+    ? `<rect x="110" y="880" width="410" height="96" rx="48" fill="#e60023"/><text x="315" y="943" text-anchor="middle" ${FONT} font-size="44" font-weight="bold" fill="#fff">BONO +${Math.round(story.bonusPct)}%</text>` +
       `<rect x="560" y="880" width="410" height="96" rx="48" fill="none" stroke="#ffffff" stroke-width="3"/><text x="765" y="943" text-anchor="middle" ${FONT} font-size="38" font-weight="bold" fill="#fff" letter-spacing="2">ENTRÁ AHORA</text>`
-    : `<rect x="315" y="880" width="450" height="96" rx="48" fill="url(#rd)"/><text x="540" y="943" text-anchor="middle" ${FONT} font-size="40" font-weight="bold" fill="#fff" letter-spacing="2">ENTRÁ AHORA</text>`;
-  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="url(#bg)"/>` +
+    : `<rect x="315" y="880" width="450" height="96" rx="48" fill="#e60023"/><text x="540" y="943" text-anchor="middle" ${FONT} font-size="40" font-weight="bold" fill="#fff" letter-spacing="2">ENTRÁ AHORA</text>`;
+  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="#14232e"/>` +
     `<circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/><circle cx="60" cy="1040" r="220" fill="#e60023" opacity="0.06"/>` +
     header(W, 50, 170, logo) + body + pills +
     `<text x="${W / 2}" y="1040" text-anchor="middle" ${FONT} font-size="26" fill="#55657e" letter-spacing="3">PICAROJA.COM</text></svg>`;
@@ -137,30 +137,30 @@ function storyCardSvg(story, logo) {
 /** Foto del PANEL DEL MES: tres números grandes (pagado, regalado, premio más grande) + sorteo. */
 function panelSvg(s, logo) {
   const W = 1280, H = 720; const mes = (MONTHS[s.monthIdx] || '').toUpperCase();
-  const tile = (x, label, value, sub) => `<rect x="${x}" y="300" width="360" height="230" rx="24" fill="#213743"/><rect x="${x}" y="300" width="360" height="8" rx="4" fill="url(#rd)"/>` +
+  const tile = (x, label, value, sub) => `<rect x="${x}" y="300" width="360" height="230" rx="24" fill="#213743"/><rect x="${x}" y="300" width="360" height="8" rx="4" fill="#e60023"/>` +
     `<text x="${x + 180}" y="362" text-anchor="middle" ${FONT} font-size="24" fill="#b1bad3" letter-spacing="2">${xesc(label)}</text>` +
     `<text x="${x + 180}" y="442" text-anchor="middle" ${FONT} font-size="${value.length > 10 ? 46 : value.length > 8 ? 54 : 60}" font-weight="bold" fill="#ffffff">${xesc(value)}</text>` +
     `<text x="${x + 180}" y="490" text-anchor="middle" ${FONT} font-size="22" fill="#55657e">${xesc(sub || '')}</text>`;
   const so = s.sorteo && (s.sorteo.prizes || [])[0] ? noEmoji(`SORTEO: ${s.sorteo.prizes[0].name}${s.sorteo.prizes[1] ? ' + ' + s.sorteo.prizes[1].name : ''}`) : 'CARGAS Y RETIROS AUTOMÁTICOS LAS 24 H';
-  return SVG_OPEN(W, H) + bgDefs() + `<rect width="${W}" height="${H}" fill="url(#bg)"/>` +
+  return SVG_OPEN(W, H) + bgDefs() + `<rect width="${W}" height="${H}" fill="#14232e"/>` +
     `<circle cx="1200" cy="60" r="240" fill="#e60023" opacity="0.08"/><circle cx="80" cy="700" r="200" fill="#e60023" opacity="0.06"/>` +
     header(W, 24, 120, logo, `${mes} ${s.year}`) +
     tile(80, 'PREMIOS PAGADOS', money(s.paid && s.paid.sum), s.paid && s.paid.count ? s.paid.count.toLocaleString('es-AR') + ' retiros' : '') +
     tile(460, 'REGALADO EN BONOS', money(s.gifted && s.gifted.sum), 'este mes') +
     tile(840, 'PREMIO MÁS GRANDE', s.top && s.top.amount > 0 ? money(s.top.amount) : '—', s.top && s.top.username ? maskUser(s.top.username) : '') +
-    `<rect x="80" y="580" width="1120" height="96" rx="48" fill="url(#rd)"/><text x="640" y="641" text-anchor="middle" ${FONT} font-size="32" font-weight="bold" fill="#fff" letter-spacing="1">${xesc(cut(so.toUpperCase(), 60))}</text></svg>`;
+    `<rect x="80" y="580" width="1120" height="96" rx="48" fill="#e60023"/><text x="640" y="641" text-anchor="middle" ${FONT} font-size="32" font-weight="bold" fill="#fff" letter-spacing="1">${xesc(cut(so.toUpperCase(), 60))}</text></svg>`;
 }
 // ── #1044-d CÓDIGO EXCLUSIVO DE TELEGRAM (owner: "un bono en Telegram: $5.000 a 10 personas cada 15 días, que entren a la app a reclamarlo, un código
 // al azar que se agote y cuando se agote avisar que se terminó") y POSTEO DEL SORTEO con los pasos para anotarse. ──
 function dropSvg(o, logo) {
   const W = 1080;
-  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="url(#bg)"/><circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/><circle cx="60" cy="1040" r="220" fill="#e60023" opacity="0.06"/>` +
+  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="#14232e"/><circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/><circle cx="60" cy="1040" r="220" fill="#e60023" opacity="0.06"/>` +
     header(W, 50, 160, logo, 'CÓDIGO EXCLUSIVO TELEGRAM') +
     `<text x="${W / 2}" y="470" text-anchor="middle" ${FONT} font-size="120" font-weight="bold" fill="#ffffff">${xesc(money(o.amount))}</text>` +
     `<text x="${W / 2}" y="540" text-anchor="middle" ${FONT} font-size="40" fill="#b1bad3">PARA LOS PRIMEROS ${Number(o.maxClaims) || 0}</text>` +
     `<rect x="190" y="600" width="700" height="150" rx="28" fill="#213743" stroke="#d4a64a" stroke-width="3" stroke-dasharray="14 10"/>` +
     `<text x="${W / 2}" y="700" text-anchor="middle" ${FONT} font-size="78" font-weight="bold" fill="#ffffff" letter-spacing="8">${xesc(o.code)}</text>` +
-    `<rect x="240" y="820" width="600" height="100" rx="50" fill="url(#rd)"/><text x="${W / 2}" y="885" text-anchor="middle" ${FONT} font-size="42" font-weight="bold" fill="#fff" letter-spacing="2">RECLAMALO EN LA APP</text>` +
+    `<rect x="240" y="820" width="600" height="100" rx="50" fill="#e60023"/><text x="${W / 2}" y="885" text-anchor="middle" ${FONT} font-size="42" font-weight="bold" fill="#fff" letter-spacing="2">RECLAMALO EN LA APP</text>` +
     `<text x="${W / 2}" y="1010" text-anchor="middle" ${FONT} font-size="26" fill="#55657e" letter-spacing="3">PICAROJA.COM</text></svg>`;
 }
 function dropCaption(o) {
@@ -184,14 +184,14 @@ function sorteoSvg(so, logo) {
   const W = 1080; const pr = (so.prizes || []).slice(0, 3);
   let y = 420; let body = '';
   pr.forEach((p, i) => {
-    body += `<rect x="110" y="${y - 62}" width="860" height="104" rx="22" fill="#213743"/>` + (i === 0 ? `<rect x="110" y="${y - 62}" width="10" height="104" rx="5" fill="url(#rd)"/>` : '') +
+    body += `<rect x="110" y="${y - 62}" width="860" height="104" rx="22" fill="#213743"/>` + (i === 0 ? `<rect x="110" y="${y - 62}" width="10" height="104" rx="5" fill="#e60023"/>` : '') +
       `<text x="160" y="${y + 6}" ${FONT} font-size="44" font-weight="bold" fill="${i === 0 ? '#d4a64a' : '#b1bad3'}">${i + 1}°</text>` +
       `<text x="250" y="${y + 6}" ${FONT} font-size="${i === 0 ? 44 : 38}" font-weight="bold" fill="#ffffff">${xesc(cut(noEmoji(p.name + (p.value ? ' ' + p.value : '')), 30))}</text>`;
     y += 130;
   });
-  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="url(#bg)"/><circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/>` +
+  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="#14232e"/><circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/>` +
     header(W, 40, 150, logo, noEmoji(String(so.title || 'SORTEO').toUpperCase())) + body +
-    `<rect x="240" y="${Math.max(y + 10, 820)}" width="600" height="100" rx="50" fill="url(#rd)"/><text x="${W / 2}" y="${Math.max(y + 10, 820) + 65}" text-anchor="middle" ${FONT} font-size="42" font-weight="bold" fill="#fff" letter-spacing="2">ANOTATE GRATIS</text>` +
+    `<rect x="240" y="${Math.max(y + 10, 820)}" width="600" height="100" rx="50" fill="#e60023"/><text x="${W / 2}" y="${Math.max(y + 10, 820) + 65}" text-anchor="middle" ${FONT} font-size="42" font-weight="bold" fill="#fff" letter-spacing="2">ANOTATE GRATIS</text>` +
     `<text x="${W / 2}" y="1030" text-anchor="middle" ${FONT} font-size="26" fill="#55657e" letter-spacing="3">PICAROJA.COM</text></svg>`;
 }
 function sorteoCaption(so) {
@@ -267,7 +267,7 @@ function panelButtons(appUrl, b, botUser) {
   if (botUser && /^[A-Za-z0-9_]{5,32}$/.test(botUser)) rows.push([{ text: '🤖 Abrir el menú del bot', url: 'https://t.me/' + botUser + '?start=menu' }]); // #1044-e
   const info = BTN_KEYS.filter((k) => b.items[k].on).map((k) => ({ text: b.items[k].label, callback_data: 'tg:' + k }));
   for (let i = 0; i < info.length; i += 2) rows.push(info.slice(i, i + 2));
-  for (const l of b.links) rows.push([{ text: l.label, url: l.url }]);
+  // #1044-e (owner: "si abre un link que sea a su app; si no, no pongamos link"): los links externos ya no se muestran.
   return { inline_keyboard: rows };
 }
 /** Ventanita de cada botón del panel (máx. 200 caracteres, texto plano). */

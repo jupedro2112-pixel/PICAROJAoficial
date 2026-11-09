@@ -8,6 +8,23 @@
 
 ## Sesión 2026-11-09
 
+### 1048. Bono de 1ª carga en el formulario de la LANDING + 2ª revisión completa (3 revisores) — panel v269 (2026-11-09)
+- **Owner:** "cuando se cree la landing que se pueda configurar el % de la primera carga, y si entran con esa landing que cargue automática con ese %".
+  Formulario de campaña: "% de bono / Hasta (carga $) / % sobre el resto" (al crear viene 50%). Guarda la MISMA regla de #1024 (`Config['publisherWelcome']`,
+  POST `/api/admin/publisher-welcome` después de crear/guardar la campaña). La carga manual y la automática del banco ya la usan (`resolveAutoBonus` ⇒
+  `getFirstDepositBonusPct(user)`); los que entran por landing no tienen `noWelcomeGifts`.
+- **#1047** Telegram con sólo el token: canal detectado por `my_chat_member` (sólo en la 1ª hora después de guardar el token; si no, queda para "✅ Usar ese canal"),
+  grupos de reportes PENDIENTES hasta "✅ Aprobar" en el panel (con miembros, fecha e id). 
+- **Revisión (plata / IA / Telegram):** plata e IA sin nada roto. Arreglado: tope único en el extra por instalar y su corrección, corrección no paga a cuentas
+  con marcas / en observación; un "Tengo otro problema" repetido = una nota cada 5 min; el cierre automático respeta un cierre manual posterior al pase.
+  Telegram: guardar sin canal ya no lo desconecta; webhook siempre al guardar el token, con URL fija (`PUBLIC_URL` o picaroja.com, no el link de los botones),
+  fuera del limitador general y sin perder eventos en cada deploy; el webhook nunca calcula (stats por el cron de cada hora aunque el panel esté apagado); 🔄 del
+  grupo sólo rearma la plata (con lock); si la foto del panel falla no crea otro panel (y el viejo se borra al reemplazarlo); fotos con colores lisos (MuPDF puede
+  no soportar degradados); grupos con $pull/$push atómicos; bot sacado del canal ⇒ se desconecta; el sorteo chequea la semana antes de calcular; el primer código
+  de $5.000 sale a los 2 días de conectar; sin botones con links externos en el canal (owner).
+- **Pendiente de decidir con el owner:** (1) arrastre de bonos #1040 entre el extra ×10 y regalos ×5 (el multiplicador del bono nuevo pisa al del viejo);
+  (2) la corrección del extra también completa a quien cobró con la regla vieja del % (owner pidió $5.000 siempre: se dejó así).
+
 ### 1046. GRUPO PRIVADO DE REPORTES en Telegram + botonera del bot + revisión completa — app v694, panel v266 (2026-11-09)
 - **Owner:** "un grupo privado para ver cómo va todo en PICA ROJA, con botones: reporte semanal, venta diaria, venta mensual, retención… algo completo".
 - `src/services/telegramAdmin.js` (textos puros) + `_tgAdmin*` en server.js. Se vincula con un CÓDIGO de un solo uso (panel → Canal de Telegram → 🔒 Grupo

@@ -1987,6 +1987,10 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   (`_inicioAiUsage` en `/api/admin/inicio/stats` ⇒ `_inicioAiHtml`). Si cambian los precios o se agrega un modelo, actualizar `SB_PRICES`.
 - **#1042-x:** bot con Haiku 5.5; handoff de la IA ⇒ mensaje con botón "Tengo otro problema" (sólo el botón abre el chat a un agente); saludo local al entrar
   (`/sys_support_greet` vía `/api/support/ui-mode`, `VIP.home.spGreetMsg`); el cliente ve 24 h de chat; la burbuja delega siempre en `casinoChatToggle`.
+- **Telegram #1047/#1048 (revisión):** webhook = `TG_WEBHOOK_BASE` (env `PUBLIC_URL` o https://picaroja.com) + `/api/telegram/webhook`, excluido de `generalLimiter`;
+  `drop_pending_updates` sólo al guardar un token nuevo. Canal auto-detectado sólo dentro de 1 h desde `tokenSavedAt`; si no, `channelCandidate` + `/use-channel`.
+  `adminChats`/`adminPending` SOLO con `_tgArrPull`/`_tgArrPush` (atómicos). `telegramPanelStats` lo escribe `_tgPanelTick` aunque el panel esté apagado.
+- **Bono de 1ª carga por landing (#1048):** el formulario de campaña del panel lee/guarda `Config['publisherWelcome'][CODE]` (misma regla que #1024).
 - **Grupo privado de reportes (#1046):** `telegramAdmin.js` (render puro) + `_tgAdminSnapTick` (lock `tgadminsnap`, 15 min ⇒ `Config['tgadminsnap']`),
   `_tgAdminReportsTick` (lock `tgadminrep`; marca `adminLastDaily/Weekly/Monthly` ANTES de mandar), `_tgAdminOnMessage` (`/vincular@bot CÓDIGO`, `/menu`,
   migración a supergrupo) y `_tgAdminOnCallback` (`ad:*`, sólo chats de `adminChats`, edita el mismo mensaje). Rutas `/api/admin/telegram/admin-pair|admin-unlink`.

@@ -55,7 +55,7 @@ caso('#1044-c Botones editables: textos, apagar info, links https (máx. 3), tex
   assert.strictEqual(b.appLabel, 'Jugá ya'); assert.strictEqual(b.storyLabel, '🎰 Entrar a PICA ROJA', 'vacío ⇒ el de siempre');
   assert.strictEqual(b.links.length, 2, 'sólo https y hasta 3 (de los primeros 3)');
   const k = tg.panelButtons('https://picaroja.com', b).inline_keyboard.flat();
-  assert.ok(!k.some((x) => x.callback_data === 'tg:top') && k.some((x) => x.text === '💰 Pagos') && k.some((x) => x.url === 'https://t.me/x'));
+  assert.ok(!k.some((x) => x.callback_data === 'tg:top') && k.some((x) => x.text === '💰 Pagos') && !k.some((x) => x.url === 'https://t.me/x'), 'sin links externos (owner)');
   assert.strictEqual(tg.popupText('serv', {}, b), 'Hola');
   assert.strictEqual(tg.storyButtons({}, 'https://picaroja.com', b).inline_keyboard[0][0].text, '🎰 Entrar a PICA ROJA');
   const svg = tg.storyCardSvg({ title: 'Hola', text: 'x' }, 'QUJD'); assert.ok(/data:image\/png;base64,QUJD/.test(svg) && /text-anchor="middle"/.test(svg));

@@ -213,6 +213,7 @@ const generalLimiter = rateLimit({
   // Desactiva la validación de IPv6-fallback de la lib: usamos cookie para admins
   // e IP para clientes a propósito (no necesitamos el helper de IPv6 acá).
   validate: { keyGeneratorIpFallback: false },
+  skip: (req) => req.originalUrl === '/api/telegram/webhook', // revisión #1047: Telegram manda todo desde pocas IPs (la ruta tiene secreto propio)
   message: { error: 'Demasiadas solicitudes. Intenta más tarde.' }
 });
 
@@ -15816,6 +15817,8 @@ async function _supportSentSince(userId, since) {
 }
 // #1042-u: pasa el chat a un agente YA (chat ABIERTO en Soporte + nota interna); el bot se corre `handoffPauseMin` (busca la nota bot_handoff).
 async function _supportHandoffNow(userId, username, reason) {
+  // revisión: tocar "Tengo otro problema" varias veces ⇒ UNA nota y UN aviso cada 5 min (no llena el panel).
+  try { if (await Message.exists({ receiverId: userId, 'metadata.kind': 'bot_handoff', timestamp: { $gte: new Date(Date.now() - 5 * 60000) } })) return; } catch (_) {}
   // #1045 (owner: "tiene que ir a SOPORTE, no a Chats"): el pase NO abre el chat en Chats (ChatStatus); queda abierto con 🆘 en Soporte
   // (lista /api/admin/support/conversations: nota bot_handoff sin respuesta de una persona después).
   try {
@@ -16914,7 +16917,7 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
 // #1043: lo que VA a cobrar un extra todavía no cobrado: con monto fijo, el fijo de HOY (ofertas viejas guardaron min(fijo, carga) o un % mal rotulado).
 function _installGiftDue(ig, cfg) {
   const a = Math.round(Number(ig && ig.amount) || 0);
-  return (cfg && cfg.enabled && cfg.fixedArs > 0) ? Math.max(a, Math.round(cfg.fixedArs)) : a;
+  return (cfg && cfg.enabled && cfg.fixedArs > 0) ? Math.max(a, _capGift(cfg.fixedArs)) : a; // revisión: nunca por encima del tope único por regalo
 }
 const BOT_FIX_INSTALL_DEFAULT = '¡Tenés razón, {username}! 🙌 Te cargamos los ${monto} que faltaban del extra por instalar la app en {plataforma}. Ya tenés los ${total} completos ✅';
 async function _installGiftTopupCheck(u) {
@@ -16923,14 +16926,15 @@ async function _installGiftTopupCheck(u) {
   if (!u) return { ok: false, why: 'sin cliente' };
   if (!cfg.enabled || !(cfg.fixedArs > 0)) return { ok: false, why: 'el extra por instalar no está como monto fijo' };
   if (u.isBlocked || u.duplicateOf) return { ok: false, why: 'cuenta bloqueada o secundaria' };
+  if (u.fraudFlags !== undefined && (_isFlagged(u) || (u.fraudReview && u.fraudReview.status === 'watch'))) return { ok: false, why: 'cuenta con marcas o en observación (lo ve una persona)' }; // revisión
   if (ig.status !== 'claimed') return { ok: false, why: 'no cobró el extra por instalar' };
   if (ig.topupAt) return { ok: false, why: 'ya se le completó antes' };
-  const diff = Math.round(cfg.fixedArs - (Number(ig.amount) || 0));
+  const _fx = _capGift(cfg.fixedArs); const diff = Math.round(_fx - (Number(ig.amount) || 0));
   if (!(diff > 0)) return { ok: false, why: 'ya cobró el extra completo' };
-  return { ok: true, diff, total: Math.round(cfg.fixedArs), cfg };
+  return { ok: true, diff, total: _fx, cfg };
 }
 async function _installGiftTopup(userId, by) {
-  const u = await User.findOne({ id: userId }).select('id username installGift isBlocked duplicateOf preferredPlatform').lean();
+  const u = await User.findOne({ id: userId }).select('id username installGift isBlocked duplicateOf preferredPlatform fraudFlags fraudReview').lean();
   const chk = await _installGiftTopupCheck(u);
   if (!chk.ok) return chk;
   const reserved = await User.findOneAndUpdate({ id: u.id, 'installGift.status': 'claimed', 'installGift.topupAt': null }, { $set: { 'installGift.topupAt': new Date() } });
@@ -30737,15 +30741,17 @@ async function _tgPanelCompute() {
 // Cada hora: recalcula y EDITA el mensaje fijado del canal (si no existe, lo crea y lo fija).
 async function _tgPanelTick(force) {
   const c = await _tgCfg();
-  if (!c.panel || !c.token || !c.channel) return { ok: false, why: 'apagado o sin configurar' };
+  if (!c.token) return { ok: false, why: 'sin configurar' };
   if (!force && !(await _cronClaim('tgpanel', 50 * 60000))) return { ok: false, why: 'otra instancia' };
-  const s = await _tgPanelCompute();
+  const s = await _tgPanelCompute(); // revisión: los números del bot (menú privado / ventanitas) se calculan acá aunque el panel esté apagado
   try { await Config.set('telegramPanelStats', s, 'telegram'); } catch (_) {}
+  if (!c.panel || !c.channel) return { ok: false, why: 'panel apagado o sin canal' };
   if (!c.botUsername) { try { const me = await tgChannel.call(c.token, 'getMe', {}); if (me.ok && me.result && me.result.username) { c.botUsername = me.result.username; await _tgSet({ botUsername: me.result.username }); } } catch (_) {} } // #1044-e
   const reply_markup = tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername);
   // #1044-b: el panel es una FOTO (tres números grandes) con el texto abajo; si la foto no se puede armar, va como texto.
   let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(s, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
   const kind = png ? 'photo' : 'text';
+  if (!png && c.panelMsgId && c.panelKind === 'photo') return { ok: false, why: 'no se pudo armar la foto: se mantiene el panel actual' }; // revisión: nada de paneles duplicados
   const caption = tgChannel.panelCaption(s), text = tgChannel.panelText(s);
   if (c.panelMsgId && (c.panelKind || 'text') === kind) {
     const r = kind === 'photo' ? await tgChannel.editPhoto(c.token, c.channel, c.panelMsgId, png, caption, reply_markup)
@@ -30757,7 +30763,7 @@ async function _tgPanelTick(force) {
     ? await tgChannel.sendMedia(c.token, 'photo', c.channel, { buffer: png, mime: 'image/png', filename: 'panel.png' }, { caption, parse_mode: 'HTML', reply_markup, disable_notification: true })
     : await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', reply_markup, disable_web_page_preview: true, disable_notification: true });
   if (!r.ok) { await _tgSet({ lastError: 'panel: ' + String(r.error).slice(0, 160), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
-  if (c.panelMsgId) await tgChannel.call(c.token, 'unpinChatMessage', { chat_id: c.channel, message_id: c.panelMsgId }); // el panel viejo deja de estar fijado
+  if (c.panelMsgId) { await tgChannel.call(c.token, 'unpinChatMessage', { chat_id: c.channel, message_id: c.panelMsgId }); await tgChannel.call(c.token, 'deleteMessage', { chat_id: c.channel, message_id: c.panelMsgId }); } // el panel viejo se saca
   await _tgSet({ panelMsgId: r.result.message_id, panelKind: kind });
   const pin = await tgChannel.call(c.token, 'pinChatMessage', { chat_id: c.channel, message_id: r.result.message_id, disable_notification: true });
   if (!pin.ok) await _tgSet({ lastError: 'no pude fijar el panel (¿el bot es admin con permiso de fijar?): ' + String(pin.error).slice(0, 120), lastErrorAt: new Date() });
@@ -30817,7 +30823,7 @@ async function _tgDropTick() {
   if (!dc.on || !c.token || !c.channel) return;
   if (!(await _cronClaim('tgdrop', 90000))) return;
   for (const d of await CodeDrop.find({ createdBy: 'telegram', status: 'active', endsAt: { $lte: new Date() } }).select('id').lean()) await _codeDropFinish(d.id).catch(() => {}); // revisión: aunque CODE_DROP_DISABLED=1
-  if (!c.dropNextAt) { await _tgSet({ dropNextAt: _tgDropNextAt(0) }); return; }
+  if (!c.dropNextAt) { await _tgSet({ dropNextAt: _tgDropNextAt(2) }); return; } // revisión: el primero a los 2 días de conectar (no el mismo día)
   if (new Date() < new Date(c.dropNextAt)) return;
   if (await CodeDrop.exists({ createdBy: 'telegram', status: 'active' })) return; // el anterior sigue vivo
   await _tgDropLaunch(c, 'automático');
@@ -30825,10 +30831,10 @@ async function _tgDropTick() {
 // ── #1044-d SORTEO EN EL CANAL: los lunes a las 12 h (o con el botón del panel), foto con los premios + los pasos para anotarse. ──
 async function _tgSorteoPost(c, force) {
   if (!c.token || !c.channel) return { ok: false, why: 'sin configurar' };
-  const st = await _tgPanelCompute(); const so = st.sorteo;
-  if (!so) return { ok: false, why: 'no hay sorteo en curso' };
   const wk = _cdWeekStart(_schedArtKey(new Date()));
-  if (!force && c.sorteoWeek === wk) return { ok: false, why: 'ya salió esta semana' };
+  if (!force && c.sorteoWeek === wk) return { ok: false, why: 'ya salió esta semana' }; // revisión: antes de calcular
+  const st = (await getConfig('telegramPanelStats', null)) || await _tgPanelCompute(); const so = st.sorteo;
+  if (!so) return { ok: false, why: 'no hay sorteo en curso' };
   await _tgSet({ sorteoWeek: wk });
   const reply_markup = { inline_keyboard: [[{ text: '🎟️ ANOTARME GRATIS', url: c.appUrl + '/?ir=sorteo' }]] };
   let r = null; let png = null;
@@ -30852,10 +30858,13 @@ setTimeout(() => { setInterval(() => { _tgDropTick().catch((e) => logger.warn('[
 // un botón 'ad:*' no recibe nada. Los números salen de una FOTO (`Config['tgadminsnap']`) que arma un cron con lock cada 15 min (el tablero del
 // negocio, cada hora): el webhook nunca calcula nada pesado. Reportes automáticos: ayer (09 h), semanal (lunes, el cierre semanal) y mes (día 1). ──
 const tgAdmin = require('./src/services/telegramAdmin');
+// revisión: listas de grupos con operaciones ATÓMICAS sobre la base (nunca leer→mezclar→guardar: si getConfig falla devuelve el default y se borraban).
+async function _tgArrPull(field, id) { await Config.collection.updateOne({ key: 'telegrambot' }, { $pull: { ['value.' + field]: { id: { $in: [String(id), Number(id)] } } } }); try { Config._cache && Config._cache.clear(); } catch (_) {} }
+async function _tgArrPush(field, obj, max) { await _tgArrPull(field, obj.id); await Config.collection.updateOne({ key: 'telegrambot' }, { $push: { ['value.' + field]: { $each: [obj], $slice: -max } } }, { upsert: true }); try { Config._cache && Config._cache.clear(); } catch (_) {} }
 function _tgAdminLinked(c, chatId) { return (c.adminChats || []).some((x) => String(x.id) === String(chatId)); }
 function _tgArtDayStart(d) { return new Date(_schedArtKey(d) + 'T00:00:00-03:00'); }
 let _tgSnapRunning = false;
-async function _tgAdminSnapTick(force) {
+async function _tgAdminSnapTick(force, moneyOnly) {
   const c = await _tgCfg(); if (!c.token || !(c.adminChats || []).length) return null;
   if (_tgSnapRunning) return null; if (!force && !(await _cronClaim('tgadminsnap', 13 * 60000))) return null;
   _tgSnapRunning = true;
@@ -30878,7 +30887,7 @@ async function _tgAdminSnapTick(force) {
     else { const ppm0 = new Date(_schedArtKey(new Date(pm0.getTime() - 15 * D)).slice(0, 7) + '-01T00:00:00-03:00'); const [lm, lmp] = await Promise.all([_bizMoney(pm0, m0), _bizMoney(ppm0, pm0)]); Object.assign(snap, { lastMonthKey: pmk, lastMonth: strip(lm), lastMonthPrev: strip(lmp) }); }
     try { const dc = await DailyClose.findOne({ dateKey: _schedArtKey(y0) }).select('resultado check').lean(); if (dc) snap.close = { resultado: dc.resultado, check: dc.check && (dc.check.estado === 'ok' ? '✅ cierre OK' : '⚠️ revisar el cierre (' + (dc.check.pendientes || 0) + ' puntos)') }; } catch (_) {}
     // Tablero del mes (retención, embudo, regalos, campañas, alertas): cada hora.
-    if (!force && prevSnap.board && prevSnap.boardAt && now - new Date(prevSnap.boardAt) < 55 * 60000) Object.assign(snap, { board: prevSnap.board, boardAt: prevSnap.boardAt });
+    if ((moneyOnly || !force) && prevSnap.board && prevSnap.boardAt && now - new Date(prevSnap.boardAt) < 55 * 60000) Object.assign(snap, { board: prevSnap.board, boardAt: prevSnap.boardAt }); // revisión: el 🔄 no rearma el tablero
     else {
       try {
         const b = await (_bizInflight.get('month') || (() => { const p = _bizBoard('month').finally(() => { if (_bizInflight.get('month') === p) _bizInflight.delete('month'); }); _bizInflight.set('month', p); return p; })());
@@ -30944,8 +30953,9 @@ setTimeout(() => {
 async function _tgAdminOnMessage(c, msg) {
   const chat = msg.chat || {}; if (!['group', 'supergroup'].includes(chat.type)) return false;
   if (msg.migrate_to_chat_id && _tgAdminLinked(c, chat.id)) { // el grupo pasó a supergrupo: cambia el id
-    await _tgSet({ adminChats: c.adminChats.map((x) => (String(x.id) === String(chat.id) ? Object.assign({}, x, { id: msg.migrate_to_chat_id }) : x)) }); return true;
+    const old = c.adminChats.find((x) => String(x.id) === String(chat.id)); await _tgArrPull('adminChats', chat.id); await _tgArrPush('adminChats', Object.assign({}, old, { id: msg.migrate_to_chat_id }), 5); return true;
   }
+  if (msg.migrate_to_chat_id && (c.adminPending || []).some((x) => String(x.id) === String(chat.id))) { const old = c.adminPending.find((x) => String(x.id) === String(chat.id)); await _tgArrPull('adminPending', chat.id); await _tgArrPush('adminPending', Object.assign({}, old, { id: msg.migrate_to_chat_id }), 10); return true; }
   const t = String(msg.text || '').trim(); const m = t.match(/^\/(vincular|menu|panel|reportes)(?:@[A-Za-z0-9_]+)?(?:\s+([A-Za-z0-9]{6,12}))?$/i);
   if (!m) return false;
   if (m[1].toLowerCase() === 'vincular') {
@@ -30953,8 +30963,8 @@ async function _tgAdminOnMessage(c, msg) {
     const ok = code && c.adminPairHash && c.adminPairUntil && new Date(c.adminPairUntil) > new Date() &&
       crypto.timingSafeEqual(Buffer.from(crypto.createHash('sha256').update(code).digest('hex')), Buffer.from(String(c.adminPairHash)));
     if (!ok) { await _tgAdminSend(c, chat.id, '❌ Código inválido o vencido. Generá uno nuevo en el panel (Canal de Telegram → 🔒 Grupo de reportes).'); return true; }
-    const list = (c.adminChats || []).filter((x) => String(x.id) !== String(chat.id)).concat([{ id: chat.id, title: String(chat.title || '').slice(0, 80), at: new Date(), by: String((msg.from && (msg.from.username || msg.from.first_name)) || '').slice(0, 40) }]).slice(-5);
-    await _tgSet({ adminChats: list, adminPairHash: null, adminPairUntil: null }); // el código se usa UNA vez
+    await _tgSet({ adminPairHash: null, adminPairUntil: null }); // el código se usa UNA vez
+    await _tgArrPush('adminChats', { id: chat.id, title: String(chat.title || '').slice(0, 80), at: new Date(), by: String((msg.from && (msg.from.username || msg.from.first_name)) || '').slice(0, 40) }, 5); await _tgArrPull('adminPending', chat.id);
     logger.info(`[telegram reportes] grupo vinculado: ${chat.title} (${chat.id})`);
     await _tgAdminSend(c, chat.id, '✅ <b>Grupo vinculado a PICA ROJA.</b>\nAcá vas a ver los números con los botones de abajo, y llegan solos el resumen de ayer (9 h), el análisis semanal (lunes) y el cierre del mes (día 1).\n⚠️ Todo el que esté en este grupo ve los números: no sumes a nadie que no deba verlos.');
     _tgAdminSnapTick(true).catch(() => {}).then(async () => { const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c, chat.id, r.text, r.markup); });
@@ -30971,12 +30981,14 @@ async function _tgOnMyChatMember(c, upd) {
   const chat = upd.chat || {}; const st = (upd.new_chat_member && upd.new_chat_member.status) || ''; const by = String((upd.from && (upd.from.username || upd.from.first_name)) || '').slice(0, 40);
   const inside = st === 'administrator' || st === 'member' || st === 'creator'; const out = st === 'left' || st === 'kicked';
   if (chat.type === 'channel') {
+    const fresh = c.tokenSavedAt && Date.now() - new Date(c.tokenSavedAt).getTime() < 60 * 60000; // revisión de seguridad: sólo en la 1ª hora después de guardar el token
+    if (st === 'administrator' && !c.channel && !fresh) { await _tgSet({ lastError: null, channelCandidate: { id: String(chat.id), title: String(chat.title || '').slice(0, 80), at: new Date(), by } }); return; }
     if (st === 'administrator' && !c.channel) {
       await _tgSet({ channel: String(chat.id), channelTitle: String(chat.title || '').slice(0, 80) || null, panelMsgId: null, since: c.since || new Date(), lastError: null });
       logger.info(`[telegram] canal conectado solo: ${chat.title} (${chat.id}) por ${by}`);
       setTimeout(() => { _tgPanelTick(true).catch(() => {}); }, 3000);
-    } else if (String(chat.id) === String(c.channel) && (out || st === 'member')) {
-      await _tgSet({ lastError: 'El bot ya no es administrador del canal: volvé a agregarlo como admin.', lastErrorAt: new Date() });
+    } else if ((String(chat.id) === String(c.channel) || String(chat.id) === String(c.channelId || '')) && (out || st === 'member')) {
+      await _tgSet({ channel: '', channelId: null, panelMsgId: null, channelCandidate: { id: String(chat.id), title: String(chat.title || c.channelTitle || '').slice(0, 80), at: new Date(), by }, lastError: 'Sacaron al bot de administrador del canal: el canal quedó DESCONECTADO (volvé a agregarlo como admin y tocá ✅ Usar ese canal).', lastErrorAt: new Date() });
     } else if (st === 'administrator' && String(chat.id) !== String(c.channel) && !String(c.channel).startsWith('@')) {
       await _tgSet({ channelCandidate: { id: String(chat.id), title: String(chat.title || '').slice(0, 80), at: new Date(), by } });
     } else if (st === 'administrator' && String(c.channel).startsWith('@')) { // cargado como @nombre: se guarda el título si es el mismo
@@ -30985,10 +30997,10 @@ async function _tgOnMyChatMember(c, upd) {
     return;
   }
   if (chat.type !== 'group' && chat.type !== 'supergroup') return;
-  if (out) { await _tgSet({ adminChats: (c.adminChats || []).filter((x) => String(x.id) !== String(chat.id)), adminPending: (c.adminPending || []).filter((x) => String(x.id) !== String(chat.id)) }); return; }
+  if (out) { await _tgArrPull('adminChats', chat.id); await _tgArrPull('adminPending', chat.id); return; }
   if (!inside || _tgAdminLinked(c, chat.id)) return;
-  const pend = (c.adminPending || []).filter((x) => String(x.id) !== String(chat.id) && new Date(x.at) > new Date(Date.now() - 7 * 86400000));
-  await _tgSet({ adminPending: pend.concat([{ id: chat.id, title: String(chat.title || '').slice(0, 80), at: new Date(), by }]).slice(-5) });
+  let members = null; try { const mc = await tgChannel.call(c.token, 'getChatMemberCount', { chat_id: chat.id }); if (mc.ok) members = mc.result; } catch (_) {}
+  await _tgArrPush('adminPending', { id: chat.id, title: String(chat.title || '').slice(0, 80), at: new Date(), by, byId: upd.from && upd.from.id || null, members }, 10);
   await _tgAdminSend(c, chat.id, '👋 <b>Hola, soy el bot de PICA ROJA.</b>\nPara ver los reportes en este grupo, el administrador tiene que APROBARLO en el panel:\nConfiguración → 🆕 NUEVO → 📣 Canal de Telegram → 🔒 Grupo de reportes → ✅ Aprobar.');
 }
 // Botones 'ad:*' del grupo: SÓLO en un chat vinculado; edita el mismo mensaje (no llena el grupo).
@@ -31001,7 +31013,7 @@ async function _tgAdminOnCallback(c, cq) {
   // 🔄 en un dato de plata viejo (> 3 min): recalcula una vez (una sola cuenta a la vez por instancia).
   if (key !== 'menu' && (!snap || Date.now() - new Date(snap.at) > 3 * 60000) && !_tgAdminBusy.get('snap')) {
     await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: '⏳ Actualizando números…' });
-    const p = _tgAdminSnapTick(true).catch(() => null); _tgAdminBusy.set('snap', p); try { snap = (await p) || snap; } finally { _tgAdminBusy.delete('snap'); }
+    const p = (async () => (await _cronClaim('tgadminsnapf', 60000)) ? _tgAdminSnapTick(true, true) : null)().catch(() => null); _tgAdminBusy.set('snap', p); try { snap = (await p) || (await getConfig('tgadminsnap', null)) || snap; } finally { _tgAdminBusy.delete('snap'); }
   } else await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: cq.id });
   const r = tgAdmin.render(key, snap || {}); if (!r) return;
   const e = await tgChannel.call(c.token, 'editMessageText', { chat_id: chatId, message_id: cq.message.message_id, text: r.text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: r.markup });
@@ -31022,9 +31034,8 @@ app.post('/api/admin/telegram/admin-approve', authMiddleware, adminMiddleware, a
   try {
     const c = await _tgCfg(); const id = String((req.body || {}).id || ''); const ok = (req.body || {}).approve !== false;
     const p = (c.adminPending || []).find((x) => String(x.id) === id); if (!p) return res.status(404).json({ error: 'Ese grupo ya no está pendiente.' });
-    const set = { adminPending: (c.adminPending || []).filter((x) => String(x.id) !== id) };
-    if (ok) set.adminChats = (c.adminChats || []).filter((x) => String(x.id) !== id).concat([{ id: p.id, title: p.title, at: new Date(), by: req.user.username }]).slice(-5);
-    await _tgSet(set);
+    await _tgArrPull('adminPending', id);
+    if (ok) await _tgArrPush('adminChats', { id: p.id, title: p.title, at: new Date(), by: req.user.username }, 5);
     if (ok) {
       logger.info(`[telegram reportes] grupo aprobado: ${p.title} (${p.id}) por ${req.user.username}`);
       const c2 = await _tgCfg();
@@ -31047,17 +31058,18 @@ app.post('/api/admin/telegram/admin-unlink', authMiddleware, adminMiddleware, as
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
   try {
     const c = await _tgCfg(); const id = String((req.body || {}).id || '');
-    await _tgSet({ adminChats: (c.adminChats || []).filter((x) => String(x.id) !== id) });
+    await _tgArrPull('adminChats', id);
     if (c.token && id) tgChannel.call(c.token, 'sendMessage', { chat_id: id, text: '🔒 Este grupo se desvinculó de PICA ROJA: ya no recibe números.' }).catch(() => {});
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 // Webhook: botones del panel (ventanitas) y /start por privado (le manda el panel). Sólo con el secreto que le dimos a Telegram.
-async function _tgSetWebhook(c) {
+const TG_WEBHOOK_BASE = String(process.env.PUBLIC_URL || 'https://picaroja.com').replace(/\/+$/, ''); // revisión: la URL del webhook NO sale del link de los botones
+async function _tgSetWebhook(c, dropPending) {
   if (!c.token) return { ok: false, error: 'sin token' };
   let secret = c.webhookSecret;
   if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _tgSet({ webhookSecret: secret }); }
-  return tgChannel.call(c.token, 'setWebhook', { url: c.appUrl + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message', 'my_chat_member'], drop_pending_updates: true }); // #1047: my_chat_member = lo agregaron/sacaron de un canal o grupo
+  return tgChannel.call(c.token, 'setWebhook', { url: TG_WEBHOOK_BASE + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message', 'my_chat_member'], drop_pending_updates: dropPending === true }); // #1047: my_chat_member = lo agregaron/sacaron de un canal o grupo
 }
 const _tgPrivSeen = new Map(); // revisión: freno por chat privado (2 s)
 app.post('/api/telegram/webhook', async (req, res) => {
@@ -31072,7 +31084,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
     if (u.callback_query && /^ad:[a-z]+$/.test(String(u.callback_query.data || ''))) { await _tgAdminOnCallback(c, u.callback_query); return; }
     if (u.message && u.message.chat && u.message.chat.type !== 'private') { await _tgAdminOnMessage(c, u.message); return; }
     if (u.message && u.message.chat && u.message.chat.type === 'private') { const k = 'p' + u.message.chat.id; const last = _tgPrivSeen.get(k) || 0; if (Date.now() - last < 2000) return; _tgPrivSeen.set(k, Date.now()); if (_tgPrivSeen.size > 5000) _tgPrivSeen.clear(); }
-    const stats = (await getConfig('telegramPanelStats', null)) || await _tgPanelCompute();
+    const stats = (await getConfig('telegramPanelStats', null)) || {}; // revisión: nunca calcula en el webhook (lo hace el cron de cada hora)
     if (u.callback_query && /^tg:(benef|paid|top|sorteo|serv)$/.test(String(u.callback_query.data || ''))) {
       await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id, text: tgChannel.popupText(u.callback_query.data.slice(3), stats, c.btn), show_alert: true });
     } else if (u.callback_query) {
@@ -31104,7 +31116,7 @@ app.get('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res)
     const queue = (c.token && c.channel && c.mirror) ? await Story.countDocuments(_tgStoryQuery(c, now)) : 0;
     const posted = await Story.find({ tgPostedAt: { $ne: null } }).sort({ tgPostedAt: -1 }).limit(5).select('id title tgPostedAt tgMsgId').lean();
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false, adminChats: (c.adminChats || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), adminReports: Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {}), adminPairUntil: c.adminPairUntil || null, adminPending: (c.adminPending || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), channelCandidate: c.channelCandidate || null }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
+    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false, adminChats: (c.adminChats || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), adminReports: Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {}), adminPairUntil: c.adminPairUntil || null, adminPending: (c.adminPending || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by, members: x.members == null ? null : x.members })), channelCandidate: c.channelCandidate || null }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
@@ -31113,7 +31125,7 @@ app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res
     const b = req.body || {}; const set = { updatedBy: req.user.username };
     const token = typeof b.token === 'string' ? b.token.trim() : '';
     if (token && !/^\d{5,15}:[A-Za-z0-9_-]{25,60}$/.test(token)) return res.status(400).json({ error: 'El token no parece el de BotFather (número:letras).' });
-    if (typeof b.channel === 'string') { const ch = b.channel.trim(); if (ch && !/^(@[A-Za-z0-9_]{4,64}|-100\d{5,20})$/.test(ch)) return res.status(400).json({ error: 'Canal: poné el @nombre del canal (ej. @picarojaoficial) o su número (-100…).' }); set.channel = ch; }
+    if (typeof b.channel === 'string' && (b.channel.trim() || b.clearChannel === true)) { const ch = b.channel.trim(); if (ch && !/^(@[A-Za-z0-9_]{4,64}|-100\d{5,20})$/.test(ch)) return res.status(400).json({ error: 'Canal: poné el @nombre del canal (ej. @picarojaoficial) o su número (-100…).' }); set.channel = ch; }
     if (typeof b.appUrl === 'string' && b.appUrl.trim()) { if (!/^https:\/\/[^\s/]+/i.test(b.appUrl.trim())) return res.status(400).json({ error: 'El link de la app tiene que empezar con https://' }); set.appUrl = b.appUrl.trim().replace(/\/+$/, ''); }
     if (typeof b.mirror === 'boolean') set.mirror = b.mirror;
     if (typeof b.panel === 'boolean') set.panel = b.panel;
@@ -31127,24 +31139,25 @@ app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res
     if (token) {
       const r = await tgChannel.call(token, 'getMe', {}); if (!r.ok) return res.status(400).json({ error: 'Telegram rechazó ese token: ' + String(r.error).slice(0, 120) });
       me = r.result; if (!_credKey()) return res.status(503).json({ error: 'No se puede cifrar ahora (falta JWT_SECRET).' });
-      Object.assign(set, { tokenEnc: _credEncrypt(token), tokenLast4: token.slice(-4), botUsername: me.username || null });
+      Object.assign(set, { tokenEnc: _credEncrypt(token), tokenLast4: token.slice(-4), botUsername: me.username || null, tokenSavedAt: new Date() }); // #1047: ventana de 1 h para que el canal se conecte solo
     }
     const prev = await _tgCfg();
     if (!prev.since && (set.mirror !== false)) set.since = new Date(); // sólo historias desde que se prende (no inunda el canal con las viejas)
     if (set.channel != null && set.channel !== prev.channel) set.panelMsgId = null; // canal nuevo ⇒ panel nuevo
     await _tgSet(set);
     const c = await _tgCfg(); const out = { success: true, bot: c.botUsername || null };
+    if (c.token) { const wh0 = await _tgSetWebhook(c, !!token); if (!wh0.ok) out.webhookError = String(wh0.error).slice(0, 120); } // revisión: siempre, aunque el canal todavía no esté listo
     if (c.token && c.channel) {
       const ch = await tgChannel.call(c.token, 'getChat', { chat_id: c.channel });
       if (!ch.ok) return res.json(Object.assign(out, { warning: 'Guardado, pero el bot no ve el canal: agregalo como ADMINISTRADOR del canal (' + String(ch.error).slice(0, 100) + ').' }));
-      await _tgSet({ channelTitle: ch.result.title || null });
+      await _tgSet({ channelTitle: ch.result.title || null, channelId: String(ch.result.id) });
       const meId = me ? me.id : ((await tgChannel.call(c.token, 'getMe', {})).result || {}).id;
       const mem = meId ? await tgChannel.call(c.token, 'getChatMember', { chat_id: c.channel, user_id: meId }) : { ok: false };
       if (!mem.ok || mem.result.status !== 'administrator') return res.json(Object.assign(out, { warning: 'Guardado, pero el bot NO es administrador del canal: agregalo como admin con permiso de publicar, editar y fijar mensajes.' }));
-      const wh = await _tgSetWebhook(c); if (!wh.ok) out.warning = 'Guardado, pero no pude activar los botones del panel: ' + String(wh.error).slice(0, 120);
+      if (out.webhookError) out.warning = 'Guardado, pero no pude activar los botones: ' + out.webhookError;
       out.channelTitle = ch.result.title || null;
     } else if (c.token) { // #1047: sólo el token ⇒ se activa el webhook y el canal / grupo se conectan solos al agregar el bot
-      const wh = await _tgSetWebhook(c);
+      const wh = { ok: !out.webhookError, error: out.webhookError };
       out.warning = wh.ok ? `✅ Token guardado. Ahora agregá a @${c.botUsername || 'tu bot'} como ADMINISTRADOR de tu canal (publicar, editar y borrar mensajes): se conecta solo.` : 'Token guardado, pero no pude activar el bot: ' + String(wh.error).slice(0, 120);
     }
     res.json(out);
@@ -32880,7 +32893,8 @@ async function _supportAutoCloseTick() {
         Message.aggregate([{ $match: { receiverId: { $in: ids }, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, timestamp: { $gte: s72 } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }])
       ]);
       const HU = new Map(hu.map((x) => [x._id, x.at]));
-      for (const x of ho) { const a = HU.get(x._id); if (!a || new Date(a) < new Date(x.at)) _waiting.add(x._id); }
+      const SS = new Map((await User.find({ id: { $in: ho.map((x) => x._id) } }).select('id supportSessionSince').lean()).map((u) => [u.id, u.supportSessionSince])); // revisión: un cierre manual posterior al pase gana
+      for (const x of ho) { const a = HU.get(x._id), ss = SS.get(x._id); if ((!a || new Date(a) < new Date(x.at)) && !(ss && new Date(ss) > new Date(x.at))) _waiting.add(x._id); }
     }
   } catch (e) { logger.warn('[support-autoclose] esperando agente: ' + e.message); }
   for (const r of rows) {

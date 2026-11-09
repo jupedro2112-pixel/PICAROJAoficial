@@ -139,7 +139,7 @@ function render(key, snap) {
 }
 // Reportes automáticos: el del día (ayer + mes), el semanal (lunes) y el del mes (día 1).
 function dailyReport(s) {
-  return cut(`${header('RESUMEN DE AYER', s && s.at)}\n${moneyBlock(s && s.yesterday, s && s.yesterdayPrev, 'Ayer, comparado con el día anterior')}\n${LINE}\n<b>📅 Mes hasta ayer</b>\n${moneyBlock(s && s.month, s && s.monthPrev)}`);
+  return cut(`${header('RESUMEN DE AYER', s && s.at)}\n${moneyBlock(s && s.yesterday, s && s.yesterdayPrev, 'Ayer, comparado con el día anterior')}\n${LINE}\n<b>📅 Mes en curso</b>\n${moneyBlock(s && s.month, s && s.monthPrev)}`);
 }
 function monthlyReport(s) {
   return cut(`${header('CIERRE DEL MES ANTERIOR', s && s.at)}\n${moneyBlock(s && s.lastMonth, s && s.lastMonthPrev, 'Comparado con el mes anterior a ese')}`);

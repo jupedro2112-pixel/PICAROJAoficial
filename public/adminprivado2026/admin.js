@@ -6383,7 +6383,7 @@ async function loadTgChannel() {
         const dr = c.drop || {}; if (g('tgDropOn')) g('tgDropOn').checked = dr.on !== false; if (g('tgDropAmount')) g('tgDropAmount').value = dr.amount || 5000; if (g('tgDropMax')) g('tgDropMax').value = dr.maxClaims || 10; if (g('tgDropEvery')) g('tgDropEvery').value = dr.everyDays || 15; if (g('tgDropHours')) g('tgDropHours').value = dr.hours || 48;
         if (g('tgSorteoPost')) g('tgSorteoPost').checked = c.sorteoPost !== false;
         const ar = c.adminReports || {}; if (g('tgRepDaily')) g('tgRepDaily').checked = ar.daily !== false; if (g('tgRepWeekly')) g('tgRepWeekly').checked = ar.weekly !== false; if (g('tgRepMonthly')) g('tgRepMonthly').checked = ar.monthly !== false;
-        if (g('tgAdminPending')) g('tgAdminPending').innerHTML = (c.adminPending || []).map((x) => '🕒 <b>' + escapeHtml(x.title || x.id) + '</b> <span style="color:#888;">(agregado' + (x.by ? ' por ' + escapeHtml(x.by) : '') + ')</span> <button class="btn-primary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminApprove(this.dataset.id, true)">✅ Aprobar</button> <button class="btn-secondary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminApprove(this.dataset.id, false)">Descartar</button>').join('<br>');
+        if (g('tgAdminPending')) g('tgAdminPending').innerHTML = (c.adminPending || []).map((x) => '🕒 <b>' + escapeHtml(x.title || x.id) + '</b> <span style="color:#888;">(agregado' + (x.by ? ' por ' + escapeHtml(x.by) : '') + (x.members != null ? ' · ' + escapeHtml(String(x.members)) + ' miembros' : '') + ' · ' + escapeHtml(x.at ? new Date(x.at).toLocaleString('es-AR') : '') + ' · id ' + escapeHtml(x.id) + ')</span> <button class="btn-primary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminApprove(this.dataset.id, true)">✅ Aprobar</button> <button class="btn-secondary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminApprove(this.dataset.id, false)">Descartar</button>').join('<br>');
         if (g('tgAdminChats')) g('tgAdminChats').innerHTML = (c.adminChats || []).length ? c.adminChats.map((x) => '✅ <b>' + escapeHtml(x.title || x.id) + '</b> <span style="color:#888;">(vinculado ' + escapeHtml(x.at ? new Date(x.at).toLocaleDateString('es-AR') : '') + (x.by ? ' por ' + escapeHtml(x.by) : '') + ')</span> <button class="btn-secondary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminUnlink(this.dataset.id)">Desvincular</button>').join('<br>') : '<span style="color:#888;">Ningún grupo vinculado todavía.</span>';
         if (g('tgMirror')) g('tgMirror').checked = c.mirror !== false; if (g('tgPanel')) g('tgPanel').checked = c.panel !== false;
         if (g('tgToken')) g('tgToken').placeholder = c.hasToken ? ('guardado (…' + (c.tokenLast4 || '') + ') · pegá uno nuevo sólo para cambiarlo') : 'pegá el token de BotFather';
@@ -6395,7 +6395,7 @@ async function loadTgChannel() {
         L.push('📤 Historias esperando para el canal: <b>' + (j.queue || 0) + '</b> · último posteo: ' + f(c.lastPostAt) + (c.panelMsgId ? ' · 📌 panel fijado' : ''));
         if ((j.posted || []).length) L.push('Últimas publicadas: ' + j.posted.map((p) => escapeHtml(p.title || p.id) + ' (' + f(p.tgPostedAt) + ')').join(' · '));
         const ld = j.lastDrop; L.push('🎁 Código de Telegram: ' + (ld ? '<b>' + escapeHtml(ld.code) + '</b> ' + ld.claims + '/' + ld.maxClaims + ' (' + (ld.status === 'active' ? 'activo' : ld.status === 'completed' ? 'agotado' : 'vencido') + ', ' + f(ld.startsAt) + ')' : 'todavía no salió') + ' · próximo: ' + f(c.dropNextAt));
-        if (c.channelCandidate) L.push('🔁 El bot también es admin de <b>' + escapeHtml(c.channelCandidate.title || c.channelCandidate.id) + '</b>. <button class="btn-secondary btn-small" onclick="tgUseChannel()">Usar ese canal</button>');
+        if (c.channelCandidate) L.push((c.channel ? '🔁 El bot también es admin de <b>' : '📣 El bot fue agregado como admin de <b>') + escapeHtml(c.channelCandidate.title || c.channelCandidate.id) + '</b>' + (c.channelCandidate.by ? ' (por ' + escapeHtml(c.channelCandidate.by) + ')' : '') + '. <button class="btn-primary btn-small" onclick="tgUseChannel()">✅ Usar ese canal</button>');
         if (c.hasToken && !c.channel) L.push('👉 Falta un paso: agregá a <b>@' + escapeHtml(c.botUsername || 'tu bot') + '</b> como administrador de tu canal y se conecta solo (tocá 🔄 en unos segundos).');
         if (c.lastError) L.push('<span style="color:#c62828;">⚠️ Último error (' + f(c.lastErrorAt) + '): ' + escapeHtml(c.lastError) + '</span>');
         if (info) info.innerHTML = L.join('<br>');
@@ -6403,7 +6403,7 @@ async function loadTgChannel() {
 }
 async function saveTgChannel() {
     const g = (id) => document.getElementById(id);
-    const body = { channel: g('tgChannel').value.trim(), appUrl: g('tgAppUrl').value.trim(), gapMin: Number(g('tgGap').value) || 90, mirror: !!g('tgMirror').checked, panel: !!g('tgPanel').checked };
+    const body = { channel: g('tgChannel').value.trim() || undefined, appUrl: g('tgAppUrl').value.trim(), gapMin: Number(g('tgGap').value) || 90, mirror: !!g('tgMirror').checked, panel: !!g('tgPanel').checked };
     const items = {}; document.querySelectorAll('#tgBtnItems .tgBtnLbl').forEach((el) => { const k = el.dataset.k; const on = document.querySelector('#tgBtnItems .tgBtnOn[data-k="' + k + '"]'); items[k] = { on: !!(on && on.checked), label: el.value.trim() }; });
     const links = (g('tgLinks') ? g('tgLinks').value : '').split('\n').map((l) => l.split('|')).filter((p) => p.length >= 2).map((p) => ({ label: p[0].trim(), url: p.slice(1).join('|').trim() }));
     const bad = links.find((l) => !/^https:\/\//i.test(l.url)); if (bad) { showToast('El link "' + escapeHtml(bad.label) + '" tiene que empezar con https://', 'error'); return; }
@@ -11691,6 +11691,7 @@ function showCreateCampaignModal() {
     _resetCampaignCredsForm(false);
     window._campaignFormInfluencers = [];
     _renderCampaignInfluencers();
+    _campaignWelcomeFill(null); // #1048: landing nueva ⇒ 50% de bono en la 1ª carga (editable)
     showModal('campaignFormModal');
     document.getElementById('campaignFormModal').style.display = 'flex';
 }
@@ -11721,6 +11722,7 @@ function editCampaign(code) {
         name: x.name, isActive: x.isActive !== false, orig: x.name
     }));
     _renderCampaignInfluencers();
+    _campaignWelcomeFill(code); // #1048
     showModal('campaignFormModal');
     document.getElementById('campaignFormModal').style.display = 'flex';
 }
@@ -11828,6 +11830,29 @@ function closeCampaignFormModal() {
     document.getElementById('campaignFormModal').style.display = '';
 }
 
+// #1048 (owner: "cuando se cree la landing que se pueda configurar el % de la primera carga, y si entran con esa landing que la carga automática
+// lleve ese %"): los campos del formulario leen/guardan la regla de Config['publisherWelcome'] (la misma de Configuración → 🆕 NUEVO, #1024).
+async function _campaignWelcomeFill(code) {
+    const g = (id) => document.getElementById(id); const P = g('campaignFormWelcomePct'), C = g('campaignFormWelcomeCap'), R = g('campaignFormWelcomeRest'), H = g('campaignFormWelcomeHint');
+    if (!P) return;
+    window._campaignWelcomeOrig = null;
+    P.value = code ? '' : '50'; C.value = ''; R.value = '';
+    try {
+        const r = await authFetch('/api/admin/publisher-welcome'); const j = await r.json(); if (!r.ok) return;
+        if (H && j.general) H.textContent = 'Se aplica SOLO en la primera carga (manual o automática del banco) de quien se registró por esta landing. Vacío = el general (' + j.general.pct + '% hasta $' + Number(j.general.capArs || 0).toLocaleString('es-AR') + ').';
+        const row = code ? (j.rows || []).find((x) => x.code === code) : null; const ru = row && row.rule;
+        if (ru) { P.value = ru.pct != null ? ru.pct : ''; C.value = ru.capArs != null ? ru.capArs : ''; R.value = ru.restPct || ''; }
+        window._campaignWelcomeOrig = ru ? JSON.stringify([ru.pct, ru.capArs, ru.restPct || 0]) : JSON.stringify([null, null, 0]);
+    } catch (_) {}
+}
+async function _campaignWelcomeSave(code) {
+    const g = (id) => document.getElementById(id); if (!g('campaignFormWelcomePct')) return null;
+    const v = (id) => { const t = String(g(id).value || '').trim(); return t === '' ? null : Number(t); };
+    const pct = v('campaignFormWelcomePct'), capArs = v('campaignFormWelcomeCap'), restPct = v('campaignFormWelcomeRest') || 0;
+    if (JSON.stringify([pct, capArs, restPct]) === window._campaignWelcomeOrig) return null; // sin cambios
+    const r = await authFetch('/api/admin/publisher-welcome', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, pct, capArs, restPct, active: true }) });
+    const j = await r.json().catch(() => ({})); return r.ok ? null : (j.error || 'No se pudo guardar el bono de la landing');
+}
 async function submitCampaignForm() {
     const mode = document.getElementById('campaignFormMode').value;
     const code = document.getElementById('campaignFormCode').value.trim().toUpperCase();
@@ -11929,6 +11954,8 @@ async function submitCampaignForm() {
             const det = data.skipped.map(s => `• ${s.key} — ${s.reason}`).join('\n');
             alert(`⚠️ ${data.skipped.length} key(s) NO se agregaron (las demás sí):\n\n${det}\n\nRevisá esas y volvé a pegarlas.`);
         }
+        // #1048: bono de la 1ª carga de esta landing (después de crear/guardar la campaña: el servidor exige que exista)
+        try { const wErr = await _campaignWelcomeSave(mode === 'create' ? code : String(document.getElementById('campaignFormOriginalCode').value || '').toUpperCase()); if (wErr) showToast('Campaña guardada, pero el bono no: ' + escapeHtml(wErr), 'error'); } catch (_) {}
         showToast(data.renamedUsers ? `Campaña guardada · ${data.renamedUsers} usuario(s) reasignado(s) al renombrar` : 'Campaña guardada', 'success');
         closeCampaignFormModal();
         loadCampaigns();

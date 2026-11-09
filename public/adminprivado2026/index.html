@@ -844,14 +844,14 @@ document.addEventListener('change', function (ev) {
                             </div>
                         </div>
                         <details style="margin-top:8px;"><summary style="cursor:pointer;font-weight:700;font-size:13px;">🔘 Botones del canal (editar)</summary>
-                            <p style="margin:6px 0;font-size:12px;color:var(--p-muted,#777);">Lo que dice cada botón. Los botones de info abren una ventanita con los números del mes; destildá los que no quieras mostrar. Abajo podés sumar hasta 3 botones con link (Telegram de soporte, Instagram…), uno por línea: <code>Texto | https://link</code>.</p>
+                            <p style="margin:6px 0;font-size:12px;color:var(--p-muted,#777);">Lo que dice cada botón. Los botones de info abren una ventanita con los números del mes; destildá los que no quieras mostrar. Todos los links van sólo a la app.</p>
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">
                                 <label style="font-size:12.5px;">Botón principal del panel <input type="text" id="tgBtnApp" maxlength="40" style="width:100%;"></label>
                                 <label style="font-size:12.5px;">Botón de cada historia <input type="text" id="tgBtnStory" maxlength="40" style="width:100%;"></label>
                             </div>
                             <div id="tgBtnItems" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px;margin-top:6px;"></div>
                             <label style="font-size:12.5px;display:block;margin-top:6px;">Texto de la ventanita "Servicio completo" (vacío = el automático; máx. 200) <textarea id="tgServText" rows="2" maxlength="200" style="width:100%;"></textarea></label>
-                            <label style="font-size:12.5px;display:block;margin-top:6px;">Botones con link (hasta 3) <textarea id="tgLinks" rows="3" placeholder="💬 Soporte | https://t.me/tuusuario" style="width:100%;"></textarea></label>
+                            <label style="font-size:12.5px;display:none;margin-top:6px;">Botones con link (hasta 3) <textarea id="tgLinks" rows="3" placeholder="💬 Soporte | https://t.me/tuusuario" style="width:100%;"></textarea></label>
                         </details>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
                             <button class="btn-primary btn-small" onclick="saveTgChannel()">💾 Guardar y probar</button>
@@ -3965,6 +3965,15 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                                 <input type="number" id="campaignFormCommissionValue" min="0" step="any" placeholder="0" style="width:100%;padding:8px;background:#0d0d1a;color:#fff;border:1px solid rgba(212,175,55,0.3);border-radius:6px;">
                                 <small style="color:#888;">CPA: $ARS por FTD. RevShare: % de 0 a 100.</small>
                             </div>
+                        </div>
+                        <div style="border:1px solid rgba(230,0,35,0.35);border-radius:8px;padding:8px;">
+                            <label style="color:#fff;font-size:12.5px;font-weight:700;">🎁 Bono de la PRIMERA carga para los que entran por esta landing</label>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:6px;">
+                                <div><label style="color:#aaa;font-size:12px;">% de bono</label><input type="number" id="campaignFormWelcomePct" min="0" max="500" step="1" placeholder="general" style="width:100%;padding:8px;background:#0d0d1a;color:#fff;border:1px solid rgba(212,175,55,0.3);border-radius:6px;"></div>
+                                <div><label style="color:#aaa;font-size:12px;">Hasta (carga $)</label><input type="number" id="campaignFormWelcomeCap" min="0" step="1000" placeholder="general" style="width:100%;padding:8px;background:#0d0d1a;color:#fff;border:1px solid rgba(212,175,55,0.3);border-radius:6px;"></div>
+                                <div><label style="color:#aaa;font-size:12px;">% sobre el resto</label><input type="number" id="campaignFormWelcomeRest" min="0" max="500" step="1" placeholder="0" style="width:100%;padding:8px;background:#0d0d1a;color:#fff;border:1px solid rgba(212,175,55,0.3);border-radius:6px;"></div>
+                            </div>
+                            <small id="campaignFormWelcomeHint" style="color:#888;display:block;margin-top:4px;">Se aplica SOLO en la primera carga (manual o automática del banco) de quien se registró por esta landing. Vacío = el bono general.</small>
                         </div>
                         <div>
                             <label style="color:#aaa;font-size:12px;">Notas (opcional)</label>
