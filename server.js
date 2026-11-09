@@ -31271,7 +31271,9 @@ app.post('/api/admin/telegram/admin-add-id', authMiddleware, adminMiddleware, as
   try {
     const c = await _tgCfg(); if (!c.token) return res.status(400).json({ error: 'Primero cargá el token del bot.' });
     const id = String((req.body || {}).id || '').replace(/\s+/g, ''); if (!/^-\d{5,16}$/.test(id)) return res.status(400).json({ error: 'El ID de un grupo es un número NEGATIVO, ej. -1001234567890.' });
-    const g = await tgChannel.call(c.token, 'getChat', { chat_id: id });
+    let g = await tgChannel.call(c.token, 'getChat', { chat_id: id });
+    // #1073 (owner: "chat not found"): Telegram Web muestra el ID de un supergrupo SIN el "100" (ej. -1234567890) y el bot lo necesita como -1001234567890
+    if (!g.ok && !id.startsWith('-100')) { const g2 = await tgChannel.call(c.token, 'getChat', { chat_id: '-100' + id.slice(1) }); if (g2.ok) g = g2; }
     if (!g.ok) return res.status(400).json({ error: 'Telegram no encuentra ese grupo o el bot no está adentro: agregá el bot al grupo primero. (' + String(g.error || '').slice(0, 80) + ')' });
     if (!['group', 'supergroup'].includes(g.result.type)) return res.status(400).json({ error: 'Ese ID no es de un grupo (es ' + g.result.type + ').' });
     const gid = g.result.id; await _tgArrPull('adminPending', gid);

@@ -8,6 +8,10 @@
 
 ## Sesión 2026-11-09
 
+### 1073. Vincular grupo por ID: acepta el número como lo muestra Telegram Web (2026-11-09)
+- **Owner (captura):** "Bad Request: chat not found". Telegram Web muestra el ID de un supergrupo sin el `100` (`-1234567890`); el bot necesita
+  `-1001234567890`. `admin-add-id` ahora prueba también con `-100` adelante.
+
 ### 1072. Landing de publicista al 50% seguía diciendo 100% (2026-11-09) — panel v277
 - **Owner:** "pongo 50 y sigue diciendo 100%, en landing y carga al 100%". Encontrado:
   1. **La landing de Vercel (grupospicaroja.com) nunca recibió el arreglo #1062:** GitHub está 70 commits atrás (último push #1039) y Vercel publica desde
