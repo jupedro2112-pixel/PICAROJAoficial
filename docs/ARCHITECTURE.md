@@ -443,7 +443,9 @@ reintento manda la misma reference y la plataforma responde `duplicate:true`.
 > sobre el total). Lo usan `creditGift`, `_creditFireReward` (delega en creditGift), `_depositWithBonus` (bono pegado a la carga) y
 > `creditUserBalance(..., {multiplier, carryOver:true})` (reembolsos diario/semanal/mensual y bono de nivel VIP). Sigue cayendo a CARGA sólo si el
 > total pasa `bonus.fixed_max`, si no se pudo reclamar lo pendiente o si el multiplicador no está permitido. Lo grabado como regalo (Transaction) es
-> el monto del regalo, sin el arrastre (`carriedBonus` en el resultado). Bonificación manual del panel / lotes / welcome code: sin arrastre (siguen estrictos).
+> el monto del regalo, sin el arrastre (`carriedBonus` en el resultado). Desde la 2ª pasada también llevan arrastre el rakeback, el welcome code, los lotes y la Bonificación manual
+> (ya no rebotan/saltean por bono activo). Cierre vs 1girox: regalos con `metadata.creditedAs:'deposit'` van a "cargas" esperadas;
+> arrastres en la colección `bonus_carry_log` (hook `setBonusCarryHook`), mostrados como `app.arrastreBonos`.
 
 1girox tiene el feature "Rollover y Bonos" **activo**. Consecuencias:
 

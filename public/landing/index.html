@@ -123,7 +123,7 @@
   <!-- PASO 1: nombre (#531: misma idea que la landing del owner / pantalla de registro de la app) -->
   <section class="card" id="step1">
     <div class="top"><img class="logo" src="/icons/icon-192x192.png" alt="PICA ROJA"><div class="brand"><b>PICA ROJA</b><small>oficial · cargas automáticas</small></div><span class="plus18">+18</span></div>
-    <div class="promo"><span class="eye">Bono de bienvenida</span><b class="big" id="bonusBig">100%</b><span class="psub" id="bonusSub">EN TU PRIMERA CARGA</span><span class="pnote" id="bonusNote">+50% EXTRA instalando la app y activando notificaciones</span></div>
+    <div class="promo"><span class="eye">Bono de bienvenida</span><b class="big" id="bonusBig">100%</b><span class="psub" id="bonusSub">EN TU PRIMERA CARGA</span><span class="pnote" id="bonusNote">+$5.000 EXTRA instalando nuestra app</span></div>
     <p class="pitch">Creá tu cuenta en un click y entrá a jugar. Sin formularios, sin esperas.</p>
     <form id="form" autocomplete="off" novalidate>
       <label class="qname" for="name">¿Cuál es tu nombre?</label>
@@ -316,7 +316,9 @@
       var cap = Number(w.capArs) || 0, rest = Number(w.restPct) || 0;
       $('bonusSub').textContent = 'EN TU PRIMERA CARGA' + (cap > 0 ? ' · HASTA $' + cap.toLocaleString('es-AR') + (rest > 0 ? ' (+' + rest + '% DEL RESTO)' : '') : ''); // #537
       if (!(pNo > 0) && info.welcome) { var pr = document.querySelector('.promo'); if (pr) pr.style.display = 'none'; }
-      var note = extra > 0 ? ('+' + extra + '% EXTRA instalando la app y activando notificaciones') : ''; $('bonusNote').textContent = note; $('bonusNote').style.display = note ? '' : 'none';
+      // #1040 (owner): "100% y $5.000 instalando nuestra app" ⇒ con monto fijo del extra (installGift.fixedArs) se muestra en pesos.
+      var fx = Number(w.installFixedArs) || 0;
+      var note = fx > 0 ? ('+$' + fx.toLocaleString('es-AR') + ' EXTRA instalando nuestra app') : (extra > 0 ? ('+' + extra + '% EXTRA instalando nuestra app') : ''); $('bonusNote').textContent = note; $('bonusNote').style.display = note ? '' : 'none';
       var rf = info.refunds || {}; if (rf.dailyMax) $('sysRefund').textContent = rf.dailyMax + '%';
       var rp = Number(info.referralPct); if (rp > 0) $('sysRef').textContent = rp + '%';
     } catch (e) {}

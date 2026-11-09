@@ -1071,7 +1071,7 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
     _invalidatePlayer(username);
     const out = _moneyResult(r.data);
     out.creditedAs = 'bonus';
-    if (carry > 0) { out.carriedBonus = carry; out.bonusTotal = sendAmt; }
+    if (carry > 0) { out.carriedBonus = carry; out.bonusTotal = sendAmt; if (!out.duplicate) _notifyCarry(username, body.reference, carry, sendAmt, 'bonus'); }
     return out;
   }
 
@@ -1143,6 +1143,13 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
  * Devuelve { ok:true, carry } o { ok:false, reason } (no se pudo reclamar lo pendiente ⇒ el caller no debe pisar el bono).
  * Si no se puede leer el jugador se sigue con carry 0 (mismo criterio de antes: la plataforma valida).
  */
+// #1040: aviso al server cuando un bono nuevo arrastró el resto del anterior (lo guarda para el cierre vs 1girox). Nunca rompe el crédito.
+let _carryHook = null;
+function setBonusCarryHook(fn) { _carryHook = typeof fn === 'function' ? fn : null; }
+function _notifyCarry(username, reference, carry, total, kind) {
+  if (!_carryHook || !(carry > 0)) return;
+  try { Promise.resolve(_carryHook({ username, reference, carry, total, kind })).catch(() => {}); } catch (_) {}
+}
 async function bonusCarryOver(username) {
   let info = null;
   try { info = await getUserInfoByName(username, { fresh: true }); } catch (_) { return { ok: true, carry: 0 }; }
@@ -1210,7 +1217,7 @@ async function creditGift(username, amount, opts = {}) {
 
   if (viaBonus) {
     const r = await creditUserBalance(username, sendAmt, reference, { multiplier: roll, description: sendDesc, noGiftGuard: true });
-    if (r && r.success) { r.creditedAs = 'bonus'; r.claimRequired = true; if (carry > 0) { r.carriedBonus = carry; r.bonusTotal = sendAmt; } return r; }
+    if (r && r.success) { r.creditedAs = 'bonus'; r.claimRequired = true; if (carry > 0) { r.carriedBonus = carry; r.bonusTotal = sendAmt; if (!r.duplicate) _notifyCarry(username, reference, carry, sendAmt, 'gift'); } return r; }
     const definitivo = r && (['feature_disabled', 'bonus_out_of_range', 'validation_error', 'invalid_multiplier', 'player_not_found'].includes(r.code) || r.httpStatus === 422);
     if (!definitivo) return r; // transitorio: no cambiar de vía
     why = `la plataforma rechazó el bono (${r.code || r.error})`;
@@ -1696,6 +1703,8 @@ module.exports = {
   getPlayersStatsBatch,
   creditGift,
   bonusCarryOver, // #1040
+  setBonusCarryHook, // #1040
+  notifyBonusCarry: _notifyCarry, // #1040 (bono pegado a la carga)
   formatStatsDate,
   // configuración del sitio
   getPlatformConfig,

@@ -497,6 +497,8 @@ function validatePassword(password) {
 // Partner API REST/JSON, auth por X-Api-Key. Cliente único: reemplaza a los 4
 // clientes de JUGAYGANA. Montos en PESOS (sin ×100) e idempotencia por `reference`.
 const girox = require('./src/services/giroxService');
+// #1040: cada bono que arrastró el resto de uno anterior queda anotado (el cierre vs 1girox lo usa para explicar la diferencia de bonos).
+try { girox.setBonusCarryHook((x) => mongoose.connection.collection('bonus_carry_log').updateOne({ _id: String(x.reference || (x.username + '-' + Date.now())) }, { $setOnInsert: { username: x.username, carry: Number(x.carry) || 0, total: Number(x.total) || 0, kind: x.kind || null, at: new Date() } }, { upsert: true })); } catch (_) {}
 // MULTI-PLATAFORMA (2026-10-16): registro de plataformas de juego. `girox` sigue
 // siendo el cliente directo para todo lo que hoy es sólo girox; los flujos que
 // pueden ir a OTRA plataforma (carga automática con pregunta "¿dónde querés
@@ -1288,7 +1290,7 @@ app.get('/api/landing/info', async (req, res) => {
     let referralPct = null; try { referralPct = require('./src/utils/referralRate').getConfiguredPct(); } catch (_) {} // #424
     // #530: % de bienvenida REAL para el banner de la pantalla de ingreso (nada hardcodeado): primera carga + extra por instalar la app.
     let welcome = null;
-    try { const _lc = String((req.query && req.query.c) || '').toUpperCase().trim().slice(0, 40); const fd = await getFirstDepositBonusPct(_lc || null); /* #1024: la landing de cada publicista muestra SU bono */ const ig = await getInstallGiftConfig(); const _lw = _lc ? await _pubWelcomeFor(_lc) : null; welcome = { pct: fd, withApp: fd + (ig && ig.enabled ? ig.pct : 0), capArs: await getFirstDepositCapArs(_lc || null), restPct: (_lw && _lw.capArs != null && _lw.restPct) || 0 }; } catch (_) {}
+    try { const _lc = String((req.query && req.query.c) || '').toUpperCase().trim().slice(0, 40); const fd = await getFirstDepositBonusPct(_lc || null); /* #1024: la landing de cada publicista muestra SU bono */ const ig = await getInstallGiftConfig(); const _lw = _lc ? await _pubWelcomeFor(_lc) : null; welcome = { pct: fd, withApp: fd + (ig && ig.enabled && !(ig.fixedArs > 0) ? ig.pct : 0), installFixedArs: (ig && ig.enabled && ig.fixedArs > 0) ? ig.fixedArs : 0, capArs: await getFirstDepositCapArs(_lc || null), restPct: (_lw && _lw.capArs != null && _lw.restPct) || 0 }; } catch (_) {}
     let services = []; try { services = await _landingServices(); if (!(await _referralsEnabled())) services = services.filter((x) => x && x.id !== 'referidos'); } catch (_) {} // #555 · #1039
     res.json({ registerInviteText: await renderSystemCommand('/sys_register_invite', REGISTER_INVITE_DEFAULT, {}), /* #748 */ registerClosedText: await renderSystemCommand('/sys_register_closed', REGISTER_CLOSED_DEFAULT, {}), /* #993 */ baseUrl: getPublicBaseUrl(), platforms: plats, refunds, minDepositArs, withdrawMinArs, refundPromo, registrationMode: await getRegistrationMode(), referralPct: (await _referralsEnabled()) ? referralPct : null, referralsEnabled: await _referralsEnabled(), soon: await renderSystemCommand('/sys_entry_soon', ENTRY_SOON_DEFAULT, {}), /* #1039 */ welcome, entryLogin: await getConfig('entryLogin', false) === true, quickEntrySms: (await getConfig('quickEntrySms', true)) === true && (await getSmsEnabled()), /* #1023 */ smsEnabled: await getSmsEnabled(), services }); // #421/#424/#530/#538/#541/#555
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -3398,7 +3400,7 @@ async function _depositWithBonus(adapter, username, amount, description, referen
   let r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonusSend, bonusMultiplier: mult }));
   // si rechaza el ×N de la carga: se prueba ×2 (siempre aceptado) y recién después sin rollover propio — misma reference, un 422 no movió plata
   for (const fb of [2, 1, 0]) { /* #903 (owner): ×3 → ×2 → ×1 (y sólo si 1girox no acepta ninguno, sin rollover propio + alerta) */ if (!(_multRejected(r) && depMult > 0 && depMult !== fb)) break; logger.warn(`[auto-bonus] ${username}: 1girox rechazó el rollover ×${depMult} de la carga (${r.code || r.error}) ⇒ pruebo ×${fb}`); depMult = fb; r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonusSend, bonusMultiplier: mult })); }
-  if (r.success && bonusSend !== bonus) r.carriedBonus = Math.round((bonusSend - bonus) * 100) / 100;
+  if (r.success && bonusSend !== bonus) { r.carriedBonus = Math.round((bonusSend - bonus) * 100) / 100; if (!r.duplicate && typeof girox.notifyBonusCarry === 'function' && (adapter === girox || adapter.id === 'girox')) girox.notifyBonusCarry(username, reference, r.carriedBonus, bonusSend, 'deposit'); }
   let needSeparate = false;
   if (!r.success && (r.code === 'bonus_out_of_range' || (r.httpStatus === 422 && /bon(o|us)/i.test(String(r.error || ''))))) {
     logger.warn(`[auto-bonus] ${username}: 1girox rechazó la carga por el bono $${bonus} (${r.code || r.error}) ⇒ carga sin bono + bono aparte`);
@@ -3735,7 +3737,7 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
         description: `Bonificación incluida en carga automática hgcash de $${Number(amount).toLocaleString('es-AR')} — automática: ${_auto.label}`,
         adminUsername: 'auto-hgcash', adminRole: 'system',
         transactionId: result.data?.transfer_id || result.data?.transferId,
-        metadata: { source: _auto.source || 'auto_bonus', movementId: movement.movementId, autoBonus: { pct: _auto.pct, rule: _auto.rule } },
+        metadata: { source: _auto.source || 'auto_bonus', movementId: movement.movementId, autoBonus: { pct: _auto.pct, rule: _auto.rule }, creditedAs: result.bonusVia === 'separate' ? (result.bonusCreditedAs || null) : 'bonus', carriedBonus: result.carriedBonus || 0 }, // #1040
         timestamp: new Date()
       }).catch((e) => logger.warn(`[auto-bonus] hgcash: no se pudo registrar la Transaction del bono (${user.username}): ${e.message}`));
     }
@@ -10818,7 +10820,8 @@ app.post('/api/vip/rakeback/claim', authMiddleware, async (req, res) => {
 
       const depositResult = await girox.creditUserBalance(username, amount, _rakebackReference(week.fromDateStr, userId), {
         multiplier: await _giftRolloverX(), // #659: rollover global
-        description: `Rakeback semanal VIP (${week.fromDateStr} a ${week.toDateStr})`
+        description: `Rakeback semanal VIP (${week.fromDateStr} a ${week.toDateStr})`,
+        carryOver: true // #1040: con bono activo, BONO + lo que quedaba (no pisa)
       });
 
       if (!depositResult.success) {
@@ -11749,6 +11752,7 @@ async function _agentDepositHandler(req, res, body) {
           adminUsername: req.user?.username,
           adminRole: req.user?.role || 'admin',
           transactionId: bonusJgResult.data?.transfer_id,
+          metadata: { creditedAs: result.bonusVia === 'separate' ? (result.bonusCreditedAs || null) : 'bonus', carriedBonus: result.carriedBonus || 0 }, // #1040
           timestamp: new Date()
         });
       }
@@ -12041,7 +12045,9 @@ app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, re
     const _playerInfo = await girox.getUserInfoByName(resolvedUsername, { fresh: true });
     const _bLocked = _playerInfo ? (Number(_playerInfo.bonusLocked) || 0) : 0;
     const _bClaim = _playerInfo ? (Number(_playerInfo.claimableTotal) || 0) : 0;
-    if (_bLocked + _bClaim > BONUS_GUARD_MIN_ARS) {
+    // #1040 (owner: "todos los bonos como bono"): ya no se rebota: `carryOver` reclama lo pendiente y le SUMA al bono nuevo lo que le
+    // quedaba del anterior (el cliente no pierde nada). El guard queda sólo si se pidió explícitamente con BONUS_GUARD_STRICT=1.
+    if (process.env.BONUS_GUARD_STRICT === '1' && _bLocked + _bClaim > BONUS_GUARD_MIN_ARS) {
       // El bono NO es saldo: un cliente con $0 puede tener igual un bono en
       // rollover o un "regalito" sin reclamar (auto-claim que falló). Se
       // detallan los montos para que el agente entienda POR QUÉ rebota.
@@ -12065,6 +12071,7 @@ app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, re
         // Elige un multiplicador VÁLIDO para la plataforma (x1 puede no estarlo).
         multiplier: await getGiroxBonusMultiplier(),
         noGiftGuard: true, // #992: la Bonificación MANUAL del panel vale también para una cuenta secundaria (decisión del agente)
+        carryOver: true, // #1040
         description: 'Bonificación otorgada'
       }
     );
@@ -16425,12 +16432,7 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
       // GUARD bono-sobre-bono (v1.7): otorgar un bono a quien ya tiene uno
       // activo lo PISA y le debita el resto → mejor rechazar sin quemar el canje.
       // fresh: decisión de plata → saldo/bono exacto, no cache.
-      const pInfo = await girox.getUserInfoByName(uDoc.username, { fresh: true });
-      if (pInfo && (Number(pInfo.bonusLocked) > 0 || Number(pInfo.claimableTotal) > 0)) {
-        return res.status(400).json({
-          error: 'Tenés un bono activo (o sin reclamar) en el casino. Terminalo y después canjeá tu código.'
-        });
-      }
+      // #1040: ya no se rechaza con bono activo: el crédito va con `carryOver` (bono nuevo + lo que le quedaba del anterior).
     }
 
     // Reserva atómica: UNA vez por cuenta PARA SIEMPRE (aunque el código cambie).
@@ -16476,7 +16478,7 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
       const _welcomeRolloverX = await getWelcomeCodeRolloverX();
       const credit = await girox.creditUserBalance(
         user.username, amount, `vip-welcome-${user.id}`,
-        { multiplier: _welcomeRolloverX, description: 'Bono sorpresa — código de bienvenida de la Comunidad' }
+        { multiplier: _welcomeRolloverX, description: 'Bono sorpresa — código de bienvenida de la Comunidad', carryOver: true /* #1040 */ }
       );
       if (!credit.success) {
         // Restaurar la reserva (guard en 'pending') para que pueda reintentar.
@@ -23131,9 +23133,14 @@ async function _closeGiroxSide(dayKey, d0, d1) {
     Transaction.aggregate([{ $match: Object.assign({ type: 'deposit', status: okSt, platform: plat, timestamp: { $gte: d0, $lte: d1 } }, notTest) },
       { $group: { _id: { $ifNull: ['$metadata.source', 'carga'] }, n: { $sum: 1 }, monto: { $sum: '$amount' }, bono: { $sum: { $ifNull: ['$bonus', 0] } } } }]),
     Transaction.aggregate([{ $match: Object.assign({ type: { $in: CASHBACK_GIFT_TX_TYPES }, status: okSt, platform: plat, timestamp: { $gte: d0, $lte: d1 } }, notTest) },
-      { $group: { _id: '$type', n: { $sum: 1 }, monto: { $sum: '$amount' } } }]),
+      { $group: { _id: '$type', n: { $sum: 1 }, monto: { $sum: '$amount' }, comoCargaN: { $sum: { $cond: [{ $eq: ['$metadata.creditedAs', 'deposit'] }, 1, 0] } }, comoCarga: { $sum: { $cond: [{ $eq: ['$metadata.creditedAs', 'deposit'] }, '$amount', 0] } } } }]),
     Transaction.aggregate([{ $match: Object.assign({ type: 'withdrawal', status: okSt, platform: plat, timestamp: { $gte: d0, $lte: d1 } }, notTest) }, { $group: { _id: null, n: { $sum: 1 }, monto: { $sum: '$amount' } } }])
   ]);
+  // #1040: regalos que 1girox recibió como CARGA (fallback: pasaba el máximo de bono, multiplicador no permitido…) figuran en "cargas" del panel
+  // de 1girox, no en "bonos" ⇒ se cuentan del lado de las cargas. Y el resto de bonos anteriores que se re-otorgó dentro de un bono nuevo (arrastre).
+  let regalosComoCarga = 0, regalosComoCargaN = 0, arrastre = 0, arrastreN = 0;
+  for (const x of gifts) { regalosComoCarga += Number(x.comoCarga) || 0; regalosComoCargaN += Number(x.comoCargaN) || 0; }
+  try { const ca = await mongoose.connection.collection('bonus_carry_log').aggregate([{ $match: { at: { $gte: d0, $lte: d1 } } }, { $group: { _id: null, n: { $sum: 1 }, m: { $sum: '$carry' } } }]).toArray(); if (ca[0]) { arrastre = ca[0].m || 0; arrastreN = ca[0].n || 0; } } catch (_) {}
   const G = { cargas: { n: 0, monto: 0 }, bonosCarga: { n: 0, monto: 0 }, regalos: { n: 0, monto: 0, porTipo: {} }, devoluciones: { n: 0, monto: 0 }, retiros: { n: 0, monto: 0 } };
   for (const x of dep) {
     if (x._id === 'payout_refund') { G.devoluciones.n += x.n; G.devoluciones.monto += x.monto; continue; }
@@ -23158,7 +23165,8 @@ async function _closeGiroxSide(dayKey, d0, d1) {
     fuera: { disponible: fuera.disponible, error: fuera.error, cargas: r0(fuera.cargas.monto), cargasN: fuera.cargas.n, cargasAcreditado: r0(fuera.cargas.acreditado), retiros: r0(fuera.retiros.monto), retirosN: fuera.retiros.n, items: fuera.items }
   };
   // Lo que el panel de 1girox debería mostrar para el día (todas las fichas que entraron/salieron de los jugadores).
-  out.esperado = { cargas: out.app.cargas + out.app.devoluciones + out.fuera.cargas, bonos: out.app.regalos + Math.max(0, out.fuera.cargasAcreditado - out.fuera.cargas), retiros: out.app.retiros + out.fuera.retiros };
+  out.app.regalosComoCarga = r0(regalosComoCarga); out.app.regalosComoCargaN = regalosComoCargaN; out.app.arrastreBonos = r0(arrastre); out.app.arrastreBonosN = arrastreN; // #1040
+  out.esperado = { cargas: out.app.cargas + out.app.devoluciones + out.fuera.cargas + r0(regalosComoCarga), bonos: out.app.regalos - r0(regalosComoCarga) + Math.max(0, out.fuera.cargasAcreditado - out.fuera.cargas), retiros: out.app.retiros + out.fuera.retiros };
   const doc = await DailyClose.findOne({ dateKey: dayKey }).select('giroxPanel').lean().catch(() => null);
   const gp = doc && doc.giroxPanel;
   if (gp) {
@@ -23167,7 +23175,7 @@ async function _closeGiroxSide(dayKey, d0, d1) {
     const causas = [];
     if (out.dif.cargas) causas.push(out.dif.cargas > 0 ? `1girox muestra ${r0(out.dif.cargas)} MÁS en cargas: alguien cargó fichas directo en el panel de 1girox (no pasó por la app ni por su caja), o una carga de la app se registró a otro día.` : `La app registra ${r0(-out.dif.cargas)} más en cargas que 1girox: una carga que la app dio por hecha no entró (revisar las cargas a mano y las de prueba) o se contó en otro día.`);
     if (out.dif.retiros) causas.push(out.dif.retiros > 0 ? `1girox muestra ${r0(out.dif.retiros)} MÁS en retiros: alguien descontó fichas directo en el panel de 1girox (por fuera de la app).` : `La app registra ${r0(-out.dif.retiros)} más en retiros que 1girox: un descuento que la app dio por confirmado no figura en 1girox (revisar Confirmación de pagos).`);
-    if (out.dif.bonos) causas.push(`Bonos: diferencia de ${r0(out.dif.bonos)}. Puede ser un bono automático de 1girox (reglas del panel de 1girox, bienvenida al crear el jugador) o un regalo que la app acreditó como carga.`);
+    if (out.dif.bonos) causas.push(`Bonos: diferencia de ${r0(out.dif.bonos)}. Puede ser un bono automático de 1girox (reglas del panel de 1girox, bienvenida al crear el jugador)${arrastre > 0 ? ` o el resto de bonos anteriores que se volvió a dar adentro de un bono nuevo (${arrastreN} vez/veces, $${r0(arrastre).toLocaleString('es-AR')}: 1girox lo cancela del viejo y lo suma al nuevo)` : ''}.`);
     out.causas = causas; out.cuadra = causas.length === 0;
   }
   return out;
@@ -30396,14 +30404,12 @@ async function _creditNotifBatchGift(uDoc, batch) {
   // fresh: decisión de plata → saldo/bono exacto, no cache.
   const pInfo = await girox.getUserInfoByName(uDoc.username, { fresh: true });
   if (!pInfo) return { ok: false, retryable: true, reason: 'no se pudo leer la cuenta del casino' };
-  if (Number(pInfo.bonusLocked) > 0 || Number(pInfo.claimableTotal) > 0) {
-    return { ok: false, blocked: true, reason: 'bono activo en el casino' };
-  }
+  // #1040: ya no se saltea a quien tiene bono activo: `carryOver` le suma lo que le quedaba al bono nuevo (no lo pisa).
   const rollover = Math.max(0, Number(batch.rolloverX) || 0);
   const _ref = `vip-nbatch-${batch.id}-${uDoc.id}`.slice(0, 100);
   const credit = await girox.creditUserBalance(
     uDoc.username, batch.amount, _ref,
-    { multiplier: rollover, description: `Regalo por notificación — lote de ${batch.sentBy}` }
+    { multiplier: rollover, description: `Regalo por notificación — lote de ${batch.sentBy}`, carryOver: true /* #1040 */ }
   );
   if (!credit.success) {
     logger.warn(`[notif-batch] crédito de fichas falló para ${uDoc.username} (lote ${batch.id}): ${credit.error || 's/detalle'}`);

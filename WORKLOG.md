@@ -21,6 +21,17 @@
   el multiplicador (ej. referidos ×1 — hoy apagados). Lo grabado en Transaction sigue siendo el regalo (el resto no es regalo nuevo; `carriedBonus`).
 - **Efecto lateral bueno:** el reintento de un regalo que ya entró ya no cambia de ruta (antes, con el bono recién dado, el reintento iba por /deposit);
   ahora va por /bonus con la misma reference ⇒ duplicate.
+- **Segunda pasada (owner: "revisá que todos los bonos vayan como bono, sólo las cargas normales como carga"):** también con arrastre (`carryOver`) el
+  rakeback VIP, el código de bienvenida (ya no rechaza "tenés un bono activo"), el regalo por lote (ya no saltea a quien tiene bono activo) y la
+  Bonificación manual del panel (ya no rebota; el bloqueo viejo sólo con env `BONUS_GUARD_STRICT=1`). Revisado: misiones, instalar app, ruleta, código
+  sorpresa, reseñas, reembolsos, VIP, fueguito, bono de carga ⇒ BONO. Por `/deposit` quedan sólo las cargas reales (`_depositWithBonus`) y las
+  devoluciones de retiro rechazado (plata del cliente, a propósito).
+- **Cierre vs 1girox (`_closeGiroxSide`):** los regalos con `metadata.creditedAs:'deposit'` (los que igual tuvieron que entrar como carga) se cuentan
+  en "cargas" esperadas y no en "bonos"; el bono de carga (Transaction 'bonus' hgcash y manual) ahora guarda `creditedAs` y `carriedBonus`. Cada
+  arrastre queda en la colección `bonus_carry_log` (hook `girox.setBonusCarryHook`) y el cierre lo muestra (`app.arrastreBonos`) como causa posible
+  de diferencia en bonos. El cierre de PLATA (banco: ingresos/gastos/resultado) nunca dependió de esto.
+- **Landings** (`public/landing` y `landing/` de Vercel): "+$5.000 EXTRA instalando nuestra app" (antes "+50%…"); `/api/landing/info` manda
+  `welcome.installFixedArs` (con monto fijo, `withApp` ya no suma el %).
 - **Lo que ya figuró como Carga NO se corrige solo** (quedó así en 1girox). Test: `scripts/test-gift-rollovers.js` (20 casos, 6 nuevos: el 1girox
   falso ahora aplica "bono sobre bono" y `/bonus/claim`). Todos los `scripts/test-*.js` OK.
 

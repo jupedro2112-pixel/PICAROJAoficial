@@ -126,7 +126,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   acumulativo), bono de nivel VIP y rakeback. **#991 (2026-10-28):** las comisiones de REFERIDOS también son BONO, con rollover ×`Config['referralRolloverX']` (1) vía `creditGift` (si 1girox no acepta ×1 como bono, entran como carga ×1, misma reference). Misiones y reembolso acumulativo usan SIEMPRE el global (`_giftRolloverX`), no su propio número. Validar con `node scripts/test-gift-rollovers.js`.
   **#1040 (2026-11-09):** un bono nuevo con cliente que YA tiene bono activo va como BONO con el resto del viejo SUMADO (`bonusCarryOver`; 1girox pisa
   el viejo): antes caía a CARGA y figuraba como "Carga" en 1girox (reclamo del owner). Un bono NUEVO con rollover tiene que pasar por `creditGift` o por
-  `creditUserBalance(..., {multiplier, carryOver:true})`, nunca un `/bonus` directo.
+  `creditUserBalance(..., {multiplier, carryOver:true})`, nunca un `/bonus` directo. Un regalo que igual entre como carga se marca `metadata.creditedAs:'deposit'`
+  (el cierre vs 1girox lo cuenta en cargas); los arrastres quedan en `bonus_carry_log`.
   **#882/#883 → #976:** TODA carga real (hgcash y manual) va con rollover propio ×`Config['depositRolloverX']` (**1** desde 2026-10-24, antes 3) en
   `_depositWithBonus`; el bono ×5. Retiro mínimo `Config['withdrawMinArs']` $5.000 (#976). Registro abierto (`noWelcomeGifts`): sin fichas gratis ni 2ª
   carga hasta ser CLIENTE FIEL (**#1039:** `Config['trustRule']` = 3 cargas reales + 7 días desde la primera, `_isTrustedClient` / `_noWelcomeActive`;
