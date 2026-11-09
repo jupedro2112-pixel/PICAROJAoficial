@@ -57,15 +57,89 @@ function storyButtons(story, appUrl) {
 }
 /** Texto del posteo de una historia (HTML de Telegram). */
 function storyCaption(story, now = new Date()) {
+  // #1044-b (owner: "foto y texto, bien premium estilo Stake"): titular fuerte, texto corto, separadores finos y la llamada al botón.
   const L = [];
-  if (story.title) L.push('<b>' + esc(story.title) + '</b>');
+  L.push('🔴 <b>PICA ROJA</b>');
+  if (story.title) L.push('<b>' + esc(String(story.title).toUpperCase()) + '</b>');
   if (story.text) L.push(esc(story.text));
   if (Number(story.bonusPct) > 0 && story.bonusUntil && new Date(story.bonusUntil) > now) {
     const h = new Date(story.bonusUntil).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
-    L.push('🎁 <b>Bono +' + Math.round(story.bonusPct) + '%</b> en tu próxima carga hasta las ' + h + ' h: reclamalo en la historia de la app.');
+    L.push('━━━━━━━━━━━━━━\n🎁 <b>BONO +' + Math.round(story.bonusPct) + '%</b> en tu próxima carga\n⏳ Hasta las ' + h + ' h · reclamalo en la app');
   }
-  L.push('👇 Entrá desde el botón de abajo.');
+  L.push('━━━━━━━━━━━━━━\n👇 <b>Entrá y jugá ahora</b>');
   return cut(L.join('\n\n'), CAPTION_MAX);
+}
+
+// ── #1044-b FOTOS PREMIUM (SVG ⇒ PNG en el server). Sin emojis adentro de la imagen (el render no los tiene): sólo letras y formas. ──
+const xesc = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const noEmoji = (t) => String(t || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').replace(/\s{2,}/g, ' ').trim();
+function wrap(text, max, lines) {
+  const out = []; let cur = '';
+  for (const w of noEmoji(text).split(/\s+/).filter(Boolean)) {
+    if ((cur + ' ' + w).trim().length > max) { if (cur) out.push(cur); cur = w; } else cur = (cur + ' ' + w).trim();
+    if (out.length >= lines) break;
+  }
+  if (cur && out.length < lines) out.push(cur);
+  if (out.length === lines && noEmoji(text).length > out.join(' ').length) out[lines - 1] = cut(out[lines - 1], max);
+  return out;
+}
+const FONT = "font-family=\"Helvetica, Arial, sans-serif\"";
+function bgDefs() {
+  return '<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f1923"/><stop offset="1" stop-color="#1a2c38"/></linearGradient>' +
+    '<linearGradient id="rd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e60023"/><stop offset="1" stop-color="#ff4d5e"/></linearGradient></defs>';
+}
+function brand(x, y) { return `<rect x="${x}" y="${y - 30}" width="14" height="40" rx="4" fill="url(#rd)"/><text x="${x + 28}" y="${y}" ${FONT} font-size="34" font-weight="bold" fill="#ffffff" letter-spacing="3">PICA ROJA</text>`; }
+/** Foto cuadrada de una historia SIN foto propia (sólo texto): titular grande, texto y "ENTRÁ AHORA". */
+function storyCardSvg(story) {
+  const W = 1080; const t = wrap(String(story.title || '').toUpperCase(), 18, 3); const b = wrap(story.text || '', 34, 4);
+  let y = 330; let body = '';
+  for (const l of t) { body += `<text x="90" y="${y}" ${FONT} font-size="84" font-weight="bold" fill="#ffffff">${xesc(l)}</text>`; y += 96; }
+  y += 30; body += `<rect x="90" y="${y - 20}" width="120" height="8" rx="4" fill="url(#rd)"/>`; y += 50;
+  for (const l of b) { body += `<text x="90" y="${y}" ${FONT} font-size="44" fill="#b1bad3">${xesc(l)}</text>`; y += 60; }
+  const bonus = Number(story.bonusPct) > 0 ? `<rect x="90" y="830" width="420" height="96" rx="48" fill="url(#rd)"/><text x="300" y="893" text-anchor="middle" ${FONT} font-size="46" font-weight="bold" fill="#fff">BONO +${Math.round(story.bonusPct)}%</text>` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${W}" viewBox="0 0 ${W} ${W}">${bgDefs()}<rect width="${W}" height="${W}" fill="url(#bg)"/>` +
+    `<circle cx="980" cy="120" r="260" fill="#e60023" opacity="0.10"/><circle cx="1020" cy="980" r="200" fill="#e60023" opacity="0.07"/>` +
+    brand(90, 150) + body + bonus +
+    `<rect x="${bonus ? 540 : 90}" y="830" width="450" height="96" rx="48" fill="none" stroke="#ffffff" stroke-width="3"/><text x="${bonus ? 765 : 315}" y="893" text-anchor="middle" ${FONT} font-size="40" font-weight="bold" fill="#fff" letter-spacing="2">ENTRÁ AHORA</text>` +
+    `<text x="90" y="1010" ${FONT} font-size="28" fill="#55657e" letter-spacing="2">picaroja.com</text></svg>`;
+}
+/** Foto del PANEL DEL MES: tres números grandes (pagado, regalado, premio más grande) + sorteo. */
+function panelSvg(s) {
+  const W = 1280, H = 720; const mes = (MONTHS[s.monthIdx] || '').toUpperCase();
+  const tile = (x, label, value, sub) => `<rect x="${x}" y="250" width="360" height="250" rx="24" fill="#213743"/><rect x="${x}" y="250" width="360" height="8" rx="4" fill="url(#rd)"/>` +
+    `<text x="${x + 30}" y="320" ${FONT} font-size="26" fill="#b1bad3" letter-spacing="2">${xesc(label)}</text>` +
+    `<text x="${x + 30}" y="410" ${FONT} font-size="${value.length > 10 ? 46 : value.length > 8 ? 54 : 60}" font-weight="bold" fill="#ffffff">${xesc(value)}</text>` +
+    `<text x="${x + 30}" y="460" ${FONT} font-size="24" fill="#55657e">${xesc(sub || '')}</text>`;
+  const so = s.sorteo && (s.sorteo.prizes || [])[0] ? noEmoji(`SORTEO: ${s.sorteo.prizes[0].name}${s.sorteo.prizes[1] ? ' + ' + s.sorteo.prizes[1].name : ''}`) : 'CARGAS Y RETIROS AUTOMÁTICOS LAS 24 H';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${bgDefs()}<rect width="${W}" height="${H}" fill="url(#bg)"/>` +
+    `<circle cx="1180" cy="80" r="240" fill="#e60023" opacity="0.10"/>` + brand(80, 110) +
+    `<text x="80" y="195" ${FONT} font-size="56" font-weight="bold" fill="#ffffff">${xesc(mes)} ${s.year}</text>` +
+    tile(80, 'PREMIOS PAGADOS', money(s.paid && s.paid.sum), s.paid && s.paid.count ? s.paid.count.toLocaleString('es-AR') + ' retiros' : '') +
+    tile(460, 'REGALADO EN BONOS', money(s.gifted && s.gifted.sum), 'este mes') +
+    tile(840, 'PREMIO MÁS GRANDE', s.top && s.top.amount > 0 ? money(s.top.amount) : '—', s.top && s.top.username ? maskUser(s.top.username) : '') +
+    `<rect x="80" y="550" width="1120" height="100" rx="50" fill="url(#rd)"/><text x="640" y="614" text-anchor="middle" ${FONT} font-size="34" font-weight="bold" fill="#fff" letter-spacing="1">${xesc(cut(so.toUpperCase(), 58))}</text></svg>`;
+}
+/** Texto que acompaña la foto del panel (≤1024). */
+function panelCaption(s) {
+  const mes = MONTHS[s.monthIdx] || '';
+  const L = [`🔴 <b>PICA ROJA · ${esc(mes.toUpperCase())} ${s.year}</b>`, '━━━━━━━━━━━━━━', '🎁 <b>BENEFICIOS DEL MES</b>'];
+  for (const x of benefitLines(s.benefits || {})) L.push('▸ ' + esc(x));
+  L.push('━━━━━━━━━━━━━━');
+  L.push(`💸 Premios pagados: <b>${money(s.paid && s.paid.sum)}</b>`);
+  L.push(`🎁 Regalado en bonos: <b>${money(s.gifted && s.gifted.sum)}</b>`);
+  if (s.top && s.top.amount > 0) L.push(`🏆 Premio más grande: <b>${money(s.top.amount)}</b> (${esc(maskUser(s.top.username))})`);
+  if (s.sorteo) L.push(`🎟️ ${esc(s.sorteo.title)}`);
+  L.push('━━━━━━━━━━━━━━', '👇 Tocá los botones para ver el detalle');
+  return cut(L.join('\n'), CAPTION_MAX);
+}
+// Cambia la foto + texto + botones de un mensaje ya publicado (panel del mes).
+async function editPhoto(token, chatId, msgId, buffer, caption, replyMarkup) {
+  const FormData = require('form-data'); const fd = new FormData();
+  fd.append('chat_id', String(chatId)); fd.append('message_id', String(msgId));
+  fd.append('media', JSON.stringify({ type: 'photo', media: 'attach://p', caption, parse_mode: 'HTML' }));
+  fd.append('p', buffer, { filename: 'panel.png', contentType: 'image/png' });
+  if (replyMarkup) fd.append('reply_markup', JSON.stringify(replyMarkup));
+  return call(token, 'editMessageMedia', fd, { headers: fd.getHeaders() });
 }
 
 /**
@@ -125,4 +199,4 @@ function popupText(key, s) {
   return cut(t, POPUP_MAX);
 }
 
-module.exports = { call, sendMedia, storyButtons, storyCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };
+module.exports = { call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };

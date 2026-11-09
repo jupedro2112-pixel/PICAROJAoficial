@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1044-b. Canal de Telegram PREMIUM: todo con FOTO y texto, estilo oscuro + rojo (2026-11-09)
+- **Owner:** "quiero foto y quiero texto, bien premium estilo Stake". `telegramChannel.storyCardSvg` (historia sin foto ⇒ tarjeta 1080×1080 con el titular
+  grande, texto, "BONO +X%" y "ENTRÁ AHORA") y `panelSvg` (panel del mes 1280×720: tres números grandes — pagado, regalado, premio más grande tapado — y el
+  sorteo). SVG ⇒ PNG con mupdf; sin emojis adentro de la imagen. Textos con titular en mayúsculas y separadores (`storyCaption`, `panelCaption`).
+- El panel fijado ahora es FOTO + texto (`panelKind`), se edita cada hora con `editMessageMedia` (`tgChannel.editPhoto`); si la foto no se puede armar
+  va como texto, y al cambiar de tipo se publica uno nuevo, se fija y se desfija el viejo. El /start por privado también manda la foto.
+- **Permisos del bot en el canal (recomendado al owner):** publicar, editar y borrar mensajes. SIN "Add New Admins" (así no puede tocar a ningún admin; al
+  creador del canal nunca lo puede sacar nadie). El token, sólo en el panel.
+
 ### 1044. 📣 CANAL DE TELEGRAM: historias al canal (rotativo) + PANEL DEL MES fijado con botones — panel v261 (2026-11-09)
 - **Owner:** "contenido rotativo automático, siempre lo que se publica en historias va al canal, para cada uno un botón directo a su aplicación o
   página; el canal con botones y premium: ver beneficios del mes, cuánto se regaló, cuánto hubo en premios en el mes, el premio más grande, info de

@@ -30621,7 +30621,8 @@ async function _tgStoryMedia(st) {
       const full = await Story.findOne({ id: st.id }).select('+autoImg').lean();
       if (full && full.autoImg) { buf = Buffer.from(storyImage.renderSvg(full.autoImg), 'utf8'); mime = 'image/svg+xml'; }
     }
-    if (!buf) return null;
+    // #1044-b (owner: "quiero foto y texto, bien premium"): historia sin foto ⇒ tarjeta con el titular grande (estilo oscuro + rojo).
+    if (!buf) { buf = Buffer.from(tgChannel.storyCardSvg(st), 'utf8'); mime = 'image/svg+xml'; }
     if (/svg/i.test(mime)) { const png = await pdfImage.svgBufferToPng(buf, { scale: 1 }); if (!png) return null; buf = png; mime = 'image/png'; }
     return { kind: 'photo', media: { buffer: buf, mime, filename: 'historia.' + (mime.split('/')[1] || 'png').replace('jpeg', 'jpg') } };
   } catch (e) { logger.warn(`[telegram] foto de la historia ${st.id}: ${e.message}`); return null; }
@@ -30709,15 +30710,23 @@ async function _tgPanelTick(force) {
   if (!force && !(await _cronClaim('tgpanel', 50 * 60000))) return { ok: false, why: 'otra instancia' };
   const s = await _tgPanelCompute();
   try { await Config.set('telegramPanelStats', s, 'telegram'); } catch (_) {}
-  const text = tgChannel.panelText(s), reply_markup = tgChannel.panelButtons(c.appUrl);
-  if (c.panelMsgId) {
-    const r = await tgChannel.call(c.token, 'editMessageText', { chat_id: c.channel, message_id: c.panelMsgId, text, parse_mode: 'HTML', reply_markup, disable_web_page_preview: true });
+  const reply_markup = tgChannel.panelButtons(c.appUrl);
+  // #1044-b: el panel es una FOTO (tres números grandes) con el texto abajo; si la foto no se puede armar, va como texto.
+  let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(s), 'utf8'), { scale: 1 }); } catch (_) {}
+  const kind = png ? 'photo' : 'text';
+  const caption = tgChannel.panelCaption(s), text = tgChannel.panelText(s);
+  if (c.panelMsgId && (c.panelKind || 'text') === kind) {
+    const r = kind === 'photo' ? await tgChannel.editPhoto(c.token, c.channel, c.panelMsgId, png, caption, reply_markup)
+      : await tgChannel.call(c.token, 'editMessageText', { chat_id: c.channel, message_id: c.panelMsgId, text, parse_mode: 'HTML', reply_markup, disable_web_page_preview: true });
     if (r.ok || /not modified/i.test(r.error || '')) return { ok: true, edited: true };
-    if (!/not found|can't be edited|MESSAGE_ID_INVALID/i.test(r.error || '')) { await _tgSet({ lastError: 'panel: ' + String(r.error).slice(0, 160), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
+    if (!/not found|can't be edited|MESSAGE_ID_INVALID|no media/i.test(r.error || '')) { await _tgSet({ lastError: 'panel: ' + String(r.error).slice(0, 160), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
   }
-  const r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', reply_markup, disable_web_page_preview: true, disable_notification: true });
+  const r = kind === 'photo'
+    ? await tgChannel.sendMedia(c.token, 'photo', c.channel, { buffer: png, mime: 'image/png', filename: 'panel.png' }, { caption, parse_mode: 'HTML', reply_markup, disable_notification: true })
+    : await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', reply_markup, disable_web_page_preview: true, disable_notification: true });
   if (!r.ok) { await _tgSet({ lastError: 'panel: ' + String(r.error).slice(0, 160), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
-  await _tgSet({ panelMsgId: r.result.message_id });
+  if (c.panelMsgId) await tgChannel.call(c.token, 'unpinChatMessage', { chat_id: c.channel, message_id: c.panelMsgId }); // el panel viejo deja de estar fijado
+  await _tgSet({ panelMsgId: r.result.message_id, panelKind: kind });
   const pin = await tgChannel.call(c.token, 'pinChatMessage', { chat_id: c.channel, message_id: r.result.message_id, disable_notification: true });
   if (!pin.ok) await _tgSet({ lastError: 'no pude fijar el panel (¿el bot es admin con permiso de fijar?): ' + String(pin.error).slice(0, 120), lastErrorAt: new Date() });
   return { ok: true, created: true };
@@ -30742,6 +30751,8 @@ app.post('/api/telegram/webhook', async (req, res) => {
     } else if (u.callback_query) {
       await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id });
     } else if (u.message && u.message.chat && u.message.chat.type === 'private') {
+      let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(stats), 'utf8'), { scale: 1 }); } catch (_) {}
+      if (png) { const r = await tgChannel.sendMedia(c.token, 'photo', u.message.chat.id, { buffer: png, mime: 'image/png', filename: 'panel.png' }, { caption: tgChannel.panelCaption(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl) }); if (r.ok) return; }
       await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl), disable_web_page_preview: true });
     }
   } catch (e) { logger.warn('[telegram] webhook: ' + e.message); if (!res.headersSent) res.status(200).end(); }
