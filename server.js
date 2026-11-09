@@ -5774,10 +5774,12 @@ app.post('/api/admin/support-bot/learned/:id', authMiddleware, adminMiddleware, 
     const q = typeof b.question === 'string' ? b.question.trim().slice(0, 300) : null, a = typeof b.answer === 'string' ? b.answer.trim().slice(0, 800) : null;
     if (req.params.id === 'new') {
       if (!q || !a) return res.status(400).json({ error: 'Escribí la pregunta y la respuesta.' });
+      if (!supportBot.learnIsSafe(q, a)) return res.status(400).json({ error: 'Sin links, CBU, alias con números, teléfonos ni mails: el CBU y el alias ya están arriba del chat y cambian.' });
       await _sbLearnCol().insertOne({ _id: uuidv4(), question: q, answer: a, variants: [], count: 0, uses: 0, status: 'approved', approvedBy: req.user.username, approvedAt: now, createdAt: now, lastAt: now });
     } else if (act === 'delete') {
       await _sbLearnCol().deleteOne({ _id: req.params.id });
     } else if (['approve', 'reject', 'save'].includes(act)) {
+      if ((q || a) && act !== 'reject' && !supportBot.learnIsSafe(q || 'x', a || 'x')) return res.status(400).json({ error: 'Sin links, CBU, teléfonos ni mails en las respuestas: el CBU y el alias ya están arriba del chat y cambian.' });
       const set = { lastAt: now }; if (q) set.question = q; if (a) set.answer = a;
       if (act === 'approve') Object.assign(set, { status: 'approved', approvedBy: req.user.username, approvedAt: now });
       if (act === 'reject') Object.assign(set, { status: 'rejected', rejectedBy: req.user.username });

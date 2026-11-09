@@ -8,6 +8,10 @@
 
 ## Sesión 2026-11-09
 
+### 1042-k. Respuestas cargadas a mano con el mismo candado (2026-11-09)
+- Agregar / editar en 🧠 Responder para IA rechaza links, CBU/CVU, teléfonos y mails (`learnIsSafe`, como lo aprendido por la IA): el CBU y el alias
+  ya están arriba del chat y cambian. Guía para el equipo (PDF, fuera del repo) con retiros, bot de soporte y cómo completar Responder para IA.
+
 ### 1042-j. Retiros automáticos: ninguno queda colgado en "Pagos a confirmar" (2026-11-09)
 - **Owner (a partir de una consulta de un agente sobre dos retiros del mismo cliente):** "revisá que funcione todo el automático, eso de confirmar no debería pasar".
 - Revisado OK: pedir no descuenta fichas; el pedido nuevo reemplaza al anterior; sin freno se paga solo; al pagar (auto o a mano) se anulan los otros
