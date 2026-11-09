@@ -203,7 +203,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/const sentAny = await Message\.findOne[\s\S]{0,200}if \(sentAny\) return;\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'IA falla y no salió respuesta fija ⇒ aviso + agente (nunca un visto)');
   assert.ok(/if \(!r\.reply\) r\.reply = /.test(S), 'silencio sólo después de una frase de cierre');
   assert.ok(/VIP\.ui\.showModal = function \(id\) \{ try \{ _modalIntoCasino\(id\); \}/.test(H) && /_modalsBackAll\(\); \} catch/.test(H), 'ventanas adentro de Girox');
-  assert.ok(/#1042-n[\s\S]{0,2500}if \(H\.has\(r\.userId\) \|\| A\.has\(r\.userId\)\) return true;[\s\S]{0,600}if \(!needsAgent\(r\)\) \{ r\.closed = true; r\.botHandled = true; \}/.test(S), 'Soporte: todo se ve, abierto sólo si necesita un agente');
+  assert.ok(/#1042-n[\s\S]{0,2500}if \(H\.has\(r\.userId\) \|\| A\.has\(r\.userId\)\) return true;[\s\S]{0,600}if \(!needsAgent\(r\)\) \{ r\.closed = true; r\.botHandled = true; return r; \}/.test(S), 'Soporte: todo se ve, abierto sólo si necesita un agente');
   assert.ok(/if \(mode !== 'play'\) \{ try \{ if \(document\.body\.classList\.contains\('ev-expanded'\)\)/.test(H), 'al cambiar de menú se suelta el bloqueo de scroll');
   assert.ok(/return c\.enabled && !c\.classic && \(supportBot\.isAvailable\(\) \|\| c\.learnedOnly\);/.test(S) && /cfg\.classic \|\| \(!supportBot\.isAvailable\(\) && !cfg\.learnedOnly\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
@@ -219,6 +219,18 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/VIP\.autoload\.pickReceipt\('clip'\)/.test(P), 'la cámara del chat ⇒ guía');
   const routes = S.slice(S.indexOf("app.post('/api/admin/support-bot/test'"), S.indexOf("app.get('/api/admin/meta-pixels'"));
   assert.ok(!/status\(502\)/.test(routes), 'nunca 502 (Cloudflare lo tapa)');
+});
+
+caso('#1045 Pase a un agente: va a SOPORTE (no reabre en Chats), queda abierto con 🆘 hasta que conteste una persona y el cierre de 30 min no lo cierra', () => {
+  const S = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  const ho = S.slice(S.indexOf('async function _supportHandoffNow('), S.indexOf('async function _supportHandoffNow(') + 1200);
+  assert.ok(!/ChatStatus\.updateOne/.test(ho) && /support_handoff/.test(ho), 'el pase manual no abre en Chats');
+  const bh = S.slice(S.indexOf('// TRABADO ⇒ a una persona'), S.indexOf('// TRABADO ⇒ a una persona') + 1500);
+  assert.ok(!/ChatStatus\.updateOne/.test(bh) && /support_handoff/.test(bh), 'el pase del bot no abre en Chats');
+  assert.ok(/if \(h && \(!a \|\| new Date\(a\) < new Date\(h\)\)\) \{ r\.closed = false; r\.waitingAgent = true; \}/.test(S));
+  assert.ok(/if \(_waiting\.has\(r\._id\)\) continue;/.test(S), 'el cierre automático respeta a los que esperan agente');
+  const A = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
+  assert.ok(/socket\.on\('support_handoff'/.test(A) && /ESPERA AGENTE/.test(A));
 });
 
 (async () => {

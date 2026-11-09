@@ -1987,6 +1987,9 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   (`_inicioAiUsage` en `/api/admin/inicio/stats` ⇒ `_inicioAiHtml`). Si cambian los precios o se agrega un modelo, actualizar `SB_PRICES`.
 - **#1042-x:** bot con Haiku 5.5; handoff de la IA ⇒ mensaje con botón "Tengo otro problema" (sólo el botón abre el chat a un agente); saludo local al entrar
   (`/sys_support_greet` vía `/api/support/ui-mode`, `VIP.home.spGreetMsg`); el cliente ve 24 h de chat; la burbuja delega siempre en `casinoChatToggle`.
+- **Pase a un agente (#1045):** el pase del bot / "Tengo otro problema" NO abre el chat en Chats (`ChatStatus`); deja la nota `bot_handoff` y emite
+  `support_handoff`. Soporte (`_supportConversationsBuild`) lo muestra abierto con `waitingAgent` (🆘) mientras ninguna persona haya contestado después
+  de la nota, y `_supportAutoCloseTick` no lo cierra. Al contestar un agente vuelven las reglas normales (cierre de 30 min incluido).
 - **Canal de Telegram #1044-d:** (1) de las historias automáticas de la app (`sa-<día>-*`) va al canal UNA por día (`_tgIsDailyAuto`, rota cuál);
   partidos (`deporte`) y la historia con bono (`TG_ALWAYS_KINDS`) van siempre; los avisos del código sorpresa de la app (`cd*`) nunca. (2) CÓDIGO EXCLUSIVO:
   `_tgDropTick` cada 2 min (lock `tgdrop`) lanza un `CodeDrop` con `createdBy:'telegram'` cuando pasa `telegramBot.dropNextAt` ($5.000 × 10, cada 15 días,

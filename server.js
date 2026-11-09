@@ -15815,14 +15815,15 @@ async function _supportSentSince(userId, since) {
 }
 // #1042-u: pasa el chat a un agente YA (chat ABIERTO en Soporte + nota interna); el bot se corre `handoffPauseMin` (busca la nota bot_handoff).
 async function _supportHandoffNow(userId, username, reason) {
-  try { await ChatStatus.updateOne({ userId }, { $set: { userId, username, status: 'open', closedAt: null, closedBy: null, lastMessageAt: new Date() } }, { upsert: true }); } catch (_) {}
+  // #1045 (owner: "tiene que ir a SOPORTE, no a Chats"): el pase NO abre el chat en Chats (ChatStatus); queda abierto con 🆘 en Soporte
+  // (lista /api/admin/support/conversations: nota bot_handoff sin respuesta de una persona después).
   try {
     const note = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: userId, receiverRole: 'user',
       content: `🤖➡️👤 PASA A UN AGENTE: ${reason}. Respondé acá (mientras escribas, el bot no contesta en este chat).`,
       type: 'system', adminOnly: true, metadata: { kind: 'bot_handoff', reason }, timestamp: new Date(), read: false });
     io.to(`chat_${userId}`).emit('new_message', note);
     notifyAdmins('new_message', { message: note, userId, username });
-    notifyAdmins('chat_reopened', { userId, username, by: 'bot' });
+    notifyAdmins('support_handoff', { userId, username }); // #1045: avisa a Soporte (no reabre en Chats)
   } catch (_) {}
   try { _supportBotStat('handoffs'); } catch (_) {}
 }
@@ -16119,16 +16120,16 @@ async function _supportBotRun(userId, username, token, t0) {
     if (!r.learnedId) _supportBotStat('replies', 1); // #1042-w: los tokens y el costo los suma _supportBotCost (una vez por llamada)
   }
   if (r.handoff) {
-    // TRABADO ⇒ a una persona: el chat queda ABIERTO en Soporte del panel con la nota del motivo (y el bot se corre un rato).
+    // TRABADO ⇒ a una persona: el chat queda ABIERTO en SOPORTE del panel (🆘 ESPERA AGENTE) con la nota del motivo (y el bot se corre un rato).
     _supportBotStat('handoffs');
-    try { await ChatStatus.updateOne({ userId }, { $set: { userId, username, status: 'open', closedAt: null, closedBy: null, lastMessageAt: new Date() } }, { upsert: true }); } catch (_) {}
+    // #1045: no abre el chat en Chats; queda abierto en SOPORTE (ver _supportConversationsBuild).
     try {
       const note = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: userId, receiverRole: 'user',
         content: `🤖➡️👤 EL BOT LO PASA A UN AGENTE: ${r.handoffReason || r.error || 'necesita una persona'}. Respondé acá (mientras escribas, el bot no contesta en este chat).`,
         type: 'system', adminOnly: true, metadata: { kind: 'bot_handoff', reason: r.handoffReason || null }, timestamp: new Date(), read: false });
       io.to(`chat_${userId}`).emit('new_message', note);
       notifyAdmins('new_message', { message: note, userId, username });
-      notifyAdmins('chat_reopened', { userId, username, by: 'bot' });
+      notifyAdmins('support_handoff', { userId, username }); // #1045: avisa a Soporte (no reabre en Chats)
     } catch (_) {}
     logger.info(`[support-bot] ${username} ⇒ agente (${r.handoffReason || r.error})`);
   } else if (reply) {
@@ -24629,7 +24630,14 @@ async function _supportConversationsBuild() {
           const ans = B.get(r.userId);
           return new Date(lu).getTime() < grace && !(ans && new Date(ans) >= new Date(lu));
         };
-        _rows = rows.map((r) => { if (!needsAgent(r)) { r.closed = true; r.botHandled = true; } return r; });
+        _rows = rows.map((r) => {
+          if (!needsAgent(r)) { r.closed = true; r.botHandled = true; return r; }
+          // #1045 (owner, caso picajulieta25): el bot lo pasó a un agente y NINGUNA persona contestó después ⇒ queda ABIERTO esperando
+          // (antes el cierre automático de 30 min lo marcaba cerrado porque el sistema/bot había escrito último y desaparecía de Pendientes).
+          const h = H.get(r.userId), a = A.get(r.userId);
+          if (h && (!a || new Date(a) < new Date(h))) { r.closed = false; r.waitingAgent = true; }
+          return r;
+        });
       }
     } catch (e) { logger.warn(`[support] filtro del bot: ${e.message}`); }
     _rows = _rows.map((r) => { delete r.userTextList; delete r._needs; return r; });
@@ -32628,7 +32636,21 @@ async function _supportAutoCloseTick() {
     { $match: { _id: { $nin: [null, '', 'admin'] }, lastRole: { $ne: 'user' }, lastAt: { $lt: cutoff } } },
     { $limit: 300 }
   ]);
+  // #1045: un chat que el bot pasó a un agente y que ninguna PERSONA contestó después no se cierra solo (está esperando al equipo).
+  const _waiting = new Set();
+  try {
+    const ids = rows.map((r) => r._id); const s72 = new Date(Date.now() - 72 * 3600 * 1000);
+    if (ids.length) {
+      const [ho, hu] = await Promise.all([
+        Message.aggregate([{ $match: { receiverId: { $in: ids }, 'metadata.kind': 'bot_handoff', timestamp: { $gte: s72 } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
+        Message.aggregate([{ $match: { receiverId: { $in: ids }, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, timestamp: { $gte: s72 } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }])
+      ]);
+      const HU = new Map(hu.map((x) => [x._id, x.at]));
+      for (const x of ho) { const a = HU.get(x._id); if (!a || new Date(a) < new Date(x.at)) _waiting.add(x._id); }
+    }
+  } catch (e) { logger.warn('[support-autoclose] esperando agente: ' + e.message); }
   for (const r of rows) {
+    if (_waiting.has(r._id)) continue;
     try {
       const now = new Date();
       const u = await User.findOneAndUpdate(

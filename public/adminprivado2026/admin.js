@@ -1300,6 +1300,12 @@ function initSocket() {
         });
     });
 
+    // #1045: el bot pasó un chat a un agente ⇒ va a SOPORTE (no a Chats): refresca la lista y avisa.
+    socket.on('support_handoff', (data) => {
+        try { pollSupportBadge(); } catch (_) {}
+        try { const ss = document.getElementById('supportSection'); if (ss && ss.classList.contains('active')) loadSupport(); } catch (_) {}
+        try { showToast('🆘 El bot pasó a @' + ((data && data.username) || '?') + ' a un agente: andá a Soporte', 'info'); } catch (_) {}
+    });
     socket.on('chat_closed', (data) => {
         if (data.userId === selectedUserId) {
             showToast('Chat movido a Cerrados. Puedes seguir respondiendo.', 'info');
@@ -18005,7 +18011,7 @@ function _spRows(list) {
     return list.map(function (c) {
         const sel = _spSelected && _spSelected.userId === c.userId;
         return '<div onclick="spSelect(\'' + escapeHtml(c.userId) + '\',\'' + escapeHtml(c.username) + '\')" style="cursor:pointer;background:' + (sel ? 'rgba(37,211,102,0.14)' : 'rgba(255,255,255,0.04)') + ';border:1px solid ' + (sel ? 'rgba(37,211,102,0.5)' : 'rgba(255,255,255,0.1)') + ';border-radius:10px;padding:9px 11px;">' +
-            '<div style="display:flex;align-items:center;gap:6px;"><b style="color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">' + (c.online ? '🟢 ' : '') + '@' + escapeHtml(c.username) + '</b>' + (c.botHandled ? '<span title="Lo atendió la IA: se abre sólo si necesita un agente (#1042-n)" style="font-size:10px;font-weight:800;color:#8fd;">🤖 IA</span>' : '') + (c.unread > 0 ? '<span style="background:#ff5050;color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;font-weight:900;">' + c.unread + '</span>' : '') + '<span style="color:#777;font-size:10.5px;">' + _spAgo(c.lastAt) + '</span></div>' +
+            '<div style="display:flex;align-items:center;gap:6px;"><b style="color:#fff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">' + (c.online ? '🟢 ' : '') + '@' + escapeHtml(c.username) + '</b>' + (c.waitingAgent ? '<span title="El bot lo pasó a un agente y nadie contestó todavía (#1045)" style="font-size:10px;font-weight:800;color:#fff;background:#e60023;border-radius:8px;padding:1px 6px;">🆘 ESPERA AGENTE</span>' : '') + (c.botHandled ? '<span title="Lo atendió la IA: se abre sólo si necesita un agente (#1042-n)" style="font-size:10px;font-weight:800;color:#8fd;">🤖 IA</span>' : '') + (c.unread > 0 ? '<span style="background:#ff5050;color:#fff;border-radius:9px;padding:1px 7px;font-size:10px;font-weight:900;">' + c.unread + '</span>' : '') + '<span style="color:#777;font-size:10.5px;">' + _spAgo(c.lastAt) + '</span></div>' +
             '<div style="color:#aaa;font-size:11.5px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (c.lastRole === 'user' ? '' : '↩ ') + escapeHtml(c.lastMessage || '') + '</div></div>';
     }).join('');
 }

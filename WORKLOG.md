@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1045. Pase del bot a un agente: va a SOPORTE (no a Chats) y no se cierra solo — panel v264 (2026-11-09)
+- **Owner (caso picajulieta25, "copié mal mi CBU y te mandé $9.500"):** el bot lo pasó a un agente pero no apareció en Soporte, "tiene que ir a soporte, no a chats".
+- Causa: el pase abría el chat en CHATS (`ChatStatus` open + `chat_reopened`); en SOPORTE el cierre automático de 30 min (#916) lo daba por cerrado porque
+  lo último lo había escrito el sistema/bot (la respuesta al comprobante), y salía de Pendientes.
+- Arreglo: el pase (bot y "Tengo otro problema") ya NO toca `ChatStatus`; avisa `support_handoff` (el panel refresca Soporte + cartel). En
+  `_supportConversationsBuild`, nota `bot_handoff` sin respuesta de una PERSONA después ⇒ `closed:false` + `waitingAgent` (etiqueta 🆘 ESPERA AGENTE).
+  `_supportAutoCloseTick` saltea esos chats (no le manda al cliente "cerramos la conversación" mientras espera). Test en `test-support-bot.js`.
+- Picajulieta25 en particular: con la versión nueva vuelve a aparecer abierta en Soporte (la nota es de hoy, 72 h de ventana).
+
 ### 1044-d. Canal de Telegram: 1 automática por día + CÓDIGO EXCLUSIVO $5.000 × 10 cada 15 días + SORTEO con pasos — app v693, panel v263 (2026-11-09)
 - **Owner:** "1 contenido automático por día; un bono en Telegram: $5.000 a 10 personas cada 15 días, que entren a la app a reclamarlo, código al azar que se
   agote y avise que se terminó; mostrar el sorteo activo con los pasos; los partidos importantes también". Decidido con el owner: el límite de 1 por día es
