@@ -6369,6 +6369,11 @@ async function loadTgChannel() {
         const r = await authFetch('/api/admin/telegram'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
         const c = j.config || {}; const g = (id) => document.getElementById(id);
         if (g('tgChannel')) g('tgChannel').value = c.channel || ''; if (g('tgAppUrl')) g('tgAppUrl').value = c.appUrl || ''; if (g('tgGap')) g('tgGap').value = c.gapMin || 90;
+        const bt = c.buttons || { items: {} }; // #1044-c botones editables
+        if (g('tgBtnApp')) g('tgBtnApp').value = bt.appLabel || ''; if (g('tgBtnStory')) g('tgBtnStory').value = bt.storyLabel || ''; if (g('tgServText')) g('tgServText').value = bt.servText || '';
+        if (g('tgLinks')) g('tgLinks').value = (bt.links || []).map((l) => l.label + ' | ' + l.url).join('\n');
+        const TGK = { benef: 'Beneficios', paid: 'Premios del mes', top: 'Premio más grande', sorteo: 'Sorteo', serv: 'Servicio completo' };
+        if (g('tgBtnItems')) g('tgBtnItems').innerHTML = Object.keys(TGK).map((k) => { const it = (bt.items || {})[k] || { on: true, label: '' }; return '<label style="font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" class="tgBtnOn" data-k="' + k + '" style="width:auto;"' + (it.on !== false ? ' checked' : '') + '> <input type="text" class="tgBtnLbl" data-k="' + k + '" maxlength="40" value="' + escapeHtml(it.label || '') + '" placeholder="' + TGK[k] + '" style="flex:1;"></label>'; }).join('');
         if (g('tgMirror')) g('tgMirror').checked = c.mirror !== false; if (g('tgPanel')) g('tgPanel').checked = c.panel !== false;
         if (g('tgToken')) g('tgToken').placeholder = c.hasToken ? ('guardado (…' + (c.tokenLast4 || '') + ') · pegá uno nuevo sólo para cambiarlo') : 'pegá el token de BotFather';
         st.textContent = !c.hasToken ? '· falta el token' : !c.channel ? '· falta el canal' : (c.mirror || c.panel) ? '· ✅ conectado' + (c.channelTitle ? ' a ' + c.channelTitle : '') : '· ⏸️ apagado';
@@ -6385,6 +6390,10 @@ async function loadTgChannel() {
 async function saveTgChannel() {
     const g = (id) => document.getElementById(id);
     const body = { channel: g('tgChannel').value.trim(), appUrl: g('tgAppUrl').value.trim(), gapMin: Number(g('tgGap').value) || 90, mirror: !!g('tgMirror').checked, panel: !!g('tgPanel').checked };
+    const items = {}; document.querySelectorAll('#tgBtnItems .tgBtnLbl').forEach((el) => { const k = el.dataset.k; const on = document.querySelector('#tgBtnItems .tgBtnOn[data-k="' + k + '"]'); items[k] = { on: !!(on && on.checked), label: el.value.trim() }; });
+    const links = (g('tgLinks') ? g('tgLinks').value : '').split('\n').map((l) => l.split('|')).filter((p) => p.length >= 2).map((p) => ({ label: p[0].trim(), url: p.slice(1).join('|').trim() }));
+    const bad = links.find((l) => !/^https:\/\//i.test(l.url)); if (bad) { showToast('El link "' + bad.label + '" tiene que empezar con https://', 'error'); return; }
+    body.buttons = { appLabel: g('tgBtnApp') ? g('tgBtnApp').value.trim() : '', storyLabel: g('tgBtnStory') ? g('tgBtnStory').value.trim() : '', items, servText: g('tgServText') ? g('tgServText').value.trim() : '', links };
     const tk = g('tgToken').value.trim(); if (tk) body.token = tk;
     try {
         const r = await authFetch('/api/admin/telegram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

@@ -50,5 +50,16 @@ caso('Server: qué se publica (sin personales ni códigos sorpresa, sólo desde 
   assert.ok(/crypto\.timingSafeEqual\(Buffer\.from\(got\), Buffer\.from\(c\.webhookSecret\)\)/.test(S2), 'webhook con secreto');
   assert.ok(/_cronClaim\('tgpanel'/.test(S2) && /_cronClaim\('tgmirror'/.test(S2), 'crons con lock (multi-instancia)');
 });
+caso('#1044-c Botones editables: textos, apagar info, links https (máx. 3), texto propio de Servicio; logo centrado en las fotos', () => {
+  const b = tg.normalizeButtons({ appLabel: 'Jugá ya', storyLabel: '', items: { top: { on: false, label: 'x' }, paid: { label: '💰 Pagos' } }, servText: 'Hola', links: [{ label: 'Soporte', url: 'https://t.me/x' }, { label: 'malo', url: 'http://x' }, { label: 'a', url: 'https://a' }, { label: 'b', url: 'https://b' }, { label: 'c', url: 'https://c' }] });
+  assert.strictEqual(b.appLabel, 'Jugá ya'); assert.strictEqual(b.storyLabel, '🎰 Entrar a PICA ROJA', 'vacío ⇒ el de siempre');
+  assert.strictEqual(b.links.length, 2, 'sólo https y hasta 3 (de los primeros 3)');
+  const k = tg.panelButtons('https://picaroja.com', b).inline_keyboard.flat();
+  assert.ok(!k.some((x) => x.callback_data === 'tg:top') && k.some((x) => x.text === '💰 Pagos') && k.some((x) => x.url === 'https://t.me/x'));
+  assert.strictEqual(tg.popupText('serv', {}, b), 'Hola');
+  assert.strictEqual(tg.storyButtons({}, 'https://picaroja.com', b).inline_keyboard[0][0].text, '🎰 Entrar a PICA ROJA');
+  const svg = tg.storyCardSvg({ title: 'Hola', text: 'x' }, 'QUJD'); assert.ok(/data:image\/png;base64,QUJD/.test(svg) && /text-anchor="middle"/.test(svg));
+  assert.ok(!/<image/.test(tg.panelSvg({ monthIdx: 0, year: 2027 }, null)), 'sin logo no rompe');
+});
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

@@ -30585,8 +30585,12 @@ async function _tgCfg() {
   c.appUrl = /^https:\/\/[^\s/]+/i.test(String(c.appUrl || '')) ? String(c.appUrl).replace(/\/+$/, '') : TG_DEFAULT.appUrl;
   let token = null; try { token = c.tokenEnc ? _credDecrypt(c.tokenEnc) : null; } catch (_) { c.decryptError = true; }
   c.token = token || process.env.TELEGRAM_BOT_TOKEN || null;
+  c.btn = tgChannel.normalizeButtons(c.buttons); // #1044-c: botones editables en el panel
   return c;
 }
+// #1044-c: logo (la pica) centrado arriba en las fotos del canal. Se lee una vez; si falta, las fotos van sólo con el nombre.
+let _tgLogoB64 = null;
+function _tgLogo() { if (_tgLogoB64 === null) { try { _tgLogoB64 = fs.readFileSync(path.join(__dirname, 'public', 'icons', 'icon-384x384.png')).toString('base64'); } catch (_) { _tgLogoB64 = ''; } } return _tgLogoB64 || null; }
 async function _tgSet(fields) {
   const $set = { updatedAt: new Date() }; for (const [k, v] of Object.entries(fields || {})) $set['value.' + k] = v;
   await Config.collection.updateOne({ key: 'telegramBot' }, { $set }, { upsert: true });
@@ -30622,13 +30626,13 @@ async function _tgStoryMedia(st) {
       if (full && full.autoImg) { buf = Buffer.from(storyImage.renderSvg(full.autoImg), 'utf8'); mime = 'image/svg+xml'; }
     }
     // #1044-b (owner: "quiero foto y texto, bien premium"): historia sin foto ⇒ tarjeta con el titular grande (estilo oscuro + rojo).
-    if (!buf) { buf = Buffer.from(tgChannel.storyCardSvg(st), 'utf8'); mime = 'image/svg+xml'; }
+    if (!buf) { buf = Buffer.from(tgChannel.storyCardSvg(st, _tgLogo()), 'utf8'); mime = 'image/svg+xml'; }
     if (/svg/i.test(mime)) { const png = await pdfImage.svgBufferToPng(buf, { scale: 1 }); if (!png) return null; buf = png; mime = 'image/png'; }
     return { kind: 'photo', media: { buffer: buf, mime, filename: 'historia.' + (mime.split('/')[1] || 'png').replace('jpeg', 'jpg') } };
   } catch (e) { logger.warn(`[telegram] foto de la historia ${st.id}: ${e.message}`); return null; }
 }
 async function _tgPostStory(c, st) {
-  const extra = { caption: tgChannel.storyCaption(st), parse_mode: 'HTML', reply_markup: tgChannel.storyButtons(st, c.appUrl), disable_notification: _tgQuiet(c) };
+  const extra = { caption: tgChannel.storyCaption(st), parse_mode: 'HTML', reply_markup: tgChannel.storyButtons(st, c.appUrl, c.btn), disable_notification: _tgQuiet(c) };
   const md = await _tgStoryMedia(st);
   if (md) { const r = await tgChannel.sendMedia(c.token, md.kind, c.channel, md.media, extra); if (r.ok) return r; logger.warn(`[telegram] foto rechazada (${r.error}); va sólo el texto`); }
   return tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: extra.caption, parse_mode: 'HTML', reply_markup: extra.reply_markup, disable_web_page_preview: true, disable_notification: extra.disable_notification });
@@ -30710,9 +30714,9 @@ async function _tgPanelTick(force) {
   if (!force && !(await _cronClaim('tgpanel', 50 * 60000))) return { ok: false, why: 'otra instancia' };
   const s = await _tgPanelCompute();
   try { await Config.set('telegramPanelStats', s, 'telegram'); } catch (_) {}
-  const reply_markup = tgChannel.panelButtons(c.appUrl);
+  const reply_markup = tgChannel.panelButtons(c.appUrl, c.btn);
   // #1044-b: el panel es una FOTO (tres números grandes) con el texto abajo; si la foto no se puede armar, va como texto.
-  let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(s), 'utf8'), { scale: 1 }); } catch (_) {}
+  let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(s, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
   const kind = png ? 'photo' : 'text';
   const caption = tgChannel.panelCaption(s), text = tgChannel.panelText(s);
   if (c.panelMsgId && (c.panelKind || 'text') === kind) {
@@ -30747,13 +30751,13 @@ app.post('/api/telegram/webhook', async (req, res) => {
     const u = req.body || {};
     const stats = (await getConfig('telegramPanelStats', null)) || await _tgPanelCompute();
     if (u.callback_query && /^tg:(benef|paid|top|sorteo|serv)$/.test(String(u.callback_query.data || ''))) {
-      await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id, text: tgChannel.popupText(u.callback_query.data.slice(3), stats), show_alert: true });
+      await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id, text: tgChannel.popupText(u.callback_query.data.slice(3), stats, c.btn), show_alert: true });
     } else if (u.callback_query) {
       await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id });
     } else if (u.message && u.message.chat && u.message.chat.type === 'private') {
-      let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(stats), 'utf8'), { scale: 1 }); } catch (_) {}
-      if (png) { const r = await tgChannel.sendMedia(c.token, 'photo', u.message.chat.id, { buffer: png, mime: 'image/png', filename: 'panel.png' }, { caption: tgChannel.panelCaption(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl) }); if (r.ok) return; }
-      await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl), disable_web_page_preview: true });
+      let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(stats, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
+      if (png) { const r = await tgChannel.sendMedia(c.token, 'photo', u.message.chat.id, { buffer: png, mime: 'image/png', filename: 'panel.png' }, { caption: tgChannel.panelCaption(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn) }); if (r.ok) return; }
+      await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn), disable_web_page_preview: true });
     }
   } catch (e) { logger.warn('[telegram] webhook: ' + e.message); if (!res.headersSent) res.status(200).end(); }
 });
@@ -30765,7 +30769,7 @@ app.get('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res)
     const queue = (c.token && c.channel && c.mirror) ? await Story.countDocuments(_tgStoryQuery(c, now)) : 0;
     const posted = await Story.find({ tgPostedAt: { $ne: null } }).sort({ tgPostedAt: -1 }).limit(5).select('id title tgPostedAt tgMsgId').lean();
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null }, queue, posted });
+    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn }, queue, posted });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
@@ -30778,6 +30782,7 @@ app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res
     if (typeof b.appUrl === 'string' && b.appUrl.trim()) { if (!/^https:\/\/[^\s/]+/i.test(b.appUrl.trim())) return res.status(400).json({ error: 'El link de la app tiene que empezar con https://' }); set.appUrl = b.appUrl.trim().replace(/\/+$/, ''); }
     if (typeof b.mirror === 'boolean') set.mirror = b.mirror;
     if (typeof b.panel === 'boolean') set.panel = b.panel;
+    if (b.buttons && typeof b.buttons === 'object') set.buttons = tgChannel.normalizeButtons(b.buttons); // #1044-c
     if (b.gapMin != null && Number.isFinite(Number(b.gapMin))) set.gapMin = Math.min(600, Math.max(10, Math.round(Number(b.gapMin))));
     // El token se PRUEBA antes de guardar (getMe) y se guarda cifrado.
     let me = null;

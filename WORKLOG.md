@@ -8,6 +8,14 @@
 
 ## Sesión 2026-11-09
 
+### 1044-c. Canal de Telegram: LOGO centrado arriba en las fotos + BOTONES editables en el panel — panel v262 (2026-11-09)
+- **Owner:** "que se puedan configurar los botones en el admin, formato premium, arriba la foto de PICA ROJA con el logo en el medio centrado".
+- Fotos (historias sin foto y panel del mes): arriba el logo (la pica, `public/icons/icon-384x384.png` en base64, `_tgLogo`) recortado en círculo con borde
+  dorado, "PICA ROJA" centrado debajo (y el mes en el panel) y una línea roja; todo centrado. Sin el archivo, va sólo el nombre.
+- Botones: `Config['telegramBot'].buttons` normalizado por `tgChannel.normalizeButtons` (textos del botón principal y del de cada historia, prender/apagar
+  y renombrar los 5 de info, texto propio de "Servicio completo" ≤200, hasta 3 botones con link https). Panel → 📣 Canal de Telegram → 🔘 Botones del canal.
+- **Token:** el owner lo pegó en el chat; se le pidió `/revoke` en BotFather y se verificó que el viejo ya da 401. El token va SÓLO en el panel.
+
 ### 1044-b. Canal de Telegram PREMIUM: todo con FOTO y texto, estilo oscuro + rojo (2026-11-09)
 - **Owner:** "quiero foto y quiero texto, bien premium estilo Stake". `telegramChannel.storyCardSvg` (historia sin foto ⇒ tarjeta 1080×1080 con el titular
   grande, texto, "BONO +X%" y "ENTRÁ AHORA") y `panelSvg` (panel del mes 1280×720: tres números grandes — pagado, regalado, premio más grande tapado — y el

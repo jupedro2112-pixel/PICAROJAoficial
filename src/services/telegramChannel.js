@@ -49,8 +49,24 @@ async function sendMedia(token, kind, chatId, media, extra) {
 }
 
 /** Botón (o botones) de cada posteo: siempre "Entrar a PICA ROJA"; si la historia tiene un link externo, también ése. */
-function storyButtons(story, appUrl) {
-  const rows = [[{ text: '🎰 Entrar a PICA ROJA', url: appUrl }]];
+// #1044-c (owner: "que se puedan configurar los botones en el admin"): `b` = Config['telegramBot'].buttons normalizado (normalizeButtons).
+const BTN_KEYS = ['benef', 'paid', 'top', 'sorteo', 'serv'];
+const BTN_DEFAULT = {
+  appLabel: '🎰 Entrar a PICA ROJA', storyLabel: '🎰 Entrar a PICA ROJA',
+  items: { benef: { on: true, label: '🎁 Beneficios del mes' }, paid: { on: true, label: '💸 Premios del mes' }, top: { on: true, label: '🏆 Premio más grande' }, sorteo: { on: true, label: '🎟️ Sorteo' }, serv: { on: true, label: '⭐ Servicio completo' } },
+  servText: '', links: [] // links: [{label, url}] botones extra (Telegram de soporte, Instagram…), hasta 3
+};
+function normalizeButtons(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const lbl = (v, d) => { const t = String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').trim(); return t ? cut(t, 40) : d; };
+  const out = { appLabel: lbl(r.appLabel, BTN_DEFAULT.appLabel), storyLabel: lbl(r.storyLabel, BTN_DEFAULT.storyLabel), items: {}, servText: cut(String(r.servText || '').trim(), POPUP_MAX), links: [] };
+  for (const k of BTN_KEYS) { const it = (r.items || {})[k] || {}; out.items[k] = { on: it.on !== false, label: lbl(it.label, BTN_DEFAULT.items[k].label) }; }
+  for (const l of (Array.isArray(r.links) ? r.links : []).slice(0, 3)) { const u = String((l && l.url) || '').trim(); if (/^https:\/\/\S+$/i.test(u) && l.label) out.links.push({ label: lbl(l.label, 'Ver'), url: u.slice(0, 300) }); }
+  return out;
+}
+function storyButtons(story, appUrl, b) {
+  b = b || normalizeButtons(null);
+  const rows = [[{ text: b.storyLabel, url: appUrl }]];
   const l = String((story && story.linkUrl) || '');
   if (/^https:\/\//i.test(l) && !l.startsWith(appUrl)) rows.push([{ text: cut((story.linkLabel || 'Ver más').replace(/[\r\n]/g, ' '), 40), url: l }]);
   return { inline_keyboard: rows };
@@ -89,35 +105,52 @@ function bgDefs() {
     '<linearGradient id="rd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e60023"/><stop offset="1" stop-color="#ff4d5e"/></linearGradient></defs>';
 }
 function brand(x, y) { return `<rect x="${x}" y="${y - 30}" width="14" height="40" rx="4" fill="url(#rd)"/><text x="${x + 28}" y="${y}" ${FONT} font-size="34" font-weight="bold" fill="#ffffff" letter-spacing="3">PICA ROJA</text>`; }
+// #1044-c (owner: "arriba la foto de PICA ROJA con el logo en el medio, centrado"): logo (la pica dorada, `logo` = PNG en base64) centrado arriba con el
+// nombre debajo y una línea roja fina. Sin logo (no se pudo leer el archivo) queda sólo el nombre centrado.
+function header(W, y, size, logo, sub) {
+  const x = (W - size) / 2;
+  const cx = W / 2, cy = y + size / 2, r = size / 2;
+  const img = logo ? `<defs><clipPath id="lc"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs><circle cx="${cx}" cy="${cy}" r="${r + 18}" fill="#e60023" opacity="0.16"/>` +
+    `<image x="${x}" y="${y}" width="${size}" height="${size}" clip-path="url(#lc)" href="data:image/png;base64,${logo}" xlink:href="data:image/png;base64,${logo}"/>` +
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#d4a64a" stroke-width="3"/>` : '';
+  const ty = y + (logo ? size + 52 : 40);
+  return img + `<text x="${W / 2}" y="${ty}" text-anchor="middle" ${FONT} font-size="${Math.round(size * 0.3)}" font-weight="bold" fill="#ffffff" letter-spacing="6">PICA ROJA</text>` +
+    (sub ? `<text x="${W / 2}" y="${ty + Math.round(size * 0.26)}" text-anchor="middle" ${FONT} font-size="${Math.round(size * 0.17)}" fill="#b1bad3" letter-spacing="4">${xesc(sub)}</text>` : '') +
+    `<rect x="${W / 2 - 60}" y="${ty + (sub ? Math.round(size * 0.26) + 24 : 22)}" width="120" height="6" rx="3" fill="url(#rd)"/>`;
+}
+const SVG_OPEN = (W, H) => `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
 /** Foto cuadrada de una historia SIN foto propia (sólo texto): titular grande, texto y "ENTRÁ AHORA". */
-function storyCardSvg(story) {
-  const W = 1080; const t = wrap(String(story.title || '').toUpperCase(), 18, 3); const b = wrap(story.text || '', 34, 4);
-  let y = 330; let body = '';
-  for (const l of t) { body += `<text x="90" y="${y}" ${FONT} font-size="84" font-weight="bold" fill="#ffffff">${xesc(l)}</text>`; y += 96; }
-  y += 30; body += `<rect x="90" y="${y - 20}" width="120" height="8" rx="4" fill="url(#rd)"/>`; y += 50;
-  for (const l of b) { body += `<text x="90" y="${y}" ${FONT} font-size="44" fill="#b1bad3">${xesc(l)}</text>`; y += 60; }
-  const bonus = Number(story.bonusPct) > 0 ? `<rect x="90" y="830" width="420" height="96" rx="48" fill="url(#rd)"/><text x="300" y="893" text-anchor="middle" ${FONT} font-size="46" font-weight="bold" fill="#fff">BONO +${Math.round(story.bonusPct)}%</text>` : '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${W}" viewBox="0 0 ${W} ${W}">${bgDefs()}<rect width="${W}" height="${W}" fill="url(#bg)"/>` +
-    `<circle cx="980" cy="120" r="260" fill="#e60023" opacity="0.10"/><circle cx="1020" cy="980" r="200" fill="#e60023" opacity="0.07"/>` +
-    brand(90, 150) + body + bonus +
-    `<rect x="${bonus ? 540 : 90}" y="830" width="450" height="96" rx="48" fill="none" stroke="#ffffff" stroke-width="3"/><text x="${bonus ? 765 : 315}" y="893" text-anchor="middle" ${FONT} font-size="40" font-weight="bold" fill="#fff" letter-spacing="2">ENTRÁ AHORA</text>` +
-    `<text x="90" y="1010" ${FONT} font-size="28" fill="#55657e" letter-spacing="2">picaroja.com</text></svg>`;
+function storyCardSvg(story, logo) {
+  const W = 1080; const t = wrap(String(story.title || '').toUpperCase(), 20, 3); const b = wrap(story.text || '', 38, 3);
+  let y = 470; let body = '';
+  for (const l of t) { body += `<text x="${W / 2}" y="${y}" text-anchor="middle" ${FONT} font-size="74" font-weight="bold" fill="#ffffff">${xesc(l)}</text>`; y += 86; }
+  y += 24;
+  for (const l of b) { body += `<text x="${W / 2}" y="${y}" text-anchor="middle" ${FONT} font-size="40" fill="#b1bad3">${xesc(l)}</text>`; y += 54; }
+  const hasBonus = Number(story.bonusPct) > 0;
+  const pills = hasBonus
+    ? `<rect x="110" y="880" width="410" height="96" rx="48" fill="url(#rd)"/><text x="315" y="943" text-anchor="middle" ${FONT} font-size="44" font-weight="bold" fill="#fff">BONO +${Math.round(story.bonusPct)}%</text>` +
+      `<rect x="560" y="880" width="410" height="96" rx="48" fill="none" stroke="#ffffff" stroke-width="3"/><text x="765" y="943" text-anchor="middle" ${FONT} font-size="38" font-weight="bold" fill="#fff" letter-spacing="2">ENTRÁ AHORA</text>`
+    : `<rect x="315" y="880" width="450" height="96" rx="48" fill="url(#rd)"/><text x="540" y="943" text-anchor="middle" ${FONT} font-size="40" font-weight="bold" fill="#fff" letter-spacing="2">ENTRÁ AHORA</text>`;
+  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="url(#bg)"/>` +
+    `<circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/><circle cx="60" cy="1040" r="220" fill="#e60023" opacity="0.06"/>` +
+    header(W, 50, 170, logo) + body + pills +
+    `<text x="${W / 2}" y="1040" text-anchor="middle" ${FONT} font-size="26" fill="#55657e" letter-spacing="3">PICAROJA.COM</text></svg>`;
 }
 /** Foto del PANEL DEL MES: tres números grandes (pagado, regalado, premio más grande) + sorteo. */
-function panelSvg(s) {
+function panelSvg(s, logo) {
   const W = 1280, H = 720; const mes = (MONTHS[s.monthIdx] || '').toUpperCase();
-  const tile = (x, label, value, sub) => `<rect x="${x}" y="250" width="360" height="250" rx="24" fill="#213743"/><rect x="${x}" y="250" width="360" height="8" rx="4" fill="url(#rd)"/>` +
-    `<text x="${x + 30}" y="320" ${FONT} font-size="26" fill="#b1bad3" letter-spacing="2">${xesc(label)}</text>` +
-    `<text x="${x + 30}" y="410" ${FONT} font-size="${value.length > 10 ? 46 : value.length > 8 ? 54 : 60}" font-weight="bold" fill="#ffffff">${xesc(value)}</text>` +
-    `<text x="${x + 30}" y="460" ${FONT} font-size="24" fill="#55657e">${xesc(sub || '')}</text>`;
+  const tile = (x, label, value, sub) => `<rect x="${x}" y="300" width="360" height="230" rx="24" fill="#213743"/><rect x="${x}" y="300" width="360" height="8" rx="4" fill="url(#rd)"/>` +
+    `<text x="${x + 180}" y="362" text-anchor="middle" ${FONT} font-size="24" fill="#b1bad3" letter-spacing="2">${xesc(label)}</text>` +
+    `<text x="${x + 180}" y="442" text-anchor="middle" ${FONT} font-size="${value.length > 10 ? 46 : value.length > 8 ? 54 : 60}" font-weight="bold" fill="#ffffff">${xesc(value)}</text>` +
+    `<text x="${x + 180}" y="490" text-anchor="middle" ${FONT} font-size="22" fill="#55657e">${xesc(sub || '')}</text>`;
   const so = s.sorteo && (s.sorteo.prizes || [])[0] ? noEmoji(`SORTEO: ${s.sorteo.prizes[0].name}${s.sorteo.prizes[1] ? ' + ' + s.sorteo.prizes[1].name : ''}`) : 'CARGAS Y RETIROS AUTOMÁTICOS LAS 24 H';
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${bgDefs()}<rect width="${W}" height="${H}" fill="url(#bg)"/>` +
-    `<circle cx="1180" cy="80" r="240" fill="#e60023" opacity="0.10"/>` + brand(80, 110) +
-    `<text x="80" y="195" ${FONT} font-size="56" font-weight="bold" fill="#ffffff">${xesc(mes)} ${s.year}</text>` +
+  return SVG_OPEN(W, H) + bgDefs() + `<rect width="${W}" height="${H}" fill="url(#bg)"/>` +
+    `<circle cx="1200" cy="60" r="240" fill="#e60023" opacity="0.08"/><circle cx="80" cy="700" r="200" fill="#e60023" opacity="0.06"/>` +
+    header(W, 24, 120, logo, `${mes} ${s.year}`) +
     tile(80, 'PREMIOS PAGADOS', money(s.paid && s.paid.sum), s.paid && s.paid.count ? s.paid.count.toLocaleString('es-AR') + ' retiros' : '') +
     tile(460, 'REGALADO EN BONOS', money(s.gifted && s.gifted.sum), 'este mes') +
     tile(840, 'PREMIO MÁS GRANDE', s.top && s.top.amount > 0 ? money(s.top.amount) : '—', s.top && s.top.username ? maskUser(s.top.username) : '') +
-    `<rect x="80" y="550" width="1120" height="100" rx="50" fill="url(#rd)"/><text x="640" y="614" text-anchor="middle" ${FONT} font-size="34" font-weight="bold" fill="#fff" letter-spacing="1">${xesc(cut(so.toUpperCase(), 58))}</text></svg>`;
+    `<rect x="80" y="580" width="1120" height="96" rx="48" fill="url(#rd)"/><text x="640" y="641" text-anchor="middle" ${FONT} font-size="32" font-weight="bold" fill="#fff" letter-spacing="1">${xesc(cut(so.toUpperCase(), 60))}</text></svg>`;
 }
 /** Texto que acompaña la foto del panel (≤1024). */
 function panelCaption(s) {
@@ -177,19 +210,17 @@ function panelText(s) {
   if (s.updatedAt) L.push(`<i>Actualizado ${esc(new Date(s.updatedAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }))} h</i>`);
   return L.join('\n');
 }
-function panelButtons(appUrl) {
-  return {
-    inline_keyboard: [
-      [{ text: '🎰 Entrar a PICA ROJA', url: appUrl }],
-      [{ text: '🎁 Beneficios del mes', callback_data: 'tg:benef' }, { text: '💸 Premios del mes', callback_data: 'tg:paid' }],
-      [{ text: '🏆 Premio más grande', callback_data: 'tg:top' }, { text: '🎟️ Sorteo', callback_data: 'tg:sorteo' }],
-      [{ text: '⭐ Servicio completo', callback_data: 'tg:serv' }]
-    ]
-  };
+function panelButtons(appUrl, b) {
+  b = b || normalizeButtons(null);
+  const rows = [[{ text: b.appLabel, url: appUrl }]];
+  const info = BTN_KEYS.filter((k) => b.items[k].on).map((k) => ({ text: b.items[k].label, callback_data: 'tg:' + k }));
+  for (let i = 0; i < info.length; i += 2) rows.push(info.slice(i, i + 2));
+  for (const l of b.links) rows.push([{ text: l.label, url: l.url }]);
+  return { inline_keyboard: rows };
 }
 /** Ventanita de cada botón del panel (máx. 200 caracteres, texto plano). */
-function popupText(key, s) {
-  s = s || {}; const mes = MONTHS[s.monthIdx] || 'este mes';
+function popupText(key, s, b) {
+  s = s || {}; if (key === 'serv' && b && b.servText) return cut(b.servText, POPUP_MAX); const mes = MONTHS[s.monthIdx] || 'este mes';
   let t;
   if (key === 'benef') t = '🎁 Beneficios de ' + mes + ':\n' + benefitLines(s.benefits || {}).map((x) => '• ' + x).join('\n');
   else if (key === 'paid') t = `💸 En ${mes} pagamos ${money(s.paid && s.paid.sum)} en premios${s.paid && s.paid.count ? ` (${s.paid.count.toLocaleString('es-AR')} retiros)` : ''} y regalamos ${money(s.gifted && s.gifted.sum)} en bonos. Todo automático, directo a tu CBU.`;
@@ -199,4 +230,4 @@ function popupText(key, s) {
   return cut(t, POPUP_MAX);
 }
 
-module.exports = { call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };
+module.exports = { normalizeButtons, BTN_KEYS, call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };
