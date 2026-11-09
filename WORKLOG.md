@@ -8,11 +8,23 @@
 
 ## Sesión 2026-11-09
 
+### 1042-v. FIX: la 2ª pregunta con palabra clave quedaba sin respuesta + IA hasta 3 respuestas (2026-11-09)
+- **Owner:** "pregunté cómo es el reembolso en una segunda pregunta y no contestaba más, ¿por qué?" + "vamos a poner más chat con la IA".
+- Causa: con palabra clave (reembolso/retiro/carga/bono) el bot va primero a la respuesta fija (`_supportCannedReply`), que se callaba si "un agente
+  respondió hace < 10 min" ⇒ contaba al PROPIO BOT y a los automáticos ⇒ ni respuesta fija ni IA. Igual en `_supportAutoReply`, y la pausa del bot
+  "escribió una persona" contaba el aviso automático de retiro pedido (senderId 'system', type text) ⇒ bot callado 2 h tras pedir un retiro.
+- Fix: esos chequeos cuentan sólo personas (`senderId $nin ['support-bot','system','admin']`, no `type:'system'`, no `metadata.bot`) en las 5 consultas
+  (también el filtro de Soporte del panel; se sacó una clave `senderId` repetida). Red de seguridad `_supportSentSince`: si la respuesta fija no
+  mandó nada ⇒ `_supportBotSchedule` (contesta la IA).
+- **Respuestas LIBRES** (owner: "hacelo a respuestas libres; una vez entrenada usa lo aprendido; que la IA simplifique el trabajo y los agentes se
+  enfoquen en responder preguntas"): `aiMaxReplies` default 20 (el máximo) + migración `mig1042vAiFree`; pasa a una persona sólo por handoff (no sabe,
+  reclamo, pide persona, "Tengo otro problema"). Lo aprendido aprobado va primero y no cuenta. Editable en la tarjeta del bot.
+
 ### 1042-u. TODO CON BOTONES: la IA una sola vez, "Tengo otro problema" directo a un agente, aprende de los agentes — PWA v688 (2026-11-09)
 - **Owner:** "que cualquier otra duda aprete alguna de las opciones y que la IA no actúe mucho; que sea el bot si aprieta un botón; que aprenda de lo
   que preguntan en Soporte y responden en el admin; si no sabe responder, directo el agente; agregá abajo 'Tengo otro problema'; que la IA responda 1
   mensaje nomás: el de bienvenida y después todo con botones y respuestas sencillas; si no entienden un botón y preguntan, simplificado cómo funciona".
-- `aiMaxReplies` default 1 + migración UNA vez (`mig1042uAiOne`, `$set` del campo): la IA contesta una vez por charla (lo aprendido aprobado NO cuenta,
+- (Desde #1042-v: 3 y `mig1042vAi3`.) `aiMaxReplies` default 1 + migración UNA vez (`mig1042uAiOne`, `$set` del campo): la IA contesta una vez por charla (lo aprendido aprobado NO cuenta,
   `metadata.learned`); a la siguiente ⇒ agente. Prompt: explicar simple el botón que pregunta y decir cuál tocar; lo demás ⇒ "tocá una opción" o
   handoff; nunca adivinar.
 - Botón `🆘 Tengo otro problema` (fila de la burbuja, `supportQuick('problema')`; `SUPPORT_QUICK_KINDS` + 'problema') ⇒ `_supportQuickReply`

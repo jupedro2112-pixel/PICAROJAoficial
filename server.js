@@ -13611,10 +13611,12 @@ async function initializeData() {
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
     // #1042-u (owner 2026-11-09): "la IA responde 1 mensaje nomás" ⇒ UNA vez, aiMaxReplies = 1 (campo puntual, nunca leer→mezclar→guardar).
     try {
-      if (!(await getConfig('mig1042uAiOne', null))) {
-        await Config.collection.updateOne({ key: 'supportBot' }, { $set: { 'value.aiMaxReplies': 1 } });
-        await Config.set('mig1042uAiOne', new Date().toISOString(), 'startup-migration');
-        console.log('✅ Bot: la IA responde 1 vez y después pasa a un agente (#1042-u)');
+      // #1042-v (owner: "hacelo a respuestas libres; una vez entrenada usa lo aprendido; que la IA simplifique el trabajo y los agentes se
+      // enfoquen en responder preguntas") ⇒ 20 (el máximo): en la práctica libre; pasa a una persona sólo por handoff (no sabe / reclamo / pide persona).
+      if (!(await getConfig('mig1042vAiFree', null))) {
+        await Config.collection.updateOne({ key: 'supportBot' }, { $set: { 'value.aiMaxReplies': 20 } });
+        await Config.set('mig1042vAiFree', new Date().toISOString(), 'startup-migration');
+        console.log('✅ Bot: la IA responde libre (hasta 20 por charla) (#1042-v)');
       }
     } catch (e) { console.warn('[startup-migration] IA una vez #1042-u:', e.message); }
     // #1042-r (owner 2026-11-09): "dejá activado el menú Girox por ahora" ⇒ UNA vez, sólo Girox (todo en uno). Después se cambia desde el panel
@@ -15672,6 +15674,7 @@ async function _supportQuickReply(userId, username, quick, text) {
     // falla, el bot cae a la respuesta automática de siempre (`_supportCannedReply`).
     // #1042-d (owner): TRES ESCALONES — 1) bot SIMPLE (respuestas fijas cortas por tema); 2) si no hay tema o ya se le contestó ese tema y
     // sigue preguntando (no entendió) ⇒ la IA; 3) la IA lo deriva a un agente (handoff, o tope `aiMaxReplies`).
+    const _t0 = new Date(Date.now() - 1500); // #1042-v: desde acá se mira si salió alguna respuesta
     if (!explicit && await _supportBotActive()) {
       try { const mu = await mongoose.connection.collection('support_bot_mutes').findOne({ _id: userId }); if (mu && mu.until > new Date()) return; } catch (_) {} // silenciado: ni respuesta fija ni IA
       const topic = _supportTopicFromText(text);
@@ -15683,14 +15686,14 @@ async function _supportQuickReply(userId, username, quick, text) {
         const since = new Date(Math.max(Date.now() - 2 * 3600 * 1000, uu && uu.supportSessionSince ? new Date(uu.supportSessionSince).getTime() : 0));
         const ours = await Message.findOne({ receiverId: userId, adminOnly: { $ne: true }, timestamp: { $gte: since }, $or: [{ channel: 'support' }, { 'metadata.channel': 'support' }] }).select('_id').lean();
         if (!ours) {
-          if (topic) return _supportCannedReply(userId, username, quick, text, false);
+          if (topic) { await _supportCannedReply(userId, username, quick, text, false); if (await _supportSentSince(userId, _t0)) return; return _supportBotSchedule(userId, username); }
           const t = await renderSystemCommand('/sys_support_first', SUPPORT_FIRST_DEFAULT, { nombre: await getSupportAgentName() });
           if (t) { await _sendUserSystemMessage(u, t, { metadata: { kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante', channel: 'support', topic: 'first' } }); return; }
         }
       } catch (_) {}
       if (topic) {
         const recent = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.topic': topic, timestamp: { $gte: new Date(Date.now() - 2 * 3600 * 1000) } }).select('_id').lean();
-        if (!recent) return _supportCannedReply(userId, username, quick, text, false); // escalón 1: respuesta simple
+        if (!recent) { await _supportCannedReply(userId, username, quick, text, false); if (await _supportSentSince(userId, _t0)) return; } // escalón 1: respuesta simple; #1042-v: si no salió nada, la IA
       }
       _supportBotSchedule(userId, username); return; // escalón 2: la IA
     }
@@ -15710,7 +15713,8 @@ async function _supportCannedReply(userId, username, quick, text, explicit) {
     if (!explicit) {
       const closed = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.kind': 'support_closed' }).sort({ timestamp: -1 }).select('timestamp').lean();
       const since = new Date(Math.max(Date.now() - 10 * 60 * 1000, closed ? new Date(closed.timestamp).getTime() : 0));
-      const agentRecent = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, channel: 'support', timestamp: { $gte: since } }).select('_id').lean();
+      // #1042-v: sólo PERSONAS del equipo (antes contaba el propio bot y los automáticos ⇒ la 2ª pregunta con palabra clave quedaba sin respuesta).
+      const agentRecent = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, channel: 'support', type: { $ne: 'system' }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, 'metadata.bot': { $ne: true }, timestamp: { $gte: since } }).select('_id').lean();
       if (agentRecent) return;
       const recent = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.topic': topic, timestamp: { $gte: new Date(Date.now() - 2 * 3600 * 1000) } }).select('_id').lean();
       if (recent) return;
@@ -15740,7 +15744,7 @@ async function _supportAutoReply(userId, username) {
     if (!txt) return;
     const recent = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.kind': 'support_ack', timestamp: { $gte: new Date(Date.now() - 2 * 3600 * 1000) } }).select('_id').lean();
     if (recent) return;
-    const agentRecent = await Message.findOne({ receiverId: userId, senderRole: { $in: ['admin', 'depositor', 'withdrawer', 'comunidad'] }, channel: 'support', timestamp: { $gte: new Date(Date.now() - 10 * 60 * 1000) } }).select('_id').lean();
+    const agentRecent = await Message.findOne({ receiverId: userId, senderRole: { $in: ['admin', 'depositor', 'withdrawer', 'comunidad'] }, channel: 'support', type: { $ne: 'system' }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, 'metadata.bot': { $ne: true }, timestamp: { $gte: new Date(Date.now() - 10 * 60 * 1000) } }).select('_id').lean();
     if (agentRecent) return;
     await _sendUserSystemMessage({ id: userId, username }, txt, { metadata: { kind: 'support_ack', channel: 'support', target: 'terms', label: '📄 Bases y condiciones' } }); // #702: + botón
   } catch (e) { logger.warn(`[support] auto-respuesta: ${e.message}`); }
@@ -15753,7 +15757,11 @@ async function _supportAutoReply(userId, username) {
 // sale la respuesta automática de siempre. Config['supportBot'] (panel → Configuración → 🤖 Bot de soporte).
 // ════════════════════════════════════════════════════════════════════════════
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
-const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 1, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
+const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 20, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
+// #1042-v: ¿le llegó al cliente alguna respuesta (bot, automático o persona) desde `since`?
+async function _supportSentSince(userId, since) {
+  try { return !!(await Message.findOne({ receiverId: userId, senderRole: { $ne: 'user' }, adminOnly: { $ne: true }, timestamp: { $gte: since } }).select('_id').lean()); } catch (_) { return false; }
+}
 // #1042-u: pasa el chat a un agente YA (chat ABIERTO en Soporte + nota interna); el bot se corre `handoffPauseMin` (busca la nota bot_handoff).
 async function _supportHandoffNow(userId, username, reason) {
   try { await ChatStatus.updateOne({ userId }, { $set: { userId, username, status: 'open', closedAt: null, closedBy: null, lastMessageAt: new Date() } }, { upsert: true }); } catch (_) {}
@@ -15908,7 +15916,7 @@ async function _supportBotRun(userId, username, token, t0) {
   try { const mu = await mongoose.connection.collection('support_bot_mutes').findOne({ _id: userId }); if (mu && mu.until > new Date()) { _supportBotStat('mutedSkip'); return; } } catch (_) {}
   // ¿Una PERSONA del equipo escribió hace poco? ⇒ el bot se calla en este chat.
   if (cfg.pauseHours > 0) {
-    const human = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, timestamp: { $gte: new Date(Date.now() - cfg.pauseHours * 3600 * 1000) } }).select('_id').lean();
+    const human = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, /* #1042-v: sólo personas */ timestamp: { $gte: new Date(Date.now() - cfg.pauseHours * 3600 * 1000) } }).select('_id').lean();
     if (human) { _supportBotStat('pausedByAgent'); return; }
   }
   // ¿El bot ya lo pasó a una persona hace poco? ⇒ no sigue contestando (lo toma el agente); si nadie aparece en ese rato, vuelve.
@@ -15973,7 +15981,7 @@ async function _supportBotRun(userId, username, token, t0) {
   // Una sola respuesta por mensaje del cliente aunque haya varias instancias (índice único = id del mensaje).
   try { await mongoose.connection.collection('support_bot_claims').insertOne({ _id: lastUser.id, userId, at: new Date() }); } catch (e) { _sbTyping(userId, agentName, false); return; }
   // ¿Respondió una persona mientras tanto? ⇒ no se pisa.
-  const humanNow = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, timestamp: { $gt: lastUser.timestamp } }).select('_id').lean();
+  const humanNow = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, /* #1042-v: sólo personas */ timestamp: { $gt: lastUser.timestamp } }).select('_id').lean();
   _sbTyping(userId, agentName, false);
   if (humanNow) return;
   // Pasado a una persona sin texto de la IA (p. ej. la IA no quiso responder): el cliente igual recibe un aviso corto.
@@ -24413,7 +24421,7 @@ async function _supportConversationsBuild() {
         const since = new Date(Date.now() - 72 * 3600 * 1000);
         const [ho, human, answered, mutes, lastU] = await Promise.all([
           Message.aggregate([{ $match: { receiverId: { $in: ids }, 'metadata.kind': 'bot_handoff', timestamp: { $gte: since } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
-          Message.aggregate([{ $match: { receiverId: { $in: ids }, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, senderId: { $ne: 'support-bot' }, timestamp: { $gte: since } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
+          Message.aggregate([{ $match: { receiverId: { $in: ids }, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, /* #1042-v: sólo personas */ timestamp: { $gte: since } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
           Message.aggregate([{ $match: { receiverId: { $in: ids }, senderId: 'support-bot', timestamp: { $gte: since } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
           mongoose.connection.collection('support_bot_mutes').find({ _id: { $in: ids }, until: { $gt: new Date() } }).project({ _id: 1 }).toArray(),
           Message.aggregate([{ $match: { senderId: { $in: ids }, senderRole: 'user', timestamp: { $gte: since } } }, { $group: { _id: '$senderId', at: { $max: '$timestamp' } } }])

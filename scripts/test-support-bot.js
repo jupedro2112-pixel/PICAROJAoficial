@@ -105,7 +105,7 @@ caso('IA sin saldo (400 credit balance / 402 / 401) ⇒ unavailable (el server p
   assert.ok(/if \(!r\.ok && r\.unavailable\) \{ _sbAiDownUntil = Date\.now\(\) \+ 30 \* 60000;/.test(S), 'pausa de 30 min');
   // primer mensaje de la charla ⇒ respuesta básica (tema o /sys_support_first) antes que la IA
   const qr = S.slice(S.indexOf('async function _supportQuickReply'), S.indexOf('async function _supportCannedReply'));
-  assert.ok(qr.indexOf("renderSystemCommand('/sys_support_first'") > -1 && qr.indexOf("renderSystemCommand('/sys_support_first'") < qr.indexOf('_supportBotSchedule(userId, username)'), 'básica primero');
+  assert.ok(qr.indexOf("renderSystemCommand('/sys_support_first'") > -1 && qr.indexOf("renderSystemCommand('/sys_support_first'") < qr.lastIndexOf('_supportBotSchedule(userId, username)'), 'básica primero');
   assert.ok(/Espero tu comprobante para realizar la carga/.test(S) && /name: '\/sys_support_first'/.test(S));
 });
 caso('Aprende: la IA devuelve pregunta/respuesta genéricas; con handoff o ignore no se aprende nada', async () => {
@@ -164,8 +164,10 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
     assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');
+    assert.ok(/async function _supportSentSince\(/.test(S) && (S.match(/if \(await _supportSentSince\(userId, _t0\)\) return;/g) || []).length === 2, 'palabra clave sin respuesta fija ⇒ contesta la IA (nunca un visto)');
+    assert.ok(!/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \},[^\n]*senderId:/.test(S) && (S.match(/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \}/g) || []).length >= 5, 'agente reciente = sólo personas (sin claves repetidas)');
     assert.ok(/if \(quick === 'problema'\) \{[\s\S]{0,400}await _supportHandoffNow\(/.test(S) && I3.includes("VIP.home.supportQuick('problema')"), 'Tengo otro problema ⇒ directo a un agente');
-    assert.ok((S.match(/_supportLearnFromAgent\(/g) || []).length >= 3 && /'metadata\.learned': \{ \$ne: true \}/.test(S) && /aiMaxReplies: 1, classic:/.test(S) && /mig1042uAiOne/.test(S), 'aprende del agente; la IA una sola vez (lo aprendido no cuenta)');
+    assert.ok((S.match(/_supportLearnFromAgent\(/g) || []).length >= 3 && /'metadata\.learned': \{ \$ne: true \}/.test(S) && /aiMaxReplies: 20, classic:/.test(S) && /mig1042vAiFree/.test(S), 'aprende del agente; la IA una sola vez (lo aprendido no cuenta)');
     assert.ok((S.match(/await _depositLuck\(/g) || []).length === 2 && /'\/sys_withdraw_chat'/.test(S) && /'\/sys_payout_done_chat'/.test(S), 'chat nuevo: carga con buena suerte, retiro pedido y pagado escritos');
     assert.ok(/if \(spNewCasino\(\)\) \{ try \{ toggleCasinoLoad\(false\); \} catch \(_\) \{\} spShowChat\(\); return; \}/.test(H) && /if \(spNewCasino\(\)\) \{ spShowChat\(\); return; \}/.test(H), 'chat nuevo: sin carteles de carga ni de retiro');
     assert.ok(/function spNewCasino\(\) \{ return _casinoIsOpen\(\) && !document\.body\.classList\.contains\('sp-classic'\); \}/.test(H), 'con Modo normal, los carteles de siempre');
