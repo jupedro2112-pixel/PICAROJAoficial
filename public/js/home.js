@@ -1575,7 +1575,8 @@
             try {
                 const ts = new Date(message.timestamp || 0).getTime();
                 const fresh = !ts || (Date.now() - ts) < 3 * 60000;
-                if (fresh && !_playNowShown.has(message.id)) { _playNowShown.add(message.id); _lastDeposit = { platform: md.platform, amount: md.amount, bonus: md.bonus }; showPlayNow(Object.assign({}, _lastDeposit, (_ig && _ig.status === 'offered' && Number(_ig.amount) > 0) ? { gift: _ig } : { plain: true })); } // #735: sin regalo → sin botones, 3 s
+                if (fresh && !_playNowShown.has(message.id) && spNewCasino()) { _playNowShown.add(message.id); spShowChat(); } // #1042-t: escrito en el chat de la burbuja, sin cartel
+                else if (fresh && !_playNowShown.has(message.id)) { _playNowShown.add(message.id); _lastDeposit = { platform: md.platform, amount: md.amount, bonus: md.bonus }; showPlayNow(Object.assign({}, _lastDeposit, (_ig && _ig.status === 'offered' && Number(_ig.amount) > 0) ? { gift: _ig } : { plain: true })); } // #735: sin regalo → sin botones, 3 s
             } catch (_) {}
         }
         // #283: oferta de carga GRATIS por instalar la app (primera carga) → hoja al instante si es reciente.
@@ -1588,7 +1589,8 @@
                     _ig = Object.assign({}, _ig || {}, { status: 'offered', amount: md.amount, pct: md.pct, baseAmount: md.baseAmount, expiresAt: md.expiresAt || null });
                     _igPaintBar();
                     try { sessionStorage.setItem('vip_ig_shown', '1'); } catch (_) {}
-                    showInstallGift({ amount: md.amount, pct: md.pct });
+                    if (spNewCasino()) spShowChat(); // #1042-t: la oferta queda escrita en el chat (con su botón), sin hoja encima
+                    else showInstallGift({ amount: md.amount, pct: md.pct });
                 }
             } catch (_) {}
         }
@@ -2468,6 +2470,9 @@
     // abierto atrás). El mismo #supportPanel se muda adentro de #casinoOverlay (ids, listeners y socket intactos) y vuelve al cerrar.
     function _casinoIsOpen() { try { return document.body.classList.contains('casino-open') && !!_el('casinoOverlay') && _el('casinoOverlay').style.display !== 'none'; } catch (_) { return false; } }
     let _casUnread = 0;
+    // #1042-t: ¿chat NUEVO (sin Modo normal) con Girox abierto? ⇒ los avisos van escritos en el chat de la burbuja, que se abre solo.
+    function spNewCasino() { return _casinoIsOpen() && !document.body.classList.contains('sp-classic'); }
+    function spShowChat() { try { if (!_spCasino) _supportIntoCasino(); else VIP.chat.scrollToBottom(); } catch (_) {} setTimeout(() => { try { VIP.chat.scrollToBottom(); } catch (_) {} }, 400); }
     const _mHome = new Map();
     // Ventanas que se abren con hidden / style.display (sorteos, ruleta) también vuelven solas: un observador las devuelve al cerrarse.
     function _modalShown(m) { return !(m.hidden || m.classList.contains('hidden') || m.style.display === 'none'); }
@@ -2633,10 +2638,12 @@
     }
     async function onDepositCredited(d) {
         try { localStorage.setItem(HAS_DEP_KEY, '1'); } catch (_) {} // #980: desde ahora entra a Girox directo
-        try { setTimeout(_notifCtaAfterDeposit, 4500); } catch (_) {} // #892        try { setTimeout(function () { if (VIP.reviews && VIP.reviews.maybeOffer) VIP.reviews.maybeOffer('deposit'); }, 7000); } catch (_) {} // #875: después de la carga, si ya es la 5ª+
+        try { if (!spNewCasino()) setTimeout(_notifCtaAfterDeposit, 4500); } catch (_) {} /* #1042-t: con el chat nuevo, sin cartel */ // #892        try { setTimeout(function () { if (VIP.reviews && VIP.reviews.maybeOffer) VIP.reviews.maybeOffer('deposit'); }, 7000); } catch (_) {} // #875: después de la carga, si ya es la 5ª+
         try { _fdPromoP = null; _fdNotesPaint(); } catch (_) {} // refresca contador de cargas / guía
         try { setTimeout(storyBonusRefresh, 1500); } catch (_) {} // #742: el bono de la historia se consumió con esta carga
         try { if (!(VIP.ui && VIP.ui._casinoOpen)) return; } catch (_) { return; }
+        // #1042-t (owner): con el chat NUEVO, lo de la carga va escrito en el chat de la burbuja ("¡Buena suerte!"), sin carteles.
+        if (spNewCasino()) { try { toggleCasinoLoad(false); } catch (_) {} spShowChat(); return; }
         // #722 (owner): con la carga acreditada, si el server ofreció el extra por instalar (primera carga sin la app), se muestra LA
         // MISMA hoja del menú completo (Instalar ahora / Ahora quiero jugar) y se queda hasta que elijan. Si elige "después", el botón
         // queda en la Carga rápida (bajo Soporte). Si no hay oferta, va el cartel "¡Buena suerte!" de 5 s.
@@ -2663,6 +2670,7 @@
     // en el menú completo" — al pedir un retiro (desde donde sea), 5 s o ✕, mismo estilo.
     function onWithdrawRequested(amount) {
         try { if (VIP.ui && VIP.ui._casinoOpen) toggleCasinoLoad(false); } catch (_) {} // #723: tras el retiro se cierra el panel
+        if (spNewCasino()) { spShowChat(); return; } // #1042-t: "en breve ya sale tu pago" escrito en el chat de la burbuja, sin cartel
         const old = _el('luckCard'); if (old) old.remove();
         const amt = Number(amount) || 0;
         document.body.insertAdjacentHTML('beforeend',
@@ -3096,7 +3104,7 @@
 
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
-        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,

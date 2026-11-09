@@ -430,7 +430,8 @@ VIP.withdraw = (function () {
                 const _wdAmt = _pendingWithdraw && _pendingWithdraw.amount; // #714
                 _pendingWithdraw = null;
                 VIP.ui.hideModal('withdrawModal');
-                VIP.ui.showToast('✅ ' + (data.message || 'Retiro solicitado correctamente'), 'success');
+                let _newChat = false; try { _newChat = !!(VIP.home && VIP.home.spNewCasino && VIP.home.spNewCasino()); } catch (_) {}
+                if (!_newChat) VIP.ui.showToast('✅ ' + (data.message || 'Retiro solicitado correctamente'), 'success'); // #1042-t: con el chat nuevo va escrito en el chat
                 try { if (VIP.home && VIP.home.onWithdrawRequested) VIP.home.onWithdrawRequested(_wdAmt); } catch (_) {} // #714: cartel ¡Felicitaciones!
                 setTimeout(() => VIP.chat.loadMessages(), 500);
                 setTimeout(() => VIP.ui.syncBalance(), 1500);

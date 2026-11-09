@@ -3044,7 +3044,8 @@ async function ensureHgcashAccountIdSaved(accountId) {
 async function notifyPayoutPaid(payout) {
   try { if (payout && payout.userId) outboundWebhook.notify('retiro', { id: payout.userId }, { amount: Number(payout.amount), payoutId: payout.id, occurredAt: payout.paidAt || new Date() }); } catch (_) {} // #562 webhooks salientes (D)
   try {
-    const content = await renderSystemCommand(
+    let content = (await _spNewChat()) ? await renderSystemCommand('/sys_payout_done_chat', '✅ ¡Pago realizado con éxito! Te enviamos ${amount} a tu cuenta 💸', { amount: Number(payout.amount).toLocaleString('es-AR') }) : null; // #1042-t
+    if (!content) content = await renderSystemCommand(
       '/sys_payout_paid',
       '💸✅ ¡Tu retiro de ${amount} fue enviado a tu cuenta! Puede tardar unos minutos en acreditarse.',
       { amount: Number(payout.amount).toLocaleString('es-AR') }
@@ -3756,7 +3757,8 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
       ? `🔒💰 Depósito de $${Number(amount).toLocaleString('es-AR')} (incluye $${Number(_auto.bonus).toLocaleString('es-AR')} de bonificación) acreditado con éxito. ✅\n💸 Tu nuevo saldo es ${balStr} 💸`
       : `🔒💰 Depósito de $${Number(amount).toLocaleString('es-AR')} acreditado con éxito. ✅\n💸 Tu nuevo saldo es ${balStr} 💸`);
     if (depositTpl) { // null = comando vaciado a propósito → no enviar mensaje al cliente
-      const clientMsg = depositTpl.replace(/\{amount\}/g, Number(amount)).replace(/\{bonus\}/g, _hgBonusApplied ? _auto.bonus : 0).replace(/\{pct\}/g, _hgBonusApplied ? _auto.pct : 0).replace(/\{balance\}/g, newBalance !== null ? newBalance : 'actualizándose');
+      let clientMsg = depositTpl.replace(/\{amount\}/g, Number(amount)).replace(/\{bonus\}/g, _hgBonusApplied ? _auto.bonus : 0).replace(/\{pct\}/g, _hgBonusApplied ? _auto.pct : 0).replace(/\{balance\}/g, newBalance !== null ? newBalance : 'actualizándose');
+      clientMsg = await _depositLuck(clientMsg); // #1042-t: chat nuevo ⇒ "¡Buena suerte!" escrito en el chat
       // #275: metadata para el cartel "Jugar ahora" de la PWA (abre la plataforma adentro de la app).
       const _depMeta = { kind: 'deposit_credited', platform: pid, amount: Number(amount), bonus: _hgBonusApplied ? Number(_auto.bonus) : 0 };
       const sysMsg = await Message.create({
@@ -11602,6 +11604,7 @@ async function _agentDepositHandler(req, res, body) {
         messageContent = `🔒💰 Depósito de $${amount} acreditado con éxito. ✅ \n💸 Tu nuevo saldo es ${balanceStr} 💸\n\nPuedes verificarlo en: https://1girox.com\n\n🔥 Mañana podes revisar si tenes reembolso para reclamar de forma automatica 🔥`;
       }
       
+      messageContent = await _depositLuck(messageContent); // #1042-t: chat nuevo ⇒ "¡Buena suerte!" escrito en el chat
       // #275: metadata para el cartel "Jugar ahora" de la PWA.
       const _depMeta = { kind: 'deposit_credited', platform: _platformId, amount: Number(amount), bonus: includeBonusInMessage ? Number(_effectiveBonus) : 0 };
       const systemMessage = await Message.create({
@@ -14504,6 +14507,24 @@ async function initializeData() {
       response: '💸✅ ¡Tu retiro de ${amount} fue enviado a tu cuenta! Puede tardar unos minutos en acreditarse.'
     },
     {
+      name: '/sys_withdraw_chat',
+      description: 'CHAT NUEVO (#1042-t, sin "Modo normal"): mensaje en el chat cuando el cliente PIDE un retiro (reemplaza a /sys_withdrawal_request). Variables: ${amount}. Si lo dejás vacío, se usa /sys_withdrawal_request.',
+      type: 'message',
+      response: '🎉 ¡Listo! Pediste tu retiro de ${amount}. En breve ya sale tu pago 💸'
+    },
+    {
+      name: '/sys_payout_done_chat',
+      description: 'CHAT NUEVO (#1042-t, sin "Modo normal"): mensaje en el chat cuando el retiro se PAGÓ (reemplaza a /sys_payout_paid). Variables: ${amount}. Si lo dejás vacío, se usa /sys_payout_paid.',
+      type: 'message',
+      response: '✅ ¡Pago realizado con éxito! Te enviamos ${amount} a tu cuenta 💸'
+    },
+    {
+      name: '/sys_deposit_luck',
+      description: 'CHAT NUEVO (#1042-t, sin "Modo normal"): frase que se suma al final del mensaje de carga acreditada. Sin variables. Si lo dejás vacío, no se suma nada.',
+      type: 'message',
+      response: '🍀 ¡Buena suerte!'
+    },
+    {
       name: '/sys_community',
       description: 'Mensaje automático al cliente cuando un agente deriva su chat a la sección Comunidad. Sin variables. Si lo dejás vacío, no se envía.',
       type: 'message',
@@ -15170,7 +15191,8 @@ async function _withdrawalRequestHandler(req, res) {
     // 2. Confirmación automática del sistema hacia el usuario (editable /sys_withdrawal_request).
     // El template usa "${amount}" y reemplazamos {amount} por el monto ya
     // formateado con separador de miles, SIN el signo $ (el $ va en el template).
-    const _wcBase = await renderSystemCommand(
+    let _wcBase = (await _spNewChat()) ? await renderSystemCommand('/sys_withdraw_chat', '🎉 ¡Listo! Pediste tu retiro de ${amount}. En breve ya sale tu pago 💸', { amount: amountNum.toLocaleString('es-AR') }) : null; // #1042-t
+    if (!_wcBase) _wcBase = await renderSystemCommand(
       '/sys_withdrawal_request',
       '⏳ Recibimos tu solicitud de retiro de ${amount}.\nUn agente la está procesando y te confirma la transferencia en breve. ¡Gracias!',
       { amount: amountNum.toLocaleString('es-AR') }
@@ -15708,6 +15730,16 @@ async function _supportAutoReply(userId, username) {
 // ════════════════════════════════════════════════════════════════════════════
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
 const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 4, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
+// #1042-t (owner): con el chat NUEVO (sin "Modo normal / chat clásico") lo que antes eran carteles va ESCRITO en el chat: carga acreditada + "¡Buena
+// suerte!", retiro pedido ("en breve ya sale tu pago") y retiro pagado ("pago realizado con éxito"). Con Modo normal, los textos de siempre.
+async function _spNewChat() { try { return !(await getSupportBotConfig()).classic; } catch (_) { return false; } }
+async function _depositLuck(text) {
+  try {
+    if (!text || !(await _spNewChat()) || /suerte/i.test(text)) return text;
+    const l = await renderSystemCommand('/sys_deposit_luck', '🍀 ¡Buena suerte!', {});
+    return l ? text + '\n' + l : text;
+  } catch (_) { return text; }
+}
 async function getSupportBotConfig() {
   let raw = null; try { raw = await getConfig('supportBot', null); } catch (_) {}
   const r = raw && typeof raw === 'object' ? raw : {};

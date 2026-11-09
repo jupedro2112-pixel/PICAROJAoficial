@@ -8,6 +8,19 @@
 
 ## Sesión 2026-11-09
 
+### 1042-t. Carga / retiro / pago ESCRITOS en el chat de la burbuja (sin carteles) — PWA v687 (2026-11-09)
+- **Owner:** "una vez que se realiza la carga, en este nuevo chat que sea todo ahí escrito: ¡buena suerte!; cuando quieran retirar 'en breve ya sale su
+  pago'; cuando se paga 'pago realizado con éxito'; todo lo que antes eran carteles ahora en el chat de la burbuja, excepto el cartel de cómo
+  adjuntar bien el comprobante (eso está perfecto)".
+- Server (sólo sin Modo normal, `_spNewChat()`): `_depositLuck` suma `/sys_deposit_luck` ("🍀 ¡Buena suerte!") al mensaje de carga acreditada (hgcash
+  y manual); retiro pedido usa `/sys_withdraw_chat` ("🎉 ¡Listo! Pediste tu retiro de $X. En breve ya sale tu pago 💸") en vez de
+  `/sys_withdrawal_request`; pagado usa `/sys_payout_done_chat` ("✅ ¡Pago realizado con éxito! Te enviamos $X a tu cuenta 💸") en vez de
+  `/sys_payout_paid`. Los tres editables en COMANDOS; vacíos ⇒ los de siempre.
+- PWA (`spNewCasino()` = Girox abierto y sin sp-classic): no salen el cartel "¡Entró tu carga!/Jugar ahora", la hoja del extra por instalar (queda el
+  mensaje con su botón en el chat), el cartel "¡Felicitaciones! En breve sale tu pago", el aviso flotante del retiro ni el pedido de notificaciones
+  tras la carga ⇒ se abre solo el chat de la burbuja (`spShowChat`) con el mensaje. La guía del comprobante (#1030) sigue igual. En la burbuja se
+  esconde el botón "Jugar ahora" del mensaje (ya está jugando). Modo normal ⇒ todo como antes.
+
 ### 1042-s. Fila de servicio ARRIBA + "modo normal" vuelve TODO (también el menú) — PWA v686 / panel v257 (2026-11-09)
 - **Owner:** "la sección que te dije que pongas abajo del chat no se ve, ponela arriba sin que tape el escribiendo; en el botón de configuración de este
   chat hacemos todos estos cambios: si pongo el normal, que siga todo igual de punta a punta, hasta con el menú".
