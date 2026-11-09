@@ -8,6 +8,23 @@
 
 ## Sesión 2026-11-09
 
+### 1046. GRUPO PRIVADO DE REPORTES en Telegram + botonera del bot + revisión completa — app v694, panel v266 (2026-11-09)
+- **Owner:** "un grupo privado para ver cómo va todo en PICA ROJA, con botones: reporte semanal, venta diaria, venta mensual, retención… algo completo".
+- `src/services/telegramAdmin.js` (textos puros) + `_tgAdmin*` en server.js. Se vincula con un CÓDIGO de un solo uso (panel → Canal de Telegram → 🔒 Grupo
+  de reportes; 15 min; se guarda el hash): en el grupo `/vincular@bot CÓDIGO`. Sólo chats en `telegramBot.adminChats` reciben datos. 14 botones (hoy, ayer,
+  7 días, mes con proyección, retención, embudo, regalos, campañas, alertas, análisis semanal, retiros frenados, sorteo con usuarios completos, IA, uso
+  de la app). Números de `Config['tgadminsnap']` (cron con lock cada 15 min; tablero del mes cada hora; 🔄 recalcula si tiene +3 min). Reportes solos:
+  ayer 9 h, análisis semanal lunes (el cierre semanal guardado), mes anterior el día 1 (tildes en el panel).
+- **#1044-e botonera del bot por privado:** 6 botones fijos (beneficios, premios, sorteo: quién va ganando con usuario tapado, cómo anotarme, código activo,
+  entrar). Owner: "si abre un link que sea a su app o su inicio de sesión; si no, no pongamos link" ⇒ todos los links van a picaroja.com y las historias ya no
+  llevan links externos. Panel del canal con "🤖 Abrir el menú del bot".
+- **Revisión de punta a punta (dos revisores):** ⚠️ `_tgSet` y dos migraciones del bot escribían Config por la colección cruda con la key en camelCase
+  (`telegramBot`/`supportBot`), pero `getConfig` busca en minúsculas ⇒ el canal NUNCA hubiera arrancado y las migraciones de Haiku / IA libre no se
+  aplicaron. Arreglado (keys en minúsculas, flags nuevos `mig1042xHaikuB`/`mig1042vAiFreeB` para que corran) + test que lo impide. Además: cierre manual
+  posterior al pase saca el 🆘; el código de la app se puede lanzar aunque haya uno de Telegram; tope del código de Telegram $15.000; el tick de Telegram
+  cierra sus códigos vencidos aunque `CODE_DROP_DISABLED`; por privado la foto sólo con /start + freno de 2 s por chat; Sorteos se abre también al entrar
+  con usuario y clave; carteles del panel escapados.
+
 ### 1045. Pase del bot a un agente: va a SOPORTE (no a Chats) y no se cierra solo — panel v264 (2026-11-09)
 - **Owner (caso picajulieta25, "copié mal mi CBU y te mandé $9.500"):** el bot lo pasó a un agente pero no apareció en Soporte, "tiene que ir a soporte, no a chats".
 - Causa: el pase abría el chat en CHATS (`ChatStatus` open + `chat_reopened`); en SOPORTE el cierre automático de 30 min (#916) lo daba por cerrado porque

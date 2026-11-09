@@ -38,7 +38,7 @@ caso('Posteo de una historia: HTML escapado, aviso del bono vigente, botón a la
   assert.ok(/&lt;B&gt;GRATIS&lt;\/B&gt;/.test(c) && /Cargá &amp; ganá/.test(c) && /BONO \+50%/.test(c) && c.length <= 1024);
   assert.ok(!/BONO/.test(tg.storyCaption(Object.assign({}, st, { bonusUntil: new Date(Date.now() - 1000) }))), 'bono vencido no se anuncia');
   const k = tg.storyButtons(st, 'https://picaroja.com').inline_keyboard;
-  assert.strictEqual(k[0][0].url, 'https://picaroja.com'); assert.strictEqual(k[1][0].url, 'https://youtube.com/x');
+  assert.strictEqual(k[0][0].url, 'https://picaroja.com'); assert.strictEqual(k.length, 1, '#1044-e: sin links externos, sólo la app');
   assert.strictEqual(tg.storyButtons({ linkUrl: '#refund' }, 'https://picaroja.com').inline_keyboard.length, 1, 'link interno ⇒ sólo el de la app');
 });
 caso('Server: qué se publica (sin personales ni códigos sorpresa, sólo desde que se prendió), reserva atómica, token cifrado y sólo admin', () => {
@@ -84,6 +84,18 @@ caso('#1044-d Server: 1 automática por día (partidos y bono siempre), código 
   assert.ok(/createdBy: 'telegram' \}\); \}/.test(S2) && /\/\?codigo=/.test(S2));
   const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'auth.js'), 'utf8');
   assert.ok(/_sp\.get\('ir'\) === 'sorteo'/.test(A) && /VIP\.sorteos\.open\('mensual'\)/.test(A));
+});
+caso('#1044-e Botonera fija del bot: 6 botones, cada uno responde; links SÓLO a la app; ranking con usuarios tapados', () => {
+  const kb = tg.menuKeyboard(); assert.ok(kb.is_persistent && kb.keyboard.flat().length === 6);
+  assert.strictEqual(tg.menuKey('🏆 Sorteo: quién va ganando'), 'rank'); assert.strictEqual(tg.menuKey('hola'), null);
+  const S3 = Object.assign({}, S, { sorteo: Object.assign({}, S.sorteo, { ranking: [{ username: 'juanperez22', points: 1234 }, { username: 'ana', points: 50 }] }) });
+  for (const [k] of tg.MENU) {
+    const m = tg.menuReply(k, S3, { appUrl: 'https://picaroja.com', drop: { code: 'ROJAX', amount: 5000, maxClaims: 10, left: 3 } });
+    assert.ok(m.text && m.text.length < 4096, k); if (m.button) assert.ok(m.button.url.startsWith('https://picaroja.com'), k + ' link sólo a la app');
+  }
+  const r = tg.menuReply('rank', S3, {}).text; assert.ok(/ju\*\*\*22/.test(r) && !/juanperez22/.test(r) && /1\.234 pts/.test(r));
+  assert.ok(!tg.menuReply('code', S, { drop: null }).button && !tg.menuReply('rank', {}, {}).button, 'sin código / sin sorteo ⇒ sin link');
+  const pb = tg.panelButtons('https://picaroja.com', null, 'PicaRojaBot').inline_keyboard.flat(); assert.ok(pb.some((x) => x.url === 'https://t.me/PicaRojaBot?start=menu'));
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

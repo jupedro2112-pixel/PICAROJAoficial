@@ -1304,7 +1304,7 @@ function initSocket() {
     socket.on('support_handoff', (data) => {
         try { pollSupportBadge(); } catch (_) {}
         try { const ss = document.getElementById('supportSection'); if (ss && ss.classList.contains('active')) loadSupport(); } catch (_) {}
-        try { showToast('🆘 El bot pasó a @' + ((data && data.username) || '?') + ' a un agente: andá a Soporte', 'info'); } catch (_) {}
+        try { showToast('🆘 El bot pasó a @' + escapeHtml((data && data.username) || '?') + ' a un agente: andá a Soporte', 'info'); } catch (_) {}
     });
     socket.on('chat_closed', (data) => {
         if (data.userId === selectedUserId) {
@@ -6382,6 +6382,8 @@ async function loadTgChannel() {
         if (g('tgBtnItems')) g('tgBtnItems').innerHTML = Object.keys(TGK).map((k) => { const it = (bt.items || {})[k] || { on: true, label: '' }; return '<label style="font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" class="tgBtnOn" data-k="' + k + '" style="width:auto;"' + (it.on !== false ? ' checked' : '') + '> <input type="text" class="tgBtnLbl" data-k="' + k + '" maxlength="40" value="' + escapeHtml(it.label || '') + '" placeholder="' + TGK[k] + '" style="flex:1;"></label>'; }).join('');
         const dr = c.drop || {}; if (g('tgDropOn')) g('tgDropOn').checked = dr.on !== false; if (g('tgDropAmount')) g('tgDropAmount').value = dr.amount || 5000; if (g('tgDropMax')) g('tgDropMax').value = dr.maxClaims || 10; if (g('tgDropEvery')) g('tgDropEvery').value = dr.everyDays || 15; if (g('tgDropHours')) g('tgDropHours').value = dr.hours || 48;
         if (g('tgSorteoPost')) g('tgSorteoPost').checked = c.sorteoPost !== false;
+        const ar = c.adminReports || {}; if (g('tgRepDaily')) g('tgRepDaily').checked = ar.daily !== false; if (g('tgRepWeekly')) g('tgRepWeekly').checked = ar.weekly !== false; if (g('tgRepMonthly')) g('tgRepMonthly').checked = ar.monthly !== false;
+        if (g('tgAdminChats')) g('tgAdminChats').innerHTML = (c.adminChats || []).length ? c.adminChats.map((x) => '✅ <b>' + escapeHtml(x.title || x.id) + '</b> <span style="color:#888;">(vinculado ' + escapeHtml(x.at ? new Date(x.at).toLocaleDateString('es-AR') : '') + (x.by ? ' por ' + escapeHtml(x.by) : '') + ')</span> <button class="btn-secondary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminUnlink(this.dataset.id)">Desvincular</button>').join('<br>') : '<span style="color:#888;">Ningún grupo vinculado todavía.</span>';
         if (g('tgMirror')) g('tgMirror').checked = c.mirror !== false; if (g('tgPanel')) g('tgPanel').checked = c.panel !== false;
         if (g('tgToken')) g('tgToken').placeholder = c.hasToken ? ('guardado (…' + (c.tokenLast4 || '') + ') · pegá uno nuevo sólo para cambiarlo') : 'pegá el token de BotFather';
         st.textContent = !c.hasToken ? '· falta el token' : !c.channel ? '· falta el canal' : (c.mirror || c.panel) ? '· ✅ conectado' + (c.channelTitle ? ' a ' + c.channelTitle : '') : '· ⏸️ apagado';
@@ -6401,26 +6403,43 @@ async function saveTgChannel() {
     const body = { channel: g('tgChannel').value.trim(), appUrl: g('tgAppUrl').value.trim(), gapMin: Number(g('tgGap').value) || 90, mirror: !!g('tgMirror').checked, panel: !!g('tgPanel').checked };
     const items = {}; document.querySelectorAll('#tgBtnItems .tgBtnLbl').forEach((el) => { const k = el.dataset.k; const on = document.querySelector('#tgBtnItems .tgBtnOn[data-k="' + k + '"]'); items[k] = { on: !!(on && on.checked), label: el.value.trim() }; });
     const links = (g('tgLinks') ? g('tgLinks').value : '').split('\n').map((l) => l.split('|')).filter((p) => p.length >= 2).map((p) => ({ label: p[0].trim(), url: p.slice(1).join('|').trim() }));
-    const bad = links.find((l) => !/^https:\/\//i.test(l.url)); if (bad) { showToast('El link "' + bad.label + '" tiene que empezar con https://', 'error'); return; }
+    const bad = links.find((l) => !/^https:\/\//i.test(l.url)); if (bad) { showToast('El link "' + escapeHtml(bad.label) + '" tiene que empezar con https://', 'error'); return; }
     body.buttons = { appLabel: g('tgBtnApp') ? g('tgBtnApp').value.trim() : '', storyLabel: g('tgBtnStory') ? g('tgBtnStory').value.trim() : '', items, servText: g('tgServText') ? g('tgServText').value.trim() : '', links };
     if (g('tgDropOn')) body.drop = { on: !!g('tgDropOn').checked, amount: Number(g('tgDropAmount').value) || 5000, maxClaims: Number(g('tgDropMax').value) || 10, everyDays: Number(g('tgDropEvery').value) || 15, hours: Number(g('tgDropHours').value) || 48 };
     if (g('tgSorteoPost')) body.sorteoPost = !!g('tgSorteoPost').checked;
+    if (g('tgRepDaily')) body.adminReports = { daily: !!g('tgRepDaily').checked, weekly: !!g('tgRepWeekly').checked, monthly: !!g('tgRepMonthly').checked };
     const tk = g('tgToken').value.trim(); if (tk) body.token = tk;
     try {
         const r = await authFetch('/api/admin/telegram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
         g('tgToken').value = '';
-        showToast(j.warning || ('📣 Canal conectado' + (j.channelTitle ? ': ' + j.channelTitle : '')), j.warning ? 'info' : 'success'); loadTgChannel();
+        showToast(j.warning ? escapeHtml(j.warning) : ('📣 Canal conectado' + (j.channelTitle ? ': ' + escapeHtml(j.channelTitle) : '')), j.warning ? 'info' : 'success'); loadTgChannel();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function tgNow(what) {
     try {
         const r = await authFetch('/api/admin/telegram/now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ what }) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'Error', 'error'); return; }
-        showToast(j.ok ? ({ panel: '📌 Panel del canal actualizado', story: '📤 Historia publicada en el canal', drop: '🎁 Código publicado en el canal: ' + (j.code || ''), sorteo: '🎟️ Sorteo publicado en el canal' }[what] || 'Listo') : ('No se hizo: ' + (j.why || '')), j.ok ? 'success' : 'info'); loadTgChannel();
+        showToast(j.ok ? ({ panel: '📌 Panel del canal actualizado', story: '📤 Historia publicada en el canal', drop: '🎁 Código publicado en el canal: ' + (j.code || ''), sorteo: '🎟️ Sorteo publicado en el canal' }[what] || 'Listo') : ('No se hizo: ' + escapeHtml(j.why || '')), j.ok ? 'success' : 'info'); loadTgChannel();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
-window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow;
+// #1046: grupo privado de reportes — código de un solo uso para vincularlo y desvincular.
+async function tgAdminPair() {
+    try {
+        const r = await authFetch('/api/admin/telegram/admin-pair', { method: 'POST' }); const j = await r.json();
+        if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
+        const el = document.getElementById('tgAdminCmd'); if (el) el.textContent = j.command;
+        showToast('🔑 Mandá en el grupo el comando que aparece (vale 15 min)', 'success');
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function tgAdminUnlink(id) {
+    try {
+        const r = await authFetch('/api/admin/telegram/admin-unlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+        if (!r.ok) { showToast('No se pudo desvincular', 'error'); return; }
+        showToast('🔒 Grupo desvinculado', 'success'); loadTgChannel();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow; window.tgAdminPair = tgAdminPair; window.tgAdminUnlink = tgAdminUnlink;
 async function saveSupportBot() {
     const g = (id) => document.getElementById(id);
     const body = { classic: !!(g('sbClassic') && g('sbClassic').checked), enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), aiMaxReplies: Number(g('sbAiMax') && g('sbAiMax').value), learnedOnly: !!(g('sbLearnedOnly') && g('sbLearnedOnly').checked), autoApproveAt: Number(g('sbAutoApprove') && g('sbAutoApprove').value) || 0, extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };

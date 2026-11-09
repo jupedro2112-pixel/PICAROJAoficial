@@ -227,7 +227,7 @@ caso('#1045 Pase a un agente: va a SOPORTE (no reabre en Chats), queda abierto c
   assert.ok(!/ChatStatus\.updateOne/.test(ho) && /support_handoff/.test(ho), 'el pase manual no abre en Chats');
   const bh = S.slice(S.indexOf('// TRABADO ⇒ a una persona'), S.indexOf('// TRABADO ⇒ a una persona') + 1500);
   assert.ok(!/ChatStatus\.updateOne/.test(bh) && /support_handoff/.test(bh), 'el pase del bot no abre en Chats');
-  assert.ok(/if \(h && \(!a \|\| new Date\(a\) < new Date\(h\)\)\) \{ r\.closed = false; r\.waitingAgent = true; \}/.test(S));
+  assert.ok(/if \(h && \(!a \|\| new Date\(a\) < new Date\(h\)\) && !\(r\.sessSince && new Date\(r\.sessSince\) > new Date\(h\)\)\) \{ r\.closed = false; r\.waitingAgent = true; \}/.test(S), 'cierre manual posterior al pase gana');
   assert.ok(/if \(_waiting\.has\(r\._id\)\) continue;/.test(S), 'el cierre automático respeta a los que esperan agente');
   const A = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
   assert.ok(/socket\.on\('support_handoff'/.test(A) && /ESPERA AGENTE/.test(A));

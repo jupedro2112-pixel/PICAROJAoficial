@@ -885,6 +885,7 @@ VIP.auth = (function () {
         }
 
         VIP.ui.showChatScreen();
+        if (VIP.state._openSorteoAfterLogin) { VIP.state._openSorteoAfterLogin = false; setTimeout(function () { try { if (VIP.sorteos && VIP.sorteos.open) VIP.sorteos.open('mensual'); } catch (e) {} }, 1800); } // #1044-d: vino de Telegram y entró con usuario y clave
         VIP.socket.startMessagePolling();
         VIP.refunds.loadRefundStatus();
         VIP.fire.loadFireStatus();

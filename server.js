@@ -13633,14 +13633,15 @@ async function initializeData() {
       // #1042-v (owner: "hacelo a respuestas libres; una vez entrenada usa lo aprendido; que la IA simplifique el trabajo y los agentes se
       // enfoquen en responder preguntas") ⇒ 20 (el máximo): en la práctica libre; pasa a una persona sólo por handoff (no sabe / reclamo / pide persona).
       // #1042-x (owner: "poné la IA más barata") ⇒ Haiku 5.5 una vez (después se cambia en la tarjeta del bot).
-      if (!(await getConfig('mig1042xHaiku', null))) {
-        await Config.collection.updateOne({ key: 'supportBot' }, { $set: { 'value.model': 'claude-haiku-5-5' } });
-        await Config.set('mig1042xHaiku', new Date().toISOString(), 'startup-migration');
+      // revisión: la key va en MINÚSCULAS (la colección cruda no la baja; antes no matcheaba y la migración se marcaba hecha igual) ⇒ flags nuevos.
+      if (!(await getConfig('mig1042xHaikuB', null))) {
+        await Config.collection.updateOne({ key: 'supportbot' }, { $set: { 'value.model': 'claude-haiku-5-5' } });
+        await Config.set('mig1042xHaikuB', new Date().toISOString(), 'startup-migration');
         console.log('✅ Bot: modelo Haiku 5.5 (el más barato) (#1042-x)');
       }
-      if (!(await getConfig('mig1042vAiFree', null))) {
-        await Config.collection.updateOne({ key: 'supportBot' }, { $set: { 'value.aiMaxReplies': 20 } });
-        await Config.set('mig1042vAiFree', new Date().toISOString(), 'startup-migration');
+      if (!(await getConfig('mig1042vAiFreeB', null))) {
+        await Config.collection.updateOne({ key: 'supportbot' }, { $set: { 'value.aiMaxReplies': 20 } });
+        await Config.set('mig1042vAiFreeB', new Date().toISOString(), 'startup-migration');
         console.log('✅ Bot: la IA responde libre (hasta 20 por charla) (#1042-v)');
       }
     } catch (e) { console.warn('[startup-migration] IA una vez #1042-u:', e.message); }
@@ -24596,6 +24597,7 @@ async function _supportConversationsBuild() {
         status: { $ifNull: [{ $arrayElemAt: ['$cs.status', 0] }, 'open'] },
         // #747 (owner): CERRADA = el agente cerró la charla (User.supportSessionSince) después del último mensaje; si el cliente
         // vuelve a escribir, pasa sola a PENDIENTE.
+        sessSince: '$user.supportSessionSince', // #1045 (revisión): un cierre posterior al pase saca el 🆘
         closed: { $gt: [{ $ifNull: ['$user.supportSessionSince', new Date(0)] }, { $ifNull: ['$lastUserAt', '$lastAt'] }] } // #905: cerrada si el CLIENTE no escribió después del corte
       } }
     ]);
@@ -24635,12 +24637,12 @@ async function _supportConversationsBuild() {
           // #1045 (owner, caso picajulieta25): el bot lo pasó a un agente y NINGUNA persona contestó después ⇒ queda ABIERTO esperando
           // (antes el cierre automático de 30 min lo marcaba cerrado porque el sistema/bot había escrito último y desaparecía de Pendientes).
           const h = H.get(r.userId), a = A.get(r.userId);
-          if (h && (!a || new Date(a) < new Date(h))) { r.closed = false; r.waitingAgent = true; }
+          if (h && (!a || new Date(a) < new Date(h)) && !(r.sessSince && new Date(r.sessSince) > new Date(h))) { r.closed = false; r.waitingAgent = true; }
           return r;
         });
       }
     } catch (e) { logger.warn(`[support] filtro del bot: ${e.message}`); }
-    _rows = _rows.map((r) => { delete r.userTextList; delete r._needs; return r; });
+    _rows = _rows.map((r) => { delete r.userTextList; delete r._needs; delete r.sessSince; return r; });
     return { conversations: _rows, unreadTotal: _rows.filter((r) => !r.closed).reduce((s, r) => s + (r.unread || 0), 0), pending: _rows.filter((r) => !r.closed).length, closed: _rows.filter((r) => r.closed).length };
   }
 }
@@ -29359,7 +29361,7 @@ app.post('/api/admin/code-drops/config', authMiddleware, adminMiddleware, async 
 app.post('/api/admin/code-drops/now', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
-    if (await CodeDrop.exists({ status: 'active' })) return res.status(409).json({ error: 'Ya hay un código activo.' });
+    if (await CodeDrop.exists({ status: 'active', createdBy: { $ne: 'telegram' } })) return res.status(409).json({ error: 'Ya hay un código activo.' });
     const d = await _codeDropLaunch(await getCodeDropConfig(), 'cd-manual-' + Date.now(), req.user.username);
     res.json({ success: true, code: d && d.code });
   } catch (e) { logger.error('[código-sorpresa] now ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
@@ -30602,7 +30604,7 @@ let _tgLogoB64 = null;
 function _tgLogo() { if (_tgLogoB64 === null) { try { _tgLogoB64 = fs.readFileSync(path.join(__dirname, 'public', 'icons', 'icon-384x384.png')).toString('base64'); } catch (_) { _tgLogoB64 = ''; } } return _tgLogoB64 || null; }
 async function _tgSet(fields) {
   const $set = { updatedAt: new Date() }; for (const [k, v] of Object.entries(fields || {})) $set['value.' + k] = v;
-  await Config.collection.updateOne({ key: 'telegramBot' }, { $set }, { upsert: true });
+  await Config.collection.updateOne({ key: 'telegrambot' }, { $set }, { upsert: true }); // revisión: la colección CRUDA no baja la key a minúsculas (getConfig sí)
   try { Config._cache && Config._cache.clear(); } catch (_) {}
 }
 function _tgArtHour(d = new Date()) { return Number(new Date(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24; }
@@ -30720,11 +30722,13 @@ async function _tgPanelCompute() {
   try {
     const so = await _sorteosCfg();
     if (so.enabled) {
-      const pick = ['gran', 'mensual'].map((k) => so[k]).find((x) => x && x.enabled && sorteosRules.periodOf(x, now).status === 'live');
+      const pkey = ['gran', 'mensual'].find((k) => so[k] && so[k].enabled && sorteosRules.periodOf(so[k], now).status === 'live'); const pick = pkey ? so[pkey] : null;
       if (pick) {
         const per = sorteosRules.periodOf(pick, now); const rq = so.requirements || {};
         const req = [rq.app && 'app instalada', rq.notif && 'notificaciones', rq.telegram && 'unirte a Telegram', rq.phone && 'celular cargado', rq.deposit && 'una carga', rq.week && 'cuenta con 7 días'].filter(Boolean);
         s.sorteo = { req: rq, title: `${pick.title} (cierra el ${per.end.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })})`, prizes: (pick.prizes || []).map((p) => ({ pos: p.pos, name: p.name, value: p.value || '' })), requirements: req };
+        // #1044-e: "quién va ganando" para el menú del bot (top 5 anotados; el usuario se TAPA al mostrarlo). Se calcula acá (cron), nunca en el webhook.
+        try { s.sorteo.ranking = (await SorteoScore.find({ key: pkey, periodKey: per.periodKey, joined: true, points: { $gt: 0 } }).sort(_sorteoSort).limit(5).select('username points').lean()).map((r) => ({ username: r.username, points: r.points })); } catch (_) {}
       }
     }
   } catch (_) {}
@@ -30737,7 +30741,8 @@ async function _tgPanelTick(force) {
   if (!force && !(await _cronClaim('tgpanel', 50 * 60000))) return { ok: false, why: 'otra instancia' };
   const s = await _tgPanelCompute();
   try { await Config.set('telegramPanelStats', s, 'telegram'); } catch (_) {}
-  const reply_markup = tgChannel.panelButtons(c.appUrl, c.btn);
+  if (!c.botUsername) { try { const me = await tgChannel.call(c.token, 'getMe', {}); if (me.ok && me.result && me.result.username) { c.botUsername = me.result.username; await _tgSet({ botUsername: me.result.username }); } } catch (_) {} } // #1044-e
+  const reply_markup = tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername);
   // #1044-b: el panel es una FOTO (tres números grandes) con el texto abajo; si la foto no se puede armar, va como texto.
   let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(s, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
   const kind = png ? 'photo' : 'text';
@@ -30766,7 +30771,7 @@ const TG_DROP_DEFAULT = { on: true, amount: 5000, maxClaims: 10, everyDays: 15, 
 function _tgDropCfg(c) {
   const d = Object.assign({}, TG_DROP_DEFAULT, (c && c.drop && typeof c.drop === 'object') ? c.drop : {});
   const n = (v, def, lo, hi) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : def; };
-  return { on: d.on !== false, amount: n(d.amount, 5000, 500, 50000), maxClaims: n(d.maxClaims, 10, 1, 100), everyDays: n(d.everyDays, 15, 1, 60), hours: n(d.hours, 48, 1, 168) };
+  return { on: d.on !== false, amount: n(d.amount, 5000, 500, 15000), maxClaims: n(d.maxClaims, 10, 1, 100), everyDays: n(d.everyDays, 15, 1, 60), hours: n(d.hours, 48, 1, 168) };
 }
 // Próxima salida: dentro de `days` días, a una hora al azar entre las 12 y las 21 (ART). days = 0 ⇒ hoy (si todavía hay franja) o mañana.
 function _tgDropNextAt(days) {
@@ -30811,6 +30816,7 @@ async function _tgDropTick() {
   const c = await _tgCfg(); const dc = _tgDropCfg(c);
   if (!dc.on || !c.token || !c.channel) return;
   if (!(await _cronClaim('tgdrop', 90000))) return;
+  for (const d of await CodeDrop.find({ createdBy: 'telegram', status: 'active', endsAt: { $lte: new Date() } }).select('id').lean()) await _codeDropFinish(d.id).catch(() => {}); // revisión: aunque CODE_DROP_DISABLED=1
   if (!c.dropNextAt) { await _tgSet({ dropNextAt: _tgDropNextAt(0) }); return; }
   if (new Date() < new Date(c.dropNextAt)) return;
   if (await CodeDrop.exists({ createdBy: 'telegram', status: 'active' })) return; // el anterior sigue vivo
@@ -30840,6 +30846,159 @@ async function _tgSorteoTick() {
   await _tgSorteoPost(c, false);
 }
 setTimeout(() => { setInterval(() => { _tgDropTick().catch((e) => logger.warn('[telegram] código ' + e.message)); _tgSorteoTick().catch((e) => logger.warn('[telegram] sorteo ' + e.message)); }, 2 * 60000); }, 2 * 60000);
+// ── #1046 GRUPO PRIVADO DE REPORTES (owner: "un grupo privado para ver cómo va todo en PICA ROJA, con botones: reporte semanal, venta diaria,
+// venta mensual, retención… algo completo para ir analizando"). Se VINCULA con un código de un solo uso (panel → Canal de Telegram → 🔒 Grupo de
+// reportes; vence en 15 min; se guarda sólo su hash). Sólo los chats vinculados (`telegramBot.adminChats`) reciben datos: cualquier otro que toque
+// un botón 'ad:*' no recibe nada. Los números salen de una FOTO (`Config['tgadminsnap']`) que arma un cron con lock cada 15 min (el tablero del
+// negocio, cada hora): el webhook nunca calcula nada pesado. Reportes automáticos: ayer (09 h), semanal (lunes, el cierre semanal) y mes (día 1). ──
+const tgAdmin = require('./src/services/telegramAdmin');
+function _tgAdminLinked(c, chatId) { return (c.adminChats || []).some((x) => String(x.id) === String(chatId)); }
+function _tgArtDayStart(d) { return new Date(_schedArtKey(d) + 'T00:00:00-03:00'); }
+let _tgSnapRunning = false;
+async function _tgAdminSnapTick(force) {
+  const c = await _tgCfg(); if (!c.token || !(c.adminChats || []).length) return null;
+  if (_tgSnapRunning) return null; if (!force && !(await _cronClaim('tgadminsnap', 13 * 60000))) return null;
+  _tgSnapRunning = true;
+  try {
+    const now = new Date(); const D = 86400000; const t0 = _tgArtDayStart(now); const y0 = new Date(t0.getTime() - D); const y1 = new Date(y0.getTime() - D);
+    const mk = _schedArtKey(now).slice(0, 7); const m0 = new Date(mk + '-01T00:00:00-03:00');
+    const pm = new Date(m0.getTime() - 15 * D); const pmk = _schedArtKey(pm).slice(0, 7); const pm0 = new Date(pmk + '-01T00:00:00-03:00');
+    const elapsed = now - m0; const pmSame = new Date(Math.min(m0.getTime(), pm0.getTime() + elapsed));
+    const prevSnap = (await getConfig('tgadminsnap', null)) || {};
+    const [today, todayPrev, yesterday, yesterdayPrev, week, weekPrev, month, monthPrev] = await Promise.all([
+      _bizMoney(t0, now), _bizMoney(y0, new Date(now.getTime() - D)), _bizMoney(y0, t0), _bizMoney(y1, y0),
+      _bizMoney(new Date(now.getTime() - 7 * D), now), _bizMoney(new Date(now.getTime() - 14 * D), new Date(now.getTime() - 7 * D)),
+      _bizMoney(m0, now), _bizMoney(pm0, pmSame)
+    ]);
+    const strip = (m) => { if (!m) return m; const o = Object.assign({}, m); delete o.prev; return o; };
+    const snap = { at: now, today: strip(today), todayPrev: strip(todayPrev), yesterday: strip(yesterday), yesterdayPrev: strip(yesterdayPrev), week: strip(week), weekPrev: strip(weekPrev),
+      month: strip(month), monthPrev: strip(monthPrev), monthDays: Math.max(1, elapsed / D), monthLen: Math.round((new Date(new Date(m0.getTime() + 32 * D).toISOString().slice(0, 7) + '-01T00:00:00-03:00') - m0) / D) };
+    // Mes anterior completo (para el reporte del día 1): una vez por mes.
+    if (prevSnap.lastMonthKey === pmk && prevSnap.lastMonth) Object.assign(snap, { lastMonthKey: pmk, lastMonth: prevSnap.lastMonth, lastMonthPrev: prevSnap.lastMonthPrev });
+    else { const ppm0 = new Date(_schedArtKey(new Date(pm0.getTime() - 15 * D)).slice(0, 7) + '-01T00:00:00-03:00'); const [lm, lmp] = await Promise.all([_bizMoney(pm0, m0), _bizMoney(ppm0, pm0)]); Object.assign(snap, { lastMonthKey: pmk, lastMonth: strip(lm), lastMonthPrev: strip(lmp) }); }
+    try { const dc = await DailyClose.findOne({ dateKey: _schedArtKey(y0) }).select('resultado check').lean(); if (dc) snap.close = { resultado: dc.resultado, check: dc.check && (dc.check.estado === 'ok' ? '✅ cierre OK' : '⚠️ revisar el cierre (' + (dc.check.pendientes || 0) + ' puntos)') }; } catch (_) {}
+    // Tablero del mes (retención, embudo, regalos, campañas, alertas): cada hora.
+    if (!force && prevSnap.board && prevSnap.boardAt && now - new Date(prevSnap.boardAt) < 55 * 60000) Object.assign(snap, { board: prevSnap.board, boardAt: prevSnap.boardAt });
+    else {
+      try {
+        const b = await (_bizInflight.get('month') || (() => { const p = _bizBoard('month').finally(() => { if (_bizInflight.get('month') === p) _bizInflight.delete('month'); }); _bizInflight.set('month', p); return p; })());
+        _bizCache.set('month', { at: Date.now(), board: b });
+        snap.board = { retention: b.retention, funnel: b.funnel && { steps: b.funnel.steps, worst: b.funnel.worst }, gifts: (b.gifts || []).map((g) => ({ label: g.label, cost: g.cost, verdict: g.verdict })),
+          campaigns: (b.campaigns || []).slice(0, 12).map((x) => ({ campaign: x.campaign, publisher: x.publisher || null, users: x.users, depositors: x.depositors, conv: x.conv, net: x.net, spend: x.spend, verdict: x.verdict })),
+          alerts: (b.alerts || []).slice(0, 8), headline: b.headline };
+        snap.boardAt = now;
+      } catch (e) { logger.warn('[telegram reportes] tablero: ' + e.message); if (prevSnap.board) Object.assign(snap, { board: prevSnap.board, boardAt: prevSnap.boardAt }); }
+    }
+    // Retiros frenados.
+    try {
+      const [rv, py, fl, old] = await Promise.all([
+        PendingPayout.aggregate([{ $match: { status: 'pending_review' } }, { $group: { _id: null, n: { $sum: 1 }, s: { $sum: '$amount' } } }]),
+        PendingPayout.aggregate([{ $match: { status: 'paying', updatedAt: { $lt: new Date(now.getTime() - 10 * 60000) } } }, { $group: { _id: null, n: { $sum: 1 }, s: { $sum: '$amount' } } }]),
+        PendingPayout.countDocuments({ status: 'failed', updatedAt: { $gte: new Date(now.getTime() - D) } }),
+        PendingPayout.find({ status: 'pending_review' }).sort({ createdAt: 1 }).limit(5).select('username amount createdAt reviewReason holdReason').lean()
+      ]);
+      const ago = (d) => { const m = Math.round((now - new Date(d)) / 60000); return m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d'; };
+      snap.payouts = { reviewN: (rv[0] || {}).n || 0, reviewSum: (rv[0] || {}).s || 0, payingN: (py[0] || {}).n || 0, payingSum: (py[0] || {}).s || 0, failedN: fl,
+        oldest: old.map((o) => ({ username: o.username, amount: o.amount, ago: ago(o.createdAt), reason: String(o.reviewReason || o.holdReason || '').slice(0, 80) })) };
+    } catch (e) { logger.warn('[telegram reportes] retiros: ' + e.message); }
+    // IA de soporte (7 días), sorteo (del panel del canal) y uso de la app.
+    try {
+      const keys = []; for (let i = 6; i >= 0; i--) keys.push(_schedArtKey(new Date(now.getTime() - i * D)));
+      const st = await mongoose.connection.collection('support_bot_stats').find({ _id: { $in: keys } }).toArray();
+      snap.ai = keys.map((k) => { const x = st.find((y) => y._id === k) || {}; return { day: k.slice(5), replies: x.replies || 0, aiCalls: x.aiCalls || 0, handoffs: x.handoffs || 0, usd: (x.costMicro || 0) / 1e6 }; });
+    } catch (_) {}
+    try { const ps = await getConfig('telegramPanelStats', null); snap.sorteo = (ps && ps.sorteo) || null; } catch (_) {}
+    try { const mr = await getConfig('menuRetention', null); if (mr) snap.menus = { at: mr.at, byMenu: mr.byMenu, weeks: (mr.weeks || []).slice(0, 1) }; } catch (_) {}
+    try { const wc = ((await getConfig('weeklyCloses', [])) || [])[0]; if (wc) { snap.weeklyText = String(wc.text || wc.head || '').slice(0, 3500); snap.weeklyAt = wc.at || wc.createdAt || null; snap.weeklyKey = wc.weekKey; } } catch (_) {}
+    await Config.set('tgadminsnap', snap, 'telegram');
+    return snap;
+  } finally { _tgSnapRunning = false; }
+}
+async function _tgAdminSend(c, chatId, text, markup) {
+  return tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: markup || undefined });
+}
+async function _tgAdminReportsTick() {
+  const c = await _tgCfg(); if (!c.token || !(c.adminChats || []).length) return;
+  if (!(await _cronClaim('tgadminrep', 4 * 60000))) return;
+  const rp = Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {});
+  const now = new Date(); const h = _tgArtHour(now); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+  const due = []; // cada reporte se marca ANTES de mandar (una sola vez aunque falle un grupo)
+  if (rp.daily && h >= 9 && c.adminLastDaily !== dk) { await _tgSet({ adminLastDaily: dk }); due.push('daily'); }
+  if (rp.monthly && dk.slice(8) === '01' && h >= 10 && c.adminLastMonthly !== dk.slice(0, 7)) { await _tgSet({ adminLastMonthly: dk.slice(0, 7) }); due.push('monthly'); }
+  let snap = null;
+  if (due.length) snap = (await _tgAdminSnapTick(true).catch(() => null)) || (await getConfig('tgadminsnap', null));
+  if (rp.weekly && dow === 1 && h >= 9) {
+    const wc = ((await getConfig('weeklyCloses', [])) || [])[0];
+    if (wc && wc.weekKey && c.adminLastWeekly !== wc.weekKey && new Date(wc.weekKey + 'T12:00:00Z') >= new Date(Date.now() - 9 * 86400000)) { await _tgSet({ adminLastWeekly: wc.weekKey }); due.push('weekly'); snap = snap || (await getConfig('tgadminsnap', null)) || {}; snap.weeklyText = String(wc.text || wc.head || '').slice(0, 3500); snap.weeklyAt = wc.at || null; }
+  }
+  for (const k of due) {
+    const text = k === 'daily' ? tgAdmin.dailyReport(snap) : k === 'monthly' ? tgAdmin.monthlyReport(snap) : tgAdmin.render('weekly', snap).text;
+    for (const ch of c.adminChats) { const r = await _tgAdminSend(c, ch.id, text, tgAdmin.menuMarkup()); if (!r.ok) logger.warn(`[telegram reportes] ${k} a ${ch.id}: ${r.error}`); }
+  }
+}
+setTimeout(() => {
+  setInterval(() => { _tgAdminSnapTick(false).catch((e) => logger.warn('[telegram reportes] ' + e.message)); }, 15 * 60000);
+  setInterval(() => { _tgAdminReportsTick().catch((e) => logger.warn('[telegram reportes] envío ' + e.message)); }, 5 * 60000);
+}, 3 * 60000);
+// Mensajes del webhook que vienen de un GRUPO: vincular, menú y cambio de id al pasar a supergrupo. Devuelve true si lo manejó.
+async function _tgAdminOnMessage(c, msg) {
+  const chat = msg.chat || {}; if (!['group', 'supergroup'].includes(chat.type)) return false;
+  if (msg.migrate_to_chat_id && _tgAdminLinked(c, chat.id)) { // el grupo pasó a supergrupo: cambia el id
+    await _tgSet({ adminChats: c.adminChats.map((x) => (String(x.id) === String(chat.id) ? Object.assign({}, x, { id: msg.migrate_to_chat_id }) : x)) }); return true;
+  }
+  const t = String(msg.text || '').trim(); const m = t.match(/^\/(vincular|menu|panel|reportes)(?:@[A-Za-z0-9_]+)?(?:\s+([A-Za-z0-9]{6,12}))?$/i);
+  if (!m) return false;
+  if (m[1].toLowerCase() === 'vincular') {
+    const code = String(m[2] || '').toUpperCase();
+    const ok = code && c.adminPairHash && c.adminPairUntil && new Date(c.adminPairUntil) > new Date() &&
+      crypto.timingSafeEqual(Buffer.from(crypto.createHash('sha256').update(code).digest('hex')), Buffer.from(String(c.adminPairHash)));
+    if (!ok) { await _tgAdminSend(c, chat.id, '❌ Código inválido o vencido. Generá uno nuevo en el panel (Canal de Telegram → 🔒 Grupo de reportes).'); return true; }
+    const list = (c.adminChats || []).filter((x) => String(x.id) !== String(chat.id)).concat([{ id: chat.id, title: String(chat.title || '').slice(0, 80), at: new Date(), by: String((msg.from && (msg.from.username || msg.from.first_name)) || '').slice(0, 40) }]).slice(-5);
+    await _tgSet({ adminChats: list, adminPairHash: null, adminPairUntil: null }); // el código se usa UNA vez
+    logger.info(`[telegram reportes] grupo vinculado: ${chat.title} (${chat.id})`);
+    await _tgAdminSend(c, chat.id, '✅ <b>Grupo vinculado a PICA ROJA.</b>\nAcá vas a ver los números con los botones de abajo, y llegan solos el resumen de ayer (9 h), el análisis semanal (lunes) y el cierre del mes (día 1).\n⚠️ Todo el que esté en este grupo ve los números: no sumes a nadie que no deba verlos.');
+    _tgAdminSnapTick(true).catch(() => {}).then(async () => { const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c, chat.id, r.text, r.markup); });
+    return true;
+  }
+  if (!_tgAdminLinked(c, chat.id)) return true; // grupo no vinculado: silencio
+  const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c, chat.id, r.text, r.markup);
+  return true;
+}
+// Botones 'ad:*' del grupo: SÓLO en un chat vinculado; edita el mismo mensaje (no llena el grupo).
+const _tgAdminBusy = new Map();
+async function _tgAdminOnCallback(c, cq) {
+  const chatId = cq.message && cq.message.chat && cq.message.chat.id; const key = String(cq.data || '').slice(3);
+  if (!chatId || !_tgAdminLinked(c, chatId)) { await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: 'Sin acceso.', show_alert: false }); return; }
+  if (key !== 'menu' && !tgAdmin.KEYS.includes(key)) { await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: cq.id }); return; }
+  let snap = await getConfig('tgadminsnap', null);
+  // 🔄 en un dato de plata viejo (> 3 min): recalcula una vez (una sola cuenta a la vez por instancia).
+  if (key !== 'menu' && (!snap || Date.now() - new Date(snap.at) > 3 * 60000) && !_tgAdminBusy.get('snap')) {
+    await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: '⏳ Actualizando números…' });
+    const p = _tgAdminSnapTick(true).catch(() => null); _tgAdminBusy.set('snap', p); try { snap = (await p) || snap; } finally { _tgAdminBusy.delete('snap'); }
+  } else await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: cq.id });
+  const r = tgAdmin.render(key, snap || {}); if (!r) return;
+  const e = await tgChannel.call(c.token, 'editMessageText', { chat_id: chatId, message_id: cq.message.message_id, text: r.text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: r.markup });
+  if (!e.ok && !/not modified/i.test(String(e.error))) await _tgAdminSend(c, chatId, r.text, r.markup);
+}
+// Panel: generar el código para vincular un grupo / desvincular.
+app.post('/api/admin/telegram/admin-pair', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _tgCfg(); if (!c.token) return res.status(400).json({ error: 'Primero cargá el token del bot.' });
+    const code = tgAdmin.newPairCode(); const until = new Date(Date.now() + 15 * 60000);
+    await _tgSet({ adminPairHash: crypto.createHash('sha256').update(code).digest('hex'), adminPairUntil: until });
+    res.json({ success: true, code, until, bot: c.botUsername || null, command: '/vincular' + (c.botUsername ? '@' + c.botUsername : '') + ' ' + code });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/telegram/admin-unlink', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _tgCfg(); const id = String((req.body || {}).id || '');
+    await _tgSet({ adminChats: (c.adminChats || []).filter((x) => String(x.id) !== id) });
+    if (c.token && id) tgChannel.call(c.token, 'sendMessage', { chat_id: id, text: '🔒 Este grupo se desvinculó de PICA ROJA: ya no recibe números.' }).catch(() => {});
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
 // Webhook: botones del panel (ventanitas) y /start por privado (le manda el panel). Sólo con el secreto que le dimos a Telegram.
 async function _tgSetWebhook(c) {
   if (!c.token) return { ok: false, error: 'sin token' };
@@ -30847,6 +31006,7 @@ async function _tgSetWebhook(c) {
   if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _tgSet({ webhookSecret: secret }); }
   return tgChannel.call(c.token, 'setWebhook', { url: c.appUrl + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message'], drop_pending_updates: true });
 }
+const _tgPrivSeen = new Map(); // revisión: freno por chat privado (2 s)
 app.post('/api/telegram/webhook', async (req, res) => {
   try {
     const c = await _tgCfg();
@@ -30854,15 +31014,31 @@ app.post('/api/telegram/webhook', async (req, res) => {
     if (!c.webhookSecret || got.length !== c.webhookSecret.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(c.webhookSecret))) return res.status(401).end();
     res.json({ ok: true }); // a Telegram se le contesta enseguida; lo demás sigue acá
     const u = req.body || {};
+    // #1046: grupo privado de reportes (vincular / menú / botones ad:*) — antes que todo lo demás.
+    if (u.callback_query && /^ad:[a-z]+$/.test(String(u.callback_query.data || ''))) { await _tgAdminOnCallback(c, u.callback_query); return; }
+    if (u.message && u.message.chat && u.message.chat.type !== 'private') { await _tgAdminOnMessage(c, u.message); return; }
+    if (u.message && u.message.chat && u.message.chat.type === 'private') { const k = 'p' + u.message.chat.id; const last = _tgPrivSeen.get(k) || 0; if (Date.now() - last < 2000) return; _tgPrivSeen.set(k, Date.now()); if (_tgPrivSeen.size > 5000) _tgPrivSeen.clear(); }
     const stats = (await getConfig('telegramPanelStats', null)) || await _tgPanelCompute();
     if (u.callback_query && /^tg:(benef|paid|top|sorteo|serv)$/.test(String(u.callback_query.data || ''))) {
       await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id, text: tgChannel.popupText(u.callback_query.data.slice(3), stats, c.btn), show_alert: true });
     } else if (u.callback_query) {
       await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id });
     } else if (u.message && u.message.chat && u.message.chat.type === 'private') {
+      // #1044-e: botonera fija del bot. Un botón del menú ⇒ responde ese dato; cualquier otra cosa (/start…) ⇒ el panel + la botonera.
+      const chatId = u.message.chat.id; const key = tgChannel.menuKey(u.message.text);
+      if (key) {
+        let drop = null;
+        if (key === 'code') { const d = await CodeDrop.findOne({ createdBy: 'telegram', status: 'active', endsAt: { $gt: new Date() } }).sort({ startsAt: -1 }).select('code amount maxClaims claims').lean(); if (d) drop = { code: d.code, amount: d.amount, maxClaims: d.maxClaims, left: Math.max(0, d.maxClaims - d.claims) }; }
+        const m = tgChannel.menuReply(key, stats, { appUrl: c.appUrl, btn: c.btn, drop });
+        await tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text: m.text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: m.button ? { inline_keyboard: [[m.button]] } : tgChannel.menuKeyboard() });
+        return;
+      }
+      await tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text: '🔴 <b>PICA ROJA</b>\nUsá los botones de abajo 👇', parse_mode: 'HTML', reply_markup: tgChannel.menuKeyboard() });
+      // revisión: la FOTO del panel sólo con /start (arma un PNG); cualquier otro texto ⇒ el panel como texto.
+      if (!/^\/start\b/.test(String(u.message.text || ''))) { await tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername), disable_web_page_preview: true }); return; }
       let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(stats, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
-      if (png) { const r = await tgChannel.sendMedia(c.token, 'photo', u.message.chat.id, { buffer: png, mime: 'image/png', filename: 'panel.png' }, { caption: tgChannel.panelCaption(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn) }); if (r.ok) return; }
-      await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn), disable_web_page_preview: true });
+      if (png) { const r = await tgChannel.sendMedia(c.token, 'photo', u.message.chat.id, { buffer: png, mime: 'image/png', filename: 'panel.png' }, { caption: tgChannel.panelCaption(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername) }); if (r.ok) return; }
+      await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername), disable_web_page_preview: true });
     }
   } catch (e) { logger.warn('[telegram] webhook: ' + e.message); if (!res.headersSent) res.status(200).end(); }
 });
@@ -30874,7 +31050,7 @@ app.get('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res)
     const queue = (c.token && c.channel && c.mirror) ? await Story.countDocuments(_tgStoryQuery(c, now)) : 0;
     const posted = await Story.find({ tgPostedAt: { $ne: null } }).sort({ tgPostedAt: -1 }).limit(5).select('id title tgPostedAt tgMsgId').lean();
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
+    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false, adminChats: (c.adminChats || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), adminReports: Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {}), adminPairUntil: c.adminPairUntil || null }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
@@ -30890,6 +31066,7 @@ app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res
     if (b.buttons && typeof b.buttons === 'object') set.buttons = tgChannel.normalizeButtons(b.buttons); // #1044-c
     if (b.drop && typeof b.drop === 'object') set.drop = _tgDropCfg({ drop: b.drop }); // #1044-d
     if (typeof b.sorteoPost === 'boolean') set.sorteoPost = b.sorteoPost;
+    if (b.adminReports && typeof b.adminReports === 'object') set.adminReports = { daily: b.adminReports.daily !== false, weekly: b.adminReports.weekly !== false, monthly: b.adminReports.monthly !== false }; // #1046
     if (b.gapMin != null && Number.isFinite(Number(b.gapMin))) set.gapMin = Math.min(600, Math.max(10, Math.round(Number(b.gapMin))));
     // El token se PRUEBA antes de guardar (getMe) y se guarda cifrado.
     let me = null;
