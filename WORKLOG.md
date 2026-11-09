@@ -8,6 +8,10 @@
 
 ## Sesión 2026-11-09
 
+### 1064. Burbuja de Girox exactamente como antes: servicios en UNA línea (revierte #1058) (2026-11-09)
+- **Owner:** "los problemas, reembolsos, etc. que queden en línea recta, que se vea la página de Girox". pin.css vuelve a ser igual al de antes de #1058
+  (fila de servicios en una línea que se desliza, cinta con carrusel, tarjeta de 560 px). Queda "🆘 Otro problema" primero (#1060) y DEPOSITAR → guía (#1057). App v704.
+
 ### 1063. Chat de Girox vuelve a BURBUJA flotante (revierte #1060) (2026-11-09)
 - **Owner:** "no queda el chat tipo burbuja como estaba, corregí eso urgente, eso estaba bien". Se quitó el CSS de #1060 (centrado + `box-shadow` con el
   color del tema que tapaba el juego); vuelven las medidas de #1058 (tarjeta abajo a la derecha, hasta 600 px). Se mantienen "🆘 Otro problema" primero
