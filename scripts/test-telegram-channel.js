@@ -35,8 +35,8 @@ caso('Panel del mes: título del mes, beneficios, premios, regalado, premio más
 caso('Posteo de una historia: HTML escapado, aviso del bono vigente, botón a la app y link externo aparte', () => {
   const st = { title: 'Hoy <b>gratis</b>', text: 'Cargá & ganá', bonusPct: 50, bonusUntil: new Date(Date.now() + 3600000), linkUrl: 'https://youtube.com/x', linkLabel: 'Ver video' };
   const c = tg.storyCaption(st);
-  assert.ok(/&lt;b&gt;gratis&lt;\/b&gt;/.test(c) && /Cargá &amp; ganá/.test(c) && /Bono \+50%/.test(c) && c.length <= 1024);
-  assert.ok(!/Bono/.test(tg.storyCaption(Object.assign({}, st, { bonusUntil: new Date(Date.now() - 1000) }))), 'bono vencido no se anuncia');
+  assert.ok(/&lt;B&gt;GRATIS&lt;\/B&gt;/.test(c) && /Cargá &amp; ganá/.test(c) && /BONO \+50%/.test(c) && c.length <= 1024);
+  assert.ok(!/BONO/.test(tg.storyCaption(Object.assign({}, st, { bonusUntil: new Date(Date.now() - 1000) }))), 'bono vencido no se anuncia');
   const k = tg.storyButtons(st, 'https://picaroja.com').inline_keyboard;
   assert.strictEqual(k[0][0].url, 'https://picaroja.com'); assert.strictEqual(k[1][0].url, 'https://youtube.com/x');
   assert.strictEqual(tg.storyButtons({ linkUrl: '#refund' }, 'https://picaroja.com').inline_keyboard.length, 1, 'link interno ⇒ sólo el de la app');
