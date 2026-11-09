@@ -27,6 +27,8 @@ const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-haiku-5-5'; // #1042-x (owner: "poné la IA más barata"): Haiku 5.5, ~40× más barato que Opus
 // #1042-p: temas con botón de info abajo de la respuesta (la app abre esa ventana; con Girox abierto, adentro del casino).
 const INFO_TOPICS = ['none', 'carga', 'retiro', 'reembolso', 'sorteo', 'misiones', 'ruleta', 'referidos'];
+// #1043: correcciones que el SERVIDOR sabe verificar y hacer solo (la IA sólo las pide; el monto lo decide el servidor).
+const FIX_CODES = ['none', 'install_gift_topup'];
 // Respuesta en JSON con esquema fijo: el texto para el cliente + si hay que pasarlo a una persona.
 const REPLY_SCHEMA = {
   type: 'object',
@@ -37,9 +39,10 @@ const REPLY_SCHEMA = {
     ignore: { type: 'boolean', description: 'true para cortar la charla y dejar de contestarle: molesta, o pregunta cosas que no tienen nada que ver con el servicio.' },
     learn_question: { type: 'string', description: 'Si la duda es GENERAL (le sirve a cualquier cliente), la pregunta en forma genérica y corta; vacío si es personal, un reclamo o no es del servicio.' },
     learn_answer: { type: 'string', description: 'Respuesta GENÉRICA reutilizable para learn_question (sin nombres, sin datos de esta cuenta); vacío si learn_question está vacío.' },
-    info_topic: { type: 'string', enum: INFO_TOPICS, description: 'Botón de INFO que va abajo de tu respuesta para que vea el detalle en la app: el tema del que pregunta, o "none".' }
+    info_topic: { type: 'string', enum: INFO_TOPICS, description: 'Botón de INFO que va abajo de tu respuesta para que vea el detalle en la app: el tema del que pregunta, o "none".' },
+    fix: { type: 'string', enum: FIX_CODES, description: 'Corrección automática: SÓLO un código que figure como CORRECCIÓN DISPONIBLE en DATOS DEL CLIENTE y que el cliente esté reclamando; si no, "none".' }
   },
-  required: ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic'],
+  required: ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic', 'fix'],
   additionalProperties: false
 };
 
@@ -118,6 +121,12 @@ function stablePrompt() {
     'corta para cualquiera, sin nombres ni datos de esta cuenta ni de su etapa). Si es personal, un reclamo, un problema con plata,',
     'handoff, ignore o fuera del servicio: los dos vacíos.',
     '',
+    'RECLAMOS DE BONOS Y REGALOS (montos que no le cierran):',
+    '- Mirá DATOS DEL CLIENTE. Si lo que reclama figura como CORRECCIÓN DISPONIBLE, marcá "fix" con ese código: el sistema verifica, le carga',
+    '  lo que falta y le avisa con el monto exacto (vos no digas montos ni prometas nada en "reply").',
+    '- Si NO hay corrección disponible, explicale con calma y con los datos de su cuenta por qué recibió ese monto (reglas, tope, rollover,',
+    '  plazo vencido). Si aun así no cierra o no tenés el dato, marcá handoff. Nunca inventes un monto ni digas que se lo vas a cargar.',
+    '',
     'FORMATO DE SALIDA: JSON con "reply" (tu mensaje al cliente), "handoff" (true/false), "handoff_reason" (motivo corto para el',
     'equipo o vacío), "ignore" (true/false), "learn_question" y "learn_answer". Aunque marques handoff, "reply" lleva un mensaje',
     'amable para el cliente.'
@@ -131,9 +140,9 @@ function serviceFactsText(f) {
   if (f.minDeposit) L.push(`- Carga mínima: ${money(f.minDeposit)}. Las cargas se acreditan solas en minutos al mandar el comprobante.`);
   if (f.withdrawMin) L.push(`- Retiro mínimo: ${money(f.withdrawMin)}. Los retiros se pagan solos al CBU del cliente; el celular se verifica una vez.`);
   if (f.depositRolloverX != null) L.push(`- Cada carga se juega x${f.depositRolloverX} antes de poder retirarla (rollover de la carga).`);
-  if (f.giftRolloverX != null) L.push(`- Todo bono o regalo entra como BONO con rollover x${f.giftRolloverX}: para retirarlo hay que apostar ${f.giftRolloverX} veces el bono. Los bonos se juegan en slots.`);
+  if (f.giftRolloverX != null) L.push(`- Todo bono o regalo (salvo el extra por instalar la app) entra como BONO con rollover x${f.giftRolloverX}: para retirarlo hay que apostar ${f.giftRolloverX} veces el bono. Los bonos se juegan en slots.`);
   if (f.firstDepositPct > 0) L.push(`- Bono de PRIMERA carga: ${f.firstDepositPct}%${f.firstDepositCap > 0 ? ` (hasta ${money(f.firstDepositCap)} de bono)` : ''}. Sólo si el cliente califica (ver DATOS DEL CLIENTE).`);
-  if (f.installGiftOn) L.push(`- Extra por instalar NUESTRA app (en la primera carga, si todavía no la tiene instalada): ${f.installGiftFixed > 0 ? money(f.installGiftFixed) + ' en fichas' : f.installGiftPct + '% extra'}. Se reclama desde la app instalada.`);
+  if (f.installGiftOn) L.push(`- Extra por instalar NUESTRA app (en la primera carga, si todavía no la tiene instalada): ${f.installGiftFixed > 0 ? money(f.installGiftFixed) + ' en fichas' : f.installGiftPct + '% extra'}. Se reclama desde la app instalada.${f.installGiftRolloverX != null ? ` OJO: este extra se juega x${f.installGiftRolloverX} (es el ÚNICO regalo con ese rollover; el resto va x${f.giftRolloverX != null ? f.giftRolloverX : 5}).` : ''}`);
   if (f.refunds) L.push(`- Reembolsos sobre lo que se pierde con plata propia (no con bonos): diario ${f.refunds.daily || '-'}; semanal ${f.refunds.weekly || '-'}; mensual ${f.refunds.monthly || '-'}. Se reclaman desde la app, sin pedirle a nadie.`);
   L.push('- En la app también hay: ruleta diaria (giro gratis para quien ya cargó alguna vez), fueguito (racha de días con premios), niveles VIP con bono al subir, misiones semanales y un sorteo mensual (requisitos en la app: app instalada, notificaciones, Telegram, celular cargado, una carga y cuenta con 7 días).');
   if (f.referralsOn === false) L.push('- El programa de referidos está pausado: no ofrecerlo.');
@@ -159,6 +168,8 @@ function userFactsText(u, agentName) {
   }
   if (u.appInstalled) L.push('- Ya tiene la app instalada.');
   else L.push('- No tiene la app instalada (conviene recomendarla: avisos, reembolsos y el extra por instalarla si le toca).');
+  if (u.installGift) L.push(`- Extra por instalar la app: ${u.installGift}.`);
+  if (u.fixInstall) L.push(`- CORRECCIÓN DISPONIBLE "install_gift_topup": ${u.fixInstall}. Si reclama el extra por instalar, marcá fix = "install_gift_topup".`);
   if (u.pendingReceipts > 0) L.push(`- Tiene ${u.pendingReceipts} comprobante(s) de carga esperando acreditación.`);
   if (u.payout) L.push(`- Último retiro: ${u.payout}.`);
   if (u.blocked) L.push('- La cuenta está BLOQUEADA: no des detalles, decí que el equipo lo revisa y marcá handoff.');
@@ -233,7 +244,8 @@ async function generateReply(p) {
   let learnA = learnQ ? String(out.learn_answer || '').trim().slice(0, 800) : '';
   if (!learnIsSafe(learnQ, learnA)) learnA = '';
   const infoTopic = INFO_TOPICS.includes(out.info_topic) && out.info_topic !== 'none' ? out.info_topic : null;
-  return { ok: true, reply, handoff, ignore, infoTopic, learnQuestion: learnA ? learnQ : '', learnAnswer: learnA, handoffReason: String(out.handoff_reason || '').slice(0, 300), usage: d.usage || null, model: d.model || body.model };
+  const fix = (!ignore && FIX_CODES.includes(out.fix) && out.fix !== 'none') ? out.fix : null;
+  return { ok: true, reply, handoff: handoff && !fix, ignore, infoTopic, fix, learnQuestion: learnA ? learnQ : '', learnAnswer: learnA, handoffReason: String(out.handoff_reason || '').slice(0, 300), usage: d.usage || null, model: d.model || body.model };
 }
 
 // ── #1042-g RESPUESTAS APRENDIDAS: comparar preguntas sin IA (palabras normalizadas, raíz de 4 letras, "no" cuenta) ──

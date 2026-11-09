@@ -655,7 +655,9 @@ const userSchema = new mongoose.Schema({
     claimTxId: { type: String, default: null },
     platform: { type: String, default: null },
     source: { type: String, default: null },
-    lastError: { type: String, default: null }
+    lastError: { type: String, default: null },
+    topupAt: { type: Date, default: undefined },     // #1043: se le completó la diferencia (cobró con la regla vieja "nunca más que la carga")
+    topupAmount: { type: Number, default: undefined }
   },
   // RULETA DIARIA v2 (2026-09-18): % EXTRA ganado y todavía sin usar. Lo consume
   // la próxima carga (manual o hgcash) vía resolveAutoBonus (server.js); un

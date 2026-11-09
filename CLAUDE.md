@@ -223,6 +223,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `Config['vipLevelsConfig']` (panel → Niveles VIP → escalera), recargados por `vipLevels.refreshFromConfig`.
   Los idx se persisten en `User.vipLevel` y en las references `vip-lvl-*`: sólo agregar niveles AL FINAL.
 
+- **#1043 EXTRA POR INSTALAR = $5.000 SIEMPRE (no se limita a la carga) con ROLLOVER ×10 PROPIO (`_installGiftRolloverX`, el ÚNICO regalo ×10; el resto ×5).**
+  Si un cliente reclama que le llegó de menos, la IA del chat pide `fix:'install_gift_topup'` y el servidor completa la diferencia (una vez). Textos y datos de la IA
+  tienen que decir siempre lo mismo que el sistema hace (owner: "que sea acorde").
 - **% EXTRA por instalar la app (#283/#290, 2026-10-17 → #974 MONTO FIJO):** en la PRIMERA carga de un cliente sin la app se le
   ofrece `Config['installGift'].fixedArs` ($5.000; 0 = pct% con tope) como EXTRA si la instala; el bono de 1ª carga tiene TOPE propio
   `Config['firstDepositCapArs']` ($15.000, 0 = libre) y `_welcomeAbuseOf` niega TODA la bienvenida (sin bloquear) si el teléfono / celular /

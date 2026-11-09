@@ -8,6 +8,21 @@
 
 ## Sesión 2026-11-09
 
+### 1043. Extra por instalar = $5.000 SIEMPRE, con rollover ×10 propio, y la IA lo CORRIGE sola si quedó de menos (2026-11-09)
+- **Owner** (captura: picatrini26 cargó $2.000, instaló la app y le llegaron "$2.000 extra"; preguntó "¿No era 5mil?"): "es 5000 el bono, si falla algo
+  quiero que la IA corrija si es necesario y si no que le explique bien" + "lo de instalar la app que sea rollover x10, solamente eso, el resto x5".
+- **Causa:** `installGiftAmount` (#974) daba min($5.000, primera carga). Ahora devuelve el fijo SIEMPRE. Ofertas viejas: el claim paga el fijo de hoy si
+  `ig.pct == null` (modo fijo) y el monto guardado es menor.
+- **Rollover:** `_installGiftRolloverX()` = `Config['installGiftRolloverX']` (default 10, sin control en el panel todavía). Lo usan el claim y la corrección.
+  Todo lo demás sigue con `_giftRolloverX` (×5). El FAQ de bonos (`ig_txt`) y los datos de la IA lo dicen ("se juega x10").
+- **Corrección por la IA (`fix`):** el esquema del bot tiene `fix` (enum `FIX_CODES` = none | install_gift_topup). La IA sólo PIDE; el servidor
+  (`_installGiftTopupCheck` / `_installGiftTopup`) verifica (cobrado < fijo, no bloqueado/secundaria, una sola vez: reserva `installGift.topupAt`, ref
+  `vip-igift-fix-<id>`), acredita la diferencia por `creditGift`, deja Transaction `install_gift` (`metadata.source:'install_gift_topup'`) y nota interna, y
+  el cliente recibe `/sys_bot_fix_install` con el monto real. Si no corresponde o falla ⇒ botón "Tengo otro problema" con el motivo en la nota.
+  Sin corrección disponible, la IA explica con los datos de SU cuenta (`installGift` en `_supportBotUserFacts`). Una corrección NUEVA = código en
+  `FIX_CODES` + chequeo/acción en server.js (el monto lo decide siempre el servidor, nunca la IA).
+- **picatrini26:** si vuelve a reclamar, la IA le carga los $3.000. Los demás que cobraron de menos con la regla vieja también, sólo si reclaman.
+
 ### 1042-z. Sorteo ARRIBA en lugar del logo (sin banner debajo de la barra del casino) — PWA v691 (2026-11-09)
 - **Owner:** "el sorteo semanal sacalo de ahí para no perder lugar y ponelo arriba donde está el logo de PICA ROJA". `paintCasino`: `openBar=false`
   (nunca el banner `#casinoSrtBar`); con sorteo, la píldora del medio reemplaza al logo y abre la hoja chica (`VIP.sorteos.casinoPill` ⇒ `openMini`).

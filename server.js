@@ -1820,7 +1820,7 @@ async function getInstallGiftConfig() {
 }
 function installGiftAmount(baseAmount, cfg) {
   const b = Math.max(0, Number(baseAmount) || 0);
-  if (cfg.fixedArs > 0) return Math.round(Math.min(b, cfg.fixedArs)); // #974: monto fijo (nunca más que la carga)
+  if (cfg.fixedArs > 0) return Math.round(cfg.fixedArs); // #974 → #1043 (owner: "es 5000 el bono"): monto fijo SIEMPRE (antes nunca más que la carga: $2.000 cargados ⇒ $2.000 y el cliente reclamaba)
   const capped = cfg.capArs > 0 ? Math.min(b, cfg.capArs) : b;
   return Math.round(capped * cfg.pct / 100);
 }
@@ -2004,7 +2004,7 @@ async function maybeOfferInstallGift(userIn, { amount, platform = null, source =
     await _sendUserSystemMessage(user, text, { metadata: md, push: { title: `🎁 $${vars.monto} extra por instalar la app`, body: `Instalá la app y cargá $${vars.monto} extra en fichas.` } });
     await _emitAdminOnlyChatNote(user.id, user.username,
       (cfg.fixedArs > 0 // #1029: con monto fijo la nota decía "50%" y confundía (parecía un bono del 50% de corrido)
-        ? `🎁 EXTRA por instalar la app OFRECIDO: $${vars.monto} (monto fijo de $${cfg.fixedArs.toLocaleString('es-AR')}, nunca más que su primera carga de $${vars.carga}). Vence en ${cfg.days} días.`
+        ? `🎁 EXTRA por instalar la app OFRECIDO: $${vars.monto} (monto fijo; su primera carga fue de $${vars.carga}). Vence en ${cfg.days} días.`
         : `🎁 ${cfg.pct}% EXTRA por instalar la app OFRECIDO: $${vars.monto} (${cfg.pct}% de su primera carga de $${vars.carga}; tope $${cfg.capArs.toLocaleString('es-AR')}). Vence en ${cfg.days} días.`) + ` Se acredita SOLA cuando reclama desde la app instalada: no hay que hacer nada.`
     ).catch(() => {});
     logger.info(`[install-gift] ofrecida user=${user.username} gift=$${gift} base=$${base} via=${source || '?'}`);
@@ -14566,6 +14566,12 @@ async function initializeData() {
       response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.'
     },
     {
+      name: '/sys_bot_fix_install',
+      description: 'CHAT NUEVO (#1043): cuando un cliente reclama que el extra por instalar la app le llegó de menos (regla vieja: nunca más que la carga) y la IA lo corrige sola, le llega este mensaje. Variables: {username}, ${monto} (lo que faltaba), ${total} (el extra completo), {plataforma}.',
+      type: 'message',
+      response: '¡Tenés razón, {username}! 🙌 Te cargamos los ${monto} que faltaban del extra por instalar la app en {plataforma}. Ya tenés los ${total} completos ✅'
+    },
+    {
       name: '/sys_support_problem',
       description: 'CHAT NUEVO (#1042-u): respuesta cuando el cliente toca "🆘 Tengo otro problema" (el chat pasa directo a un agente en Soporte). Sin variables. Vacío = no se manda nada (igual pasa al agente).',
       type: 'message',
@@ -15761,7 +15767,7 @@ async function _supportCannedReply(userId, username, quick, text, explicit) {
       if (recent) return;
     }
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), rollover: String(await _giftRolloverX()), carga: String(await getDepositRolloverX()) }; // #883: {carga}
-    try { const _fd = await getFirstDepositBonusPct({ id: userId }), _cap = await getFirstDepositCapArs({ id: userId }) /* #1024 */, _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
+    try { const _fd = await getFirstDepositBonusPct({ id: userId }), _cap = await getFirstDepositCapArs({ id: userId }) /* #1024 */, _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones (se juega x' + (await _installGiftRolloverX()) + ')' : '' }); } catch (_) {} // #974 · #1043
     if (topic === 'otro') {
       const t = await renderSystemCommand('/sys_support_topic_otro', SUPPORT_TOPIC_OTRO_DEFAULT, vars);
       if (t) await _sendUserSystemMessage(u, t, { metadata: Object.assign({}, SUPPORT_TERMS_BTN, { topic }) });
@@ -15866,7 +15872,7 @@ async function _supportBotFacts(cfg) {
   try { f.minDeposit = await getMinDepositArs(); f.withdrawMin = await getWithdrawMinArs(); } catch (_) {}
   try { f.depositRolloverX = await getDepositRolloverX(); f.giftRolloverX = await _giftRolloverX(); } catch (_) {}
   try { f.firstDepositPct = await getFirstDepositBonusPct(null); f.firstDepositCap = await getFirstDepositCapArs(null); } catch (_) {}
-  try { const ig = await getInstallGiftConfig(); f.installGiftOn = !!ig.enabled; f.installGiftFixed = ig.fixedArs || 0; f.installGiftPct = ig.pct; } catch (_) {}
+  try { const ig = await getInstallGiftConfig(); f.installGiftOn = !!ig.enabled; f.installGiftFixed = ig.fixedArs || 0; f.installGiftPct = ig.pct; f.installGiftRolloverX = await _installGiftRolloverX(); } catch (_) {}
   try {
     const tbp = await getRefundTiersByPeriod();
     const linea = (ts) => (ts || []).map((t) => (t.max === null ? (t.min ? `más de ${money(t.min)}` : 'sobre todo lo perdido') : `hasta ${money(t.max)}`) + ` ${t.pct}%`).join(', ');
@@ -15905,6 +15911,19 @@ async function _supportBotUserFacts(u) {
   }
   try { out.appInstalled = u.fcmTokenContext === 'standalone' || (Array.isArray(u.fcmTokens) && u.fcmTokens.some((t) => t && t.context === 'standalone')); } catch (_) {}
   try { out.pendingReceipts = await Comprobante.countDocuments({ userId: u.id, reviewStatus: 'pending' }); } catch (_) {}
+  // #1043: el extra por instalar de ESTE cliente (para explicarle bien) y si el sistema puede corregírselo solo.
+  try {
+    const ig = u.installGift || {};
+    if (ig.status && ig.status !== 'none') {
+      const m = (x) => '$' + Math.round(Number(x) || 0).toLocaleString('es-AR');
+      out.installGift = ig.status === 'claimed'
+        ? `COBRADO ${m(ig.amount)}${ig.topupAt ? ` (ya se le completó la diferencia de ${m(ig.topupAmount)})` : ''}; su primera carga fue de ${m(ig.baseAmount)}`
+        : ig.status === 'expired' ? `ofrecido ${m(ig.amount)} pero VENCIÓ sin reclamarlo (se reclamaba desde la app instalada dentro del plazo)`
+          : `ofrecido y PENDIENTE: lo reclama desde la app instalada con las notificaciones activadas, con el botón del extra (vence ${ig.expiresAt ? new Date(ig.expiresAt).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'pronto'})`;
+      const chk = await _installGiftTopupCheck(u);
+      if (chk.ok) out.fixInstall = `le faltan ${m(chk.diff)} (cobró ${m(chk.total - chk.diff)} con la regla anterior, que lo limitaba a lo que había cargado; hoy el extra es ${m(chk.total)})`;
+    }
+  } catch (_) {}
   try {
     const pp = await PendingPayout.findOne({ userId: u.id }).sort({ createdAt: -1 }).select('status amount createdAt').lean();
     if (pp && now - new Date(pp.createdAt).getTime() < 7 * day) {
@@ -15974,7 +15993,7 @@ async function _supportBotRun(userId, username, token, t0) {
   if (_sbTimers.get(userId) !== token) return; // llegó otro mensaje: contesta el último
   const cfg = await getSupportBotConfig();
   if (!cfg.enabled || cfg.classic || (!supportBot.isAvailable() && !cfg.learnedOnly)) return _supportCannedReply(userId, username, null, '', false);
-  const u = await User.findOne({ id: userId }).select('id username role createdAt isBlocked duplicateOf noWelcomeGifts fcmTokenContext fcmTokens supportSessionSince').lean();
+  const u = await User.findOne({ id: userId }).select('id username role createdAt isBlocked duplicateOf noWelcomeGifts fcmTokenContext fcmTokens supportSessionSince installGift').lean();
   if (!u || u.role !== 'user') return;
   const lastUser = await Message.findOne({ senderId: userId }).sort({ timestamp: -1 }).select('id type timestamp content').lean();
   if (!lastUser || lastUser.type !== 'text') return; // imágenes = comprobantes: los contesta su propio circuito
@@ -16013,6 +16032,18 @@ async function _supportBotRun(userId, username, token, t0) {
     }
   } catch (e) { r = { ok: false, error: e.message }; }
   if (_sbTimers.get(userId) !== token) { _sbTyping(userId, agentName, false); return; } // escribió de nuevo mientras pensaba: contesta el último
+  // #1043: la IA pidió una CORRECCIÓN ⇒ el servidor verifica y acredita (o no). Con éxito, el mensaje es el fijo con el monto real; si no
+  // corresponde o falla, va al botón "Tengo otro problema" con el motivo en la nota interna (la IA nunca promete un monto).
+  if (r.ok && r.fix === 'install_gift_topup') {
+    let fx;
+    try { fx = await _installGiftTopup(userId, 'bot'); } catch (e) { fx = { ok: false, why: e.message, failed: true }; }
+    if (fx.ok) {
+      const t = await renderSystemCommand('/sys_bot_fix_install', BOT_FIX_INSTALL_DEFAULT, { username, monto: fx.diff.toLocaleString('es-AR'), total: fx.total.toLocaleString('es-AR'), plataforma: platforms.labelOf(fx.platform, { emoji: false }) });
+      r = Object.assign({}, r, { reply: t || _renderVars(BOT_FIX_INSTALL_DEFAULT, { username, monto: fx.diff.toLocaleString('es-AR'), total: fx.total.toLocaleString('es-AR'), plataforma: platforms.labelOf(fx.platform, { emoji: false }) }), learnQuestion: '', learnAnswer: '', infoTopic: null });
+      _supportBotStat('fixes');
+    } else if (fx.failed) r = Object.assign({}, r, { handoff: true, handoffReason: `reclamó el extra por instalar y la corrección automática falló: ${fx.why}` });
+    else r = Object.assign({}, r, { handoff: true, handoffReason: `reclamó el extra por instalar; corrección automática no corresponde (${fx.why})` }); // la IA no promete: lo mira una persona
+  }
   if (r.ok && r.ignore) {
     // Sólo molesta ⇒ se le deja de contestar `muteHours` (sin respuesta, sin abrir el chat); queda una nota interna por si un agente mira.
     _sbTyping(userId, agentName, false); _supportBotStat('muted');
@@ -16430,6 +16461,9 @@ async function claimPromoBonusPercent(user, usedBy, amount) {
  * @returns {{pct, bonus, source, label, claimed, rule, revert()}}
  */
 // #509 anti-estafa (owner: "puede haber multi registros de muchas cuentas"): rollover de regalos y chequeo de CBU repetido.
+// #1043 (owner: "lo de instalar la app que sea rollover x10, solamente eso; el resto x5"): rollover PROPIO del extra por instalar
+// (`Config['installGiftRolloverX']`, default 10). Todo otro regalo sigue con el global `_giftRolloverX` (×5).
+async function _installGiftRolloverX() { try { const v = Number(await getConfig('installGiftRolloverX', 10)); return Number.isFinite(v) && v >= 0 ? Math.min(50, Math.round(v)) : 10; } catch (_) { return 10; } }
 async function _giftRolloverX() { try { const v = Number(await getConfig('bonusRolloverX', 5)); return Number.isFinite(v) && v >= 0 ? Math.min(50, Math.round(v)) : 5; } catch (_) { return 5; } }
 // Si el CBU/CVU de origen de esta transferencia ya fue usado por OTRA cuenta, es la misma persona con otro usuario: se marca
 // `fraudFlags: cbu_reuse` y NO lleva bonos de bienvenida (1ª carga, instalar, código, 2ª carga) ni misiones. La carga se acredita igual.
@@ -16824,13 +16858,15 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'Este dispositivo ya recibió la carga sin cargo en otra cuenta.', code: 'DEVICE_ALREADY_CLAIMED' });
       }
     }
-    const amount = Math.round(Number(ig.amount) || 0);
+    let amount = Math.round(Number(ig.amount) || 0);
+    // #1043: ofertas hechas con la regla vieja (nunca más que la carga) ⇒ se paga el monto fijo de hoy (owner: "es 5000 el bono").
+    try { const _igc = await getInstallGiftConfig(); if (_igc.enabled && _igc.fixedArs > 0 && ig.pct == null && amount < _igc.fixedArs) amount = Math.round(_igc.fixedArs); } catch (_) {}
     if (!(amount > 0)) return res.status(400).json({ error: 'Monto inválido.', code: 'INVALID' });
     // Reserva atómica (dos toques simultáneos → uno solo acredita).
     const prevStatus = ig.status;
     const reserved = await User.findOneAndUpdate(
       { id: user.id, 'installGift.status': { $in: ['offered', 'deferred'] } },
-      { $set: { 'installGift.status': 'claimed', 'installGift.claimedAt': new Date() } }
+      { $set: { 'installGift.status': 'claimed', 'installGift.claimedAt': new Date(), 'installGift.amount': amount } }
     );
     if (!reserved) return res.status(400).json({ error: 'Ya reclamaste tu carga sin cargo.', code: 'ALREADY_CLAIMED' });
     // Plataforma: la fija/última del cliente si tiene API; si no, girox (los regalos van a girox directo).
@@ -16838,9 +16874,9 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
     let adapter = platforms.getAdapter(pid);
     if (!adapter || typeof adapter.isConnected !== 'function' || !adapter.isConnected() || typeof adapter.creditGift !== 'function') { pid = 'girox'; adapter = girox; }
     const reference = `vip-igift-${user.id}`;
-    const credit = await adapter.creditGift(user.username, amount, { description: `${ig.pct != null ? ig.pct : ''}% extra por instalar la app (sobre la primera carga)`, reference, rolloverX: await _giftRolloverX() }); // #509
+    const credit = await adapter.creditGift(user.username, amount, { description: `${ig.pct != null ? ig.pct : ''}% extra por instalar la app (sobre la primera carga)`, reference, rolloverX: await _installGiftRolloverX() }); // #509 · #1043: ×10 propio
     if (!credit || !credit.success) {
-      await User.updateOne({ id: user.id }, { $set: { 'installGift.status': prevStatus, 'installGift.claimedAt': null, 'installGift.lastError': String((credit && credit.error) || 'unknown').slice(0, 200) } }).catch(() => {});
+      await User.updateOne({ id: user.id }, { $set: { 'installGift.status': prevStatus, 'installGift.claimedAt': null, 'installGift.amount': Math.round(Number(ig.amount) || 0), 'installGift.lastError': String((credit && credit.error) || 'unknown').slice(0, 200) } }).catch(() => {});
       logger.error(`[install-gift] credit FAIL user=${user.username} $${amount}: ${(credit && credit.error) || 'unknown'}`);
       return res.status(503).json({ error: 'No pudimos acreditar ahora. Probá de nuevo en un rato o avisanos por el chat.', code: 'CREDIT_FAILED' });
     }
@@ -16864,6 +16900,53 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'Error del servidor' });
   }
 });
+
+// #1043 (owner: "es 5000 el bono, si falla algo quiero que la IA corrija si es necesario y si no que le explique bien"): el extra por instalar se
+// calculaba "nunca más que la carga" ($2.000 cargados ⇒ $2.000) y el cliente reclamaba los $5.000. CORRECCIÓN SEGURA que puede pedir la IA del chat:
+// el SERVIDOR decide si corresponde y cuánto (fijo de hoy − lo cobrado), una sola vez por cliente (reserva atómica `installGift.topupAt` + reference
+// estable `vip-igift-fix-<id>`), por creditGift (guard de cuentas secundarias, rollover global). La IA sólo dice "corregilo"; nunca elige un monto.
+const BOT_FIX_INSTALL_DEFAULT = '¡Tenés razón, {username}! 🙌 Te cargamos los ${monto} que faltaban del extra por instalar la app en {plataforma}. Ya tenés los ${total} completos ✅';
+async function _installGiftTopupCheck(u) {
+  const cfg = await getInstallGiftConfig();
+  const ig = (u && u.installGift) || {};
+  if (!u) return { ok: false, why: 'sin cliente' };
+  if (!cfg.enabled || !(cfg.fixedArs > 0)) return { ok: false, why: 'el extra por instalar no está como monto fijo' };
+  if (u.isBlocked || u.duplicateOf) return { ok: false, why: 'cuenta bloqueada o secundaria' };
+  if (ig.status !== 'claimed') return { ok: false, why: 'no cobró el extra por instalar' };
+  if (ig.topupAt) return { ok: false, why: 'ya se le completó antes' };
+  const diff = Math.round(cfg.fixedArs - (Number(ig.amount) || 0));
+  if (!(diff > 0)) return { ok: false, why: 'ya cobró el extra completo' };
+  return { ok: true, diff, total: Math.round(cfg.fixedArs), cfg };
+}
+async function _installGiftTopup(userId, by) {
+  const u = await User.findOne({ id: userId }).select('id username installGift isBlocked duplicateOf preferredPlatform').lean();
+  const chk = await _installGiftTopupCheck(u);
+  if (!chk.ok) return chk;
+  const reserved = await User.findOneAndUpdate({ id: u.id, 'installGift.status': 'claimed', 'installGift.topupAt': null }, { $set: { 'installGift.topupAt': new Date() } });
+  if (!reserved) return { ok: false, why: 'ya se le completó antes' };
+  let pid = await platforms.resolveDefaultFor(u);
+  let adapter = platforms.getAdapter(pid);
+  if (!adapter || typeof adapter.isConnected !== 'function' || !adapter.isConnected() || typeof adapter.creditGift !== 'function') { pid = 'girox'; adapter = girox; }
+  const reference = `vip-igift-fix-${u.id}`;
+  let credit = null;
+  try { credit = await adapter.creditGift(u.username, chk.diff, { description: `Diferencia del extra por instalar la app (completa ${chk.total})`, reference, rolloverX: await _installGiftRolloverX() }); } catch (e) { credit = { success: false, error: e.message }; }
+  if (!credit || !credit.success) {
+    await User.updateOne({ id: u.id }, { $unset: { 'installGift.topupAt': 1 } }).catch(() => {});
+    logger.error(`[install-gift] topup FAIL user=${u.username} $${chk.diff}: ${(credit && credit.error) || 'unknown'}`);
+    return { ok: false, why: `no se pudo acreditar (${String((credit && credit.error) || 'error').slice(0, 80)})`, failed: true };
+  }
+  const txId = credit.data?.transfer_id || credit.data?.transferId || null;
+  await User.updateOne({ id: u.id }, { $set: { 'installGift.amount': chk.total, 'installGift.topupAmount': chk.diff } }).catch(() => {});
+  await Transaction.create({
+    id: uuidv4(), type: 'install_gift', platform: pid, userId: u.id, username: u.username, amount: chk.diff,
+    description: `Diferencia del extra por instalar la app (cobró $${Math.round(chk.total - chk.diff).toLocaleString('es-AR')}, el extra es $${chk.total.toLocaleString('es-AR')})`,
+    adminUsername: by === 'bot' ? 'support-bot' : 'auto-install-gift', adminRole: 'system', transactionId: txId,
+    metadata: { source: 'install_gift_topup', creditedAs: credit.creditedAs || null, by: by || null }, timestamp: new Date()
+  }).catch((e) => logger.warn(`[install-gift] topup sin Transaction (${u.username}): ${e.message}`));
+  await _emitAdminOnlyChatNote(u.id, u.username, `🎁 EXTRA por instalar COMPLETADO${by === 'bot' ? ' por el bot (el cliente lo reclamó)' : ''}: +$${chk.diff.toLocaleString('es-AR')} en ${platforms.labelOf(pid)} (había cobrado $${Math.round(chk.total - chk.diff).toLocaleString('es-AR')} con la regla vieja; el extra es $${chk.total.toLocaleString('es-AR')}). Ref ${reference}. No hay que hacer nada.`).catch(() => {});
+  logger.info(`[install-gift] topup user=${u.username} +$${chk.diff} platform=${pid} by=${by || '?'}`);
+  return { ok: true, diff: chk.diff, total: chk.total, platform: pid, username: u.username };
+}
 
 // ============================================
 // BONO por instalar la app (% en la próxima carga) — el agente lo marca como usado
@@ -24391,7 +24474,7 @@ app.post('/api/admin/support/:userId/quick', authMiddleware, async (req, res) =>
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
     const vars = { min: money(await getMinDepositArs()), retiro_min: money(await getWithdrawMinArs()), carga: String(await getDepositRolloverX().catch(() => 1)), rollover: String(await _giftRolloverX().catch(() => 5)) };
-    try { const _fd = await getFirstDepositBonusPct({ id: u.id }), _cap = await getFirstDepositCapArs({ id: u.id }) /* #1024 */, _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones' : '' }); } catch (_) {} // #974
+    try { const _fd = await getFirstDepositBonusPct({ id: u.id }), _cap = await getFirstDepositCapArs({ id: u.id }) /* #1024 */, _ig = await getInstallGiftConfig(); Object.assign(vars, { fd_pct: String(_fd), fd_tope: _cap > 0 ? money(_cap) : 'sin tope', ig_txt: _ig.enabled ? ' y ' + (_ig.fixedArs > 0 ? money(_ig.fixedArs) : _ig.pct + '%') + ' extra instalando la app y activando las notificaciones (se juega x' + (await _installGiftRolloverX()) + ')' : '' }); } catch (_) {} // #974 · #1043
     if (q.dynamic === 'sorteo') {
       // #944: resumen de los dos sorteos con los números de la config (fechas, premios, puntos, SORTEO EXTRA, requisitos, cobro).
       const cfg = await _sorteosCfg(); const now = new Date(); const R = sorteosRules;

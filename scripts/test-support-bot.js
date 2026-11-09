@@ -35,7 +35,7 @@ caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallb
   assert.ok(r.ok); assert.strictEqual(r.reply, '¡Hola! Para cargar tocá DEPOSITAR.'); assert.strictEqual(r.handoff, false);
   const b = lastReq.body;
   assert.strictEqual(b.model, 'claude-haiku-5-5'); assert.strictEqual(b.output_config.effort, 'low');
-  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic']);
+  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic', 'fix']);
   assert.strictEqual(b.output_config.format.schema.additionalProperties, false);
   assert.strictEqual(b.fallbacks, 'default'); assert.strictEqual(lastReq.opts.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
   assert.ok(!('thinking' in b) && !('temperature' in b), 'no manda thinking/temperature (Opus 5.5)');
@@ -70,6 +70,16 @@ caso('Handoff: la IA marca que lo tome una persona (carga trabada) ⇒ reply + h
   nextResp = okResp({ reply: 'Ya lo paso al equipo que lo revisa.', handoff: true, handoff_reason: 'carga de $5.000 no acreditada' });
   const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'cargue 5000 y no me llego' }] });
   assert.ok(r.ok && r.handoff); assert.strictEqual(r.handoffReason, 'carga de $5.000 no acreditada');
+});
+caso('#1043 Corrección: la IA pide fix sólo con un código conocido; el prompt muestra la corrección disponible y el rollover x10 del extra', async () => {
+  nextResp = okResp({ reply: 'Ya lo reviso.', handoff: true, handoff_reason: 'x', fix: 'install_gift_topup' });
+  let r = await bot.generateReply({ facts: Object.assign({}, FACTS, { installGiftRolloverX: 10, giftRolloverX: 5 }), user: Object.assign({}, USER_NEW, { installGift: 'COBRADO $2.000', fixInstall: 'le faltan $3.000' }), history: [{ role: 'user', text: 'no era 5mil?' }] });
+  assert.ok(r.ok && r.fix === 'install_gift_topup' && !r.handoff, 'con fix el server decide (no handoff)');
+  const sys = lastReq.body.system.map((x) => x.text).join('\n');
+  assert.ok(/CORRECCIÓN DISPONIBLE "install_gift_topup"/.test(sys) && /COBRADO \$2\.000/.test(sys) && /se juega x10/.test(sys));
+  nextResp = okResp({ reply: 'hola', handoff: false, handoff_reason: '', fix: 'pagar_todo' });
+  r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'hola' }] });
+  assert.ok(r.ok && r.fix === null, 'código desconocido ⇒ sin corrección');
 });
 caso('Molesta o fuera de tema ⇒ ignore (a lo sumo una frase de cierre); si además hay que pasarlo a una persona, gana el handoff', async () => {
   nextResp = okResp({ reply: 'chau', handoff: false, handoff_reason: '', ignore: true });
