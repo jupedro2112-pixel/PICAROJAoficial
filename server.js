@@ -13649,6 +13649,8 @@ async function initializeData() {
         if (r && r.modifiedCount) console.log('✅ /sys_recover_100 vaciado (#1029): prometía otro % en la próxima carga después de cada carga');
       }
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
+    // #1060 (owner): el botón ahora se llama "🆘 Otro problema" y va primero ⇒ el texto que lo nombra, si quedó el de antes sin editar.
+    try { await Command.updateOne({ name: '/sys_support_to_button', response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.' }, { $set: { response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.' } }); } catch (_) {}
     // #1042-w (owner): "Tengo otro problema" ⇒ "Ya te paso con una persona del equipo, un segundo" (si quedó el texto anterior sin editar).
     try { await Command.updateOne({ name: '/sys_support_problem', response: 'Contame qué pasó en un mensaje y en breve te responde alguien del equipo 🙌' }, { $set: { response: 'Ya te paso con una persona del equipo, un segundo 🙌' } }); } catch (_) {}
     // #1042-u (owner 2026-11-09): "la IA responde 1 mensaje nomás" ⇒ UNA vez, aiMaxReplies = 1 (campo puntual, nunca leer→mezclar→guardar).
@@ -14589,7 +14591,7 @@ async function initializeData() {
       name: '/sys_support_to_button',
       description: 'CHAT NUEVO (#1042-x): cuando el bot no puede resolver algo (reclamo, no sabe, pide una persona) NO pasa solo a un agente: manda este texto con el botón "🆘 Tengo otro problema". Sin variables.',
       type: 'message',
-      response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.'
+      response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.'
     },
     {
       name: '/sys_bot_fix_install',
@@ -15838,7 +15840,7 @@ const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu car
 const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 20, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
 // #1042-v: ¿le llegó al cliente alguna respuesta (bot, automático o persona) desde `since`?
 const SUPPORT_GREET_DEFAULT = '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀'; // #1042-x
-const SUPPORT_TO_BUTTON_DEFAULT = 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.'; // #1042-x
+const SUPPORT_TO_BUTTON_DEFAULT = 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.'; // #1042-x
 async function _supportSentSince(userId, since) {
   try { return !!(await Message.findOne({ receiverId: userId, senderRole: { $ne: 'user' }, adminOnly: { $ne: true }, timestamp: { $gte: since } }).select('_id').lean()); } catch (_) { return false; }
 }

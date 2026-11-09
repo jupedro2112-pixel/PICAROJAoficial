@@ -8,6 +8,13 @@
 
 ## Sesión 2026-11-09
 
+### 1060. Chat de Girox centrado con el fondo del tema + "🆘 Otro problema" primero (2026-11-09)
+- **Owner:** "centrada en el medio, arriba y abajo un margen así no se tapa según el teléfono, lo que quede sin llenar en blanco si está claro y negro
+  si está nocturno, así parece todo uno; 'Tengo otro problema' ponelo primero y que diga sólo 'Otro problema'".
+- pin.css (#1060): `#supportPanel.sp-in-casino` centrado (left/right 0 + margin auto, ancho hasta 480 px), de `--sat`+12 px a `--sab`+12 px, y alrededor
+  `box-shadow: 0 0 0 100vmax var(--p-bg)` (blanco / negro según el tema). Sólo CSS; las reglas de alto de #1058 se quitaron.
+- `#spInfoBar`: "🆘 Otro problema" es el primer botón. `/sys_support_to_button` y la IA nombran "🆘 Otro problema" (migración del texto si estaba el de antes). App v701.
+
 ### 1059. Juegos ⇒ soporte DENTRO de Girox; nuestro chat se llama "Carga aquí" (2026-11-09)
 - **Owner:** "si hablan de un juego, que hablen al soporte dentro de Girox; a la IA y a la que nosotros tenemos llamada soporte, pongamos Carga aquí".
 - IA (`supportBot.js`, QUEJAS DE UN JUEGO): manda al soporte que está ADENTRO de Girox y aclara que nosotros somos "Carga aquí" (cargas, retiros, bonos).

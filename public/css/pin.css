@@ -3297,8 +3297,15 @@ body:not(.sp-classic) #ctSupport { display: none !important; }
 @media (max-width: 380px), (max-height: 700px) {
   #casinoOverlay > #supportPanel.sp-in-casino .sp-infobar button { padding: 4px 7px !important; font-size: 10.5px !important; }
 }
-/* #1058: la tarjeta crece un poco (la fila de servicios ahora ocupa 2-3 renglones) y tiene altura de respaldo en vh para iPhone viejos sin dvh. */
-#casinoOverlay > #supportPanel.sp-in-casino { height: calc(100vh - 150px - var(--sat, 0px)) !important; max-height: 600px !important; }
-@supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: calc(100dvh - 150px - var(--sat, 0px)) !important; } }
-@media (max-height: 700px) { #casinoOverlay > #supportPanel.sp-in-casino { bottom: calc(76px + var(--sab, env(safe-area-inset-bottom, 0px))) !important; height: calc(100vh - 120px - var(--sat, 0px)) !important; }
-  @supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: calc(100dvh - 120px - var(--sat, 0px)) !important; } } }
+/* #1058: el alto de la tarjeta lo define ahora #1060 (centrada, de arriba abajo con margen). */
+/* #1060 (owner): "que esté centrada en el medio, que arriba y abajo quede un margen así no se tapa según el teléfono, y lo que quede sin llenar en
+   blanco si está en claro y en negro si está en nocturno, así parece todo uno". El chat de la burbuja de Girox pasa a ocupar la pantalla CENTRADO,
+   con margen arriba/abajo por el notch y la barra de inicio (--sat/--sab, #823), y alrededor el color de fondo del tema (--p-bg): una sombra sólida
+   que tapa el juego detrás (sin capas nuevas ni JS). Al cerrar el chat (X) vuelve el juego como siempre. */
+#casinoOverlay > #supportPanel.sp-in-casino {
+  top: calc(var(--sat, env(safe-area-inset-top, 0px)) + 12px) !important;
+  bottom: calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 12px) !important;
+  left: 0 !important; right: 0 !important; margin: 0 auto !important;
+  width: min(480px, calc(100vw - 20px)) !important; height: auto !important; max-height: none !important;
+  box-shadow: 0 0 0 100vmax var(--p-bg) !important; border-color: var(--p-border) !important;
+}
