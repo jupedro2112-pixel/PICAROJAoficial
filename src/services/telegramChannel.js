@@ -60,28 +60,26 @@ function normalizeButtons(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
   const lbl = (v, d) => { const t = String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').trim(); return t ? cut(t, 40) : d; };
   const out = { appLabel: lbl(r.appLabel, BTN_DEFAULT.appLabel), storyLabel: lbl(r.storyLabel, BTN_DEFAULT.storyLabel), items: {}, servText: cut(String(r.servText || '').trim(), POPUP_MAX), links: [] };
-  for (const k of BTN_KEYS) { const it = (r.items || {})[k] || {}; out.items[k] = { on: it.on !== false, label: lbl(it.label, BTN_DEFAULT.items[k].label) }; }
+  for (const k of BTN_KEYS) { const it = (r.items || {})[k] || {}; out.items[k] = { on: it.on !== false && k !== 'paid' && k !== 'top', label: lbl(it.label, BTN_DEFAULT.items[k].label) }; } // #1055: sin montos de premios
   for (const l of (Array.isArray(r.links) ? r.links : []).slice(0, 3)) { const u = String((l && l.url) || '').trim(); if (/^https:\/\/\S+$/i.test(u) && l.label) out.links.push({ label: lbl(l.label, 'Ver'), url: u.slice(0, 300) }); }
   return out;
 }
-function storyButtons(story, appUrl, b) {
-  b = b || normalizeButtons(null);
-  // #1044-e (owner: "si abre un link que sea a su app o su inicio de sesión, si no no pongamos link"): sólo el botón a la app (sin links externos).
-  return { inline_keyboard: [[{ text: b.storyLabel, url: appUrl }]] };
+function storyButtons() {
+  // #1055 (owner: "sacá el link, que la gente entre siempre desde su app"): los posteos del canal no llevan botones con link.
+  return undefined;
 }
 /** Texto del posteo de una historia (HTML de Telegram). */
 function storyCaption(story, now = new Date()) {
-  // #1044-b (owner: "foto y texto, bien premium estilo Stake"): titular fuerte, texto corto, separadores finos y la llamada al botón.
-  const L = [];
-  L.push('🔴 <b>PICA ROJA</b>');
-  if (story.title) L.push('<b>' + esc(String(story.title).toUpperCase()) + '</b>');
+  // #1055 (owner): informativo, mismo formato que el posteo del sorteo (titular, secciones con separadores) y sin links: se entra desde la app.
+  const L = ['🔴 <b>PICA ROJA' + (story.title ? ' · ' + esc(String(story.title).toUpperCase()) : '') + '</b>', '━━━━━━━━━━━━━━'];
   if (story.text) L.push(esc(story.text));
   if (Number(story.bonusPct) > 0 && story.bonusUntil && new Date(story.bonusUntil) > now) {
-    const h = new Date(story.bonusUntil).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
-    L.push('━━━━━━━━━━━━━━\n🎁 <b>BONO +' + Math.round(story.bonusPct) + '%</b> en tu próxima carga\n⏳ Hasta las ' + h + ' h · reclamalo en la app');
+    const h = new Date(story.bonusUntil).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' });
+    L.push('━━━━━━━━━━━━━━', '🎁 <b>BONO +' + Math.round(story.bonusPct) + '% EN TU PRÓXIMA CARGA</b>', '⏳ Vale hasta las ' + h + ' h', '━━━━━━━━━━━━━━', '📝 <b>CÓMO USARLO</b>',
+      '1. Abrí tu app PICA ROJA', '2. Tocá la historia del bono y después "Reclamar"', '3. Cargá antes de las ' + h + ' h y el bono entra solo');
   }
-  L.push('━━━━━━━━━━━━━━\n👇 <b>Entrá y jugá ahora</b>');
-  return cut(L.join('\n\n'), CAPTION_MAX);
+  L.push('━━━━━━━━━━━━━━', '📲 <b>Entrá desde tu app PICA ROJA</b>');
+  return cut(L.join('\n'), CAPTION_MAX);
 }
 
 // ── #1044-b FOTOS PREMIUM (SVG ⇒ PNG en el server). Sin emojis adentro de la imagen (el render no los tiene): sólo letras y formas. ──
@@ -167,16 +165,15 @@ function dropCaption(o) {
   return cut([
     '🔴 <b>PICA ROJA · CÓDIGO EXCLUSIVO TELEGRAM</b>', '━━━━━━━━━━━━━━',
     `🎁 <b>${money(o.amount)}</b> para los primeros <b>${o.maxClaims}</b>`,
-    `🔑 Código: <code>${esc(o.code)}</code>`, '━━━━━━━━━━━━━━',
-    '1️⃣ Tocá <b>Reclamar</b> acá abajo', '2️⃣ Entrá a tu cuenta de PICA ROJA', '3️⃣ Se acredita solo en tu saldo',
+    `🔑 Código: <code>${esc(o.code)}</code>`, '━━━━━━━━━━━━━━', '📝 <b>CÓMO CANJEARLO</b>',
+    '1. Abrí tu app PICA ROJA', '2. Entrá a <b>Perfil → Canjear código</b>', '3. Escribí el código: se acredita solo en tu saldo',
     '━━━━━━━━━━━━━━', `<i>Para clientes que ya cargaron alguna vez · se juega x${o.rolloverX || 5} · cuando se llenan los ${o.maxClaims} lugares, se agota.</i>`
   ].join('\n'), CAPTION_MAX);
 }
 function dropDoneCaption(o) {
-  const L = ['🔴 <b>PICA ROJA</b>', '━━━━━━━━━━━━━━', o.full ? `✅ <b>¡SE AGOTÓ EL CÓDIGO ${esc(o.code)}!</b>` : `⏱ <b>TERMINÓ EL CÓDIGO ${esc(o.code)}</b>`];
-  if ((o.winners || []).length) { L.push(`🏆 Se llevaron ${money(o.amount)} cada uno:`); L.push(o.winners.slice(0, 10).map((w, i) => `${i + 1}. ${esc(maskUser(w))}`).join('\n')); }
-  L.push('━━━━━━━━━━━━━━', '🔔 El próximo código sale pronto: activá las notificaciones del canal para no perderlo.');
-  return cut(L.join('\n'), CAPTION_MAX);
+  // #1055 (owner: "tantos datos de premios regalados no"): sin la lista de ganadores.
+  return cut(['🔴 <b>PICA ROJA</b>', '━━━━━━━━━━━━━━', o.full ? `✅ <b>¡SE AGOTÓ EL CÓDIGO ${esc(o.code)}!</b>` : `⏱ <b>TERMINÓ EL CÓDIGO ${esc(o.code)}</b>`,
+    '━━━━━━━━━━━━━━', '🔔 El próximo código sale pronto: activá las notificaciones del canal para no perderlo.'].join('\n'), CAPTION_MAX);
 }
 const SORTEO_STEPS = [['app', 'Instalá la app de PICA ROJA'], ['notif', 'Activá las notificaciones'], ['telegram', 'Unite a este canal de Telegram'], ['phone', 'Cargá tu celular en Perfil'], ['deposit', 'Hacé una carga'], ['week', 'Tu cuenta tiene que tener 7 días']];
 function sorteoSteps(req) { return SORTEO_STEPS.filter(([k]) => !req || req[k]).map(([, t]) => t).concat(['Entrá a Sorteos en la app y tocá Anotarme']); }
@@ -199,23 +196,12 @@ function sorteoCaption(so) {
   for (const p of (so.prizes || []).slice(0, 3)) L.push(`${p.pos}° ${esc(p.name)}${p.value ? ' ' + esc(p.value) : ''}`);
   L.push('━━━━━━━━━━━━━━', '📝 <b>CÓMO ANOTARTE (es gratis)</b>');
   sorteoSteps(so.req).forEach((t, i) => L.push(`${i + 1}. ${esc(t)}`));
-  L.push('━━━━━━━━━━━━━━', '🎟️ Cuanto más jugás y cargás, más chances tenés. ¡Suerte!');
+  L.push('━━━━━━━━━━━━━━', '🎟️ Cuanto más jugás y cargás, más chances tenés. ¡Suerte!', '📲 <b>Entrá desde tu app PICA ROJA</b>');
   return cut(L.join('\n'), CAPTION_MAX);
 }
 
 /** Texto que acompaña la foto del panel (≤1024). */
-function panelCaption(s) {
-  const mes = MONTHS[s.monthIdx] || '';
-  const L = [`🔴 <b>PICA ROJA · ${esc(mes.toUpperCase())} ${s.year}</b>`, '━━━━━━━━━━━━━━', '🎁 <b>BENEFICIOS DEL MES</b>'];
-  for (const x of benefitLines(s.benefits || {})) L.push('▸ ' + esc(x));
-  L.push('━━━━━━━━━━━━━━');
-  L.push(`💸 Premios pagados: <b>${money(s.paid && s.paid.sum)}</b>`);
-  L.push(`🎁 Regalado en bonos: <b>${money(s.gifted && s.gifted.sum)}</b>`);
-  if (s.top && s.top.amount > 0) L.push(`🏆 Premio más grande: <b>${money(s.top.amount)}</b> (${esc(maskUser(s.top.username))})`);
-  if (s.sorteo) L.push(`🎟️ ${esc(s.sorteo.title)}`);
-  L.push('━━━━━━━━━━━━━━', '👇 Tocá los botones para ver el detalle');
-  return cut(L.join('\n'), CAPTION_MAX);
-}
+function panelCaption(s) { return cut(panelText(s), CAPTION_MAX); }
 // Cambia la foto + texto + botones de un mensaje ya publicado (panel del mes).
 async function editPhoto(token, chatId, msgId, buffer, caption, replyMarkup) {
   const FormData = require('form-data'); const fd = new FormData();
@@ -233,10 +219,10 @@ async function editPhoto(token, chatId, msgId, buffer, caption, replyMarkup) {
  */
 function benefitLines(b) {
   const L = [];
-  if (b.firstPct > 0) L.push(`1ª carga: +${b.firstPct}%${b.firstCap > 0 ? ` (hasta ${money(b.firstCap)})` : ''}`);
-  if (b.dailyRefundPct > 0) L.push(`Reembolso diario: ${b.dailyRefundPct}% de lo que perdés`);
-  if (b.installFixed > 0) L.push(`Instalando la app: ${money(b.installFixed)} extra`);
+  if (b.dailyRefundPct > 0) L.push(`Reembolso diario: ${b.dailyRefundPct}% de lo que perdiste ayer`);
+  if (b.installFixed > 0) L.push(`Extra por usar la app instalada: ${money(b.installFixed)}`);
   L.push('Ruleta diaria, fueguito, misiones y niveles VIP');
+  L.push('Bonos por tiempo limitado: los avisamos en este canal');
   return L;
 }
 function sorteoLine(so) {
@@ -244,41 +230,35 @@ function sorteoLine(so) {
   return so.prizes.slice(0, 3).map((p) => `${p.pos}° ${p.name}${p.value ? ' ' + p.value : ''}`).join(' · ');
 }
 function panelText(s) {
-  const mes = MONTHS[s.monthIdx] || '';
-  const L = [];
-  L.push(`🔴 <b>PICA ROJA · ${esc(mes.charAt(0).toUpperCase() + mes.slice(1))} ${s.year}</b>`);
-  L.push('Lo más importante del mes, actualizado solo cada hora.');
-  L.push('');
-  L.push('🎁 <b>Beneficios del mes</b>');
-  for (const x of benefitLines(s.benefits || {})) L.push('• ' + esc(x));
-  L.push('');
-  L.push(`💸 <b>Premios pagados:</b> ${money(s.paid && s.paid.sum)}${s.paid && s.paid.count ? ` en ${s.paid.count.toLocaleString('es-AR')} retiros` : ''}`);
-  L.push(`🎁 <b>Regalado en bonos:</b> ${money(s.gifted && s.gifted.sum)}`);
-  if (s.top && s.top.amount > 0) L.push(`🏆 <b>Premio más grande:</b> ${money(s.top.amount)} (${esc(maskUser(s.top.username))})`);
-  if (s.sorteo) { L.push(''); L.push(`🎟️ <b>${esc(s.sorteo.title)}</b>: ${esc(sorteoLine(s.sorteo))}`); }
-  L.push('');
-  L.push('⭐ Cargas y retiros automáticos las 24 h, reembolsos y soporte dentro de la app.');
-  if (s.updatedAt) L.push(`<i>Actualizado ${esc(new Date(s.updatedAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' }))} h</i>`);
-  return L.join('\n');
+  // #1055 (owner: "más informativo, sin tantos datos de premios regalados"; "los mensajes de la comunidad son para gente ya registrada"):
+  // un panel FIJO de información, mismo formato que el posteo del sorteo, sin montos pagados/regalados y sin links (se entra desde la app).
+  s = s || {}; const L = ['🔴 <b>PICA ROJA · CANAL OFICIAL</b>', '━━━━━━━━━━━━━━', '⭐ <b>TU SERVICIO</b>',
+    '▸ Cargas y retiros automáticos las 24 h', '▸ Retiros directo a tu CBU, en minutos', '▸ Soporte dentro de la app (burbuja del chat)',
+    '━━━━━━━━━━━━━━', '🎁 <b>BENEFICIOS</b>'];
+  for (const x of benefitLines(s.benefits || {})) L.push('▸ ' + esc(x));
+  if (s.sorteo && (s.sorteo.prizes || []).length) {
+    L.push('━━━━━━━━━━━━━━', '🎟️ <b>' + esc(String(s.sorteo.title || 'SORTEO').toUpperCase()) + '</b>');
+    for (const p of s.sorteo.prizes.slice(0, 3)) L.push(`${p.pos}° ${esc(p.name)}${p.value ? ' ' + esc(p.value) : ''}`);
+    L.push('Te anotás gratis desde Sorteos, en la app.');
+  }
+  L.push('━━━━━━━━━━━━━━', '📢 <b>EN ESTE CANAL</b>', '▸ Bonos del momento y códigos exclusivos', '▸ Partidos del día y novedades del servicio');
+  L.push('━━━━━━━━━━━━━━', '📲 <b>Entrá desde tu app PICA ROJA</b>');
+  return cut(L.join('\n'), 4000);
 }
-function panelButtons(appUrl, b, botUser) {
+function panelButtons(appUrl, b) {
+  // #1055: sin links (ni a la app ni al bot): sólo las ventanitas de información.
   b = b || normalizeButtons(null);
-  const rows = [[{ text: b.appLabel, url: appUrl }]];
-  if (botUser && /^[A-Za-z0-9_]{5,32}$/.test(botUser)) rows.push([{ text: '🤖 Abrir el menú del bot', url: 'https://t.me/' + botUser + '?start=menu' }]); // #1044-e
   const info = BTN_KEYS.filter((k) => b.items[k].on).map((k) => ({ text: b.items[k].label, callback_data: 'tg:' + k }));
-  for (let i = 0; i < info.length; i += 2) rows.push(info.slice(i, i + 2));
-  // #1044-e (owner: "si abre un link que sea a su app; si no, no pongamos link"): los links externos ya no se muestran.
-  return { inline_keyboard: rows };
+  const rows = []; for (let i = 0; i < info.length; i += 2) rows.push(info.slice(i, i + 2));
+  return rows.length ? { inline_keyboard: rows } : undefined;
 }
 /** Ventanita de cada botón del panel (máx. 200 caracteres, texto plano). */
 function popupText(key, s, b) {
-  s = s || {}; if (key === 'serv' && b && b.servText) return cut(b.servText, POPUP_MAX); const mes = MONTHS[s.monthIdx] || 'este mes';
+  s = s || {}; if (key === 'serv' && b && b.servText) return cut(b.servText, POPUP_MAX);
   let t;
-  if (key === 'benef') t = '🎁 Beneficios de ' + mes + ':\n' + benefitLines(s.benefits || {}).map((x) => '• ' + x).join('\n');
-  else if (key === 'paid') t = `💸 En ${mes} pagamos ${money(s.paid && s.paid.sum)} en premios${s.paid && s.paid.count ? ` (${s.paid.count.toLocaleString('es-AR')} retiros)` : ''} y regalamos ${money(s.gifted && s.gifted.sum)} en bonos. Todo automático, directo a tu CBU.`;
-  else if (key === 'top') t = s.top && s.top.amount > 0 ? `🏆 El premio más grande de ${mes}: ${money(s.top.amount)}, cobrado por ${maskUser(s.top.username)}. ¡El próximo puede ser el tuyo!` : `🏆 Todavía no hay un premio grande en ${mes}. ¡Puede ser el tuyo!`;
-  else if (key === 'sorteo') t = s.sorteo ? `🎟️ ${s.sorteo.title}: ${sorteoLine(s.sorteo)}. Para anotarte: ${(s.sorteo.requirements || []).join(', ')}. Todo desde la app.` : '🎟️ Pronto un sorteo nuevo. Atento al canal.';
-  else t = '⭐ Servicio completo: cargás y retirás solo las 24 h, reembolsos todos los días, ruleta, misiones, sorteos y soporte en la app.';
+  if (key === 'benef') t = '🎁 Beneficios:\n' + benefitLines(s.benefits || {}).map((x) => '• ' + x).join('\n');
+  else if (key === 'sorteo') t = s.sorteo ? `🎟️ ${s.sorteo.title}: ${sorteoLine(s.sorteo)}. Te anotás gratis desde Sorteos, en tu app.` : '🎟️ Pronto un sorteo nuevo. Atento al canal.';
+  else t = '⭐ Cargás y retirás solo las 24 h, reembolsos todos los días, ruleta, misiones, sorteos y soporte: todo desde tu app PICA ROJA.'; // #1055: 'paid' / 'top' ya no muestran montos
   return cut(t, POPUP_MAX);
 }
 
@@ -286,9 +266,9 @@ function popupText(key, s, b) {
 // ── #1044-e BOTONERA FIJA DEL BOT (chat privado: en un canal Telegram no muestra teclado). Cada botón responde con datos del momento y, si
 // hace falta un link, es SIEMPRE a la app (picaroja.com: entra con su sesión o ve el inicio de sesión). ──
 const MENU = [
-  ['benef', '🎁 Beneficios'], ['paid', '💸 Premios del mes'],
+  ['benef', '🎁 Beneficios'], ['serv', '⭐ El servicio'],
   ['rank', '🏆 Sorteo: quién va ganando'], ['steps', '🎟️ Cómo anotarme'],
-  ['code', '🔑 Código activo'], ['app', '🎰 Entrar a PICA ROJA']
+  ['code', '🔑 Código activo'], ['app', '📲 Cómo entrar']
 ];
 function menuKeyboard() {
   const rows = []; for (let i = 0; i < MENU.length; i += 2) rows.push(MENU.slice(i, i + 2).map(([, t]) => ({ text: t })));
@@ -297,9 +277,10 @@ function menuKeyboard() {
 function menuKey(text) { const t = String(text || '').trim(); const m = MENU.find(([, l]) => l === t); return m ? m[0] : null; }
 // Devuelve { text, button } (button = { text, url } a la app o null).
 function menuReply(key, s, o) {
-  s = s || {}; o = o || {}; const app = o.appUrl || 'https://picaroja.com';
-  const enter = { text: '🎰 Abrir PICA ROJA', url: app };
-  if (key === 'benef' || key === 'paid') return { text: '🔴 <b>PICA ROJA</b>\n' + esc(popupText(key, s, o.btn)), button: enter };
+  // #1055 (owner: "sin link, que entren desde su app"): las respuestas del bot por privado no llevan botones con link.
+  s = s || {}; o = o || {};
+  const APP = '\n\n📲 <b>Entrá desde tu app PICA ROJA</b>';
+  if (key === 'benef' || key === 'serv') return { text: '🔴 <b>PICA ROJA</b>\n' + esc(popupText(key, s, o.btn)) + APP, button: null };
   if (key === 'rank') {
     const so = s.sorteo;
     if (!so) return { text: '🎟️ Ahora no hay un sorteo en curso. Te avisamos en el canal cuando arranque el próximo.', button: null };
@@ -308,19 +289,19 @@ function menuReply(key, s, o) {
     if (top.length) { L.push('<b>Así va el ranking</b> (anotados):'); top.forEach((r, i) => L.push(`${['🥇', '🥈', '🥉'][i] || (i + 1) + '.'} ${esc(maskUser(r.username))} · ${Math.round(r.points || 0).toLocaleString('es-AR')} pts`)); }
     else L.push('Todavía no hay puntos: ¡anotate y arrancá primero!');
     if ((so.prizes || [])[0]) L.push('━━━━━━━━━━━━━━', '🎁 1° premio: <b>' + esc(so.prizes[0].name) + '</b>');
-    L.push('<i>Se actualiza cada hora. Mirá tus puntos en Sorteos, dentro de la app.</i>');
-    return { text: cut(L.join('\n'), 4000), button: { text: '🎟️ Ver mis puntos', url: app + '/?ir=sorteo' } };
+    L.push('<i>Se actualiza cada hora. Tus puntos están en Sorteos, dentro de tu app.</i>');
+    return { text: cut(L.join('\n'), 4000), button: null };
   }
   if (key === 'steps') {
     if (!s.sorteo) return { text: '🎟️ Ahora no hay un sorteo en curso. Te avisamos en el canal cuando arranque el próximo.', button: null };
-    return { text: sorteoCaption(s.sorteo), button: { text: '🎟️ ANOTARME GRATIS', url: app + '/?ir=sorteo' } };
+    return { text: sorteoCaption(s.sorteo), button: null };
   }
   if (key === 'code') {
     const d = o.drop;
-    if (d && d.code && d.left > 0) return { text: `🎁 <b>Código activo: <code>${esc(d.code)}</code></b>\n${money(d.amount)} para los primeros ${d.maxClaims} · quedan <b>${d.left}</b> lugares.\nTocá el botón y se acredita solo al entrar.`, button: { text: `🎁 RECLAMAR MIS ${money(d.amount)}`, url: app + '/?codigo=' + encodeURIComponent(d.code) } };
+    if (d && d.code && d.left > 0) return { text: `🎁 <b>Código activo: <code>${esc(d.code)}</code></b>\n${money(d.amount)} para los primeros ${d.maxClaims} · quedan <b>${d.left}</b> lugares.\n\n📝 Abrí tu app PICA ROJA → <b>Perfil → Canjear código</b> y escribilo.`, button: null };
     return { text: '🔑 Ahora no hay un código activo.\nSale cada pocos días en el canal, a cualquier hora, y vuela en minutos: activá las notificaciones del canal 🔔', button: null };
   }
-  return { text: '🎰 Entrá a tu cuenta de PICA ROJA: cargá, jugá y retirá desde la app.', button: enter };
+  return { text: '🎰 Cargá, jugá y retirá desde tu app PICA ROJA.' + APP, button: null };
 }
 
 module.exports = { MENU, menuKeyboard, menuKey, menuReply, dropSvg, dropCaption, dropDoneCaption, sorteoSvg, sorteoCaption, sorteoSteps, normalizeButtons, BTN_KEYS, call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };

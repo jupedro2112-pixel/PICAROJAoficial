@@ -20,10 +20,10 @@ const SNAP = { at: new Date('2026-11-09T21:00:00Z'), today: M, todayPrev: Object
   menus: { at: new Date(), byMenu: { girox: { users: 100, back7: 60, depositors: 40, repeat: 20 } }, weeks: [{ regs: 50, firstDep: 20, depositors: 90, chatNewPct: 80 }] },
   weeklyText: 'ANÁLISIS SEMANAL\n• todo bien' };
 
-caso('Menú: 14 botones, todos responden con texto < 4096 y botones Actualizar / Menú', () => {
-  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 14);
+caso('Menú: 15 botones (con Info), todos responden con texto < 4096 y botones Actualizar / Menú', () => {
+  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 15);
   for (const b of k) { assert.ok(/^ad:[a-z]+$/.test(b.callback_data) && b.callback_data.length <= 64); const r = ta.render(b.callback_data.slice(3), SNAP); assert.ok(r && r.text.length < 4096, b.callback_data); assert.ok(r.markup.inline_keyboard[0].some((x) => x.callback_data === 'ad:menu')); }
-  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 14);
+  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 15);
   assert.strictEqual(ta.render('nada', SNAP), null);
 });
 caso('Sin datos (snap vacío) no rompe', () => { for (const [k] of ta.MENU) assert.ok(ta.render(k, {}).text.length > 10, k); assert.ok(ta.dailyReport(null).length > 10 && ta.monthlyReport({}).length > 10); });

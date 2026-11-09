@@ -17,30 +17,6 @@ caso('Nunca el usuario completo en el canal', () => {
   assert.strictEqual(tg.maskUser('juanperez22'), 'ju***22'); assert.strictEqual(tg.maskUser('ana'), 'a***');
   assert.ok(!/juanperez22/.test(tg.panelText(S))); for (const k of ['top', 'paid']) assert.ok(!/juanperez22/.test(tg.popupText(k, S)));
 });
-caso('Ventanitas de los botones: siempre ≤ 200 caracteres (límite de Telegram) y con los datos', () => {
-  for (const k of ['benef', 'paid', 'top', 'sorteo', 'serv']) { const t = tg.popupText(k, S); assert.ok(t.length <= 200, k + ' ' + t.length); assert.ok(t.length > 20); }
-  assert.ok(/\$12\.345\.678/.test(tg.popupText('paid', S)) && /\$2\.345\.000/.test(tg.popupText('paid', S)));
-  assert.ok(/\$850\.000/.test(tg.popupText('top', S)) && /iPhone/.test(tg.popupText('sorteo', S)));
-  assert.ok(/100%/.test(tg.popupText('benef', S)) && /\$5\.000/.test(tg.popupText('benef', S)));
-  assert.ok(tg.popupText('sorteo', {}).length > 10 && tg.popupText('top', {}).length > 10, 'sin datos no rompe');
-});
-caso('Panel del mes: título del mes, beneficios, premios, regalado, premio más grande, sorteo y botones', () => {
-  const t = tg.panelText(S);
-  assert.ok(/Noviembre 2026/.test(t) && /Beneficios del mes/.test(t) && /Premios pagados/.test(t) && /Regalado/.test(t) && /Premio más grande/.test(t) && /Sorteo mensual/.test(t));
-  assert.ok(t.length < 4096);
-  const b = tg.panelButtons('https://picaroja.com').inline_keyboard.flat();
-  assert.strictEqual(b[0].url, 'https://picaroja.com');
-  assert.deepStrictEqual(b.slice(1).map((x) => x.callback_data), ['tg:benef', 'tg:paid', 'tg:top', 'tg:sorteo', 'tg:serv']);
-});
-caso('Posteo de una historia: HTML escapado, aviso del bono vigente, botón a la app y link externo aparte', () => {
-  const st = { title: 'Hoy <b>gratis</b>', text: 'Cargá & ganá', bonusPct: 50, bonusUntil: new Date(Date.now() + 3600000), linkUrl: 'https://youtube.com/x', linkLabel: 'Ver video' };
-  const c = tg.storyCaption(st);
-  assert.ok(/&lt;B&gt;GRATIS&lt;\/B&gt;/.test(c) && /Cargá &amp; ganá/.test(c) && /BONO \+50%/.test(c) && c.length <= 1024);
-  assert.ok(!/BONO/.test(tg.storyCaption(Object.assign({}, st, { bonusUntil: new Date(Date.now() - 1000) }))), 'bono vencido no se anuncia');
-  const k = tg.storyButtons(st, 'https://picaroja.com').inline_keyboard;
-  assert.strictEqual(k[0][0].url, 'https://picaroja.com'); assert.strictEqual(k.length, 1, '#1044-e: sin links externos, sólo la app');
-  assert.strictEqual(tg.storyButtons({ linkUrl: '#refund' }, 'https://picaroja.com').inline_keyboard.length, 1, 'link interno ⇒ sólo el de la app');
-});
 caso('Server: qué se publica (sin personales ni códigos sorpresa, sólo desde que se prendió), reserva atómica, token cifrado y sólo admin', () => {
   const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/audienceUserId: null, codeDropId: null, autoKey: \{ \$not: \/\^cd\/ \}, tgPostedAt: null/.test(S2));
@@ -50,52 +26,49 @@ caso('Server: qué se publica (sin personales ni códigos sorpresa, sólo desde 
   assert.ok(/if \(!sec \|\| got\.length !== sec\.length \|\| !crypto\.timingSafeEqual\(Buffer\.from\(got\), Buffer\.from\(sec\)\)\) return res\.status\(401\)\.end\(\);\n    const c = await _tgCfg\(\);/.test(S2), 'webhook con secreto ANTES de leer la config');
   assert.ok(/_cronClaim\('tgpanel'/.test(S2) && /_cronClaim\('tgmirror'/.test(S2), 'crons con lock (multi-instancia)');
 });
-caso('#1044-c Botones editables: textos, apagar info, links https (máx. 3), texto propio de Servicio; logo centrado en las fotos', () => {
-  const b = tg.normalizeButtons({ appLabel: 'Jugá ya', storyLabel: '', items: { top: { on: false, label: 'x' }, paid: { label: '💰 Pagos' } }, servText: 'Hola', links: [{ label: 'Soporte', url: 'https://t.me/x' }, { label: 'malo', url: 'http://x' }, { label: 'a', url: 'https://a' }, { label: 'b', url: 'https://b' }, { label: 'c', url: 'https://c' }] });
-  assert.strictEqual(b.appLabel, 'Jugá ya'); assert.strictEqual(b.storyLabel, '🎰 Entrar a PICA ROJA', 'vacío ⇒ el de siempre');
-  assert.strictEqual(b.links.length, 2, 'sólo https y hasta 3 (de los primeros 3)');
-  const k = tg.panelButtons('https://picaroja.com', b).inline_keyboard.flat();
-  assert.ok(!k.some((x) => x.callback_data === 'tg:top') && k.some((x) => x.text === '💰 Pagos') && !k.some((x) => x.url === 'https://t.me/x'), 'sin links externos (owner)');
-  assert.strictEqual(tg.popupText('serv', {}, b), 'Hola');
-  assert.strictEqual(tg.storyButtons({}, 'https://picaroja.com', b).inline_keyboard[0][0].text, '🎰 Entrar a PICA ROJA');
-  const svg = tg.storyCardSvg({ title: 'Hola', text: 'x' }, 'QUJD'); assert.ok(/data:image\/png;base64,QUJD/.test(svg) && /text-anchor="middle"/.test(svg));
-  assert.ok(!/<image/.test(tg.panelSvg({ monthIdx: 0, year: 2027 }, null)), 'sin logo no rompe');
-});
-caso('#1044-d Código exclusivo de Telegram: imagen con el código, texto con los pasos, aviso de AGOTADO con usuarios tapados', () => {
-  const o = { code: 'ROJAK7M2Q', amount: 5000, maxClaims: 10, rolloverX: 5 };
-  assert.ok(/ROJAK7M2Q/.test(tg.dropSvg(o, 'QUJD')) && /\$5\.000/.test(tg.dropSvg(o, null)));
-  const c = tg.dropCaption(o); assert.ok(/ROJAK7M2Q/.test(c) && /primeros <b>10<\/b>/.test(c) && /ya cargaron/.test(c) && c.length <= 1024);
-  const d = tg.dropDoneCaption({ code: 'ROJAK7M2Q', amount: 5000, full: true, winners: ['juanperez22', 'ana'] });
-  assert.ok(/SE AGOTÓ/.test(d) && /ju\*\*\*22/.test(d) && !/juanperez22/.test(d));
-  assert.ok(/TERMINÓ/.test(tg.dropDoneCaption({ code: 'X', amount: 5000, full: false, winners: [] })));
-});
 caso('#1044-d Sorteo en el canal: premios + pasos según los requisitos activos', () => {
   const so = Object.assign({}, S.sorteo, { req: { app: true, notif: true, telegram: true, phone: true, deposit: true, week: false } });
   const c = tg.sorteoCaption(so); assert.ok(/iPhone/.test(c) && /Activá las notificaciones/.test(c) && /Anotarme/.test(c) && !/7 días/.test(c) && c.length <= 1024);
   assert.strictEqual(tg.sorteoSteps(null).length, 7, 'sin requisitos guardados ⇒ todos los pasos');
   assert.ok(/ANOTATE GRATIS/.test(tg.sorteoSvg(so, null)));
 });
-caso('#1044-d Server: 1 automática por día (partidos y bono siempre), código cada N días con lock, agotado avisa en el canal, link ?ir=sorteo', () => {
-  const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.ok(/const TG_ALWAYS_KINDS = \['deporte', 'bono'\]/.test(S2) && /_tgIsDailyAuto\(st\)/.test(S2));
-  assert.ok(/autoKey: \{ \$not: \/\^cd\/ \}/.test(S2), 'los avisos del código de la app no van al canal');
-  assert.ok(/_cronClaim\('tgdrop'/.test(S2) && /_cronClaim\('tgsorteo'/.test(S2));
-  assert.ok(/if \(d\.createdBy === 'telegram'\) \{ await _tgDropDone\(d, winners, full\)/.test(S2));
-  assert.ok(/createdBy: 'telegram' \}\); \}/.test(S2) && /\/\?codigo=/.test(S2));
-  const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'auth.js'), 'utf8');
-  assert.ok(/_sp\.get\('ir'\) === 'sorteo'/.test(A) && /VIP\.sorteos\.open\('mensual'\)/.test(A));
+caso('#1055 Canal INFORMATIVO: sin links, sin montos de premios ni regalado, panel de texto con servicio / beneficios / sorteo', () => {
+  const t = tg.panelText(S);
+  assert.ok(/CANAL OFICIAL/.test(t) && /TU SERVICIO/.test(t) && /BENEFICIOS/.test(t) && /iPhone/.test(t) && /Entrá desde tu app/.test(t) && t.length < 4096);
+  assert.ok(!/12\.345\.678|2\.345\.000|850\.000|Regalado|Premios pagados|Premio más grande/.test(t), 'sin montos de premios');
+  const all = JSON.stringify([tg.panelButtons('https://picaroja.com'), tg.storyButtons({}, 'https://picaroja.com')]);
+  assert.ok(!/"url"/.test(all), 'ningún botón con link');
+  const b = tg.panelButtons('https://picaroja.com').inline_keyboard.flat().map((x) => x.callback_data);
+  assert.deepStrictEqual(b, ['tg:benef', 'tg:sorteo', 'tg:serv'], 'premios pagados / más grande, apagados');
+  for (const k of ['benef', 'paid', 'top', 'sorteo', 'serv']) { const p = tg.popupText(k, S); assert.ok(p.length <= 200 && p.length > 20, k); assert.ok(!/12\.345\.678|850\.000/.test(p), k); }
 });
-caso('#1044-e Botonera fija del bot: 6 botones, cada uno responde; links SÓLO a la app; ranking con usuarios tapados', () => {
+caso('#1055 Historias y bono: formato del sorteo, HTML escapado, cómo usar el bono, sin link', () => {
+  const st = { title: 'Hoy <b>gratis</b>', text: 'Cargá & ganá', bonusPct: 50, bonusUntil: new Date(Date.now() + 3600000) };
+  const c = tg.storyCaption(st);
+  assert.ok(/&lt;B&gt;GRATIS&lt;\/B&gt;/.test(c) && /Cargá &amp; ganá/.test(c) && /BONO \+50%/.test(c) && /CÓMO USARLO/.test(c) && /Entrá desde tu app/.test(c) && c.length <= 1024);
+  assert.ok(!/p\. m\./.test(c), 'hora en 24 h');
+  assert.ok(!/BONO/.test(tg.storyCaption(Object.assign({}, st, { bonusUntil: new Date(Date.now() - 1000) }))), 'bono vencido no se anuncia');
+});
+caso('#1055 Código de Telegram: se canjea en Perfil → Canjear código; agotado SIN lista de ganadores', () => {
+  const o = { code: 'ROJAK7M2Q', amount: 5000, maxClaims: 10, rolloverX: 5 };
+  const c = tg.dropCaption(o); assert.ok(/ROJAK7M2Q/.test(c) && /Canjear código/.test(c) && /ya cargaron/.test(c) && c.length <= 1024);
+  const d = tg.dropDoneCaption({ code: 'ROJAK7M2Q', amount: 5000, full: true, winners: ['juanperez22', 'ana'] });
+  assert.ok(/SE AGOTÓ/.test(d) && !/ju\*\*\*22|juanperez22/.test(d));
+});
+caso('#1055 Server: qué historias van (las del admin + partidos / bono / servicio), sin links, canje desde el Perfil', () => {
+  const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/const TG_CHANNEL_AUTO_KINDS = \['deporte', 'bono', 'servicio'\]/.test(S2) && /\{ autoKey: \/\^sa-\/, autoKind: \{ \$in: TG_CHANNEL_AUTO_KINDS \} \}/.test(S2));
+  assert.ok(/const TG_ALWAYS_KINDS = \['deporte', 'bono'\]/.test(S2) && /autoKey: \{ \$not: \/\^cd\/ \}/.test(S2));
+  assert.ok(!/\/\?codigo=' \+ encodeURIComponent\(code\)/.test(S2) && !/url: c\.appUrl \+ '\/\?ir=sorteo'/.test(S2), 'sin links en el canal');
+  assert.ok(/if \(cdc && await CodeDrop\.exists\(\{ code: cdc \}\)\) \{ req\.body\.code = cdc; return _codeDropClaimHandler\(req, res\); \}/.test(S2));
+  assert.ok(/_cronClaim\('tgdrop'/.test(S2) && /_cronClaim\('tgsorteo'/.test(S2));
+});
+caso('#1055 Bot por privado: 6 botones, sin links, ranking con usuarios tapados', () => {
   const kb = tg.menuKeyboard(); assert.ok(kb.is_persistent && kb.keyboard.flat().length === 6);
-  assert.strictEqual(tg.menuKey('🏆 Sorteo: quién va ganando'), 'rank'); assert.strictEqual(tg.menuKey('hola'), null);
-  const S3 = Object.assign({}, S, { sorteo: Object.assign({}, S.sorteo, { ranking: [{ username: 'juanperez22', points: 1234 }, { username: 'ana', points: 50 }] }) });
-  for (const [k] of tg.MENU) {
-    const m = tg.menuReply(k, S3, { appUrl: 'https://picaroja.com', drop: { code: 'ROJAX', amount: 5000, maxClaims: 10, left: 3 } });
-    assert.ok(m.text && m.text.length < 4096, k); if (m.button) assert.ok(m.button.url.startsWith('https://picaroja.com'), k + ' link sólo a la app');
-  }
-  const r = tg.menuReply('rank', S3, {}).text; assert.ok(/ju\*\*\*22/.test(r) && !/juanperez22/.test(r) && /1\.234 pts/.test(r));
-  assert.ok(!tg.menuReply('code', S, { drop: null }).button && !tg.menuReply('rank', {}, {}).button, 'sin código / sin sorteo ⇒ sin link');
-  const pb = tg.panelButtons('https://picaroja.com', null, 'PicaRojaBot').inline_keyboard.flat(); assert.ok(pb.some((x) => x.url === 'https://t.me/PicaRojaBot?start=menu'));
+  const S3 = Object.assign({}, S, { sorteo: Object.assign({}, S.sorteo, { ranking: [{ username: 'juanperez22', points: 1234 }] }) });
+  for (const [k] of tg.MENU) { const m = tg.menuReply(k, S3, { drop: { code: 'ROJAX', amount: 5000, maxClaims: 10, left: 3 } }); assert.ok(m.text && m.text.length < 4096 && !m.button, k); }
+  const r = tg.menuReply('rank', S3, {}).text; assert.ok(/ju\*\*\*22/.test(r) && !/juanperez22/.test(r));
+  assert.ok(/Canjear código/.test(tg.menuReply('code', S, { drop: { code: 'ROJAX', amount: 5000, maxClaims: 10, left: 3 } }).text));
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

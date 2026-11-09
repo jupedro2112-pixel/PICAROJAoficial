@@ -17112,6 +17112,8 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
     // lote). Si no matchea ningún lote, sigue el código de bienvenida clásico.
     const batchResult = await _tryClaimNotifBatchCode(req.user, attempt);
     if (batchResult) return res.status(batchResult.http).json(batchResult.body);
+    // #1055 (owner: "que entren desde su app, sin link"): el código del canal de Telegram (y el código sorpresa) se canjea acá también.
+    try { const cdc = attempt.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20); if (cdc && await CodeDrop.exists({ code: cdc })) { req.body.code = cdc; return _codeDropClaimHandler(req, res); } } catch (_) {}
 
     const code = String((await getConfig('communityWelcomeCode', '')) || '').trim();
     if (!code) {
@@ -29331,7 +29333,8 @@ app.post('/api/admin/story-gifts', authMiddleware, adminMiddleware, async (req, 
 });
 // Revisión #1003: limitador propio POR CLIENTE (el de login va por IP: con la push a todos, los que comparten la IP de la operadora se frenaban entre sí).
 const codeDropLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false, keyGenerator: (req) => (req.user && req.user.userId) ? ('u:' + req.user.userId) : req.ip, validate: { keyGeneratorIpFallback: false }, store: makeRateStore('codedrop'), message: { error: 'Esperá unos segundos y probá de nuevo.' } });
-app.post('/api/code-drop/claim', authMiddleware, codeDropLimiter, async (req, res) => {
+app.post('/api/code-drop/claim', authMiddleware, codeDropLimiter, (req, res) => _codeDropClaimHandler(req, res));
+async function _codeDropClaimHandler(req, res) { // #1055: también desde Perfil → Canjear código
   try {
     if (!req.user || req.user.role !== 'user') return res.status(403).json({ error: 'Sólo clientes' });
     const code = String((req.body && req.body.code) || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
@@ -29380,7 +29383,7 @@ app.post('/api/code-drop/claim', authMiddleware, codeDropLimiter, async (req, re
     const rx = await _giftRolloverX().catch(() => 5);
     res.json({ success: true, amount: d.amount, position: slot.claims, maxClaims: d.maxClaims, rolloverX: rx, message: `🎉 ¡Ganaste ${_cdMoney(d.amount)}! Sos el ${slot.claims}° de ${d.maxClaims}. Ya está en tu cuenta (se juega ×${rx}).` });
   } catch (e) { logger.error('[código-sorpresa] claim ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
-});
+}
 // Panel → Historias automáticas → 🎁 Código sorpresa: config, plan de la semana, últimos códigos con sus ganadores, lanzar uno ahora.
 app.get('/api/admin/code-drops', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -30697,8 +30700,9 @@ async function _tgPostStory(c, st) {
 const TG_ALWAYS_KINDS = ['deporte', 'bono']; // #1044-d: partidos importantes y la historia con bono siempre van al canal
 function _tgIsDailyAuto(st) { return /^sa-\d{4}-\d{2}-\d{2}-/.test(String(st.autoKey || '')) && !TG_ALWAYS_KINDS.includes(st.autoKind); }
 function _tgQuiet(c) { const h = _tgArtHour(); return c.quietFrom > c.quietTo ? (h >= c.quietFrom || h < c.quietTo) : (h >= c.quietFrom && h < c.quietTo); }
+const TG_CHANNEL_AUTO_KINDS = ['deporte', 'bono', 'servicio']; // #1055 (owner): partidos, bono y servicio; nada de premios / ganadores / slots
 function _tgStoryQuery(c, now) {
-  return { isActive: true, audienceUserId: null, codeDropId: null, autoKey: { $not: /^cd/ }, tgPostedAt: null, tgTries: { $lt: 3 }, expiresAt: { $gt: now }, publishedAt: { $gte: new Date(c.since || now), $lte: now } }; // #1044-d: tampoco los avisos del código sorpresa de la app (cdt-/cdd-)
+  return { $or: [{ autoKey: null }, { autoKey: { $exists: false } }, { autoKey: /^sa-/, autoKind: { $in: TG_CHANNEL_AUTO_KINDS } }], isActive: true, audienceUserId: null, codeDropId: null, autoKey: { $not: /^cd/ }, tgPostedAt: null, tgTries: { $lt: 3 }, expiresAt: { $gt: now }, publishedAt: { $gte: new Date(c.since || now), $lte: now } }; // #1044-d: tampoco los avisos del código sorpresa de la app (cdt-/cdd-)
 }
 // Cada 2 min: UNA historia por vez, respetando el espacio entre posteos (gapMin) y sin publicar de noche (salvo una historia con bono vigente).
 async function _tgMirrorTick(force) {
@@ -30792,9 +30796,8 @@ async function _tgPanelTick(force) {
   if (!c.botUsername) { try { const me = await tgChannel.call(c.token, 'getMe', {}); if (me.ok && me.result && me.result.username) { c.botUsername = me.result.username; await _tgSet({ botUsername: me.result.username }); } } catch (_) {} } // #1044-e
   const reply_markup = tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername);
   // #1044-b: el panel es una FOTO (tres números grandes) con el texto abajo; si la foto no se puede armar, va como texto.
-  let png = null; try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.panelSvg(s, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
+  const png = null; // #1055 (owner: "más informativo, sin tantos datos de premios regalados"): el panel es un texto informativo (la foto con montos se fue)
   const kind = png ? 'photo' : 'text';
-  if (!png && c.panelMsgId && c.panelKind === 'photo') return { ok: false, why: 'no se pudo armar la foto: se mantiene el panel actual' }; // revisión: nada de paneles duplicados
   const caption = tgChannel.panelCaption(s), text = tgChannel.panelText(s);
   if (c.panelMsgId && (c.panelKind || 'text') === kind) {
     const r = kind === 'photo' ? await tgChannel.editPhoto(c.token, c.channel, c.panelMsgId, png, caption, reply_markup)
@@ -30836,8 +30839,7 @@ async function _tgDropLaunch(c, by) {
   try { drop = await CodeDrop.create({ id: uuidv4(), dropKey: 'tg-' + _schedArtKey(now) + (by === 'panel' ? '-' + Date.now() : ''), code, amount: dc.amount, maxClaims: dc.maxClaims, startsAt: now, endsAt: new Date(now.getTime() + dc.hours * 3600000), createdBy: 'telegram' }); }
   catch (e) { if (e && e.code === 11000) return { ok: false, why: 'ya salió el código de hoy' }; throw e; }
   const o = { code, amount: dc.amount, maxClaims: dc.maxClaims, rolloverX: await _giftRolloverX().catch(() => 5) };
-  const url = c.appUrl + '/?codigo=' + encodeURIComponent(code);
-  const reply_markup = { inline_keyboard: [[{ text: `🎁 RECLAMAR MIS ${_cdMoney(dc.amount)}`, url }]] };
+  const reply_markup = undefined; // #1055 (owner: "sin link, que entren desde su app"): se canjea en la app, Perfil → Canjear código
   let r = null; let png = null;
   try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.dropSvg(o, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
   if (png) r = await tgChannel.sendMedia(c.token, 'photo', c.channel, { buffer: png, mime: 'image/png', filename: 'codigo.png' }, { caption: tgChannel.dropCaption(o), parse_mode: 'HTML', reply_markup });
@@ -30856,9 +30858,9 @@ async function _tgDropLaunch(c, by) {
 async function _tgDropDone(d, winners, full) {
   try {
     const c = await _tgCfg(); if (!c.token || !c.channel) return;
-    if (d.tgMsgId) await tgChannel.call(c.token, 'editMessageReplyMarkup', { chat_id: c.channel, message_id: d.tgMsgId, reply_markup: { inline_keyboard: [[{ text: full ? '❌ AGOTADO' : '⏱ TERMINÓ', url: c.appUrl }]] } });
+    if (d.tgMsgId) await tgChannel.call(c.token, 'editMessageReplyMarkup', { chat_id: c.channel, message_id: d.tgMsgId, reply_markup: { inline_keyboard: [[{ text: full ? '❌ AGOTADO' : '⏱ TERMINÓ', callback_data: 'tg:serv' }]] } });
     const text = tgChannel.dropDoneCaption({ code: d.code, amount: d.amount, full, winners });
-    await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: c.btn.appLabel, url: c.appUrl }]] }, disable_web_page_preview: true, reply_to_message_id: d.tgMsgId || undefined, allow_sending_without_reply: true });
+    await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_to_message_id: d.tgMsgId || undefined, allow_sending_without_reply: true });
   } catch (e) { logger.warn('[telegram] aviso de código agotado: ' + e.message); }
 }
 async function _tgDropTick() {
@@ -30879,7 +30881,7 @@ async function _tgSorteoPost(c, force) {
   const st = (await getConfig('telegramPanelStats', null)) || await _tgPanelCompute(); const so = st.sorteo;
   if (!so) return { ok: false, why: 'no hay sorteo en curso' };
   await _tgSet({ sorteoWeek: wk });
-  const reply_markup = { inline_keyboard: [[{ text: '🎟️ ANOTARME GRATIS', url: c.appUrl + '/?ir=sorteo' }]] };
+  const reply_markup = undefined; // #1055: sin link (se anotan desde Sorteos, en la app)
   let r = null; let png = null;
   try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.sorteoSvg(so, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
   if (png) r = await tgChannel.sendMedia(c.token, 'photo', c.channel, { buffer: png, mime: 'image/png', filename: 'sorteo.png' }, { caption: tgChannel.sorteoCaption(so), parse_mode: 'HTML', reply_markup });
@@ -31222,14 +31224,15 @@ app.post('/api/telegram/webhook', async (req, res) => {
         let drop = null;
         if (key === 'code') { const d = await CodeDrop.findOne({ createdBy: 'telegram', status: 'active', endsAt: { $gt: new Date() } }).sort({ startsAt: -1 }).select('code amount maxClaims claims').lean(); if (d) drop = { code: d.code, amount: d.amount, maxClaims: d.maxClaims, left: Math.max(0, d.maxClaims - d.claims) }; }
         const m = tgChannel.menuReply(key, stats, { appUrl: c.appUrl, btn: c.btn, drop });
-        await tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text: m.text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: m.button ? { inline_keyboard: [[m.button]] } : tgChannel.menuKeyboard() });
+        await tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text: m.text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: tgChannel.menuKeyboard() });
         return;
       }
       await tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text: '🔴 <b>PICA ROJA</b>\nUsá los botones de abajo 👇', parse_mode: 'HTML', reply_markup: tgChannel.menuKeyboard() });
       // revisión: la FOTO del panel sólo con /start (arma un PNG); cualquier otro texto ⇒ el panel como texto.
       if (!/^\/start\b/.test(String(u.message.text || ''))) { await tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername), disable_web_page_preview: true }); return; }
       // revisión de seguridad: nada de armar imágenes acá (frenaba el servidor con /start repetidos): se reenvía la foto del panel ya subida.
-      if (c.panelFileId) { const r = await tgChannel.sendMedia(c.token, 'photo', u.message.chat.id, c.panelFileId, { caption: tgChannel.panelCaption(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername) }); if (r.ok) return; }
+      // #1055: el panel es sólo texto (no se reenvía la foto)
+      if (false && c.panelFileId) { const r = await tgChannel.sendMedia(c.token, 'photo', u.message.chat.id, c.panelFileId, { caption: tgChannel.panelCaption(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername) }); if (r.ok) return; }
       await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl, c.btn, c.botUsername), disable_web_page_preview: true });
     }
   } catch (e) { logger.warn('[telegram] webhook: ' + e.message); if (!res.headersSent) res.status(200).end(); }

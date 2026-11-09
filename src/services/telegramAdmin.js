@@ -27,7 +27,8 @@ const MENU = [
   ['gifts', '🎁 Regalos'], ['campaigns', '📣 Campañas'],
   ['alerts', '🚨 Alertas'], ['weekly', '📋 Análisis semanal'],
   ['payouts', '🛡️ Retiros frenados'], ['sorteo', '🎟️ Sorteo'],
-  ['ai', '🤖 IA de soporte'], ['menus', '📱 Uso de la app']
+  ['ai', '🤖 IA de soporte'], ['menus', '📱 Uso de la app'],
+  ['info', 'ℹ️ Info: qué es cada cosa']
 ];
 const KEYS = MENU.map(([k]) => k);
 function menuMarkup() {
@@ -59,7 +60,15 @@ function render(key, snap) {
   const s = snap || {}; const at = s.at;
   if (key === 'menu') return { text: `${header('PANEL DE CONTROL', at)}\nElegí qué querés ver 👇\n<i>Los números se recalculan cada 15 min (retención, embudo, regalos y campañas cada hora).</i>`, markup: menuMarkup() };
   let text;
-  if (key === 'today') text = `${header('HOY', at)}\n${moneyBlock(s.today, s.todayPrev, 'Comparado con ayer a la misma hora')}`;
+  if (key === 'info') text = [header('CÓMO USAR ESTE GRUPO', at), // #1055 (owner): botonera, info y reportes del negocio en el grupo privado
+    '📊 <b>Hoy / 📆 Ayer / 🗓️ 7 días / 📅 Mes</b>: depósitos, retiros, regalos, resultado (plata que queda), clientes que cargaron y registros, comparado con el período anterior.',
+    '🔁 <b>Retención</b>: cuántos de los que cargaron vuelven a cargar.', '🪜 <b>Embudo</b>: registro → 1ª carga → 2ª carga, y dónde se pierde más gente.',
+    '🎁 <b>Regalos</b>: cuánto cuesta cada regalo y si conviene.', '📣 <b>Campañas</b>: clientes y plata que trae cada publicista.',
+    '🚨 <b>Alertas</b>: lo que hay que mirar ya.', '📋 <b>Análisis semanal</b>: el resumen de la semana con lo que conviene cambiar.',
+    '🛡️ <b>Retiros frenados</b>: los que esperan revisión.', '🎟️ <b>Sorteo</b> · 🤖 <b>IA de soporte</b> · 📱 <b>Uso de la app</b>.', LINE,
+    '📬 <b>REPORTES AUTOMÁTICOS</b>', '▸ Todos los días a las 9 h: cómo cerró ayer', '▸ Los lunes: la semana completa', '▸ El día 1: el mes completo', LINE,
+    '<i>Escribí /menu para volver a ver la botonera. Este grupo es PRIVADO: no agregues a nadie que no deba ver los números.</i>'].join('\n');
+  else if (key === 'today') text = `${header('HOY', at)}\n${moneyBlock(s.today, s.todayPrev, 'Comparado con ayer a la misma hora')}`;
   else if (key === 'yesterday') text = `${header('AYER', at)}\n${moneyBlock(s.yesterday, s.yesterdayPrev, 'Comparado con el día anterior')}` + (s.close ? `\n${LINE}\n🧾 Cierre del día: resultado ${money(s.close.resultado)}${s.close.check ? ' · ' + esc(s.close.check) : ''}` : '');
   else if (key === 'week') text = `${header('ÚLTIMOS 7 DÍAS', at)}\n${moneyBlock(s.week, s.weekPrev, 'Comparado con los 7 días anteriores')}`;
   else if (key === 'month') {

@@ -8,6 +8,18 @@
 
 ## Sesión 2026-11-09
 
+### 1055. Canal de Telegram INFORMATIVO y SIN LINKS + Info en el grupo privado (2026-11-09)
+- **Owner:** "más informativo, tantos datos de premios regalados no; fotos de las historias y algún texto como el del sorteo cada tanto; cuando hay un bono lo
+  mismo con texto; historias de partidos o del servicio, después nada más"; "sacá el link: que la gente entre siempre desde su app"; "los mensajes de la
+  comunidad son para gente ya registrada"; "el grupo privado para ver los números del negocio, con botonera, menú, info y reportes".
+- Canal: panel fijado = TEXTO informativo (servicio, beneficios, sorteo, qué sale en el canal; sin pagado / regalado / premio más grande); historias que van:
+  las que sube el admin + automáticas `deporte` / `bono` / `servicio` (`TG_CHANNEL_AUTO_KINDS`; fuera premio, ganadores, slots, pagos de la semana);
+  captions con el formato del sorteo y "📲 Entrá desde tu app PICA ROJA"; el bono explica cómo usarlo. NINGÚN botón con link (historias, panel, sorteo,
+  código, bot por privado); botones "Premios del mes" / "Premio más grande" forzados apagados. Código de Telegram: se canjea en la app, Perfil → Canjear
+  código (`/api/community-code/claim` reconoce un `CodeDrop` y llama `_codeDropClaimHandler`); el aviso de AGOTADO ya no lista ganadores.
+- Grupo privado (#1046): botón nuevo ℹ️ Info (qué muestra cada botón y cuándo llegan los reportes diario / semanal / mensual). Para sumarlo: agregar el bot
+  al grupo y tocar ✅ Aprobar en el panel.
+
 ### 1054. Bono en TODA carga automática: APAGADO por defecto y a la vista — app v697, panel v272 (2026-11-09)
 - **Owner:** "ese 10% fijo está desactivado, desactivalo desde configuración" y "extra por instalar: $5.000 fijo siempre" (se deja #1043 como está).
   `AUTO_LOAD_BONUS_PCT_DEFAULT` = 0 (sin valor guardado = apagado) y la migración #281 que lo forzaba a 10 ya no corre. Configuración → 🆕 NUEVO → 💸 muestra
