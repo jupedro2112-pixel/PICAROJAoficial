@@ -31264,6 +31264,24 @@ app.post('/api/admin/telegram/admin-approve', authMiddleware, adminMiddleware, a
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
+// #1071 (owner: "el id para que hable en el grupo es -1528942 ejemplo"): vincular el grupo escribiendo su ID a mano (respaldo de ✅ Aprobar / /vincular).
+// Sólo admin; se verifica con Telegram que sea un GRUPO y que el bot esté adentro antes de mandarle números.
+app.post('/api/admin/telegram/admin-add-id', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _tgCfg(); if (!c.token) return res.status(400).json({ error: 'Primero cargá el token del bot.' });
+    const id = String((req.body || {}).id || '').replace(/\s+/g, ''); if (!/^-\d{5,16}$/.test(id)) return res.status(400).json({ error: 'El ID de un grupo es un número NEGATIVO, ej. -1001234567890.' });
+    const g = await tgChannel.call(c.token, 'getChat', { chat_id: id });
+    if (!g.ok) return res.status(400).json({ error: 'Telegram no encuentra ese grupo o el bot no está adentro: agregá el bot al grupo primero. (' + String(g.error || '').slice(0, 80) + ')' });
+    if (!['group', 'supergroup'].includes(g.result.type)) return res.status(400).json({ error: 'Ese ID no es de un grupo (es ' + g.result.type + ').' });
+    const gid = g.result.id; await _tgArrPull('adminPending', gid);
+    if (!_tgAdminLinked(c, gid)) await _tgArrPush('adminChats', { id: gid, title: String(g.result.title || '').slice(0, 80), at: new Date(), by: req.user.username }, 5);
+    logger.info(`[telegram reportes] grupo vinculado por ID: ${g.result.title} (${gid}) por ${req.user.username}`);
+    const c2 = await _tgCfg(); const sent = await _tgAdminSend(c2, gid, '✅ <b>Grupo vinculado a PICA ROJA.</b> Escribí /menu para ver los botones con los números.');
+    _tgAdminSnapTick(true).catch(() => {}).then(async () => { const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c2, gid, r.text, r.markup); }).catch(() => {});
+    res.json({ success: true, title: g.result.title || null, id: gid, sent: !!(sent && sent.ok !== false) });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.post('/api/admin/telegram/use-channel', authMiddleware, adminMiddleware, async (req, res) => { // #1047: cambiar al canal donde se agregó al bot
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
   try {

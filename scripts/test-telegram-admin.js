@@ -124,5 +124,10 @@ caso('#1069 Inicio / Clientes / Cuántas veces cargan: números del cron (snap.c
   const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/snap\.clients = await _tgClientsSnap\(now, t0, m0\)/.test(S2), 'lo calcula el cron');
 });
+caso('#1071 Vincular grupo por ID: sólo admin, ID negativo, verifica con getChat que sea grupo', () => {
+  const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  const i = S2.indexOf("app.post('/api/admin/telegram/admin-add-id'"); assert.ok(i > 0); const b = S2.slice(i, i + 1800);
+  assert.ok(/req\.user\.role !== 'admin'/.test(b) && /\^-\\d\{5,16\}\$/.test(b) && /'getChat'/.test(b) && /\['group', 'supergroup'\]\.includes/.test(b));
+});
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

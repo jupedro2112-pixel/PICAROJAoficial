@@ -6429,6 +6429,16 @@ async function tgNow(what) {
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 // #1046: grupo privado de reportes — código de un solo uso para vincularlo y desvincular.
+// #1071: vincular el grupo privado escribiendo su ID (número negativo)
+async function tgAdminAddId() {
+    const inp = document.getElementById('tgAdminIdIn'); const id = String((inp && inp.value) || '').trim();
+    if (!id) { showToast('Escribí el ID del grupo (empieza con -)', 'error'); return; }
+    try {
+        const r = await authFetch('/api/admin/telegram/admin-add-id', { method: 'POST', body: JSON.stringify({ id }) }); const j = await r.json();
+        if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
+        showToast('✅ Grupo vinculado: ' + escapeHtml(j.title || String(j.id)), 'success'); if (inp) inp.value = ''; try { loadTgChannel(); } catch (_) {}
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
 // #1069: 🩺 diagnóstico del bot (por qué no responde en el grupo) + 🔧 reconectar
 async function tgDiag(fix) {
     const out = document.getElementById('tgDiagOut'); if (out) out.innerHTML = '⏳ Revisando…';

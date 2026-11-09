@@ -8,6 +8,11 @@
 
 ## Sesión 2026-11-09
 
+### 1071. Grupo privado de Telegram: vincular escribiendo el ID del grupo (2026-11-09) — panel v276
+- **Owner:** "el id para que hable en el grupo es -1528942 ejemplo". El ID ya se guarda solo al Aprobar / `/vincular`; se suma un respaldo: tarjeta
+  📊 Grupo privado → 🆔 ID del grupo + ➕ Vincular por ID (`POST /api/admin/telegram/admin-add-id`, sólo admin, ID negativo, `getChat` confirma que es un
+  grupo con el bot adentro). Los botones igual necesitan el webhook (🔧 Reconectar).
+
 ### 1070. La "Carga rápida" vieja ya no aparece sola al entrar (2026-11-09) — app v708
 - **Owner (captura):** "apenas entro a la app aparece este menú, después se va y se pone el nuevo, este no quiero que aparezca más". Al entrar en Girox
   directo se abría `toggleCasinoLoad(true)` (#937 y la 1ª entrada por pauta #843) y después el chat nuevo lo tapaba. Ahora esas aperturas automáticas
