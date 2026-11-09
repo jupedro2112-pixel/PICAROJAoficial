@@ -2443,6 +2443,7 @@
         // ellos" ⇒ abierto solo UNA vez (primera entrada desde la landing, `vip_from_pauta`), después arranca cerrado (queda la burbuja).
         setTimeout(() => { _setCasinoTestMode(test); _setupCasinoQuick(); if (!test) { try { _giroxNewsShow(); setTimeout(() => { try { if (VIP.ui && VIP.ui._casinoOpen) _giroxNewsShow(); } catch (_) {} }, 3000); } catch (_) {} _quickDismissed = false;
             let first = false; try { first = sessionStorage.getItem('vip_from_pauta') === '1' && localStorage.getItem('vip_cq_auto_done') !== '1'; if (first) { localStorage.setItem('vip_cq_auto_done', '1'); sessionStorage.removeItem('vip_from_pauta'); } } catch (_) {}
+            if (!document.body.classList.contains('sp-classic')) first = false; // #1070: con el chat nuevo la Carga rápida vieja nunca se abre sola
             try { toggleCasinoLoad(first); } catch (_) {} try { if (!first) _cqTipShow(); } catch (_) {} } }, 60);
     }
     // #1019 (owner): "¡Actualizamos!" adentro de Girox para los clientes que YA estaban (el server decide `show`; los nuevos de la landing no).
@@ -2819,7 +2820,8 @@
         }
         try { if (VIP.sorteos && VIP.sorteos.paintCasino) VIP.sorteos.paintCasino(); } catch (_) {} // #935
         // #937 (owner): "en Girox directo, al iniciar, la Carga rápida abierta para cargar, siempre"
-        if (_curPref === 'girox') setTimeout(() => { try { toggleCasinoLoad(true); } catch (_) {} }, 450);
+        // #1070 (owner: "apenas entro aparece este menú [Carga rápida], después se va y se pone el nuevo: no quiero que aparezca más"): sólo en el chat CLÁSICO
+        if (_curPref === 'girox' && document.body.classList.contains('sp-classic')) setTimeout(() => { try { toggleCasinoLoad(true); } catch (_) {} }, 450);
         // #700: el contador de historias nuevas copia el de la barra principal; sin historias cargadas el botón igual abre el visor.
         try { const src = _el('storiesBadge'), dst = _el('ctStoriesBadge'); if (src && dst) { dst.textContent = src.textContent; dst.style.display = src.style.display; } const nh = _el('navHistorias'), cs = _el('ctStories'); if (nh && cs) cs.classList.toggle('has-active', nh.classList.contains('has-active') || nh.classList.contains('has-new')); } catch (_) {}
         document.body.classList.add('casino-open'); // #700: los modales (Info, Perfil, historias…) van por encima del casino

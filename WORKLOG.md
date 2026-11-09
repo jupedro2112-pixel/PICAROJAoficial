@@ -8,6 +8,11 @@
 
 ## Sesión 2026-11-09
 
+### 1070. La "Carga rápida" vieja ya no aparece sola al entrar (2026-11-09) — app v708
+- **Owner (captura):** "apenas entro a la app aparece este menú, después se va y se pone el nuevo, este no quiero que aparezca más". Al entrar en Girox
+  directo se abría `toggleCasinoLoad(true)` (#937 y la 1ª entrada por pauta #843) y después el chat nuevo lo tapaba. Ahora esas aperturas automáticas
+  sólo corren en el chat CLÁSICO (`body.sp-classic`); con el chat nuevo nunca se abre sola (los botones manuales siguen igual).
+
 ### 1069. Grupo privado de Telegram: el bot no respondía — diagnóstico y arreglos (2026-11-09)
 - **Owner:** "no activa el bot ni los botones". Causas posibles: (1) el webhook se registraba en `PUBLIC_URL` (si en AWS apunta a otra página, el bot
   PUBLICA en el canal pero no RECIBE nada del grupo) ⇒ ahora `TG_WEBHOOK_BASE` env o https://picaroja.com fijo; se re-registra 5 min después del arranque.
