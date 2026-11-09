@@ -1985,3 +1985,5 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   de los agentes ⇒ "Responder para IA" para aprobar (`_supportLearnFromAgent`).
 - **Consumo de la IA (#1042-w):** `_supportBotCost` suma por día en `support_bot_stats` (`aiCalls`, tokens, `costMicro`) con `SB_PRICES`; INICIO lo muestra
   (`_inicioAiUsage` en `/api/admin/inicio/stats` ⇒ `_inicioAiHtml`). Si cambian los precios o se agrega un modelo, actualizar `SB_PRICES`.
+- **#1042-x:** bot con Haiku 5.5; handoff de la IA ⇒ mensaje con botón "Tengo otro problema" (sólo el botón abre el chat a un agente); saludo local al entrar
+  (`/sys_support_greet` vía `/api/support/ui-mode`, `VIP.home.spGreetMsg`); el cliente ve 24 h de chat; la burbuja delega siempre en `casinoChatToggle`.

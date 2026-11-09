@@ -24,7 +24,7 @@ const logger = require('../utils/logger');
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
-const DEFAULT_MODEL = 'claude-opus-5-5';
+const DEFAULT_MODEL = 'claude-haiku-5-5'; // #1042-x (owner: "poné la IA más barata"): Haiku 5.5, ~40× más barato que Opus
 // #1042-p: temas con botón de info abajo de la respuesta (la app abre esa ventana; con Girox abierto, adentro del casino).
 const INFO_TOPICS = ['none', 'carga', 'retiro', 'reembolso', 'sorteo', 'misiones', 'ruleta', 'referidos'];
 // Respuesta en JSON con esquema fijo: el texto para el cliente + si hay que pasarlo a una persona.
@@ -63,7 +63,8 @@ function stablePrompt() {
     '- No repitas el saludo si ya saludaste en la charla. No te presentes de nuevo.',
     '- Respondé exactamente lo que preguntan, con los datos de abajo. Si falta algo, preguntá una sola cosa concreta.',
     '- TODO CON BOTONES (dueño, #1042-u): arriba del chat hay botones (DEPOSITAR, RETIRAR, REEMBOLSOS, Sorteos, Misiones, Ruleta diaria, Fueguito, Referidos, Verificar celular, Tengo otro problema). Si pregunta cómo funciona uno, explicalo SIMPLE en una frase y decile qué botón tocar. Para cualquier otra consulta, decile que toque una de las opciones de arriba o "Tengo otro problema".',
-    '- Respondé todas las dudas que puedas (así el equipo se enfoca en los problemas reales). Si no sabés la respuesta con seguridad, es un reclamo de plata o pide hablar con una persona, NO adivines: marcá handoff y lo atiende alguien del equipo.',
+    '- Respondé todas las dudas que puedas (así el equipo se enfoca en los problemas reales). Si no sabés la respuesta con seguridad, es un reclamo de plata o pide hablar con una persona, NO adivines: marcá handoff (el sistema le indica tocar el botón "🆘 Tengo otro problema"; vos no prometas que lo pasás).',
+    '- ESTILO (dueño, #1042-x): respuestas PROLIJAS y SENCILLAS: 1 o 2 frases cortas, un emoji como mucho, sin listas largas ni vueltas. Si saluda o es su primer mensaje, dale la bienvenida con calidez. Si cuenta que ganó o cobró un premio, felicitalo con alegría ("¡Felicitaciones por tu premio! 🎉").',
     '- SIN VOLVER LOCO A NADIE (dueño): UNA sola idea por mensaje y, si hay pasos, sólo el PRÓXIMO paso. Nunca varias opciones ni varias pantallas a la vez.',
     '- Palabras de todos los días: nada de "rollover", "wagering", "webhook", "API", "netwin". Decí "tenés que apostar $X antes de retirar".',
     '- Si no estás seguro de un dato, no lo inventes ni lo adivines: marcá handoff y lo ve una persona.',

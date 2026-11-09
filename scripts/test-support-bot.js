@@ -34,7 +34,7 @@ caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallb
   const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, agentName: 'Sofía', history: [{ role: 'user', text: 'hola' }] });
   assert.ok(r.ok); assert.strictEqual(r.reply, '¡Hola! Para cargar tocá DEPOSITAR.'); assert.strictEqual(r.handoff, false);
   const b = lastReq.body;
-  assert.strictEqual(b.model, 'claude-opus-5-5'); assert.strictEqual(b.output_config.effort, 'low');
+  assert.strictEqual(b.model, 'claude-haiku-5-5'); assert.strictEqual(b.output_config.effort, 'low');
   assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic']);
   assert.strictEqual(b.output_config.format.schema.additionalProperties, false);
   assert.strictEqual(b.fallbacks, 'default'); assert.strictEqual(lastReq.opts.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
@@ -164,6 +164,10 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
     assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');
+    { const U3 = fs.readFileSync(path.join(ROOT, 'public/js/ui.js'), 'utf8'), C3 = fs.readFileSync(path.join(ROOT, 'public/js/chat.js'), 'utf8');
+      assert.ok(/VIP\.home\.casinoChatToggle\) return VIP\.home\.casinoChatToggle\(\)/.test(U3), 'burbuja: el primer toque abre el chat nuevo');
+      assert.ok(/if \(r\.handoff\) \{\n    const why = /.test(S) && /target: 'problema', label: '🆘 Tengo otro problema'/.test(S) && C3.includes("'problema']"), 'a Soporte sólo por el botón (la IA manda al botón)');
+      assert.ok(/SUPPORT_GREET_DEFAULT/.test(S) && /spGreetMsg/.test(C3) && /24 \* 3600 \* 1000\);\n          const cur = matchStage/.test(S), 'saludo al entrar + chat de 24 h para el cliente'); }
     { const A3 = fs.readFileSync(path.join(ROOT, 'public/adminprivado2026/admin.js'), 'utf8');
       assert.ok((S.match(/_supportBotCost\(r\);/g) || []).length === 2 && /const ai = await _inicioAiUsage\(day\)/.test(S) && /_inicioAiHtml\(d\.ai, n\)/.test(A3), 'INICIO: consumo de la IA día a día (bot + Probar)');
       // precio: 1M de entrada + 1M de salida en Opus 5.5 = US$ 24

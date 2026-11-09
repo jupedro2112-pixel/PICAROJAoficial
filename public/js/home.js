@@ -459,8 +459,20 @@
     // #1042: barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo con VER (abre el cartel del bono de 1ª carga).
     // #1042-c: CHAT CLÁSICO desde el panel ⇒ body.sp-classic (sin barra ni cara de WhatsApp; el CSS nuevo no aplica).
     async function spUiMode() {
-        try { const r = await fetch('/api/support/ui-mode', { cache: 'no-store' }); const j = await r.json(); document.body.classList.toggle('sp-classic', !!(j && j.classic)); } catch (_) {}
+        try {
+            const r = await fetch('/api/support/ui-mode', { cache: 'no-store' }); const j = await r.json(); document.body.classList.toggle('sp-classic', !!(j && j.classic));
+            const had = !!_spGreet; _spGreet = (j && !j.classic && j.greet) ? { text: String(j.greet), agent: j.agent || 'Soporte' } : null;
+            if (_spGreet && !had) { try { VIP.chat.addMessageToChat(spGreetMsg()); } catch (_) {} }
+        } catch (_) {}
         return document.body.classList.contains('sp-classic');
+    }
+    // #1042-x (owner): saludo en el chat cada vez que entra a la app (local: no se guarda ni cuenta como mensaje).
+    let _spGreet = null; const _spGreetAt = new Date().toISOString();
+    function spGreetMsg() {
+        if (!_spGreet || document.body.classList.contains('sp-classic')) return null;
+        const u = (VIP.state && VIP.state.currentUser) || {};
+        return { id: 'local-greet', senderId: 'support-bot', senderUsername: _spGreet.agent, senderRole: 'admin', receiverRole: 'user', type: 'text', channel: 'support',
+            content: u.username ? _spGreet.text.replace(/\{usuario\}/g, u.username) : _spGreet.text.replace(/,?\s*\{usuario\}/g, ''), timestamp: _spGreetAt, read: true, metadata: { bot: true, channel: 'support' } };
     }
     // #1042-i: titular / alias / CBU de la cuenta vigente (mismo dato que la Carga automática: GET /api/config/cbu) para copiar con un toque.
     let _spBk = null;
@@ -2501,6 +2513,7 @@
         t = String(t || '');
         const into = (id) => { try { _modalIntoCasino(id); } catch (_) {} };
         try {
+            if (t === 'problema') return supportQuick('problema'); // #1042-x: botón del bot ⇒ a un agente
             if (t === 'sorteo' || t === 'sorteos') { into('srtModal'); return VIP.sorteos.open('mensual'); }
             if (t === 'misiones') { into('missionsModal'); return openMissions(); }
             if (t === 'ruleta') { into('rouletteModal'); return svcRoulette(); }
@@ -3104,6 +3117,7 @@
 
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
+        casinoChatToggle, spGreetMsg, // #1042-x
         supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806

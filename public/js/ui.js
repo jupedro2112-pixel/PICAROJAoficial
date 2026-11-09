@@ -1530,6 +1530,9 @@ VIP.ui.toggleCasinoChat = function() {
   if (VIP.ui._bubbleWasDragged) return;
   // #601/#630 (owner): dentro del casino NO hay chat: la pastilla abre SIEMPRE el panel chico de Carga rápida (alias · CBU · titular +
   // adjuntar comprobante). El cajón de chat se eliminó.
+  // #1042-x (owner: "la primera vez abre el chat viejo; cerrando y abriendo, el nuevo"): el reemplazo de home.js se instalaba recién al
+  // terminar de abrir el casino ⇒ el primer toque caía acá. Ahora va siempre al chat nuevo (casinoChatToggle decide clásico / nuevo).
+  try { if (VIP.home && VIP.home.casinoChatToggle) return VIP.home.casinoChatToggle(); } catch (_) {}
   try { if (VIP.home && VIP.home.toggleCasinoLoad) VIP.home.toggleCasinoLoad(); } catch (_) {}
 };
 

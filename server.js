@@ -5794,7 +5794,12 @@ app.post('/api/admin/support-bot/learned/:id', authMiddleware, adminMiddleware, 
 // #1042-c (owner): CHAT CLÁSICO — "un botón para que figure el chat como estaba antes de la actualización, sin IA y sin modificaciones".
 // La app lo lee al abrir Soporte (público: sólo dice si es clásico) y pone body.sp-classic (sin barra DEPOSITAR/RETIRAR/REEMBOLSOS ni cara de WhatsApp).
 app.get('/api/support/ui-mode', async (req, res) => {
-  try { const c = await getSupportBotConfig(); res.set('Cache-Control', 'no-store'); res.json({ classic: !!c.classic }); } catch (_) { res.json({ classic: false }); }
+  try {
+    const c = await getSupportBotConfig(); res.set('Cache-Control', 'no-store');
+    // #1042-x (owner): "siempre que entren a la app que diga: ¡Buenas, usuario! esperamos tu carga…". {usuario} lo completa la app.
+    const greet = c.classic ? '' : await renderSystemCommand('/sys_support_greet', SUPPORT_GREET_DEFAULT, {});
+    res.json({ classic: !!c.classic, greet: greet || '', agent: await getSupportAgentName() });
+  } catch (_) { res.json({ classic: false }); }
 });
 // #1042 BOT DE SOPORTE CON IA — config, estadísticas (7 días) y prueba. Sólo el admin general cambia o prueba (la prueba gasta IA).
 app.get('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, res) => {
@@ -9179,6 +9184,15 @@ app.get('/api/messages/:userId', authMiddleware, async (req, res) => {
       // fechas y ve el aviso "chat cerrado" (metadata.kind support_closed) fijado abajo de las opciones. `supportSessionSince`
       // sigue marcando el último cierre para el panel / cron, pero no filtra acá.
       if (since) matchStage.timestamp = Object.assign({}, matchStage.timestamp || {}, { $gte: since });
+      // #1042-x (owner: "que el chat después de un día se borre para el cliente"): con el chat nuevo el cliente ve sólo las últimas 24 h
+      // (el panel sigue viendo todo). Modo normal / clásico ⇒ como antes.
+      try {
+        if (!(await getSupportBotConfig()).classic) {
+          const d24 = new Date(Date.now() - 24 * 3600 * 1000);
+          const cur = matchStage.timestamp && matchStage.timestamp.$gte;
+          if (!cur || new Date(cur) < d24) matchStage.timestamp = Object.assign({}, matchStage.timestamp || {}, { $gte: d24 });
+        }
+      } catch (_) {}
     }
 
     const messages = await Message.aggregate([
@@ -13616,6 +13630,12 @@ async function initializeData() {
     try {
       // #1042-v (owner: "hacelo a respuestas libres; una vez entrenada usa lo aprendido; que la IA simplifique el trabajo y los agentes se
       // enfoquen en responder preguntas") ⇒ 20 (el máximo): en la práctica libre; pasa a una persona sólo por handoff (no sabe / reclamo / pide persona).
+      // #1042-x (owner: "poné la IA más barata") ⇒ Haiku 5.5 una vez (después se cambia en la tarjeta del bot).
+      if (!(await getConfig('mig1042xHaiku', null))) {
+        await Config.collection.updateOne({ key: 'supportBot' }, { $set: { 'value.model': 'claude-haiku-5-5' } });
+        await Config.set('mig1042xHaiku', new Date().toISOString(), 'startup-migration');
+        console.log('✅ Bot: modelo Haiku 5.5 (el más barato) (#1042-x)');
+      }
       if (!(await getConfig('mig1042vAiFree', null))) {
         await Config.collection.updateOne({ key: 'supportBot' }, { $set: { 'value.aiMaxReplies': 20 } });
         await Config.set('mig1042vAiFree', new Date().toISOString(), 'startup-migration');
@@ -14532,6 +14552,18 @@ async function initializeData() {
       description: 'CHAT NUEVO (#1042-t, sin "Modo normal"): mensaje en el chat cuando el retiro se PAGÓ (reemplaza a /sys_payout_paid). Variables: ${amount}. Si lo dejás vacío, se usa /sys_payout_paid.',
       type: 'message',
       response: '✅ ¡Pago realizado con éxito! Te enviamos ${amount} a tu cuenta 💸'
+    },
+    {
+      name: '/sys_support_greet',
+      description: 'CHAT NUEVO (#1042-x): saludo que ve el cliente en el chat CADA VEZ que entra a la app (no se guarda, no manda push). Variable: {usuario}. Vacío = sin saludo.',
+      type: 'message',
+      response: '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀'
+    },
+    {
+      name: '/sys_support_to_button',
+      description: 'CHAT NUEVO (#1042-x): cuando el bot no puede resolver algo (reclamo, no sabe, pide una persona) NO pasa solo a un agente: manda este texto con el botón "🆘 Tengo otro problema". Sin variables.',
+      type: 'message',
+      response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.'
     },
     {
       name: '/sys_support_problem',
@@ -15762,6 +15794,8 @@ async function _supportAutoReply(userId, username) {
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
 const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 20, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
 // #1042-v: ¿le llegó al cliente alguna respuesta (bot, automático o persona) desde `since`?
+const SUPPORT_GREET_DEFAULT = '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀'; // #1042-x
+const SUPPORT_TO_BUTTON_DEFAULT = 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.'; // #1042-x
 async function _supportSentSince(userId, since) {
   try { return !!(await Message.findOne({ receiverId: userId, senderRole: { $ne: 'user' }, adminOnly: { $ne: true }, timestamp: { $gte: since } }).select('_id').lean()); } catch (_) { return false; }
 }
@@ -15997,6 +16031,21 @@ async function _supportBotRun(userId, username, token, t0) {
     r = { ok: true, reply: 'Dame un momentito, ya te responde alguien del equipo 🙌', handoff: true, handoffReason: `la IA no pudo responder (${String(r.error || 'sin IA').slice(0, 80)})` };
     _sbTyping(userId, agentName, true);
   }
+  // #1042-x (owner: "si la gente quiere ir a soporte, que no sea por la IA: que sea apretando el botón de abajo"): el bot NUNCA abre el chat a una
+  // persona por su cuenta. Lo que antes era handoff (no sabe, reclamo, pide persona, tope de respuestas, IA caída) ⇒ mensaje fijo con el botón
+  // "🆘 Tengo otro problema" (ése sí pasa a un agente, `_supportHandoffNow`). La nota interna queda para que el equipo vea el motivo.
+  if (r.handoff) {
+    const why = r.handoffReason || r.error || 'necesita una persona';
+    const txt = await renderSystemCommand('/sys_support_to_button', SUPPORT_TO_BUTTON_DEFAULT, {});
+    r = { ok: true, reply: txt || SUPPORT_TO_BUTTON_DEFAULT, handoff: false, toButton: true, toButtonWhy: why, usage: r.usage, model: r.model };
+    _supportBotStat('toButton');
+    try {
+      const note = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: userId, receiverRole: 'user',
+        content: `🤖 El bot le indicó tocar "🆘 Tengo otro problema" (${why}). Si lo toca, el chat se abre para vos.`,
+        type: 'system', adminOnly: true, metadata: { kind: 'bot_to_button', reason: why }, timestamp: new Date(), read: true });
+      io.to(`chat_${userId}`).emit('new_message', note);
+    } catch (_) {}
+  }
   // Que no parezca instantáneo: espera hasta completar los 10-15 s desde el mensaje del cliente.
   const target = (cfg.delayMinSec + Math.random() * (cfg.delayMaxSec - cfg.delayMinSec)) * 1000;
   const wait = Math.max(0, t0 + target - Date.now());
@@ -16015,7 +16064,7 @@ async function _supportBotRun(userId, username, token, t0) {
       content: reply, type: 'text', channel: 'support', timestamp: new Date(), read: false,
       // Si habla del comprobante, va con el botón "Adjuntar comprobante": abre la GUÍA de 3 pasos (#1030, VIP.autoload.sendReceipt ⇒ pickReceipt), nunca el selector directo.
       // #1042-p (owner): botón de INFO del tema que preguntó (la IA elige info_topic); con Girox abierto se abre adentro del casino.
-      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, r.learnedId ? { learned: true } : {}, _sbInfoButton(r, reply)) });
+      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, r.learnedId ? { learned: true } : {}, r.toButton ? { kind: 'go_section', target: 'problema', label: '🆘 Tengo otro problema' } : _sbInfoButton(r, reply)) });
     io.to(`user_${userId}`).emit('new_message', message);
     io.to(`chat_${userId}`).emit('new_message', message);
     notifyAdmins('new_message', { message, userId, username });
@@ -16023,7 +16072,7 @@ async function _supportBotRun(userId, username, token, t0) {
     try { await ChatStatus.updateOne({ userId }, { $set: { lastMessageAt: new Date() } }); } catch (_) {}
     const us = r.usage || {};
     if (r.learnedId) { _supportBotStat('learnedUsed'); try { await _sbLearnCol().updateOne({ _id: r.learnedId }, { $inc: { uses: 1 }, $set: { lastUsedAt: new Date() } }); } catch (_) {} }
-    else if (r.learnQuestion) { try { await _supportLearnSave(String(lastUser.content || ''), r.learnQuestion, r.learnAnswer, cfg, userId); } catch (e) { logger.warn(`[support-bot] aprender: ${e.message}`); } }
+    else if (r.learnQuestion && !r.toButton) { try { await _supportLearnSave(String(lastUser.content || ''), r.learnQuestion, r.learnAnswer, cfg, userId); } catch (e) { logger.warn(`[support-bot] aprender: ${e.message}`); } }
     if (!r.learnedId) _supportBotStat('replies', 1); // #1042-w: los tokens y el costo los suma _supportBotCost (una vez por llamada)
   }
   if (r.handoff) {

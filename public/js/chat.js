@@ -107,7 +107,7 @@ VIP.chat = (function () {
         if (md.kind === 'go_section' || (md.target === 'terms' && md.label)) { // #702: + refund (info de reembolso) y terms (Bases y condiciones, dentro de la app)
             const t = String(md.target || 'full');
             // #1042-p: retiro / reembolso / sorteo / misiones / ruleta / referidos pasan por VIP.home.spInfo (con Girox abierto, la ventana se abre adentro)
-            const INFO_T = ['withdraw', 'refund', 'sorteo', 'misiones', 'ruleta', 'referidos'];
+            const INFO_T = ['withdraw', 'refund', 'sorteo', 'misiones', 'ruleta', 'referidos', 'problema']; // #1042-x: + problema
             const act = t === 'receipt' ? "VIP.autoload.sendReceipt()" /* #905: comprobante no válido ⇒ adjuntarlo de nuevo */
                 : t === 'terms' ? "VIP.home.openTerms()"
                 : INFO_T.includes(t) ? "VIP.home.spInfo('" + t + "')"
@@ -340,6 +340,8 @@ VIP.chat = (function () {
             if (wrapper) fragment.appendChild(wrapper);
         });
 
+        // #1042-x: saludo de entrada (local) al final de lo que ya hay
+        try { const g = VIP.home && VIP.home.spGreetMsg && VIP.home.spGreetMsg(); if (g) { VIP.state.processedMessageIds.add(g.id); const w = createMessageElement(g); if (w) fragment.appendChild(w); } } catch (_) {}
         container.innerHTML = '';
         container.appendChild(fragment);
         // #401: la presentación de Soporte (#supportIntro) desaparece cuando el cliente YA escribió en esta sesión del

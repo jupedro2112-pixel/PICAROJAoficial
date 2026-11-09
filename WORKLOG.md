@@ -8,6 +8,21 @@
 
 ## Sesión 2026-11-09
 
+### 1042-x. IA = Haiku 5.5 + a Soporte SÓLO por el botón + saludo al entrar + chat de 24 h + burbuja siempre nueva — PWA v689 / panel v259 (2026-11-09)
+- **Owner:** "si la gente quiere ir a soporte que no sea por la IA, que sea apretando el botón de abajo; que el bot dé la bienvenida, felicidades por su
+  premio, respuestas prolijas y sencillas" · "siempre que entro a la app abre el chat burbuja viejo la primera vez; cerrando y abriendo, el nuevo" ·
+  "que el chat después de un día se borre para el cliente, y siempre que entren a la app que diga: ¡Buenas, usuario! esperamos tu carga…".
+- `_supportBotRun`: todo handoff de la IA (no sabe, reclamo, pide persona, tope, IA caída) ⇒ `/sys_support_to_button` con botón `go_section
+  target:'problema'` (chat.js ⇒ `spInfo('problema')` ⇒ `supportQuick('problema')` ⇒ `_supportHandoffNow`) + nota interna `bot_to_button`. El bot
+  ya NO abre chats a una persona por su cuenta. Prompt: estilo prolijo/sencillo, bienvenida, felicitar premios.
+- Burbuja: ui.js `toggleCasinoChat` original delega en `VIP.home.casinoChatToggle` (el reemplazo se instalaba recién tras abrir el casino ⇒ el
+  primer toque abría la Carga rápida vieja).
+- Saludo LOCAL al entrar (`/sys_support_greet`, `{usuario}`; `/api/support/ui-mode` ⇒ `greet`; `VIP.home.spGreetMsg`, chat.js lo agrega al final
+  en `renderMessages`; no se guarda). Cliente ve sólo las últimas 24 h del chat (GET mensajes, no clásico); el panel ve todo.
+- Modelo:
+- **Owner:** "poné la IA más barata, ¿no sirve para esto?". Sirve: respuestas cortas con esquema fijo. `DEFAULT_MODEL` = `claude-haiku-5-5`, migración
+  UNA vez `mig1042xHaiku` (`$set` de `value.model`), Haiku primero en el selector. Se vuelve a Opus/Sonnet desde la tarjeta del bot. Costo en INICIO (#1042-w).
+
 ### 1042-w. INICIO: consumo de la IA día a día + "Tengo otro problema" ⇒ "Ya te paso con una persona" — panel v258 (2026-11-09)
 - **Owner:** "ahora quedó libre: poné en INICIO cuánto va consumiendo la IA día a día para ir midiendo" + "cuando la gente tiene otro problema que
   responda automáticamente 'Ya te paso con una persona del equipo, un segundo'".

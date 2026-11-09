@@ -787,7 +787,7 @@ document.addEventListener('change', function (ev) {
                         </div>
                         <label style="margin:0 0 8px;display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="sbEnabled" style="width:auto;"> <b>Bot encendido</b></label>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:12.5px;">
-                            <label>Modelo <select id="sbModel" style="width:auto;"><option value="claude-opus-5-5">Opus 5.5 (mejor criterio, ~US$0,01 por respuesta)</option><option value="claude-sonnet-5-5">Sonnet 5.5 (intermedio)</option><option value="claude-haiku-5-5">Haiku 5.5 (económico)</option></select></label>
+                            <label>Modelo <select id="sbModel" style="width:auto;"><option value="claude-haiku-5-5">Haiku 5.5 (el más barato, ~US$0,0003 por respuesta) — recomendado</option><option value="claude-opus-5-5">Opus 5.5 (mejor criterio, ~US$0,01 por respuesta)</option><option value="claude-sonnet-5-5">Sonnet 5.5 (intermedio)</option></select></label>
                             <label>Espera <input type="number" id="sbDelayMin" min="3" max="120" style="width:64px;"> a <input type="number" id="sbDelayMax" min="3" max="180" style="width:64px;"> s</label>
                             <label>Se calla tras un agente <input type="number" id="sbPause" min="0" max="72" style="width:56px;"> h</label>
                             <label>Respuestas de la IA antes de pasarlo a un agente <input type="number" id="sbAiMax" min="1" max="20" style="width:56px;"></label>
