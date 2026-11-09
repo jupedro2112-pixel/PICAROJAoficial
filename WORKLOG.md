@@ -8,6 +8,17 @@
 
 ## Sesión 2026-11-09
 
+### 1042-j. Retiros automáticos: ninguno queda colgado en "Pagos a confirmar" (2026-11-09)
+- **Owner (a partir de una consulta de un agente sobre dos retiros del mismo cliente):** "revisá que funcione todo el automático, eso de confirmar no debería pasar".
+- Revisado OK: pedir no descuenta fichas; el pedido nuevo reemplaza al anterior; sin freno se paga solo; al pagar (auto o a mano) se anulan los otros
+  pendientes del cliente (`_closeOtherPayouts`); banco con falla ⇒ reintento 6 veces; antifraude sin respuesta ⇒ re-chequeo.
+- **Hueco cerrado:** si la CLASIFICACIÓN del retiro tiraba error (base lenta, antifraude con excepción) el retiro quedaba `pending_review` con los
+  valores por defecto (ni `autoPay`, ni `reviewRequired`, ni `fraudRecheck`): no lo levantaba ningún cron, el cliente no recibía aviso y sólo salía si
+  alguien lo confirmaba. Ahora el catch lo manda al re-chequeo automático (`fraudRecheck`, antifraude incluido) + `_notifyWithdrawDelayed`, y
+  `_payoutFraudRecheckTick` barre los huérfanos (+5 min, 24 h, sin `paidBy` ni envío al banco). Test nuevo `scripts/test-payout-auto.js` 8/8.
+- Siguen yendo a una persona A PROPÓSITO: freno del antifraude, pago automático apagado / sin hgcash, 6 reintentos fallidos, y retiros con envío al
+  banco sin confirmar (nunca pagar dos).
+
 ### 1042-i. Titular, alias y CBU para copiar en el chat de Soporte — PWA v678 (2026-11-09)
 - **Owner:** "poné titular, alias y CBU abajo de cargar / retirar / reembolsos, para que puedan copiar directo, chiquito que no tape el chat".
 - `#spBank` dentro de `#spActBar` (3 renglones de 12 px): Titular · Alias [Copiar] · CBU [Copiar]. Dato: `VIP.autoload.ensureCbu()` (GET

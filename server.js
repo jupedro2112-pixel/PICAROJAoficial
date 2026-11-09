@@ -15238,7 +15238,13 @@ async function _withdrawalRequestHandler(req, res) {
         const pp = { id: _newPayoutId };
         if (pp) setImmediate(() => { _payPendingPayout(pp.id, PAYOUT_AUTO_ACTOR, getPublicBaseUrl()).then((o) => { logger.info(`[pay-review] pago AUTOMÁTICO $${amountNum} ${user.username} → ${o.code} ${JSON.stringify(o.body).slice(0, 160)}`); _payoutAutoFailNote(pp.id, o).catch(() => {}); }).catch((e) => logger.warn(`[pay-review] pago automático falló: ${e.message}`)); });
       }
-    } catch (e) { logger.warn(`[pay-review] no se pudo clasificar el retiro: ${e.message}`); }
+    } catch (e) {
+      // #1042-j: si la clasificación FALLA (base lenta, antifraude con error) el retiro quedaba en Pagos a confirmar sin pagarse solo, sin aviso
+      // y sin ningún reintento que lo levantara. Ahora va al re-chequeo automático (antifraude incluido, fail-closed) igual que cuando la API tarda.
+      logger.warn(`[pay-review] no se pudo clasificar el retiro: ${e.message} ⇒ re-chequeo automático`);
+      try { await PendingPayout.updateOne({ id: _newPayoutId, status: 'pending_review', autoPay: { $ne: true }, reviewRequired: { $ne: true } }, { $set: { fraudRecheck: { n: 0, at: new Date() } } }); } catch (_) {}
+      _notifyWithdrawDelayed(_newPayoutId).catch(() => {});
+    }
 
     // Meta CAPI — WithdrawRequest (señal de usuario activo / ganador).
     try {
@@ -24879,6 +24885,13 @@ app.post('/api/admin/api-failures/:id/bank-seen', authMiddleware, adminMiddlewar
 async function _payoutFraudRecheckTick() {
   try {
     if (!(await _cronClaim('payoutfraudrecheck', 150000))) return;
+    // #1042-j: barrido de retiros que quedaron SIN CLASIFICAR (ni automático, ni revisión, ni re-chequeo: falló la clasificación al pedirlos) ⇒
+    // entran al re-chequeo automático. Nunca toca uno que una persona agarró (paidBy) ni uno con envío al banco.
+    try {
+      await PendingPayout.updateMany({ status: 'pending_review', deductAtPay: true, reviewRequired: { $ne: true }, autoPay: { $ne: true }, fraudRecheck: null, paidBy: null,
+        hgTransactionId: null, hgTxId: null, debitConfirmed: { $ne: true }, createdAt: { $gte: new Date(Date.now() - 24 * 3600000) }, updatedAt: { $lt: new Date(Date.now() - 5 * 60000) } },
+      { $set: { fraudRecheck: { n: 0, at: new Date() } } });
+    } catch (_) {}
     const rows = await PendingPayout.find({ status: 'pending_review', reviewRequired: false, autoPay: false, 'fraudRecheck.at': { $ne: null }, createdAt: { $gte: new Date(Date.now() - 24 * 3600000) } }).limit(20).lean();
     if (!rows.length) return;
     const prCfg = await getPayoutReviewConfig();

@@ -403,6 +403,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `businessBoard.weeklyAnalysis`, test `scripts/test-business-board.js`): números, gente con señales de estafa, trabas, cómo va el proyecto y alertas. Sólo
   LEE. `_weeklyCloseTick` guarda cada lunes (06 h ART) el cierre de lunes a domingo en `Config['weeklyCloses']` (52, idempotente por `weekKey`); no borrarlo.
   `scripts/test-business-board.js`). Todo por agregaciones; un tipo de regalo nuevo ⇒ etiqueta en `GIFT_LABELS`.
+- **RETIRO SIN CLASIFICAR (#1042-j):** un error al clasificar un retiro lo manda al re-chequeo automático (`fraudRecheck`) y `_payoutFraudRecheckTick` barre los huérfanos; un paso NUEVO en la clasificación no puede dejar el retiro con los valores por defecto. Test `scripts/test-payout-auto.js`.
 - **RETIROS EN PROCESO (#1014):** Pagos a confirmar muestra también los `paying` de +10 min; para esos sólo se CONSULTA al banco (nunca pagar/rechazar: hg puede haberlo enviado).
 - **UN RETIRO POR CLIENTE (#1008):** pagar un retiro llama `_closeOtherPayouts` (anula los otros pendientes seguros del cliente); un flujo nuevo
   que marque un retiro pagado tiene que llamarla. Pagos a confirmar muestra una tarjeta por cliente.
