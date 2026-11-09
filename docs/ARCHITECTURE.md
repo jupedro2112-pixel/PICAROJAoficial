@@ -1971,5 +1971,5 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 
 ### Bot de soporte y la burbuja de Girox (#1042-m/n)
 - La burbuja del casino muda `#supportPanel` a `#casinoOverlay` como tarjeta flotante (estilo nuevo scopeado a `.sp-in-casino`); Soporte normal sin cambios.
-- Panel: con el bot activo, la sección **Soporte** (`/api/admin/support/conversations`) lista sólo lo que necesita una persona (handoff del bot, chat
-  ya atendido por el equipo, reclamo sin respuesta del bot en 3 min); todo lo que contesta la IA se ve en **Chat completo**. Mismo canal `support`.
+- Panel: con el bot activo, la sección **Soporte** (`/api/admin/support/conversations`) lista todo, pero ABIERTO sólo lo que necesita una persona (handoff del bot,
+  chat ya atendido por el equipo, reclamo sin respuesta del bot en 3 min); lo que resolvió la IA queda en Cerrados con "🤖 IA" (y en **Chat completo**). Mismo canal `support`.

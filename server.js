@@ -24283,10 +24283,11 @@ async function _supportConversationsBuild() {
     // cuánto falta apostar (ya contestada sola y explicada en Retirar premio) no ocupa Soporte; un retiro que NO LLEGÓ o un descuento sí.
     rows.forEach((r) => { r._needs = (r.userTextList || []).some(_supportNeedsHuman); });
     let _rows = rows.filter((r) => r._needs);
-    // #1042-n (owner): "lo que atiende la IA que figure en el Chat completo; si tiene que responder un agente, que se abra en Soporte". Con el bot
-    // encendido, Soporte muestra SÓLO: chats que el bot pasó a un agente (nota bot_handoff), chats donde ya escribe una persona del equipo, o
-    // reclamos que el BOT no contestó (sólo la respuesta fija o nada) hace 3+ min y el cliente no está silenciado. El resto lo ve el
-    // Chat completo (es el mismo chat: lo que escriba el agente le llega al cliente igual, también en la burbuja de Girox).
+    // #1042-n (owner): "se tiene que ver en Soporte, pero se tiene que ABRIR solamente si el cliente necesita un agente". Con el bot encendido
+    // Soporte muestra TODOS los chats donde el cliente escribió, pero ABIERTOS sólo: los que el bot pasó a un agente (nota bot_handoff), los que ya
+    // atiende una persona del equipo, o reclamos que el BOT no contestó (sólo la respuesta fija o nada) hace 3+ min sin estar silenciado. Lo que
+    // resolvió la IA queda CERRADO (se ve igual y, si el cliente vuelve a escribir algo que necesita un agente, se abre). Mismo chat (canal support):
+    // lo que escriba el agente le llega al cliente igual, también en la burbuja de Girox.
     try {
       const bc = await getSupportBotConfig();
       if (bc.enabled && !bc.classic && rows.length) {
@@ -24302,13 +24303,14 @@ async function _supportConversationsBuild() {
         const mp = (arr) => new Map(arr.map((x) => [x._id, x.at]));
         const H = mp(ho), A = mp(human), B = mp(answered), L = mp(lastU), M = new Set(mutes.map((x) => x._id));
         const grace = Date.now() - 3 * 60000;
-        _rows = rows.filter((r) => {
-          if (H.has(r.userId) || A.has(r.userId)) return true; // pasado a un agente / ya lo atiende una persona (aunque sea una consulta simple)
-          if (!r._needs) return false;
-          const lu = L.get(r.userId); if (!lu || M.has(r.userId)) return false;
+        const needsAgent = (r) => {
+          if (H.has(r.userId) || A.has(r.userId)) return true; // pasado a un agente / ya lo atiende una persona
+          if (!r._needs || M.has(r.userId)) return false;
+          const lu = L.get(r.userId); if (!lu) return false;
           const ans = B.get(r.userId);
           return new Date(lu).getTime() < grace && !(ans && new Date(ans) >= new Date(lu));
-        });
+        };
+        _rows = rows.map((r) => { if (!needsAgent(r)) { r.closed = true; r.botHandled = true; } return r; });
       }
     } catch (e) { logger.warn(`[support] filtro del bot: ${e.message}`); }
     _rows = _rows.map((r) => { delete r.userTextList; delete r._needs; return r; });

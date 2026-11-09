@@ -159,7 +159,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
   { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); assert.ok(/#supportPanel:not\(\.sp-in-casino\) \.sp-actbar \{ display: none !important; \}/.test(C2) && !/^body:not\(\.sp-classic\) #supportPanel /m.test(C2), 'lo nuevo sólo en la burbuja; Soporte como antes'); }
-  assert.ok(/#1042-n[\s\S]{0,2500}if \(H\.has\(r\.userId\) \|\| A\.has\(r\.userId\)\) return true;/.test(S), 'Soporte del panel: sólo lo pasado a un agente / atendido por una persona / sin respuesta');
+  assert.ok(/#1042-n[\s\S]{0,2500}if \(H\.has\(r\.userId\) \|\| A\.has\(r\.userId\)\) return true;[\s\S]{0,600}if \(!needsAgent\(r\)\) \{ r\.closed = true; r\.botHandled = true; \}/.test(S), 'Soporte: todo se ve, abierto sólo si necesita un agente');
   assert.ok(/if \(mode !== 'play'\) \{ try \{ if \(document\.body\.classList\.contains\('ev-expanded'\)\)/.test(H), 'al cambiar de menú se suelta el bloqueo de scroll');
   assert.ok(/return c\.enabled && !c\.classic && \(supportBot\.isAvailable\(\) \|\| c\.learnedOnly\);/.test(S) && /cfg\.classic \|\| \(!supportBot\.isAvailable\(\) && !cfg\.learnedOnly\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));

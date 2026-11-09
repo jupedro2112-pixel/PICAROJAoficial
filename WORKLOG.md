@@ -13,9 +13,12 @@
   admin para recolectar todos los chats de la IA; si tiene que responder un agente, que se abra en Soporte, que él va a estar atento ahí".
 - Es el MISMO chat (canal support): lo que el agente escribe desde Chat completo o Soporte le llega al cliente en la burbuja. Los chats que atiende
   la IA se ven en **Chat completo**.
-- `_supportConversationsBuild` (con bot encendido y sin Chat clásico): Soporte muestra sólo chats con nota `bot_handoff`, chats donde ya escribió una
-  persona del equipo, o reclamos (`_supportNeedsHuman`) que el bot no contestó hace 3+ min (IA caída / primera respuesta fija) y sin silenciar.
-  Bot apagado / clásico ⇒ igual que antes.
+- **Owner (2ª parte):** "se tiene que ver en Soporte pero se tiene que abrir solamente si el cliente necesita un agente; la IA tiene que sacar
+  respuestas claras y básicas sin volver loco a la gente".
+- `_supportConversationsBuild` (bot encendido, sin Chat clásico): Soporte lista TODOS los chats donde el cliente escribió; quedan ABIERTOS sólo los
+  que tienen nota `bot_handoff`, los que ya atiende una persona del equipo, o reclamos (`_supportNeedsHuman`) que el bot no contestó hace 3+ min
+  (IA caída / sólo la respuesta fija) sin silenciar. El resto va a 🔒 Cerrados con la marca "🤖 IA" (`botHandled`). Bot apagado ⇒ igual que antes.
+- Prompt: una sola idea por mensaje / sólo el próximo paso, sin palabras técnicas (rollover…), sin inventar datos (si duda ⇒ handoff).
 - PWA: jugando con el chat de la burbuja cerrado, una respuesta de Soporte pone el número en la burbuja (`casinoChatBadge`) + aviso "Te respondió
   Soporte"; al abrirla se limpia.
 
