@@ -3258,3 +3258,5 @@ body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctS
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .tn-btn:not(#ctTelegram):not(#ctStories):not(#ctSupport) { order: 5; }
 /* #1042-t: en el chat de la burbuja (ya está adentro del juego) no hace falta el botón "Jugar ahora" del mensaje de carga. */
 #casinoOverlay > #supportPanel.sp-in-casino .plat-play-now[onclick^="VIP.home.playNow"] { display: none !important; }
+/* #1042-u: "Tengo otro problema" (va directo a un agente) se distingue del resto */
+#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar .sp-ib-help { border-color: var(--p-red, #e60023) !important; color: var(--p-red, #e60023) !important; }

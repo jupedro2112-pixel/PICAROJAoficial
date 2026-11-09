@@ -8,6 +8,18 @@
 
 ## Sesión 2026-11-09
 
+### 1042-u. TODO CON BOTONES: la IA una sola vez, "Tengo otro problema" directo a un agente, aprende de los agentes — PWA v688 (2026-11-09)
+- **Owner:** "que cualquier otra duda aprete alguna de las opciones y que la IA no actúe mucho; que sea el bot si aprieta un botón; que aprenda de lo
+  que preguntan en Soporte y responden en el admin; si no sabe responder, directo el agente; agregá abajo 'Tengo otro problema'; que la IA responda 1
+  mensaje nomás: el de bienvenida y después todo con botones y respuestas sencillas; si no entienden un botón y preguntan, simplificado cómo funciona".
+- `aiMaxReplies` default 1 + migración UNA vez (`mig1042uAiOne`, `$set` del campo): la IA contesta una vez por charla (lo aprendido aprobado NO cuenta,
+  `metadata.learned`); a la siguiente ⇒ agente. Prompt: explicar simple el botón que pregunta y decir cuál tocar; lo demás ⇒ "tocá una opción" o
+  handoff; nunca adivinar.
+- Botón `🆘 Tengo otro problema` (fila de la burbuja, `supportQuick('problema')`; `SUPPORT_QUICK_KINDS` + 'problema') ⇒ `_supportQuickReply`
+  manda `/sys_support_problem` y `_supportHandoffNow` (chat abierto + nota bot_handoff; la IA se corre). En Soporte cuenta como texto del cliente.
+- `_supportLearnFromAgent` (REST y socket, sólo staff, texto): respuesta del agente + último texto del cliente (< 30 min, no reclamo, no chip) ⇒
+  `_supportLearnSave` como PARA APROBAR en "Responder para IA". Nunca se usa sin aprobación (puede tener datos de ese cliente).
+
 ### 1042-t. Carga / retiro / pago ESCRITOS en el chat de la burbuja (sin carteles) — PWA v687 (2026-11-09)
 - **Owner:** "una vez que se realiza la carga, en este nuevo chat que sea todo ahí escrito: ¡buena suerte!; cuando quieran retirar 'en breve ya sale su
   pago'; cuando se paga 'pago realizado con éxito'; todo lo que antes eran carteles ahora en el chat de la burbuja, excepto el cartel de cómo

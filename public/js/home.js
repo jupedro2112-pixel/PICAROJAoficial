@@ -823,7 +823,7 @@
         } catch (_) {}
     }
     // #384 (owner): los chips MANDAN el mensaje solos. 'cargar' / 'retirar' reciben respuesta automática con botón al sector.
-    const SUPPORT_QUICK_TEXT = { carga: '💳 Tengo un problema con una carga', retiro: '💸 Tengo un problema con un retiro', reembolso: '🎁 Tengo un problema con un reembolso', bono: '🎰 Tengo un problema con el bono', otro: '❓ Tengo un problema con otra cosa', cargar: '💳 Quiero hacer una carga', retirar: '💸 Quiero retirar mi premio' }; // #602 soporte de problemas
+    const SUPPORT_QUICK_TEXT = { carga: '💳 Tengo un problema con una carga', retiro: '💸 Tengo un problema con un retiro', reembolso: '🎁 Tengo un problema con un reembolso', bono: '🎰 Tengo un problema con el bono', otro: '❓ Tengo un problema con otra cosa', problema: '🆘 Tengo otro problema', cargar: '💳 Quiero hacer una carga', retirar: '💸 Quiero retirar mi premio' }; // #602 soporte de problemas
     function supportQuick(kind) {
         try {
             const k = SUPPORT_QUICK_TEXT[kind] ? kind : 'otro';

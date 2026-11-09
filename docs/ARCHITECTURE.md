@@ -1981,3 +1981,5 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   panel sin filtro y `/api/public/menu-layout` con el menú de antes (`menusEnabledBefore1042r`). Fila de servicio `#spInfoBar` adentro de `#spActBar` (arriba).
 - **Avisos escritos en el chat (#1042-t):** sin Modo normal, carga acreditada (+ `/sys_deposit_luck`), retiro pedido (`/sys_withdraw_chat`) y pagado
   (`/sys_payout_done_chat`) son mensajes del chat; con Girox abierto la app no muestra los carteles de antes y abre el chat de la burbuja.
+- **Todo con botones (#1042-u):** IA una vez por charla (`aiMaxReplies` 1), botón "Tengo otro problema" ⇒ agente (`_supportHandoffNow`), respuestas
+  de los agentes ⇒ "Responder para IA" para aprobar (`_supportLearnFromAgent`).

@@ -9580,6 +9580,7 @@ app.post('/api/messages/send', authMiddleware, async (req, res) => {
       // Admin enviando mensaje - notificar al usuario
       // SLA: respuesta de texto del agente — resolver el reloj de demora (fire-and-forget).
       delayClockResolve(req.body.receiverId, { responded: true, agentId: req.user.userId, agentUsername: req.user.username, via: 'message', queueHint: roleQueueHint(req.user.role) }).catch(() => {});
+      if (SUPPORT_ROLES.includes(req.user.role) && (req.body.type || 'text') === 'text') _supportLearnFromAgent(req.body.receiverId, req.body.content).catch(() => {}); // #1042-u: aprende de la respuesta del agente (para aprobar)
       const userSocket = connectedUsers.get(req.body.receiverId);
       const deliveredViaSocket = !!userSocket;
       if (userSocket) {
@@ -12608,6 +12609,7 @@ io.on('connection', (socket) => {
         setTimeout(() => { _supportQuickReply(socket.userId, socket.username, _spQuick, content); }, 1200); // #383/#384 · #702: + texto
       } else {
         // Admin/depositor/withdrawer enviando mensaje - notificar al usuario específico
+        try { if (SUPPORT_ROLES.includes(socket.role) && (!type || type === 'text')) _supportLearnFromAgent(receiverId, content).catch(() => {}); } catch (_) {} // #1042-u
         logger.debug(`[SEND_MESSAGE] Looking up socket for user ${receiverId}`);
 
         // CORREGIDO: Múltiples canales de entrega para asegurar que llegue
@@ -13607,6 +13609,14 @@ async function initializeData() {
         if (r && r.modifiedCount) console.log('✅ /sys_recover_100 vaciado (#1029): prometía otro % en la próxima carga después de cada carga');
       }
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
+    // #1042-u (owner 2026-11-09): "la IA responde 1 mensaje nomás" ⇒ UNA vez, aiMaxReplies = 1 (campo puntual, nunca leer→mezclar→guardar).
+    try {
+      if (!(await getConfig('mig1042uAiOne', null))) {
+        await Config.collection.updateOne({ key: 'supportBot' }, { $set: { 'value.aiMaxReplies': 1 } });
+        await Config.set('mig1042uAiOne', new Date().toISOString(), 'startup-migration');
+        console.log('✅ Bot: la IA responde 1 vez y después pasa a un agente (#1042-u)');
+      }
+    } catch (e) { console.warn('[startup-migration] IA una vez #1042-u:', e.message); }
     // #1042-r (owner 2026-11-09): "dejá activado el menú Girox por ahora" ⇒ UNA vez, sólo Girox (todo en uno). Después se cambia desde el panel
     // (Configuración → bot → 📱 Menú de la app, o Elegir menú) y esta migración no lo vuelve a tocar.
     try {
@@ -14517,6 +14527,12 @@ async function initializeData() {
       description: 'CHAT NUEVO (#1042-t, sin "Modo normal"): mensaje en el chat cuando el retiro se PAGÓ (reemplaza a /sys_payout_paid). Variables: ${amount}. Si lo dejás vacío, se usa /sys_payout_paid.',
       type: 'message',
       response: '✅ ¡Pago realizado con éxito! Te enviamos ${amount} a tu cuenta 💸'
+    },
+    {
+      name: '/sys_support_problem',
+      description: 'CHAT NUEVO (#1042-u): respuesta cuando el cliente toca "🆘 Tengo otro problema" (el chat pasa directo a un agente en Soporte). Sin variables. Vacío = no se manda nada (igual pasa al agente).',
+      type: 'message',
+      response: 'Contame qué pasó en un mensaje y en breve te responde alguien del equipo 🙌'
     },
     {
       name: '/sys_deposit_luck',
@@ -15588,7 +15604,8 @@ const SUPPORT_AUTOREPLY_DEFAULT = '🙌 Contame qué necesitás, ya estamos con 
 // con un botón que lleva al sector. Texto editable ({min} = carga mínima, {retiro_min} = retiro mínimo).
 const SUPPORT_QUICK_CARGAR_DEFAULT = '⚡ Las cargas son 100% automáticas: transferís al CBU, mandás la foto del comprobante y se acredita sola en minutos (carga mínima {min}). Tocá el botón y te llevo a la carga automática. Si ya la hiciste y algo falló, contame acá y lo reviso.';
 const SUPPORT_QUICK_RETIRAR_DEFAULT = '💸 Los retiros también son automáticos: en "Retirar premio" completás tus datos, confirmás con el código SMS y se paga solo a tu CBU (retiro mínimo {retiro_min}). Tocá el botón para ir. Si ya lo pediste y tenés dudas, contame acá.';
-const SUPPORT_QUICK_KINDS = ['cargar', 'retirar', 'otro', 'carga', 'retiro', 'reembolso', 'bono']; // #602: temas del soporte de problemas · #715: + bono
+const SUPPORT_QUICK_KINDS = ['cargar', 'retirar', 'otro', 'carga', 'retiro', 'reembolso', 'bono', 'problema']; // #1042-u: + 'Tengo otro problema' (directo a un agente)
+// // #602: temas del soporte de problemas · #715: + bono
 // #702 (owner 2026-10-21): respuestas automáticas POR TEMA en Soporte. "Con una carga": avisar de antemano la carga mínima y pedir
 // captura si cargó menos (para ver el reintegro). "Con un retiro": el retiro mínimo. "Con un reembolso": botón a la info del
 // reembolso. "Otra cosa": "si tenés un problema, detallanos tu problema" + Bases y condiciones (se abren dentro de la app).
@@ -15628,6 +15645,13 @@ function _supportTopicFromText(text) {
 }
 async function _supportQuickReply(userId, username, quick, text) {
   try {
+    // #1042-u (owner): botón "Tengo otro problema" ⇒ DIRECTO a un agente (chat abierto en Soporte) + aviso corto al cliente; la IA no se mete.
+    if (quick === 'problema') {
+      const t = await renderSystemCommand('/sys_support_problem', 'Contame qué pasó en un mensaje y en breve te responde alguien del equipo 🙌', {});
+      if (t) await _sendUserSystemMessage({ id: userId, username }, t, { metadata: { channel: 'support', topic: 'problema' } });
+      await _supportHandoffNow(userId, username, 'tocó "Tengo otro problema"');
+      return;
+    }
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
     const u = { id: userId, username };
     if (quick === 'cargar' || quick === 'retirar') {
@@ -15729,7 +15753,33 @@ async function _supportAutoReply(userId, username) {
 // sale la respuesta automática de siempre. Config['supportBot'] (panel → Configuración → 🤖 Bot de soporte).
 // ════════════════════════════════════════════════════════════════════════════
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
-const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 4, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
+const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 1, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
+// #1042-u: pasa el chat a un agente YA (chat ABIERTO en Soporte + nota interna); el bot se corre `handoffPauseMin` (busca la nota bot_handoff).
+async function _supportHandoffNow(userId, username, reason) {
+  try { await ChatStatus.updateOne({ userId }, { $set: { userId, username, status: 'open', closedAt: null, closedBy: null, lastMessageAt: new Date() } }, { upsert: true }); } catch (_) {}
+  try {
+    const note = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: userId, receiverRole: 'user',
+      content: `🤖➡️👤 PASA A UN AGENTE: ${reason}. Respondé acá (mientras escribas, el bot no contesta en este chat).`,
+      type: 'system', adminOnly: true, metadata: { kind: 'bot_handoff', reason }, timestamp: new Date(), read: false });
+    io.to(`chat_${userId}`).emit('new_message', note);
+    notifyAdmins('new_message', { message: note, userId, username });
+    notifyAdmins('chat_reopened', { userId, username, by: 'bot' });
+  } catch (_) {}
+  try { _supportBotStat('handoffs'); } catch (_) {}
+}
+// #1042-u (owner): "que aprenda de lo que preguntan en Soporte y responden en el admin": cuando una PERSONA del equipo contesta con texto a una
+// pregunta del cliente (su último texto, hace < 30 min, que no sea un reclamo), se guarda pregunta + respuesta en "Responder para IA" como PARA APROBAR.
+// Nunca se usa sin que el admin la apruebe (la respuesta del agente puede tener datos de ESE cliente). Mismos filtros que lo de la IA (learnIsSafe).
+async function _supportLearnFromAgent(userId, agentText) {
+  try {
+    const a = String(agentText || '').trim(); if (a.length < 8 || a.length > 600 || a.startsWith('/')) return;
+    const cfg = await getSupportBotConfig(); if (!cfg.enabled || cfg.classic) return;
+    const q = await Message.findOne({ senderId: userId, senderRole: 'user', type: 'text', timestamp: { $gte: new Date(Date.now() - 30 * 60000) } }).sort({ timestamp: -1 }).select('content metadata').lean();
+    if (!q || (q.metadata && q.metadata.quick)) return;
+    const qt = String(q.content || '').trim(); if (qt.length < 6 || qt.length > 300 || supportBot.COMPLAINT_RE.test(qt)) return;
+    await _supportLearnSave(qt, qt, a, cfg, userId);
+  } catch (e) { logger.warn(`[support-bot] aprender del agente: ${e.message}`); }
+}
 // #1042-t (owner): con el chat NUEVO (sin "Modo normal / chat clásico") lo que antes eran carteles va ESCRITO en el chat: carga acreditada + "¡Buena
 // suerte!", retiro pedido ("en breve ya sale tu pago") y retiro pagado ("pago realizado con éxito"). Con Modo normal, los textos de siempre.
 async function _spNewChat() { try { return !(await getSupportBotConfig()).classic; } catch (_) { return false; } }
@@ -15872,9 +15922,9 @@ async function _supportBotRun(userId, username, token, t0) {
   try {
     // Escalón 3: ya le respondió la IA `aiMaxReplies` veces en esta charla (2 h) y sigue escribiendo ⇒ a un agente, sin dar más vueltas.
     const since = new Date(Math.max(Date.now() - 2 * 3600 * 1000, u.supportSessionSince ? new Date(u.supportSessionSince).getTime() : 0));
-    const aiReplies = await Message.countDocuments({ receiverId: userId, senderId: 'support-bot', 'metadata.kind': { $ne: 'bot_after_deposit' }, timestamp: { $gte: since } });
+    const aiReplies = await Message.countDocuments({ receiverId: userId, senderId: 'support-bot', 'metadata.kind': { $ne: 'bot_after_deposit' }, 'metadata.learned': { $ne: true }, timestamp: { $gte: since } }); // #1042-u: lo aprendido no cuenta
     if (aiReplies >= cfg.aiMaxReplies) {
-      r = { ok: true, reply: 'Para que no des más vueltas, te paso con alguien del equipo que te lo resuelve 🙌', handoff: true, handoffReason: `siguió con dudas después de ${aiReplies} respuestas de la IA` };
+      r = { ok: true, reply: 'Te paso con alguien del equipo que te lo resuelve 🙌', handoff: true, handoffReason: `siguió con dudas después de ${aiReplies} respuesta(s) de la IA` };
     } else {
       // #1042-g: primero lo APRENDIDO (aprobado en el panel), sin IA. Reclamos / plata trabada nunca (bestLearned los descarta).
       const hit = supportBot.bestLearned(String(lastUser.content || ''), await _supportLearnedApproved());
@@ -15933,7 +15983,7 @@ async function _supportBotRun(userId, username, token, t0) {
       content: reply, type: 'text', channel: 'support', timestamp: new Date(), read: false,
       // Si habla del comprobante, va con el botón "Adjuntar comprobante": abre la GUÍA de 3 pasos (#1030, VIP.autoload.sendReceipt ⇒ pickReceipt), nunca el selector directo.
       // #1042-p (owner): botón de INFO del tema que preguntó (la IA elige info_topic); con Girox abierto se abre adentro del casino.
-      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, _sbInfoButton(r, reply)) });
+      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, r.learnedId ? { learned: true } : {}, _sbInfoButton(r, reply)) });
     io.to(`user_${userId}`).emit('new_message', message);
     io.to(`chat_${userId}`).emit('new_message', message);
     notifyAdmins('new_message', { message, userId, username });
@@ -24325,8 +24375,8 @@ async function _supportConversationsBuild() {
         lastUserAt: { $max: { $cond: [{ $eq: ['$senderRole', 'user'] }, '$timestamp', null] } }, // #905
         // #898 (owner): "en Soporte que se vean sólo los chats de la gente que se queja": cuenta los TEXTOS que escribió el cliente
         // #900: los temas rápidos (chips "Con un retiro"…) ya tienen respuesta automática: no cuentan como queja
-        userTexts: { $sum: { $cond: [{ $and: [{ $eq: ['$senderRole', 'user'] }, { $eq: ['$type', 'text'] }, { $not: [{ $ifNull: ['$metadata.quick', false] }] }] }, 1, 0] } },
-        userTextList: { $push: { $cond: [{ $and: [{ $eq: ['$senderRole', 'user'] }, { $eq: ['$type', 'text'] }, { $not: [{ $ifNull: ['$metadata.quick', false] }] }] }, '$content', '$$REMOVE'] } }
+        userTexts: { $sum: { $cond: [{ $and: [{ $eq: ['$senderRole', 'user'] }, { $eq: ['$type', 'text'] }, { $or: [{ $not: [{ $ifNull: ['$metadata.quick', false] }] }, { $eq: ['$metadata.quick', 'problema'] }] }] }, 1, 0] } },
+        userTextList: { $push: { $cond: [{ $and: [{ $eq: ['$senderRole', 'user'] }, { $eq: ['$type', 'text'] }, { $or: [{ $not: [{ $ifNull: ['$metadata.quick', false] }] }, { $eq: ['$metadata.quick', 'problema'] }] }] }, '$content', '$$REMOVE'] } }
       } },
       // Sólo conversaciones donde el cliente ESCRIBIÓ algo: los avisos automáticos (comprobante ilegible, retiro procesado…) y las fotos de
       // comprobantes solas los resuelve el sistema (y Cargas pendientes) y no ocupan Soporte.

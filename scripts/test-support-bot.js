@@ -164,6 +164,8 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
     assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');
+    assert.ok(/if \(quick === 'problema'\) \{[\s\S]{0,400}await _supportHandoffNow\(/.test(S) && I3.includes("VIP.home.supportQuick('problema')"), 'Tengo otro problema ⇒ directo a un agente');
+    assert.ok((S.match(/_supportLearnFromAgent\(/g) || []).length >= 3 && /'metadata\.learned': \{ \$ne: true \}/.test(S) && /aiMaxReplies: 1, classic:/.test(S) && /mig1042uAiOne/.test(S), 'aprende del agente; la IA una sola vez (lo aprendido no cuenta)');
     assert.ok((S.match(/await _depositLuck\(/g) || []).length === 2 && /'\/sys_withdraw_chat'/.test(S) && /'\/sys_payout_done_chat'/.test(S), 'chat nuevo: carga con buena suerte, retiro pedido y pagado escritos');
     assert.ok(/if \(spNewCasino\(\)\) \{ try \{ toggleCasinoLoad\(false\); \} catch \(_\) \{\} spShowChat\(\); return; \}/.test(H) && /if \(spNewCasino\(\)\) \{ spShowChat\(\); return; \}/.test(H), 'chat nuevo: sin carteles de carga ni de retiro');
     assert.ok(/function spNewCasino\(\) \{ return _casinoIsOpen\(\) && !document\.body\.classList\.contains\('sp-classic'\); \}/.test(H), 'con Modo normal, los carteles de siempre');
