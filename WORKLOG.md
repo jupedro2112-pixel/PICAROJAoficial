@@ -8,6 +8,16 @@
 
 ## Sesión 2026-11-09
 
+### 1042-d. Bot en TRES ESCALONES + cortar charla fuera de tema (2026-11-09)
+- **Owner:** "respuestas sencillas, que la gente no se pierda, lo más importante es a lo que va: a jugar. Si no entiende, primero el bot, si no
+  puede entra la IA y después de la IA lo derivás a soporte" + "si preguntan cosas que no tienen nada que ver con el servicio, cortamos la charla".
+- `_supportQuickReply` (texto libre, bot activo): 1) tema detectado (`_supportTopicFromText`) y no contestado en 2 h ⇒ respuesta FIJA de siempre
+  (`_supportCannedReply`); 2) sin tema o mismo tema otra vez (no entendió) ⇒ IA; 3) `aiReplies >= Config['supportBot'].aiMaxReplies` (4, panel;
+  cuenta mensajes del bot en la charla sin los post-carga) ⇒ handoff directo a un agente. Prompt: "la gente viene a JUGAR", explicar más simple con
+  qué botón tocar, MAPA DE LA APP, y cuántas veces ya respondió.
+- Fuera de tema ⇒ una frase de cierre + `ignore` (silencio `muteHours`); silenciado ⇒ tampoco recibe la respuesta fija por palabras (los
+  botones de tema sí responden). Plata / reclamos / juego problemático / menores nunca se silencian (handoff).
+
 ### 1042-c. Botón "↩️ Chat clásico" — PWA v676, admin SW v250 (2026-11-09)
 - **Owner:** "un botón para que, si quiero, el chat figure como estaba antes de la actualización, sin IA y sin modificaciones".
 - `Config['supportBot'].classic` (panel → Configuración → 🆕 NUEVO → 🤖, primer tilde). Encendido ⇒ `_supportBotActive()` false (ni respuestas ni

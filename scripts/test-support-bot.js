@@ -48,7 +48,7 @@ caso('Prompt: fijo cacheado primero; datos del servicio y del cliente (etapa sin
   assert.ok(/ETAPA: sin carga/.test(dyn)); assert.ok(/Califica para el bono de primera carga \(100%\)/.test(dyn)); assert.ok(/\$5\.000 en fichas/.test(dyn));
   assert.ok(/TU NOMBRE EN ESTE TURNO: Sofía/.test(dyn)); assert.ok(/referidos está pausado/.test(dyn));
   const fixed = b.system[0].text;
-  assert.ok(/BIEN RESUMIDO/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /sin negarlo ni hacerte pasar/.test(fixed) && /Soy Tati, la asistente virtual/.test(fixed) && /Juego responsable/.test(fixed));
+  assert.ok(/NO tienen nada que ver con el servicio/.test(fixed) && /la gente viene a JUGAR/.test(fixed) && /MAPA DE LA APP/.test(fixed)); assert.ok(/BIEN RESUMIDO/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /sin negarlo ni hacerte pasar/.test(fixed) && /Soy Tati, la asistente virtual/.test(fixed) && /Juego responsable/.test(fixed));
 });
 caso('Cliente sin bono de bienvenida: el prompt dice que NO se lo ofrezca', async () => {
   nextResp = okResp({ reply: 'ok', handoff: false, handoff_reason: '' });
@@ -71,10 +71,12 @@ caso('Handoff: la IA marca que lo tome una persona (carga trabada) ⇒ reply + h
   const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'cargue 5000 y no me llego' }] });
   assert.ok(r.ok && r.handoff); assert.strictEqual(r.handoffReason, 'carga de $5.000 no acreditada');
 });
-caso('Molesta ⇒ ignore: sin texto para el cliente; si además hay que pasarlo a una persona, gana el handoff', async () => {
+caso('Molesta o fuera de tema ⇒ ignore (a lo sumo una frase de cierre); si además hay que pasarlo a una persona, gana el handoff', async () => {
   nextResp = okResp({ reply: 'chau', handoff: false, handoff_reason: '', ignore: true });
   let r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'jajaja tonto' }] });
-  assert.ok(r.ok && r.ignore); assert.strictEqual(r.reply, '');
+  assert.ok(r.ok && r.ignore); assert.strictEqual(r.reply, 'chau');
+  nextResp = okResp({ reply: '', handoff: false, handoff_reason: '', ignore: true });
+  r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'jajaja' }] }); assert.ok(r.ok && r.ignore && r.reply === '');
   nextResp = okResp({ reply: 'Lo paso al equipo.', handoff: true, handoff_reason: 'reclamo de retiro', ignore: true });
   r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'devolveme la plata' }] });
   assert.ok(r.ok && r.handoff && !r.ignore && r.reply);
@@ -101,10 +103,13 @@ caso('Sin ANTHROPIC_API_KEY: isAvailable false y no llama', async () => {
 });
 caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por mensaje, sólo texto, chips con respuesta fija, sin 502) + adjuntar siempre por la guía', async () => {
   const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-  assert.ok(/if \(!explicit && await _supportBotActive\(\)\) \{ _supportBotSchedule\(userId, username\); return; \}/.test(S), 'texto libre ⇒ bot; chips ⇒ respuesta fija');
   assert.ok(/'metadata\.bot': \{ \$ne: true \}/.test(S), 'la pausa cuenta sólo personas, no al bot');
   assert.ok(/support_bot_claims'\)\.insertOne\(\{ _id: lastUser\.id/.test(S), 'una respuesta por mensaje (multi-instancia)');
   assert.ok(/lastUser\.type !== 'text'/.test(S), 'imágenes (comprobantes) no las contesta el bot');
+  // #1042-d: tres escalones — tema detectado y no contestado ⇒ respuesta simple; si no ⇒ IA; tope de respuestas de la IA ⇒ agente
+  const qr = S.slice(S.indexOf('async function _supportQuickReply'), S.indexOf('async function _supportCannedReply'));
+  assert.ok(qr.indexOf('const topic = _supportTopicFromText(text)') > -1 && qr.indexOf("return _supportCannedReply(userId, username, quick, text, false); // escalón 1") < qr.indexOf('_supportBotSchedule(userId, username); return; // escalón 2'), 'escalón 1 antes que la IA');
+  assert.ok(/if \(aiReplies >= cfg\.aiMaxReplies\) \{\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'escalón 3: tope ⇒ agente');
   assert.ok(/return c\.enabled && !c\.classic;/.test(S) && /cfg\.classic \|\| !supportBot\.isAvailable\(\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
   assert.ok(!/^#supportPanel|^\.sp-acts|^\.sp-actbar/m.test(blk) && /body\.sp-classic \.sp-actbar \{ display: none/.test(blk), 'chat clásico: nada del diseño nuevo aplica');

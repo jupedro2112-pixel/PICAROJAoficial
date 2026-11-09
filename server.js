@@ -5778,7 +5778,7 @@ app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, 
     if (b.classic != null) next.classic = b.classic === true;
     if (typeof b.model === 'string' && /^claude-[a-z0-9.-]{3,40}$/.test(b.model)) next.model = b.model;
     if (['low', 'medium', 'high'].includes(b.effort)) next.effort = b.effort;
-    for (const k of ['delayMinSec', 'delayMaxSec', 'pauseHours', 'handoffPauseMin', 'muteHours']) if (b[k] != null && Number.isFinite(Number(b[k]))) next[k] = Number(b[k]);
+    for (const k of ['delayMinSec', 'delayMaxSec', 'pauseHours', 'handoffPauseMin', 'muteHours', 'aiMaxReplies']) if (b[k] != null && Number.isFinite(Number(b[k]))) next[k] = Number(b[k]);
     if (typeof b.extraInfo === 'string') next.extraInfo = b.extraInfo.slice(0, 4000);
     await Config.set('supportBot', next, req.user.username);
     _sbFactsCache = { at: 0, v: null };
@@ -15559,7 +15559,17 @@ async function _supportQuickReply(userId, username, quick, text) {
     const explicit = ['carga', 'retiro', 'reembolso', 'otro', 'bono'].includes(quick);
     // #1042: con el BOT de IA activo, el texto libre lo contesta el bot (los botones de tema siguen con su respuesta fija). Si la IA
     // falla, el bot cae a la respuesta automática de siempre (`_supportCannedReply`).
-    if (!explicit && await _supportBotActive()) { _supportBotSchedule(userId, username); return; }
+    // #1042-d (owner): TRES ESCALONES — 1) bot SIMPLE (respuestas fijas cortas por tema); 2) si no hay tema o ya se le contestó ese tema y
+    // sigue preguntando (no entendió) ⇒ la IA; 3) la IA lo deriva a un agente (handoff, o tope `aiMaxReplies`).
+    if (!explicit && await _supportBotActive()) {
+      try { const mu = await mongoose.connection.collection('support_bot_mutes').findOne({ _id: userId }); if (mu && mu.until > new Date()) return; } catch (_) {} // silenciado: ni respuesta fija ni IA
+      const topic = _supportTopicFromText(text);
+      if (topic) {
+        const recent = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.topic': topic, timestamp: { $gte: new Date(Date.now() - 2 * 3600 * 1000) } }).select('_id').lean();
+        if (!recent) return _supportCannedReply(userId, username, quick, text, false); // escalón 1: respuesta simple
+      }
+      _supportBotSchedule(userId, username); return; // escalón 2: la IA
+    }
     return _supportCannedReply(userId, username, quick, text, explicit);
   } catch (e) { logger.warn(`[support] quick-reply: ${e.message}`); }
 }
@@ -15619,7 +15629,7 @@ async function _supportAutoReply(userId, username) {
 // sale la respuesta automática de siempre. Config['supportBot'] (panel → Configuración → 🤖 Bot de soporte).
 // ════════════════════════════════════════════════════════════════════════════
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
-const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, classic: false, extraInfo: '' };
+const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 4, classic: false, extraInfo: '' };
 async function getSupportBotConfig() {
   let raw = null; try { raw = await getConfig('supportBot', null); } catch (_) {}
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -15629,7 +15639,7 @@ async function getSupportBotConfig() {
   const dmin = num(r.delayMinSec, SUPPORT_BOT_DEFAULT.delayMinSec, 3, 120);
   return { enabled: r.enabled == null ? SUPPORT_BOT_DEFAULT.enabled : r.enabled === true, classic: r.classic === true, model, effort, delayMinSec: dmin,
     delayMaxSec: Math.max(dmin, num(r.delayMaxSec, SUPPORT_BOT_DEFAULT.delayMaxSec, 3, 180)), pauseHours: num(r.pauseHours, SUPPORT_BOT_DEFAULT.pauseHours, 0, 72),
-    handoffPauseMin: num(r.handoffPauseMin, SUPPORT_BOT_DEFAULT.handoffPauseMin, 0, 1440), muteHours: num(r.muteHours, SUPPORT_BOT_DEFAULT.muteHours, 1, 168), extraInfo: String(r.extraInfo || '').slice(0, 4000) };
+    handoffPauseMin: num(r.handoffPauseMin, SUPPORT_BOT_DEFAULT.handoffPauseMin, 0, 1440), muteHours: num(r.muteHours, SUPPORT_BOT_DEFAULT.muteHours, 1, 168), aiMaxReplies: num(r.aiMaxReplies, SUPPORT_BOT_DEFAULT.aiMaxReplies, 1, 20), extraInfo: String(r.extraInfo || '').slice(0, 4000) };
 }
 async function _supportBotActive() { if (!supportBot.isAvailable()) return false; try { const c = await getSupportBotConfig(); return c.enabled && !c.classic; } catch (_) { return false; } } // #1042-c: chat CLÁSICO = sin bot
 
@@ -15739,8 +15749,16 @@ async function _supportBotRun(userId, username, token, t0) {
   _sbTyping(userId, agentName, true);
   let r;
   try {
-    const [facts, user, history] = await Promise.all([_supportBotFacts(cfg), _supportBotUserFacts(u), _supportBotHistory(u)]);
-    r = await supportBot.generateReply({ facts, user, agentName, history, model: cfg.model, effort: cfg.effort });
+    // Escalón 3: ya le respondió la IA `aiMaxReplies` veces en esta charla (2 h) y sigue escribiendo ⇒ a un agente, sin dar más vueltas.
+    const since = new Date(Math.max(Date.now() - 2 * 3600 * 1000, u.supportSessionSince ? new Date(u.supportSessionSince).getTime() : 0));
+    const aiReplies = await Message.countDocuments({ receiverId: userId, senderId: 'support-bot', 'metadata.kind': { $ne: 'bot_after_deposit' }, timestamp: { $gte: since } });
+    if (aiReplies >= cfg.aiMaxReplies) {
+      r = { ok: true, reply: 'Para que no des más vueltas, te paso con alguien del equipo que te lo resuelve 🙌', handoff: true, handoffReason: `siguió con dudas después de ${aiReplies} respuestas de la IA` };
+    } else {
+      const [facts, user, history] = await Promise.all([_supportBotFacts(cfg), _supportBotUserFacts(u), _supportBotHistory(u)]);
+      user.aiReplies = aiReplies;
+      r = await supportBot.generateReply({ facts, user, agentName, history, model: cfg.model, effort: cfg.effort });
+    }
   } catch (e) { r = { ok: false, error: e.message }; }
   if (_sbTimers.get(userId) !== token) { _sbTyping(userId, agentName, false); return; } // escribió de nuevo mientras pensaba: contesta el último
   if (r.ok && r.ignore) {
@@ -15750,12 +15768,13 @@ async function _supportBotRun(userId, username, token, t0) {
     try { await mongoose.connection.collection('support_bot_mutes').updateOne({ _id: userId }, { $set: { until, username, at: new Date() } }, { upsert: true }); } catch (_) {}
     try {
       const note = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: userId, receiverRole: 'user',
-        content: `🤖🔇 El bot dejó de contestarle a este cliente por ${cfg.muteHours || 12} h (sólo molestaba). Si escribís vos, le llega normal.`,
+        content: `🤖🔇 El bot dejó de contestarle a este cliente por ${cfg.muteHours || 12} h (molestaba o preguntaba cosas fuera del servicio). Si escribís vos, le llega normal.`,
         type: 'system', adminOnly: true, metadata: { kind: 'bot_muted' }, timestamp: new Date(), read: true });
       io.to(`chat_${userId}`).emit('new_message', note);
     } catch (_) {}
     logger.info(`[support-bot] ${username}: silenciado ${cfg.muteHours || 12} h`);
-    return;
+    if (!r.reply) return;
+    _sbTyping(userId, agentName, true); // #1042-d: fuera de tema ⇒ una frase de cierre y después silencio
   }
   if (!r.ok && !r.handoff) {
     _sbTyping(userId, agentName, false); _supportBotStat('errors');
