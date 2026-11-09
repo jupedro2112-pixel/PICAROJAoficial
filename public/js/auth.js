@@ -546,6 +546,10 @@ VIP.auth = (function () {
                 // #581: alta por landing (`ir=cargar`): sin selector de menú, directo a donde se carga.
                 // #595 (owner): al entrar con el registro la pantalla queda limpia y sólo se elige el menú (el selector lo abre ui.js).
                 VIP.state._openLoadAfterLogin = false;
+                if (VIP.state._openSorteoAfterLogin) { // #1044-d: viene del canal de Telegram ⇒ abre Sorteos
+                    VIP.state._openSorteoAfterLogin = false;
+                    setTimeout(function () { try { if (VIP.sorteos && VIP.sorteos.open) VIP.sorteos.open('mensual'); } catch (e) {} }, 1800);
+                }
                 if (VIP.state._openCasinoAfterLogin) {
                     VIP.state._openCasinoAfterLogin = false;
                     setTimeout(function () {
@@ -711,6 +715,8 @@ VIP.auth = (function () {
             const sp = new URLSearchParams(window.location.search); const mn = sp.get('menu');
             if (mn && ['full', 'basic', 'easy', 'girox'].includes(mn)) { localStorage.setItem('vip_menu_pref', mn); if (sp.get('picked') === '1') localStorage.setItem('vip_menu_user', '1'); /* #836: el menú que eligió en Safari · #980: sólo si lo eligió él */ if (sp.get('fixed') === '1') localStorage.setItem('vip_menu_fixed', '1'); }
         } catch (e) {}
+        // #1044-d: botón "Anotarme gratis" del canal de Telegram (?ir=sorteo, sin token de acceso): abre Sorteos al entrar. Se saca de la URL.
+        try { const _sp = new URLSearchParams(window.location.search); if (_sp.get('ir') === 'sorteo') { VIP.state._openSorteoAfterLogin = true; _sp.delete('ir'); history.replaceState(null, '', window.location.pathname + (_sp.toString() ? '?' + _sp.toString() : '') + window.location.hash); } } catch (e) {}
         if (!token) return false;
         // #673: la app instalada abre SIEMPRE con el mismo ?acceso= (start_url): si ya tiene sesión propia, el token ya se canjeó →
         // se ignora en silencio (sin toast de "link usado") y sigue con la sesión guardada.

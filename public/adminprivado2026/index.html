@@ -818,6 +818,16 @@ document.addEventListener('change', function (ev) {
                         </div>
                         <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;"><input type="checkbox" id="tgMirror" style="width:auto;"> Publicar las historias en el canal</label>
                         <label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:12.5px;"><input type="checkbox" id="tgPanel" style="width:auto;"> Panel del mes fijado arriba (se actualiza cada hora)</label>
+                        <div style="margin-top:8px;padding:8px;border:1px solid var(--p-border,#ddd);border-radius:10px;">
+                            <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;"><input type="checkbox" id="tgDropOn" style="width:auto;"> 🎁 Código exclusivo de Telegram (se reclama en la app, sólo clientes que ya cargaron)</label>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:6px;">
+                                <label style="font-size:12.5px;">Monto $ <input type="number" id="tgDropAmount" min="500" max="50000" style="width:100%;"></label>
+                                <label style="font-size:12.5px;">Personas <input type="number" id="tgDropMax" min="1" max="100" style="width:100%;"></label>
+                                <label style="font-size:12.5px;">Cada cuántos días <input type="number" id="tgDropEvery" min="1" max="60" style="width:100%;"></label>
+                                <label style="font-size:12.5px;">Vence a las (horas) <input type="number" id="tgDropHours" min="1" max="168" style="width:100%;"></label>
+                            </div>
+                            <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12.5px;"><input type="checkbox" id="tgSorteoPost" style="width:auto;"> 🎟️ Publicar el sorteo activo con los pasos para anotarse (lunes 12 h)</label>
+                        </div>
                         <details style="margin-top:8px;"><summary style="cursor:pointer;font-weight:700;font-size:13px;">🔘 Botones del canal (editar)</summary>
                             <p style="margin:6px 0;font-size:12px;color:var(--p-muted,#777);">Lo que dice cada botón. Los botones de info abren una ventanita con los números del mes; destildá los que no quieras mostrar. Abajo podés sumar hasta 3 botones con link (Telegram de soporte, Instagram…), uno por línea: <code>Texto | https://link</code>.</p>
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">
@@ -832,6 +842,8 @@ document.addEventListener('change', function (ev) {
                             <button class="btn-primary btn-small" onclick="saveTgChannel()">💾 Guardar y probar</button>
                             <button class="btn-secondary btn-small" onclick="tgNow('panel')">📌 Actualizar el panel ahora</button>
                             <button class="btn-secondary btn-small" onclick="tgNow('story')">📤 Publicar la próxima historia ahora</button>
+                            <button class="btn-secondary btn-small" onclick="tgNow('drop')">🎁 Lanzar el código ahora</button>
+                            <button class="btn-secondary btn-small" onclick="tgNow('sorteo')">🎟️ Publicar el sorteo ahora</button>
                         </div>
                         <div id="tgInfo" style="margin-top:8px;font-size:12px;line-height:1.5;"></div>
                     </div>

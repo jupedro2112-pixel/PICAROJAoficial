@@ -29093,6 +29093,7 @@ async function _codeDropFinish(dropId) {
   if (!(r.modifiedCount || r.nModified)) return; // otra instancia ya lo cerró
   if (d.storyId) await Story.updateOne({ id: d.storyId }, { $set: { isActive: false } }).catch(() => {});
   const winners = (await CodeDropClaim.find({ dropId, status: 'credited' }).sort({ at: 1 }).select('username').lean()).map((c) => c.username);
+  if (d.createdBy === 'telegram') { await _tgDropDone(d, winners, full); logger.info(`[telegram] código ${d.code} ${full ? 'AGOTADO' : 'vencido'}: ${winners.length} ganadores`); return; } // #1044-d: se avisa en el canal
   if (!winners.length) { logger.info(`[código-sorpresa] ${d.code} terminó sin canjes`); return; }
   const list = winners.map((w, i) => `${i + 1}. ${_cdMask(w)}`).join(' · ');
   const doneId = await _cdStory({ title: (full ? '✅ ¡Código completado!' : '⏱ Terminó el código') + ' Estate atento al próximo', text: `Ganadores (${_cdMoney(d.amount)} c/u): ${list}. Pronto sale otro código: activá las notificaciones 🔔`.slice(0, 300),
@@ -30637,9 +30638,11 @@ async function _tgPostStory(c, st) {
   if (md) { const r = await tgChannel.sendMedia(c.token, md.kind, c.channel, md.media, extra); if (r.ok) return r; logger.warn(`[telegram] foto rechazada (${r.error}); va sólo el texto`); }
   return tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: extra.caption, parse_mode: 'HTML', reply_markup: extra.reply_markup, disable_web_page_preview: true, disable_notification: extra.disable_notification });
 }
+const TG_ALWAYS_KINDS = ['deporte', 'bono']; // #1044-d: partidos importantes y la historia con bono siempre van al canal
+function _tgIsDailyAuto(st) { return /^sa-\d{4}-\d{2}-\d{2}-/.test(String(st.autoKey || '')) && !TG_ALWAYS_KINDS.includes(st.autoKind); }
 function _tgQuiet(c) { const h = _tgArtHour(); return c.quietFrom > c.quietTo ? (h >= c.quietFrom || h < c.quietTo) : (h >= c.quietFrom && h < c.quietTo); }
 function _tgStoryQuery(c, now) {
-  return { isActive: true, audienceUserId: null, codeDropId: null, tgPostedAt: null, tgTries: { $lt: 3 }, expiresAt: { $gt: now }, publishedAt: { $gte: new Date(c.since || now), $lte: now } };
+  return { isActive: true, audienceUserId: null, codeDropId: null, autoKey: { $not: /^cd/ }, tgPostedAt: null, tgTries: { $lt: 3 }, expiresAt: { $gt: now }, publishedAt: { $gte: new Date(c.since || now), $lte: now } }; // #1044-d: tampoco los avisos del código sorpresa de la app (cdt-/cdd-)
 }
 // Cada 2 min: UNA historia por vez, respetando el espacio entre posteos (gapMin) y sin publicar de noche (salvo una historia con bono vigente).
 async function _tgMirrorTick(force) {
@@ -30656,6 +30659,18 @@ async function _tgMirrorTick(force) {
   }
   if (!st) st = await Story.findOne(q).sort({ publishedAt: 1 }).lean();
   if (!st) return { ok: false, why: 'no hay historias nuevas' };
+  // #1044-d (owner: "1 contenido automático por día"): de las automáticas de la app (sa-…) va al canal UNA por día, rotando cuál; los PARTIDOS
+  // (deporte) y la historia con bono van siempre. Las demás se marcan como "no van al canal" (no se reintentan).
+  if (_tgIsDailyAuto(st)) {
+    const day = String(st.autoKey).slice(3, 13);
+    const sameDay = await Story.find({ autoKey: new RegExp('^sa-' + day + '-'), autoKind: { $nin: TG_ALWAYS_KINDS.concat(['borrada']) }, audienceUserId: null, $or: [{ isActive: true }, { tgMsgId: { $ne: null } }] }).sort({ publishedAt: 1, autoKey: 1 }).select('id tgMsgId').lean();
+    const chosen = sameDay.length ? sameDay[Math.floor(new Date(day + 'T12:00:00Z').getTime() / 86400000) % sameDay.length] : null;
+    const already = sameDay.some((x) => x.tgMsgId);
+    if (already || !chosen || chosen.id !== st.id) {
+      await Story.updateOne({ id: st.id, tgPostedAt: null }, { $set: { tgPostedAt: now, tgError: 'no va al canal (1 automática por día)' } });
+      return { ok: false, why: 'automática salteada (ya va 1 por día)' };
+    }
+  }
   const claimed = await Story.findOneAndUpdate({ id: st.id, tgPostedAt: null }, { $set: { tgPostedAt: now } });
   if (!claimed) return { ok: false, why: 'ya publicada' };
   const r = await _tgPostStory(c, st);
@@ -30701,7 +30716,7 @@ async function _tgPanelCompute() {
       if (pick) {
         const per = sorteosRules.periodOf(pick, now); const rq = so.requirements || {};
         const req = [rq.app && 'app instalada', rq.notif && 'notificaciones', rq.telegram && 'unirte a Telegram', rq.phone && 'celular cargado', rq.deposit && 'una carga', rq.week && 'cuenta con 7 días'].filter(Boolean);
-        s.sorteo = { title: `${pick.title} (cierra el ${per.end.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })})`, prizes: (pick.prizes || []).map((p) => ({ pos: p.pos, name: p.name, value: p.value || '' })), requirements: req };
+        s.sorteo = { req: rq, title: `${pick.title} (cierra el ${per.end.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })})`, prizes: (pick.prizes || []).map((p) => ({ pos: p.pos, name: p.name, value: p.value || '' })), requirements: req };
       }
     }
   } catch (_) {}
@@ -30735,6 +30750,88 @@ async function _tgPanelTick(force) {
   if (!pin.ok) await _tgSet({ lastError: 'no pude fijar el panel (¿el bot es admin con permiso de fijar?): ' + String(pin.error).slice(0, 120), lastErrorAt: new Date() });
   return { ok: true, created: true };
 }
+// ── #1044-d CÓDIGO EXCLUSIVO DE TELEGRAM: $5.000 × 10 cada 15 días a una hora al azar (12–21 h). Usa el MISMO motor que el código sorpresa
+// (CodeDrop + /api/code-drop/claim: un lugar por persona, reference única, sólo clientes que ya cargaron si `codeDrop.requireDeposit`, guard de
+// cuentas secundarias). El botón abre la app con ?codigo= y se canjea solo al entrar. Al agotarse (o vencer) se avisa en el canal y el botón pasa a
+// "AGOTADO". Config: `telegramBot.drop` { on, amount, maxClaims, everyDays, hours } y `dropNextAt` (próxima salida).
+const TG_DROP_DEFAULT = { on: true, amount: 5000, maxClaims: 10, everyDays: 15, hours: 48 };
+function _tgDropCfg(c) {
+  const d = Object.assign({}, TG_DROP_DEFAULT, (c && c.drop && typeof c.drop === 'object') ? c.drop : {});
+  const n = (v, def, lo, hi) => { const x = Math.round(Number(v)); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : def; };
+  return { on: d.on !== false, amount: n(d.amount, 5000, 500, 50000), maxClaims: n(d.maxClaims, 10, 1, 100), everyDays: n(d.everyDays, 15, 1, 60), hours: n(d.hours, 48, 1, 168) };
+}
+// Próxima salida: dentro de `days` días, a una hora al azar entre las 12 y las 21 (ART). days = 0 ⇒ hoy (si todavía hay franja) o mañana.
+function _tgDropNextAt(days) {
+  const now = new Date(); const base = new Date(now.getTime() + days * 86400000); const dk = _schedArtKey(base);
+  const min = 12 * 60 + require('crypto').randomInt(0, 9 * 60);
+  let at = new Date(`${dk}T${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}:00-03:00`);
+  if (at <= now) at = new Date(Math.max(now.getTime() + 20 * 60000, at.getTime() + 86400000 * (days === 0 && _tgArtHour(now) >= 21 ? 1 : 0)));
+  return at;
+}
+async function _tgDropLaunch(c, by) {
+  const dc = _tgDropCfg(c); const now = new Date();
+  const code = _cdNewCode(); let drop;
+  try { drop = await CodeDrop.create({ id: uuidv4(), dropKey: 'tg-' + _schedArtKey(now) + (by === 'panel' ? '-' + Date.now() : ''), code, amount: dc.amount, maxClaims: dc.maxClaims, startsAt: now, endsAt: new Date(now.getTime() + dc.hours * 3600000), createdBy: 'telegram' }); }
+  catch (e) { if (e && e.code === 11000) return { ok: false, why: 'ya salió el código de hoy' }; throw e; }
+  const o = { code, amount: dc.amount, maxClaims: dc.maxClaims, rolloverX: await _giftRolloverX().catch(() => 5) };
+  const url = c.appUrl + '/?codigo=' + encodeURIComponent(code);
+  const reply_markup = { inline_keyboard: [[{ text: `🎁 RECLAMAR MIS ${_cdMoney(dc.amount)}`, url }]] };
+  let r = null; let png = null;
+  try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.dropSvg(o, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
+  if (png) r = await tgChannel.sendMedia(c.token, 'photo', c.channel, { buffer: png, mime: 'image/png', filename: 'codigo.png' }, { caption: tgChannel.dropCaption(o), parse_mode: 'HTML', reply_markup });
+  if (!r || !r.ok) r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: tgChannel.dropCaption(o), parse_mode: 'HTML', reply_markup, disable_web_page_preview: true });
+  if (!r.ok) {
+    await CodeDrop.updateOne({ id: drop.id }, { $set: { status: 'expired', finishedAt: new Date() } }); // nadie lo vio: no queda un código suelto
+    await _tgSet({ lastError: 'código de Telegram: ' + String(r.error).slice(0, 150), lastErrorAt: new Date() });
+    return { ok: false, why: r.error };
+  }
+  await CodeDrop.updateOne({ id: drop.id }, { $set: { tgMsgId: r.result.message_id, tgKind: png ? 'photo' : 'text' } });
+  await _tgSet({ dropLastAt: now, dropNextAt: _tgDropNextAt(dc.everyDays), dropLastCode: code });
+  logger.info(`[telegram] código ${code} ${_cdMoney(dc.amount)} × ${dc.maxClaims} publicado (${by || 'automático'})`);
+  return { ok: true, code };
+}
+// Lo llama _codeDropFinish cuando un código de Telegram se agota o vence.
+async function _tgDropDone(d, winners, full) {
+  try {
+    const c = await _tgCfg(); if (!c.token || !c.channel) return;
+    if (d.tgMsgId) await tgChannel.call(c.token, 'editMessageReplyMarkup', { chat_id: c.channel, message_id: d.tgMsgId, reply_markup: { inline_keyboard: [[{ text: full ? '❌ AGOTADO' : '⏱ TERMINÓ', url: c.appUrl }]] } });
+    const text = tgChannel.dropDoneCaption({ code: d.code, amount: d.amount, full, winners });
+    await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: c.btn.appLabel, url: c.appUrl }]] }, disable_web_page_preview: true, reply_to_message_id: d.tgMsgId || undefined, allow_sending_without_reply: true });
+  } catch (e) { logger.warn('[telegram] aviso de código agotado: ' + e.message); }
+}
+async function _tgDropTick() {
+  const c = await _tgCfg(); const dc = _tgDropCfg(c);
+  if (!dc.on || !c.token || !c.channel) return;
+  if (!(await _cronClaim('tgdrop', 90000))) return;
+  if (!c.dropNextAt) { await _tgSet({ dropNextAt: _tgDropNextAt(0) }); return; }
+  if (new Date() < new Date(c.dropNextAt)) return;
+  if (await CodeDrop.exists({ createdBy: 'telegram', status: 'active' })) return; // el anterior sigue vivo
+  await _tgDropLaunch(c, 'automático');
+}
+// ── #1044-d SORTEO EN EL CANAL: los lunes a las 12 h (o con el botón del panel), foto con los premios + los pasos para anotarse. ──
+async function _tgSorteoPost(c, force) {
+  if (!c.token || !c.channel) return { ok: false, why: 'sin configurar' };
+  const st = await _tgPanelCompute(); const so = st.sorteo;
+  if (!so) return { ok: false, why: 'no hay sorteo en curso' };
+  const wk = _cdWeekStart(_schedArtKey(new Date()));
+  if (!force && c.sorteoWeek === wk) return { ok: false, why: 'ya salió esta semana' };
+  await _tgSet({ sorteoWeek: wk });
+  const reply_markup = { inline_keyboard: [[{ text: '🎟️ ANOTARME GRATIS', url: c.appUrl + '/?ir=sorteo' }]] };
+  let r = null; let png = null;
+  try { png = await pdfImage.svgBufferToPng(Buffer.from(tgChannel.sorteoSvg(so, _tgLogo()), 'utf8'), { scale: 1 }); } catch (_) {}
+  if (png) r = await tgChannel.sendMedia(c.token, 'photo', c.channel, { buffer: png, mime: 'image/png', filename: 'sorteo.png' }, { caption: tgChannel.sorteoCaption(so), parse_mode: 'HTML', reply_markup });
+  if (!r || !r.ok) r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: tgChannel.sorteoCaption(so), parse_mode: 'HTML', reply_markup, disable_web_page_preview: true });
+  if (!r.ok) { await _tgSet({ sorteoWeek: null, lastError: 'sorteo: ' + String(r.error).slice(0, 150), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
+  return { ok: true };
+}
+async function _tgSorteoTick() {
+  const c = await _tgCfg(); if (c.sorteoPost === false || !c.token || !c.channel) return;
+  const now = new Date(); const dow = new Date(_schedArtKey(now) + 'T12:00:00Z').getUTCDay();
+  if (dow !== 1 || _tgArtHour(now) < 12 || _tgArtHour(now) >= 20) return;
+  if (!(await _cronClaim('tgsorteo', 5 * 60000))) return;
+  await _tgSorteoPost(c, false);
+}
+setTimeout(() => { setInterval(() => { _tgDropTick().catch((e) => logger.warn('[telegram] código ' + e.message)); _tgSorteoTick().catch((e) => logger.warn('[telegram] sorteo ' + e.message)); }, 2 * 60000); }, 2 * 60000);
 // Webhook: botones del panel (ventanitas) y /start por privado (le manda el panel). Sólo con el secreto que le dimos a Telegram.
 async function _tgSetWebhook(c) {
   if (!c.token) return { ok: false, error: 'sin token' };
@@ -30769,7 +30866,7 @@ app.get('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res)
     const queue = (c.token && c.channel && c.mirror) ? await Story.countDocuments(_tgStoryQuery(c, now)) : 0;
     const posted = await Story.find({ tgPostedAt: { $ne: null } }).sort({ tgPostedAt: -1 }).limit(5).select('id title tgPostedAt tgMsgId').lean();
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn }, queue, posted });
+    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
@@ -30783,6 +30880,8 @@ app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res
     if (typeof b.mirror === 'boolean') set.mirror = b.mirror;
     if (typeof b.panel === 'boolean') set.panel = b.panel;
     if (b.buttons && typeof b.buttons === 'object') set.buttons = tgChannel.normalizeButtons(b.buttons); // #1044-c
+    if (b.drop && typeof b.drop === 'object') set.drop = _tgDropCfg({ drop: b.drop }); // #1044-d
+    if (typeof b.sorteoPost === 'boolean') set.sorteoPost = b.sorteoPost;
     if (b.gapMin != null && Number.isFinite(Number(b.gapMin))) set.gapMin = Math.min(600, Math.max(10, Math.round(Number(b.gapMin))));
     // El token se PRUEBA antes de guardar (getMe) y se guarda cifrado.
     let me = null;
@@ -30813,7 +30912,9 @@ app.post('/api/admin/telegram/now', authMiddleware, adminMiddleware, async (req,
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
   try {
     const what = String((req.body || {}).what || '');
-    const r = what === 'panel' ? await _tgPanelTick(true) : what === 'story' ? await _tgMirrorTick(true) : null;
+    const c0 = await _tgCfg();
+    if (what === 'drop' && await CodeDrop.exists({ createdBy: 'telegram', status: 'active' })) return res.status(409).json({ error: 'Ya hay un código de Telegram activo: esperá a que se agote.' });
+    const r = what === 'panel' ? await _tgPanelTick(true) : what === 'story' ? await _tgMirrorTick(true) : what === 'drop' ? (c0.token && c0.channel ? await _tgDropLaunch(c0, 'panel') : { ok: false, why: 'falta el token o el canal' }) : what === 'sorteo' ? await _tgSorteoPost(c0, true) : null;
     if (!r) return res.status(400).json({ error: 'Acción inválida' });
     res.json(Object.assign({ success: !!r.ok }, r));
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }

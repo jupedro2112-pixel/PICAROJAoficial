@@ -8,6 +8,17 @@
 
 ## Sesión 2026-11-09
 
+### 1044-d. Canal de Telegram: 1 automática por día + CÓDIGO EXCLUSIVO $5.000 × 10 cada 15 días + SORTEO con pasos — app v693, panel v263 (2026-11-09)
+- **Owner:** "1 contenido automático por día; un bono en Telegram: $5.000 a 10 personas cada 15 días, que entren a la app a reclamarlo, código al azar que se
+  agote y avise que se terminó; mostrar el sorteo activo con los pasos; los partidos importantes también". Decidido con el owner: el límite de 1 por día es
+  SÓLO en Telegram (la app sigue con sus 5) y el código es sólo para clientes que ya cargaron.
+- Canal: de las automáticas de la app va una por día (rota); partidos y la historia con bono siempre. Los avisos del código sorpresa de la app no van.
+- Código: mismo motor que el código sorpresa (`CodeDrop createdBy:'telegram'`, mismo canje, mismos requisitos y antifraude). Foto con el código + botón
+  "RECLAMAR" ⇒ app con `?codigo=` (se canjea solo al entrar). Agotado/vencido ⇒ el botón pasa a "❌ AGOTADO" y sale un mensaje con los ganadores tapados.
+- Sorteo: lunes 12 h, foto con los 3 premios + pasos según los requisitos activos; botón ⇒ `/?ir=sorteo` abre Sorteos en la app.
+- Panel → 📣 Canal de Telegram: tildes, monto/personas/días/vencimiento, "🎁 Lanzar el código ahora", "🎟️ Publicar el sorteo ahora". Test ampliado (9 casos).
+- No probado con Telegram real ni con mupdf del servidor (si la foto falla, sale como texto).
+
 ### 1044-c. Canal de Telegram: LOGO centrado arriba en las fotos + BOTONES editables en el panel — panel v262 (2026-11-09)
 - **Owner:** "que se puedan configurar los botones en el admin, formato premium, arriba la foto de PICA ROJA con el logo en el medio centrado".
 - Fotos (historias sin foto y panel del mes): arriba el logo (la pica, `public/icons/icon-384x384.png` en base64, `_tgLogo`) recortado en círculo con borde

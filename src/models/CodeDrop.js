@@ -15,6 +15,9 @@ const codeDropSchema = new mongoose.Schema({
   doneStoryId: { type: String, default: null },
   finishedAt: { type: Date, default: null },
   createdBy: { type: String, default: 'automático' },
-  pushStats: { type: mongoose.Schema.Types.Mixed, default: null }
+  pushStats: { type: mongoose.Schema.Types.Mixed, default: null },
+  // #1044-d: código exclusivo del canal de Telegram (createdBy 'telegram'): id del posteo para marcarlo AGOTADO
+  tgMsgId: { type: Number, default: null },
+  tgKind: { type: String, default: null }
 }, { timestamps: true });
 module.exports = mongoose.models.CodeDrop || mongoose.model('CodeDrop', codeDropSchema);

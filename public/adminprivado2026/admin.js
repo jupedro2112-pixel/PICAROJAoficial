@@ -6374,6 +6374,8 @@ async function loadTgChannel() {
         if (g('tgLinks')) g('tgLinks').value = (bt.links || []).map((l) => l.label + ' | ' + l.url).join('\n');
         const TGK = { benef: 'Beneficios', paid: 'Premios del mes', top: 'Premio más grande', sorteo: 'Sorteo', serv: 'Servicio completo' };
         if (g('tgBtnItems')) g('tgBtnItems').innerHTML = Object.keys(TGK).map((k) => { const it = (bt.items || {})[k] || { on: true, label: '' }; return '<label style="font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" class="tgBtnOn" data-k="' + k + '" style="width:auto;"' + (it.on !== false ? ' checked' : '') + '> <input type="text" class="tgBtnLbl" data-k="' + k + '" maxlength="40" value="' + escapeHtml(it.label || '') + '" placeholder="' + TGK[k] + '" style="flex:1;"></label>'; }).join('');
+        const dr = c.drop || {}; if (g('tgDropOn')) g('tgDropOn').checked = dr.on !== false; if (g('tgDropAmount')) g('tgDropAmount').value = dr.amount || 5000; if (g('tgDropMax')) g('tgDropMax').value = dr.maxClaims || 10; if (g('tgDropEvery')) g('tgDropEvery').value = dr.everyDays || 15; if (g('tgDropHours')) g('tgDropHours').value = dr.hours || 48;
+        if (g('tgSorteoPost')) g('tgSorteoPost').checked = c.sorteoPost !== false;
         if (g('tgMirror')) g('tgMirror').checked = c.mirror !== false; if (g('tgPanel')) g('tgPanel').checked = c.panel !== false;
         if (g('tgToken')) g('tgToken').placeholder = c.hasToken ? ('guardado (…' + (c.tokenLast4 || '') + ') · pegá uno nuevo sólo para cambiarlo') : 'pegá el token de BotFather';
         st.textContent = !c.hasToken ? '· falta el token' : !c.channel ? '· falta el canal' : (c.mirror || c.panel) ? '· ✅ conectado' + (c.channelTitle ? ' a ' + c.channelTitle : '') : '· ⏸️ apagado';
@@ -6383,6 +6385,7 @@ async function loadTgChannel() {
         if (c.decryptError) L.push('⚠️ El token guardado no se puede leer (cambió la clave del servidor): pegalo de nuevo.');
         L.push('📤 Historias esperando para el canal: <b>' + (j.queue || 0) + '</b> · último posteo: ' + f(c.lastPostAt) + (c.panelMsgId ? ' · 📌 panel fijado' : ''));
         if ((j.posted || []).length) L.push('Últimas publicadas: ' + j.posted.map((p) => escapeHtml(p.title || p.id) + ' (' + f(p.tgPostedAt) + ')').join(' · '));
+        const ld = j.lastDrop; L.push('🎁 Código de Telegram: ' + (ld ? '<b>' + escapeHtml(ld.code) + '</b> ' + ld.claims + '/' + ld.maxClaims + ' (' + (ld.status === 'active' ? 'activo' : ld.status === 'completed' ? 'agotado' : 'vencido') + ', ' + f(ld.startsAt) + ')' : 'todavía no salió') + ' · próximo: ' + f(c.dropNextAt));
         if (c.lastError) L.push('<span style="color:#c62828;">⚠️ Último error (' + f(c.lastErrorAt) + '): ' + escapeHtml(c.lastError) + '</span>');
         if (info) info.innerHTML = L.join('<br>');
     } catch (_) { st.textContent = '· error de conexión'; }
@@ -6394,6 +6397,8 @@ async function saveTgChannel() {
     const links = (g('tgLinks') ? g('tgLinks').value : '').split('\n').map((l) => l.split('|')).filter((p) => p.length >= 2).map((p) => ({ label: p[0].trim(), url: p.slice(1).join('|').trim() }));
     const bad = links.find((l) => !/^https:\/\//i.test(l.url)); if (bad) { showToast('El link "' + bad.label + '" tiene que empezar con https://', 'error'); return; }
     body.buttons = { appLabel: g('tgBtnApp') ? g('tgBtnApp').value.trim() : '', storyLabel: g('tgBtnStory') ? g('tgBtnStory').value.trim() : '', items, servText: g('tgServText') ? g('tgServText').value.trim() : '', links };
+    if (g('tgDropOn')) body.drop = { on: !!g('tgDropOn').checked, amount: Number(g('tgDropAmount').value) || 5000, maxClaims: Number(g('tgDropMax').value) || 10, everyDays: Number(g('tgDropEvery').value) || 15, hours: Number(g('tgDropHours').value) || 48 };
+    if (g('tgSorteoPost')) body.sorteoPost = !!g('tgSorteoPost').checked;
     const tk = g('tgToken').value.trim(); if (tk) body.token = tk;
     try {
         const r = await authFetch('/api/admin/telegram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -6406,7 +6411,7 @@ async function tgNow(what) {
     try {
         const r = await authFetch('/api/admin/telegram/now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ what }) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'Error', 'error'); return; }
-        showToast(j.ok ? (what === 'panel' ? '📌 Panel del canal actualizado' : '📤 Historia publicada en el canal') : ('No se hizo: ' + (j.why || '')), j.ok ? 'success' : 'info'); loadTgChannel();
+        showToast(j.ok ? ({ panel: '📌 Panel del canal actualizado', story: '📤 Historia publicada en el canal', drop: '🎁 Código publicado en el canal: ' + (j.code || ''), sorteo: '🎟️ Sorteo publicado en el canal' }[what] || 'Listo') : ('No se hizo: ' + (j.why || '')), j.ok ? 'success' : 'info'); loadTgChannel();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow;

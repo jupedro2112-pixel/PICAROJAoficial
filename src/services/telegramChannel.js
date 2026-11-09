@@ -152,6 +152,59 @@ function panelSvg(s, logo) {
     tile(840, 'PREMIO MÁS GRANDE', s.top && s.top.amount > 0 ? money(s.top.amount) : '—', s.top && s.top.username ? maskUser(s.top.username) : '') +
     `<rect x="80" y="580" width="1120" height="96" rx="48" fill="url(#rd)"/><text x="640" y="641" text-anchor="middle" ${FONT} font-size="32" font-weight="bold" fill="#fff" letter-spacing="1">${xesc(cut(so.toUpperCase(), 60))}</text></svg>`;
 }
+// ── #1044-d CÓDIGO EXCLUSIVO DE TELEGRAM (owner: "un bono en Telegram: $5.000 a 10 personas cada 15 días, que entren a la app a reclamarlo, un código
+// al azar que se agote y cuando se agote avisar que se terminó") y POSTEO DEL SORTEO con los pasos para anotarse. ──
+function dropSvg(o, logo) {
+  const W = 1080;
+  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="url(#bg)"/><circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/><circle cx="60" cy="1040" r="220" fill="#e60023" opacity="0.06"/>` +
+    header(W, 50, 160, logo, 'CÓDIGO EXCLUSIVO TELEGRAM') +
+    `<text x="${W / 2}" y="470" text-anchor="middle" ${FONT} font-size="120" font-weight="bold" fill="#ffffff">${xesc(money(o.amount))}</text>` +
+    `<text x="${W / 2}" y="540" text-anchor="middle" ${FONT} font-size="40" fill="#b1bad3">PARA LOS PRIMEROS ${Number(o.maxClaims) || 0}</text>` +
+    `<rect x="190" y="600" width="700" height="150" rx="28" fill="#213743" stroke="#d4a64a" stroke-width="3" stroke-dasharray="14 10"/>` +
+    `<text x="${W / 2}" y="700" text-anchor="middle" ${FONT} font-size="78" font-weight="bold" fill="#ffffff" letter-spacing="8">${xesc(o.code)}</text>` +
+    `<rect x="240" y="820" width="600" height="100" rx="50" fill="url(#rd)"/><text x="${W / 2}" y="885" text-anchor="middle" ${FONT} font-size="42" font-weight="bold" fill="#fff" letter-spacing="2">RECLAMALO EN LA APP</text>` +
+    `<text x="${W / 2}" y="1010" text-anchor="middle" ${FONT} font-size="26" fill="#55657e" letter-spacing="3">PICAROJA.COM</text></svg>`;
+}
+function dropCaption(o) {
+  return cut([
+    '🔴 <b>PICA ROJA · CÓDIGO EXCLUSIVO TELEGRAM</b>', '━━━━━━━━━━━━━━',
+    `🎁 <b>${money(o.amount)}</b> para los primeros <b>${o.maxClaims}</b>`,
+    `🔑 Código: <code>${esc(o.code)}</code>`, '━━━━━━━━━━━━━━',
+    '1️⃣ Tocá <b>Reclamar</b> acá abajo', '2️⃣ Entrá a tu cuenta de PICA ROJA', '3️⃣ Se acredita solo en tu saldo',
+    '━━━━━━━━━━━━━━', `<i>Para clientes que ya cargaron alguna vez · se juega x${o.rolloverX || 5} · cuando se llenan los ${o.maxClaims} lugares, se agota.</i>`
+  ].join('\n'), CAPTION_MAX);
+}
+function dropDoneCaption(o) {
+  const L = ['🔴 <b>PICA ROJA</b>', '━━━━━━━━━━━━━━', o.full ? `✅ <b>¡SE AGOTÓ EL CÓDIGO ${esc(o.code)}!</b>` : `⏱ <b>TERMINÓ EL CÓDIGO ${esc(o.code)}</b>`];
+  if ((o.winners || []).length) { L.push(`🏆 Se llevaron ${money(o.amount)} cada uno:`); L.push(o.winners.slice(0, 10).map((w, i) => `${i + 1}. ${esc(maskUser(w))}`).join('\n')); }
+  L.push('━━━━━━━━━━━━━━', '🔔 El próximo código sale pronto: activá las notificaciones del canal para no perderlo.');
+  return cut(L.join('\n'), CAPTION_MAX);
+}
+const SORTEO_STEPS = [['app', 'Instalá la app de PICA ROJA'], ['notif', 'Activá las notificaciones'], ['telegram', 'Unite a este canal de Telegram'], ['phone', 'Cargá tu celular en Perfil'], ['deposit', 'Hacé una carga'], ['week', 'Tu cuenta tiene que tener 7 días']];
+function sorteoSteps(req) { return SORTEO_STEPS.filter(([k]) => !req || req[k]).map(([, t]) => t).concat(['Entrá a Sorteos en la app y tocá Anotarme']); }
+function sorteoSvg(so, logo) {
+  const W = 1080; const pr = (so.prizes || []).slice(0, 3);
+  let y = 420; let body = '';
+  pr.forEach((p, i) => {
+    body += `<rect x="110" y="${y - 62}" width="860" height="104" rx="22" fill="#213743"/>` + (i === 0 ? `<rect x="110" y="${y - 62}" width="10" height="104" rx="5" fill="url(#rd)"/>` : '') +
+      `<text x="160" y="${y + 6}" ${FONT} font-size="44" font-weight="bold" fill="${i === 0 ? '#d4a64a' : '#b1bad3'}">${i + 1}°</text>` +
+      `<text x="250" y="${y + 6}" ${FONT} font-size="${i === 0 ? 44 : 38}" font-weight="bold" fill="#ffffff">${xesc(cut(noEmoji(p.name + (p.value ? ' ' + p.value : '')), 30))}</text>`;
+    y += 130;
+  });
+  return SVG_OPEN(W, W) + bgDefs() + `<rect width="${W}" height="${W}" fill="url(#bg)"/><circle cx="1000" cy="80" r="260" fill="#e60023" opacity="0.08"/>` +
+    header(W, 40, 150, logo, noEmoji(String(so.title || 'SORTEO').toUpperCase())) + body +
+    `<rect x="240" y="${Math.max(y + 10, 820)}" width="600" height="100" rx="50" fill="url(#rd)"/><text x="${W / 2}" y="${Math.max(y + 10, 820) + 65}" text-anchor="middle" ${FONT} font-size="42" font-weight="bold" fill="#fff" letter-spacing="2">ANOTATE GRATIS</text>` +
+    `<text x="${W / 2}" y="1030" text-anchor="middle" ${FONT} font-size="26" fill="#55657e" letter-spacing="3">PICAROJA.COM</text></svg>`;
+}
+function sorteoCaption(so) {
+  const L = ['🔴 <b>PICA ROJA · ' + esc(String(so.title || 'SORTEO').toUpperCase()) + '</b>', '━━━━━━━━━━━━━━', '🏆 <b>PREMIOS</b>'];
+  for (const p of (so.prizes || []).slice(0, 3)) L.push(`${p.pos}° ${esc(p.name)}${p.value ? ' ' + esc(p.value) : ''}`);
+  L.push('━━━━━━━━━━━━━━', '📝 <b>CÓMO ANOTARTE (es gratis)</b>');
+  sorteoSteps(so.req).forEach((t, i) => L.push(`${i + 1}. ${esc(t)}`));
+  L.push('━━━━━━━━━━━━━━', '🎟️ Cuanto más jugás y cargás, más chances tenés. ¡Suerte!');
+  return cut(L.join('\n'), CAPTION_MAX);
+}
+
 /** Texto que acompaña la foto del panel (≤1024). */
 function panelCaption(s) {
   const mes = MONTHS[s.monthIdx] || '';
@@ -230,4 +283,4 @@ function popupText(key, s, b) {
   return cut(t, POPUP_MAX);
 }
 
-module.exports = { normalizeButtons, BTN_KEYS, call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };
+module.exports = { dropSvg, dropCaption, dropDoneCaption, sorteoSvg, sorteoCaption, sorteoSteps, normalizeButtons, BTN_KEYS, call, sendMedia, editPhoto, storyButtons, storyCaption, storyCardSvg, panelSvg, panelCaption, panelText, panelButtons, popupText, maskUser, esc, cut, POPUP_MAX };

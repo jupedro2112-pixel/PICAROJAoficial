@@ -225,7 +225,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 
 - **📣 CANAL DE TELEGRAM (#1044):** toda historia pública de la app se publica sola en el canal (una cada `gapMin`, nada de noche salvo con bono) y arriba queda un
   panel del mes fijado (premios, regalado, premio más grande con usuario TAPADO, sorteo). Token del bot sólo cifrado en el panel o env `TELEGRAM_BOT_TOKEN`. Una historia que
-  no deba ir al canal (personal, código, interna) ⇒ `_tgStoryQuery`. Nunca publicar usuarios completos ni montos de un cliente puntual en el canal.
+  no deba ir al canal (personal, código, interna) ⇒ `_tgStoryQuery`. Nunca publicar usuarios completos ni montos de un cliente puntual en el canal. **#1044-d:** al canal va 1 automática por día (partidos y bono siempre); código exclusivo `CodeDrop createdBy:'telegram'` ($5.000×10 cada 15 días, mismo canje que el código sorpresa) y sorteo los lunes.
 - **#1043 EXTRA POR INSTALAR = $5.000 SIEMPRE (no se limita a la carga) con ROLLOVER ×10 PROPIO (`_installGiftRolloverX`, el ÚNICO regalo ×10; el resto ×5).**
   Si un cliente reclama que le llegó de menos, la IA del chat pide `fix:'install_gift_topup'` y el servidor completa la diferencia (una vez). Textos y datos de la IA
   tienen que decir siempre lo mismo que el sistema hace (owner: "que sea acorde").

@@ -1987,6 +1987,13 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   (`_inicioAiUsage` en `/api/admin/inicio/stats` ⇒ `_inicioAiHtml`). Si cambian los precios o se agrega un modelo, actualizar `SB_PRICES`.
 - **#1042-x:** bot con Haiku 5.5; handoff de la IA ⇒ mensaje con botón "Tengo otro problema" (sólo el botón abre el chat a un agente); saludo local al entrar
   (`/sys_support_greet` vía `/api/support/ui-mode`, `VIP.home.spGreetMsg`); el cliente ve 24 h de chat; la burbuja delega siempre en `casinoChatToggle`.
+- **Canal de Telegram #1044-d:** (1) de las historias automáticas de la app (`sa-<día>-*`) va al canal UNA por día (`_tgIsDailyAuto`, rota cuál);
+  partidos (`deporte`) y la historia con bono (`TG_ALWAYS_KINDS`) van siempre; los avisos del código sorpresa de la app (`cd*`) nunca. (2) CÓDIGO EXCLUSIVO:
+  `_tgDropTick` cada 2 min (lock `tgdrop`) lanza un `CodeDrop` con `createdBy:'telegram'` cuando pasa `telegramBot.dropNextAt` ($5.000 × 10, cada 15 días,
+  vence en 48 h, hora al azar 12-21 h; `telegramBot.drop`). Se canjea por el MISMO `/api/code-drop/claim` (botón ⇒ `picaroja.com/?codigo=`; requisitos del
+  código sorpresa: ya cargó, sin secundarias/marcas). Al agotarse/vencer `_codeDropFinish` llama `_tgDropDone` (botón ⇒ AGOTADO + mensaje con ganadores
+  tapados) en vez de la historia de la app. (3) SORTEO: `_tgSorteoTick` lunes 12 h (lock `tgsorteo`, una vez por semana `sorteoWeek`) foto + pasos según
+  `sorteos.requirements`; botón ⇒ `/?ir=sorteo` (auth.js abre `VIP.sorteos.open`). Panel: tildes + "Lanzar el código ahora" / "Publicar el sorteo ahora".
 - **Canal de Telegram (#1044):** `src/services/telegramChannel.js` (textos/botones/Bot API) + `_tg*` en server.js: `_tgMirrorTick` (historias públicas ⇒ canal,
   una cada `gapMin`, reserva `Story.tgPostedAt`), `_tgPanelTick` (panel del mes fijado, `Config['telegramPanelStats']`), webhook `/api/telegram/webhook` (secreto),
   `Config['telegramBot']` con `_tgSet` (token cifrado). Una historia nueva que NO deba salir en el canal ⇒ excluirla en `_tgStoryQuery`.

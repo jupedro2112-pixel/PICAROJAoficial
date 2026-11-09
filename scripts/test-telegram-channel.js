@@ -43,7 +43,7 @@ caso('Posteo de una historia: HTML escapado, aviso del bono vigente, botón a la
 });
 caso('Server: qué se publica (sin personales ni códigos sorpresa, sólo desde que se prendió), reserva atómica, token cifrado y sólo admin', () => {
   const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.ok(/audienceUserId: null, codeDropId: null, tgPostedAt: null/.test(S2));
+  assert.ok(/audienceUserId: null, codeDropId: null, autoKey: \{ \$not: \/\^cd\/ \}, tgPostedAt: null/.test(S2));
   assert.ok(/publishedAt: \{ \$gte: new Date\(c\.since \|\| now\)/.test(S2));
   assert.ok(/Story\.findOneAndUpdate\(\{ id: st\.id, tgPostedAt: null \}/.test(S2), 'una sola instancia publica cada historia');
   assert.ok(/tokenEnc: _credEncrypt\(token\)/.test(S2) && /\/\^\\\/api\\\/admin\\\/telegram\(\\\/\|\$\)\/i/.test(S2));
@@ -60,6 +60,30 @@ caso('#1044-c Botones editables: textos, apagar info, links https (máx. 3), tex
   assert.strictEqual(tg.storyButtons({}, 'https://picaroja.com', b).inline_keyboard[0][0].text, '🎰 Entrar a PICA ROJA');
   const svg = tg.storyCardSvg({ title: 'Hola', text: 'x' }, 'QUJD'); assert.ok(/data:image\/png;base64,QUJD/.test(svg) && /text-anchor="middle"/.test(svg));
   assert.ok(!/<image/.test(tg.panelSvg({ monthIdx: 0, year: 2027 }, null)), 'sin logo no rompe');
+});
+caso('#1044-d Código exclusivo de Telegram: imagen con el código, texto con los pasos, aviso de AGOTADO con usuarios tapados', () => {
+  const o = { code: 'ROJAK7M2Q', amount: 5000, maxClaims: 10, rolloverX: 5 };
+  assert.ok(/ROJAK7M2Q/.test(tg.dropSvg(o, 'QUJD')) && /\$5\.000/.test(tg.dropSvg(o, null)));
+  const c = tg.dropCaption(o); assert.ok(/ROJAK7M2Q/.test(c) && /primeros <b>10<\/b>/.test(c) && /ya cargaron/.test(c) && c.length <= 1024);
+  const d = tg.dropDoneCaption({ code: 'ROJAK7M2Q', amount: 5000, full: true, winners: ['juanperez22', 'ana'] });
+  assert.ok(/SE AGOTÓ/.test(d) && /ju\*\*\*22/.test(d) && !/juanperez22/.test(d));
+  assert.ok(/TERMINÓ/.test(tg.dropDoneCaption({ code: 'X', amount: 5000, full: false, winners: [] })));
+});
+caso('#1044-d Sorteo en el canal: premios + pasos según los requisitos activos', () => {
+  const so = Object.assign({}, S.sorteo, { req: { app: true, notif: true, telegram: true, phone: true, deposit: true, week: false } });
+  const c = tg.sorteoCaption(so); assert.ok(/iPhone/.test(c) && /Activá las notificaciones/.test(c) && /Anotarme/.test(c) && !/7 días/.test(c) && c.length <= 1024);
+  assert.strictEqual(tg.sorteoSteps(null).length, 7, 'sin requisitos guardados ⇒ todos los pasos');
+  assert.ok(/ANOTATE GRATIS/.test(tg.sorteoSvg(so, null)));
+});
+caso('#1044-d Server: 1 automática por día (partidos y bono siempre), código cada N días con lock, agotado avisa en el canal, link ?ir=sorteo', () => {
+  const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/const TG_ALWAYS_KINDS = \['deporte', 'bono'\]/.test(S2) && /_tgIsDailyAuto\(st\)/.test(S2));
+  assert.ok(/autoKey: \{ \$not: \/\^cd\/ \}/.test(S2), 'los avisos del código de la app no van al canal');
+  assert.ok(/_cronClaim\('tgdrop'/.test(S2) && /_cronClaim\('tgsorteo'/.test(S2));
+  assert.ok(/if \(d\.createdBy === 'telegram'\) \{ await _tgDropDone\(d, winners, full\)/.test(S2));
+  assert.ok(/createdBy: 'telegram' \}\); \}/.test(S2) && /\/\?codigo=/.test(S2));
+  const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'auth.js'), 'utf8');
+  assert.ok(/_sp\.get\('ir'\) === 'sorteo'/.test(A) && /VIP\.sorteos\.open\('mensual'\)/.test(A));
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);
