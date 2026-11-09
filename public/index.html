@@ -1933,6 +1933,12 @@
                         <button type="button" class="sp-wd" onclick="VIP.home.spWithdraw()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>RETIRAR</button>
                         <button type="button" class="sp-rf" onclick="VIP.home.svcRefund()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></svg>REEMBOLSOS</button>
                     </div>
+                    <!-- #1042-i (owner): titular, alias y CBU abajo de los botones, chiquito, para copiar directo -->
+                    <div class="sp-bank" id="spBank" hidden>
+                        <div class="sp-bk-row sp-bk-tit"><span>Titular</span><b id="spBkTit">—</b></div>
+                        <button type="button" class="sp-bk-row" onclick="VIP.home.spCopy('alias')"><span>Alias</span><b id="spBkAlias">—</b><i>Copiar</i></button>
+                        <button type="button" class="sp-bk-row" onclick="VIP.home.spCopy('cbu')"><span>CBU</span><b id="spBkCbu">—</b><i>Copiar</i></button>
+                    </div>
                     <button type="button" class="sp-ticker" id="spTicker" hidden onclick="VIP.home.spPromoOpen()"><i class="sp-tk-dot"></i><span class="sp-tk-win"><span class="sp-tk-txt" id="spTickerTxt">CARGÁ Y GANÁ · 100% en tu primera carga</span></span><b>VER</b></button>
                 </div>
                 <!-- #235: pruebas de plataforma — links directos de Girox y Ganamos, abren en Google Chrome (home.js) -->
@@ -2754,7 +2760,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v677</div>
+                    <div class="pf-build" id="appBuildTag">app v678</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2783,7 +2789,7 @@
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v677</div> <!-- #790: espejo de #appBuildTag -->
+                <div class="pf-build pf-build-min" id="pfBuildMini">app v678</div> <!-- #790: espejo de #appBuildTag -->
                 <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
                 <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>

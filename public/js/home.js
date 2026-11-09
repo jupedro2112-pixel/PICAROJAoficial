@@ -458,8 +458,29 @@
         try { const r = await fetch('/api/support/ui-mode', { cache: 'no-store' }); const j = await r.json(); document.body.classList.toggle('sp-classic', !!(j && j.classic)); } catch (_) {}
         return document.body.classList.contains('sp-classic');
     }
+    // #1042-i: titular / alias / CBU de la cuenta vigente (mismo dato que la Carga automática: GET /api/config/cbu) para copiar con un toque.
+    let _spBk = null;
+    function spBankPaint() {
+        const box = _el('spBank'); if (!box) return;
+        try {
+            VIP.autoload.ensureCbu().then((c) => {
+                if (!c || !(c.number || c.alias)) { box.hidden = true; return; }
+                _spBk = c;
+                const set = (id, v) => { const e = _el(id); if (e) e.textContent = v || '—'; };
+                set('spBkTit', c.titular); set('spBkAlias', c.alias); set('spBkCbu', c.number);
+                box.hidden = false;
+            }).catch(() => {});
+        } catch (_) {}
+    }
+    function spCopy(which) {
+        const c = _spBk || {}; const v = which === 'cbu' ? String(c.number || '').replace(/\D/g, '') : String(c.alias || '').trim();
+        if (!v) return;
+        try { VIP.ui.copyText(v); } catch (_) {}
+        try { VIP.ui.showToast((which === 'cbu' ? 'CBU' : 'Alias') + ' copiado ✅', 'success'); } catch (_) {}
+    }
     async function spPromoPaint() {
         spUiMode();
+        spBankPaint();
         const tk = _el('spTicker'), tx = _el('spTickerTxt'); if (!tk || !tx) return;
         try {
             const j = await _fdPromoLoad(); _spPromo = j || null;
@@ -2986,7 +3007,7 @@
 
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
-        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spWithdraw, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,

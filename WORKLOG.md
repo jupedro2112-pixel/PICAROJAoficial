@@ -8,6 +8,12 @@
 
 ## Sesión 2026-11-09
 
+### 1042-i. Titular, alias y CBU para copiar en el chat de Soporte — PWA v678 (2026-11-09)
+- **Owner:** "poné titular, alias y CBU abajo de cargar / retirar / reembolsos, para que puedan copiar directo, chiquito que no tape el chat".
+- `#spBank` dentro de `#spActBar` (3 renglones de 12 px): Titular · Alias [Copiar] · CBU [Copiar]. Dato: `VIP.autoload.ensureCbu()` (GET
+  `/api/config/cbu`, la misma cuenta vigente que la Carga automática); sin dato ⇒ no se muestra. `VIP.home.spCopy('alias'|'cbu')` (CBU sólo dígitos).
+  Chat clásico ⇒ oculto. Adentro de Girox también (es el mismo panel).
+
 ### 1042-h. Revisión de seguridad antes de subir (2026-11-09)
 - **Riesgo encontrado y cerrado:** con "aprobar solas" un cliente podía repetir una pregunta N veces y hacer aprobar una respuesta trucha (otro CBU,
   un link) que el bot después le daba a TODOS. Ahora: la auto-aprobación cuenta CLIENTES DISTINTOS (mínimo 3, `users` con $addToSet) y nada con

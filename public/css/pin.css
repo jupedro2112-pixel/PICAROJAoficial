@@ -3213,3 +3213,15 @@ body.sp-classic .sp-actbar { display: none !important; } /* #1042-c: chat clási
 #casinoOverlay > #supportPanel.sp-in-casino #chatMessages { display: flex !important; flex: 1 1 auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .sp-quickbar { display: flex !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .chat-input-container { display: block !important; flex: 0 0 auto; }
+
+/* #1042-i (owner): titular / alias / CBU chiquitos abajo de DEPOSITAR · RETIRAR · REEMBOLSOS, para copiar directo sin tapar el chat */
+body:not(.sp-classic) .sp-bank { margin-top: 6px; border: 1px solid var(--p-border); border-radius: 10px; background: var(--p-card); overflow: hidden; }
+body:not(.sp-classic) .sp-bank[hidden] { display: none; }
+body:not(.sp-classic) .sp-bk-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 10px; border: 0; border-top: 1px solid var(--p-border); background: transparent; color: var(--p-text); font: 600 12px/1.25 var(--p-font); text-align: left; cursor: pointer; }
+body:not(.sp-classic) .sp-bk-row:first-child { border-top: 0; }
+body:not(.sp-classic) .sp-bk-tit { cursor: default; }
+body:not(.sp-classic) .sp-bk-row span { flex: 0 0 46px; color: var(--p-muted); font-weight: 700; font-size: 11px; }
+body:not(.sp-classic) .sp-bk-row b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; letter-spacing: .01em; }
+body:not(.sp-classic) .sp-bk-row i { flex: 0 0 auto; font-style: normal; font-weight: 800; font-size: 11px; color: var(--p-inv); background: var(--p-green); border-radius: 999px; padding: 3px 9px; }
+body:not(.sp-classic) .sp-bk-row:active i { background: var(--p-text); }
+body.sp-classic .sp-bank { display: none !important; }
