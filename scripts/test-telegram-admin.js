@@ -83,5 +83,16 @@ caso('Revisión de seguridad: /start sin armar fotos, tope global por privado, c
   const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
   assert.ok(A.includes('onclick="tgUseChannel(') && A.includes('async function tgUseChannel(id)') && /confirm\('¿Ese grupo es TUYO\?/.test(A));
 });
+caso('#1051 Claude en Telegram: token de GitHub cifrado, nunca devuelto, verificado con GitHub, sólo admin', () => {
+  const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const g = S.slice(S.indexOf("app.get('/api/admin/claude-dev'"), S.indexOf("app.post('/api/admin/claude-dev'"));
+  assert.ok(g.length > 100 && !/githubToken:|githubTokenEnc/.test(g), 'el GET nunca devuelve el token');
+  assert.ok(/set\.githubTokenEnc = _credEncrypt\(t\)/.test(S) && /const chk = await _cdevCheckGithub\(t/.test(S));
+  assert.ok(/\/\^\\\/api\\\/admin\\\/claude-dev\(\\\/\|\$\)\/i/.test(S), 'en STAFF_DENY_MUTATIONS');
+  for (const m of ['get', 'post']) assert.ok(new RegExp("app\\." + m + "\\('/api/admin/claude-dev', authMiddleware, adminMiddleware, async \\(req, res\\) => \\{\\n  if \\(req\\.user\\.role !== 'admin'\\)").test(S), m);
+  assert.ok(/key: 'claudedev'/.test(S));
+  const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
+  assert.ok(A.includes("document.getElementById('cdevToken').value = '';\n        if (!r.ok)"), 'el campo del token se vacía al guardar');
+});
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

@@ -6534,6 +6534,30 @@ async function saveSupportLearnSettings() {
 }
 window.saveSupportLearnSettings = saveSupportLearnSettings;
 window.loadSupportLearned = loadSupportLearned; window.supportLearnedAct = supportLearnedAct; window.supportLearnedNew = supportLearnedNew; window.supportLearnedCreate = supportLearnedCreate;
+// #1051 Claude en Telegram: el token se manda UNA vez y no vuelve (el input se vacía al guardar).
+async function loadClaudeDev() {
+    const st = document.getElementById('cdevState'); if (!st) return;
+    try {
+        const r = await authFetch('/api/admin/claude-dev'); const j = await r.json().catch(() => ({})); if (!r.ok) { st.textContent = ''; return; }
+        const c = j.config || {};
+        document.getElementById('cdevRepo').value = c.repo || ''; document.getElementById('cdevTgIds').value = (c.tgUserIds || []).join(', '); document.getElementById('cdevCap').value = c.monthlyUsdCap == null ? '' : c.monthlyUsdCap;
+        document.getElementById('cdevToken').value = ''; document.getElementById('cdevToken').placeholder = c.hasGithubToken ? 'guardado (…' + (c.githubTokenLast4 || '') + ') · pegá otro para cambiarlo' : 'github_pat_…';
+        st.innerHTML = (c.decryptError ? '<span style="color:#c62828;">⚠️ el token no se puede leer (¿cambió JWT_SECRET?): cargalo de nuevo</span>' : c.hasGithubToken ? '<span style="color:#2e7d32;">✅ token guardado (…' + escapeHtml(c.githubTokenLast4 || '') + ')</span>' : '<span style="color:#888;">sin token</span>') +
+            (c.hasAnthropicKey ? ' · <span style="color:#2e7d32;">IA ✅</span>' : ' · <span style="color:#c62828;">falta ANTHROPIC_API_KEY</span>') + (c.githubWarn ? '<br><span style="color:#b26a00;">⚠️ ' + escapeHtml(c.githubWarn) + '</span>' : '');
+    } catch (_) {}
+}
+async function saveClaudeDev(remove) {
+    const body = { repo: document.getElementById('cdevRepo').value.trim(), tgUserIds: document.getElementById('cdevTgIds').value, monthlyUsdCap: document.getElementById('cdevCap').value };
+    const t = document.getElementById('cdevToken').value.trim(); if (t) body.githubToken = t;
+    if (remove === true) { if (!confirm('¿Borrar el token de GitHub?')) return; body.removeGithubToken = true; }
+    try {
+        const r = await authFetch('/api/admin/claude-dev', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json().catch(() => ({})); document.getElementById('cdevToken').value = '';
+        if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
+        showToast(j.githubWarn ? '⚠️ ' + escapeHtml(j.githubWarn) : (t ? '🔒 Token verificado con GitHub y guardado cifrado' : '✅ Guardado'), j.githubWarn ? 'info' : 'success'); loadClaudeDev();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.loadClaudeDev = loadClaudeDev; window.saveClaudeDev = saveClaudeDev;
 window.loadSupportBot = loadSupportBot; window.saveSupportBot = saveSupportBot; window.testSupportBot = testSupportBot;
 
 // #589: Página de la app (dominio público) editable
@@ -7265,6 +7289,7 @@ async function loadInstallBonusPct() {
     try { loadRegistrationMode(); } catch (_) {} // #421
     try { loadPublisherWelcome(); } catch (_) {} // #1024
     try { loadSupportBot(); } catch (_) {} // #1042
+    try { loadClaudeDev(); } catch (_) {} // #1051
     try { loadBankOutage(); } catch (_) {} // #442
     try { loadWebhooksCard(); } catch (_) {} // #562 webhooks salientes
     const form = document.getElementById('installBonusPctForm');

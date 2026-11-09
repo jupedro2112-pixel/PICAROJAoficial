@@ -767,6 +767,22 @@ document.addEventListener('change', function (ev) {
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;"><span style="background:#e60023;color:#fff;font-weight:900;font-size:11px;letter-spacing:.08em;padding:3px 8px;border-radius:6px;">🆕 NUEVO</span><h3 style="margin:0;font-size:17px;">Lo último que agregamos</h3></div>
                     <p style="margin:0 0 12px;font-size:12.5px;color:var(--p-muted, #777);">Todo lo nuevo junto, acá arriba. Cada bloque dice cómo funciona.</p>
 
+                    <!-- #1051 CLAUDE EN TELEGRAM (configuración; el agente se activa en una próxima versión) -->
+                    <div style="border:2px solid var(--p-line, #e4e4e7);border-radius:12px;padding:12px;margin-bottom:10px;">
+                        <h4 style="margin:0 0 4px;">🛠️ Claude en Telegram <span id="cdevState" style="font-weight:700;font-size:12.5px;"></span></h4>
+                        <p style="margin:0 0 8px;font-size:12.5px;line-height:1.5;">Para pedirle cambios del sistema desde el grupo de reportes y recibir el <b>zip listo</b> para subir a Amazon. Nunca sube nada solo ni toca la rama principal. <b>El token queda cifrado y no se vuelve a mostrar</b> (sólo los últimos 4 caracteres).</p>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px;">
+                            <label style="flex:1 1 260px;">Token de GitHub (fine-grained, sólo este repo) <input type="password" id="cdevToken" autocomplete="off" placeholder="github_pat_…" style="width:100%;"></label>
+                            <label style="flex:1 1 200px;">Repo <input type="text" id="cdevRepo" style="width:100%;"></label>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px;margin-bottom:6px;">
+                            <label style="flex:1 1 260px;">Tu id de Telegram (sólo él le puede pedir cambios; hasta 3, separados por coma) <input type="text" id="cdevTgIds" placeholder="123456789" style="width:100%;"></label>
+                            <label>Tope por mes (US$) <input type="number" id="cdevCap" min="0" max="1000" style="width:80px;"></label>
+                        </div>
+                        <small style="display:block;color:var(--p-muted, #777);margin-bottom:6px;">Tu id de Telegram: escribile a <b>@userinfobot</b> en Telegram y te lo dice. Token: GitHub → Settings → Developer settings → Fine-grained tokens → sólo este repo → Contents y Pull requests en "Read and write".</small>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn-primary btn-small" onclick="saveClaudeDev()">Guardar</button><button class="btn-secondary btn-small" onclick="saveClaudeDev(true)">Borrar token</button></div>
+                    </div>
+
                     <!-- #1042 BOT DE SOPORTE CON IA -->
                     <div style="border:2px solid var(--p-red, #e60023);border-radius:12px;padding:12px;margin-bottom:10px;">
                         <h4 style="margin:0 0 4px;">🤖 Bot de soporte con IA <span id="sbState" style="font-weight:700;font-size:12.5px;"></span></h4>

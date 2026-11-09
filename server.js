@@ -4659,7 +4659,9 @@ const STAFF_DENY_MUTATIONS = [
   // #1042-g (seguridad): lo que dice el bot a TODOS los clientes (config, respuestas aprendidas, prueba que gasta IA): sólo admin.
   /^\/api\/admin\/support-bot(\/|$)/i,
   // #1044: el canal de Telegram (token del bot, qué se publica a todos): sólo admin.
-  /^\/api\/admin\/telegram(\/|$)/i
+  /^\/api\/admin\/telegram(\/|$)/i,
+  // #1051: Claude en Telegram (token de GitHub, quién le puede pedir cambios): sólo admin.
+  /^\/api\/admin\/claude-dev(\/|$)/i
 ];
 const adminMiddleware = (req, res, next) => {
   if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'withdrawer' && req.user.role !== 'comunidad') {
@@ -31090,6 +31092,68 @@ async function _tgSetWebhook(c, dropPending) {
   if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _tgSet({ webhookSecret: secret }); }
   return tgChannel.call(c.token, 'setWebhook', { url: TG_WEBHOOK_BASE + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message', 'my_chat_member'], drop_pending_updates: dropPending === true }); // #1047: my_chat_member = lo agregaron/sacaron de un canal o grupo
 }
+// ── #1051 CLAUDE EN TELEGRAM (configuración). El owner quiere pedirle cambios al código desde el grupo de reportes y recibir el zip listo
+// para subir a Amazon (owner: "que funcione como vos pero ya configurado"). Acá SÓLO se guarda la configuración; el agente se arma después.
+// Seguridad: el token de GitHub se guarda CIFRADO (`_credEncrypt`, JWT_SECRET) y NUNCA vuelve al panel (sólo los últimos 4 y el permiso
+// verificado); sólo el admin general lo ve/cambia (STAFF_DENY_MUTATIONS); el agente nunca toca `main` ni Amazon (sólo ramas `claude/*`).
+const CDEV_DEFAULT = { enabled: false, repo: 'jupedro2112-pixel/PICAROJAoficial', tgUserIds: [], monthlyUsdCap: 50 };
+async function _cdevCfg() {
+  let v = null; try { v = await getConfig('claudeDev', null); } catch (_) {}
+  const c = Object.assign({}, CDEV_DEFAULT, v && typeof v === 'object' ? v : {});
+  let token = null; try { token = c.githubTokenEnc ? _credDecrypt(c.githubTokenEnc) : null; } catch (_) { c.decryptError = true; }
+  c.githubToken = token; return c;
+}
+async function _cdevSet(fields) {
+  const $set = { updatedAt: new Date() }; for (const [k, v] of Object.entries(fields || {})) $set['value.' + k] = v;
+  await Config.collection.updateOne({ key: 'claudedev' }, { $set }, { upsert: true }); // key en minúsculas (revisión #1046)
+  try { Config._cache && Config._cache.clear(); } catch (_) {}
+}
+async function _cdevCheckGithub(token, repo) { // ¿el token sirve y tiene permiso de escritura SOLO en ese repo?
+  const axios = require('axios');
+  try {
+    const r = await axios.get('https://api.github.com/repos/' + repo, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'User-Agent': 'picaroja-backend' }, timeout: 10000, validateStatus: () => true });
+    if (r.status === 401) return { ok: false, error: 'GitHub rechazó el token (vencido o mal copiado).' };
+    if (r.status === 404) return { ok: false, error: 'El token no ve el repo ' + repo + ' (en "Repository access" elegí ese repo).' };
+    if (r.status !== 200) return { ok: false, error: 'GitHub respondió ' + r.status };
+    const perm = (r.data && r.data.permissions) || {};
+    if (!perm.push) return { ok: false, error: 'El token ve el repo pero NO puede escribir (en Permissions poné "Contents: Read and write").' };
+    const classic = /^ghp_/.test(token);
+    return { ok: true, admin: !!perm.admin, classic };
+  } catch (e) { return { ok: false, error: 'No pude hablar con GitHub: ' + String(e.message).slice(0, 80) }; }
+}
+app.get('/api/admin/claude-dev', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _cdevCfg();
+    res.json({ success: true, config: { enabled: !!c.enabled, repo: c.repo, tgUserIds: c.tgUserIds || [], monthlyUsdCap: c.monthlyUsdCap,
+      hasGithubToken: !!c.githubToken, githubTokenLast4: c.githubTokenLast4 || null, githubCheckedAt: c.githubCheckedAt || null, githubWarn: c.githubWarn || null,
+      decryptError: !!c.decryptError, hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY } });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/claude-dev', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  if (process.env.RENDER === 'true') return res.status(409).json({ error: 'En el entorno de prueba (Render) no se carga: comparte la base con producción.' });
+  try {
+    const b = req.body || {}; const set = {}; const c = await _cdevCfg();
+    if (typeof b.repo === 'string') { const r = b.repo.trim(); if (!/^[A-Za-z0-9_.-]{1,40}\/[A-Za-z0-9_.-]{1,100}$/.test(r)) return res.status(400).json({ error: 'Repo inválido (formato usuario/repo).' }); set.repo = r; }
+    if (b.tgUserIds !== undefined) { const ids = String(Array.isArray(b.tgUserIds) ? b.tgUserIds.join(',') : b.tgUserIds).split(/[\s,]+/).filter(Boolean); if (ids.some((x) => !/^\d{4,15}$/.test(x))) return res.status(400).json({ error: 'Los ids de Telegram son números (ej. 123456789).' }); set.tgUserIds = ids.slice(0, 3); }
+    if (b.monthlyUsdCap !== undefined) { const n = Number(b.monthlyUsdCap); if (!Number.isFinite(n) || n < 0 || n > 1000) return res.status(400).json({ error: 'Tope mensual entre 0 y 1000 US$.' }); set.monthlyUsdCap = Math.round(n); }
+    if (typeof b.githubToken === 'string' && b.githubToken.trim()) {
+      const t = b.githubToken.trim();
+      if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(t)) return res.status(400).json({ error: 'Eso no parece un token de GitHub (empieza con github_pat_).' });
+      const chk = await _cdevCheckGithub(t, set.repo || c.repo);
+      if (!chk.ok) return res.status(400).json({ error: chk.error });
+      set.githubTokenEnc = _credEncrypt(t); set.githubTokenLast4 = t.slice(-4); set.githubCheckedAt = new Date();
+      set.githubWarn = chk.classic ? 'Es un token CLÁSICO (ve todos tus repos): mejor uno "fine-grained" sólo para este repo.' : (chk.admin ? 'El token tiene permiso de ADMIN del repo: alcanza con Contents y Pull requests.' : null);
+    }
+    if (b.removeGithubToken === true) { set.githubTokenEnc = null; set.githubTokenLast4 = null; set.githubWarn = null; }
+    if (typeof b.enabled === 'boolean') set.enabled = b.enabled;
+    await _cdevSet(set);
+    logger.info(`[claude-dev] configuración cambiada por ${req.user.username}` + (set.githubTokenEnc ? ' (token de GitHub nuevo)' : ''));
+    const n = await _cdevCfg();
+    res.json({ success: true, githubWarn: n.githubWarn || null, hasGithubToken: !!n.githubToken });
+  } catch (e) { logger.warn('[claude-dev] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
 const _tgPrivSeen = new Map(); // revisión: freno por chat privado (2 s)
 const _tgSecretMem = { v: null, at: 0, p: null }; // revisión de seguridad: el secreto se compara contra una copia en memoria (60 s)
 async function _tgSecretNow() {

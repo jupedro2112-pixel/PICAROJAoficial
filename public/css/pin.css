@@ -3265,3 +3265,24 @@ body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .tn-
    casino se oculta (con el chat clásico queda, porque ahí es el único acceso). */
 body:not(.sp-classic) #ctSupport { display: none !important; }
 
+/* ── #1052 (owner): "en el registro se pierden las palabras del registro por SMS por el fondo: poné FONDO NEGRO, tapá todo el servicio, dejá
+   sólo Registrate / Iniciar sesión, sacá historias y Telegram". La pantalla de ingreso y la de registro van en NEGRO con letras blancas
+   (los tokens --p-* se redefinen SÓLO adentro de #loginScreen, así todo lo que ya usa tokens queda legible) y se esconde todo lo demás. */
+#loginScreen {
+  --p-bg: #000; --p-card: #111; --p-surface: #1a1a1a; --p-surface-2: #242424; --p-text: #fff; --p-text-2: #e6e6e6; --p-muted: #b8b8b8;
+  --p-border: #333; --p-border-hi: #444; --p-placeholder: #8a8a8a; --p-hover: #1f1f1f; --p-inv: #000; --p-red-soft: #3a1a1f;
+  color-scheme: dark; background: #000 !important; color: #fff;
+}
+#loginScreen .login-box, #loginScreen .lg-regscreen, #loginScreen .lg-form { background: #000 !important; color: #fff !important; box-shadow: none !important; }
+#loginScreen h1, #loginScreen h2, #loginScreen label, #loginScreen .lg-brand b, #loginScreen .lg-quick-l, #loginScreen .lg-login-h, #loginScreen .lg-steps, #loginScreen .lg-done-t { color: #fff !important; }
+#loginScreen small, #loginScreen .lg-quick-n, #loginScreen .lg-brand small, #loginScreen .lg-reg-trust, #loginScreen .lg-foot, #loginScreen #quickSmsMsg { color: #c8c8c8 !important; }
+#loginScreen input, #loginScreen select, #loginScreen .lg-phone { background: #1a1a1a !important; color: #fff !important; border-color: #444 !important; }
+#loginScreen input::placeholder { color: #8a8a8a !important; }
+#loginScreen .lg-phone span { color: #fff !important; }
+#loginScreen .lg-link, #loginScreen .lg-reg-login, #loginScreen .lg-reg-back { color: #fff !important; }
+#loginScreen .lg-quick-otp { color: #fff !important; border-color: #fff !important; background: transparent !important; }
+#loginScreen .lg-cred { background: #1a1a1a !important; color: #fff !important; }
+/* fuera: historias, Telegram, hero, servicios, plataformas, próximamente, reseñas, confianza, el segundo bloque de "Crear mi cuenta" y el popup */
+#loginScreen #lgStoriesRing, #loginScreen #helpTelegramBtn, #loginScreen .lg-hero, #loginScreen .lg-trustrow, #loginScreen .lg-play-box,
+#loginScreen #lgSoon, #loginScreen .lg-sys, #loginScreen #lgTrust, #loginScreen .lg-alt, #loginScreen .lg-sec-reviews, #loginScreen #lgPop { display: none !important; }
+

@@ -8,6 +8,18 @@
 
 ## Sesión 2026-11-09
 
+### 1052. Ingreso y registro en NEGRO, sólo Registrate / Iniciar sesión — app v696 (2026-11-09)
+- **Owner:** "en el registro se pierden las palabras del registro por SMS por el fondo; poné fondo negro, tapá todo el servicio, dejá sólo Registrate / Iniciar
+  sesión, sacá historias y Telegram". pin.css (final): tokens `--p-*` redefinidos SÓLO dentro de `#loginScreen` (negro, letras blancas, inputs oscuros) y fuera
+  hero, confianza, plataformas, PRÓXIMAMENTE, servicios, reseñas, el 2º bloque "Crear mi cuenta", el popup, historias y Telegram. Queda: logo, Iniciar sesión,
+  📝 Registrarse, 🔑 Olvidé mi contraseña, la burbuja de soporte para visitantes y el +18. No probado en un celular.
+
+### 1051. Claude en Telegram: CONFIGURACIÓN (token de GitHub cifrado) — panel v271 (2026-11-09)
+- Configuración → 🆕 NUEVO → 🛠️ Claude en Telegram: token de GitHub (fine-grained, se verifica contra GitHub que vea el repo y pueda escribir; se guarda
+  cifrado con `_credEncrypt` en `Config['claudeDev'].githubTokenEnc`, el GET nunca lo devuelve: sólo los últimos 4), repo, ids de Telegram que pueden pedir
+  cambios (hasta 3) y tope mensual en US$. Rutas `/api/admin/claude-dev` sólo admin (+ STAFF_DENY_MUTATIONS); en Render no se carga. El AGENTE (que haga los
+  cambios y mande el zip) todavía NO está armado: esto sólo deja guardada la configuración.
+
 ### 1050. Revisión de SEGURIDAD de todo lo de hoy (9749567..HEAD) — panel v270 (2026-11-09)
 - Resultado: nada crítico (sin secretos en el repo, rutas nuevas sólo admin, nadie ve datos de otro cliente, la IA no mueve plata). Arreglado:
   - `/start` del bot ya NO arma la foto (frenaba el servidor con pedidos repetidos): reenvía la del panel por `panelFileId`; tope global de 120 respuestas/min por privado.
