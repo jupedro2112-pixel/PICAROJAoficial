@@ -4656,7 +4656,9 @@ const STAFF_DENY_MUTATIONS = [
   // un agente podía poner su propio número y recibir transferencias / comprobantes / claves.
   /^\/api\/admin\/(soporte-vip|community)(\/|$)/i,
   // #1042-g (seguridad): lo que dice el bot a TODOS los clientes (config, respuestas aprendidas, prueba que gasta IA): sólo admin.
-  /^\/api\/admin\/support-bot(\/|$)/i
+  /^\/api\/admin\/support-bot(\/|$)/i,
+  // #1044: el canal de Telegram (token del bot, qué se publica a todos): sólo admin.
+  /^\/api\/admin\/telegram(\/|$)/i
 ];
 const adminMiddleware = (req, res, next) => {
   if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'withdrawer' && req.user.role !== 'comunidad') {
@@ -30566,6 +30568,245 @@ async function _menuRetCompute() {
   const menusEnabled = await getConfig('menusEnabled', null).catch(() => null), bot = await getSupportBotConfig().catch(() => ({}));
   return { at: now.toISOString(), byMenu, byChat, weeks, current: { menusEnabled, chat: bot.classic ? 'classic' : 'new' } };
 }
+// ============================================
+// #1044 CANAL DE TELEGRAM (owner 2026-11-09): toda historia PÚBLICA de la app se publica también en el canal (foto + texto + botón "Entrar a
+// PICA ROJA"), repartidas en el día (contenido rotativo), y un PANEL DEL MES fijado arriba del canal que se actualiza solo cada hora, con botones
+// que abren ventanitas: beneficios del mes, premios pagados, lo regalado, el premio más grande, sorteo y servicio completo.
+// Config['telegramBot'] (campo a campo con `_tgSet`, nunca leer→mezclar→guardar): tokenEnc (cifrado con JWT_SECRET), channel, appUrl, mirror,
+// panel, gapMin, since, panelMsgId, webhookSecret, lastPostAt, lastError. Token por env TELEGRAM_BOT_TOKEN si no está en el panel.
+// Lo que NO va al canal: historias personales (audienceUserId), códigos sorpresa (codeDropId: son sólo para quien ya cargó) y las de antes de prenderlo.
+// ============================================
+const tgChannel = require('./src/services/telegramChannel');
+const TG_DEFAULT = { channel: '', appUrl: 'https://picaroja.com', mirror: true, panel: true, gapMin: 90, quietFrom: 23, quietTo: 9 };
+async function _tgCfg() {
+  let v = null; try { v = await getConfig('telegramBot', null); } catch (_) {}
+  const c = Object.assign({}, TG_DEFAULT, v && typeof v === 'object' ? v : {});
+  c.gapMin = Math.min(600, Math.max(10, Number(c.gapMin) || TG_DEFAULT.gapMin));
+  c.appUrl = /^https:\/\/[^\s/]+/i.test(String(c.appUrl || '')) ? String(c.appUrl).replace(/\/+$/, '') : TG_DEFAULT.appUrl;
+  let token = null; try { token = c.tokenEnc ? _credDecrypt(c.tokenEnc) : null; } catch (_) { c.decryptError = true; }
+  c.token = token || process.env.TELEGRAM_BOT_TOKEN || null;
+  return c;
+}
+async function _tgSet(fields) {
+  const $set = { updatedAt: new Date() }; for (const [k, v] of Object.entries(fields || {})) $set['value.' + k] = v;
+  await Config.collection.updateOne({ key: 'telegramBot' }, { $set }, { upsert: true });
+  try { Config._cache && Config._cache.clear(); } catch (_) {}
+}
+function _tgArtHour(d = new Date()) { return Number(new Date(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24; }
+
+// La foto de una historia lista para Telegram: archivo del repo / subida al panel (SVG ⇒ PNG) / foto automática (SVG ⇒ PNG) / URL https.
+async function _tgStoryMedia(st) {
+  try {
+    if (st.mediaType === 'video') {
+      if (st.mediaUrl && /^https:\/\//i.test(st.mediaUrl)) return { kind: 'video', media: st.mediaUrl };
+      const full = await Story.findOne({ id: st.id }).select('+mediaData mediaMime').lean();
+      const m = full && /^data:([\w/+.-]+);base64,(.+)$/s.exec(full.mediaData || '');
+      if (m) return { kind: 'video', media: { buffer: Buffer.from(m[2], 'base64'), mime: m[1] } };
+      return null;
+    }
+    let buf = null, mime = '';
+    if (st.mediaType === 'image') {
+      if (st.mediaUrl && /^https:\/\//i.test(st.mediaUrl)) return { kind: 'photo', media: st.mediaUrl };
+      if (st.mediaUrl && st.mediaUrl.startsWith('/')) {
+        const pub = path.join(__dirname, 'public'); const f = path.normalize(path.join(pub, st.mediaUrl.split('?')[0]));
+        if (f.startsWith(pub + path.sep) && fs.existsSync(f)) { buf = fs.readFileSync(f); mime = /\.svg$/i.test(f) ? 'image/svg+xml' : 'image/' + (path.extname(f).slice(1) || 'png'); }
+      }
+      if (!buf) {
+        const full = await Story.findOne({ id: st.id }).select('+mediaData mediaMime').lean();
+        const m = full && /^data:([\w/+.-]+);base64,(.+)$/s.exec(full.mediaData || '');
+        if (m) { buf = Buffer.from(m[2], 'base64'); mime = full.mediaMime || m[1]; }
+      }
+    }
+    if (!buf) {
+      const full = await Story.findOne({ id: st.id }).select('+autoImg').lean();
+      if (full && full.autoImg) { buf = Buffer.from(storyImage.renderSvg(full.autoImg), 'utf8'); mime = 'image/svg+xml'; }
+    }
+    if (!buf) return null;
+    if (/svg/i.test(mime)) { const png = await pdfImage.svgBufferToPng(buf, { scale: 1 }); if (!png) return null; buf = png; mime = 'image/png'; }
+    return { kind: 'photo', media: { buffer: buf, mime, filename: 'historia.' + (mime.split('/')[1] || 'png').replace('jpeg', 'jpg') } };
+  } catch (e) { logger.warn(`[telegram] foto de la historia ${st.id}: ${e.message}`); return null; }
+}
+async function _tgPostStory(c, st) {
+  const extra = { caption: tgChannel.storyCaption(st), parse_mode: 'HTML', reply_markup: tgChannel.storyButtons(st, c.appUrl), disable_notification: _tgQuiet(c) };
+  const md = await _tgStoryMedia(st);
+  if (md) { const r = await tgChannel.sendMedia(c.token, md.kind, c.channel, md.media, extra); if (r.ok) return r; logger.warn(`[telegram] foto rechazada (${r.error}); va sólo el texto`); }
+  return tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: extra.caption, parse_mode: 'HTML', reply_markup: extra.reply_markup, disable_web_page_preview: true, disable_notification: extra.disable_notification });
+}
+function _tgQuiet(c) { const h = _tgArtHour(); return c.quietFrom > c.quietTo ? (h >= c.quietFrom || h < c.quietTo) : (h >= c.quietFrom && h < c.quietTo); }
+function _tgStoryQuery(c, now) {
+  return { isActive: true, audienceUserId: null, codeDropId: null, tgPostedAt: null, tgTries: { $lt: 3 }, expiresAt: { $gt: now }, publishedAt: { $gte: new Date(c.since || now), $lte: now } };
+}
+// Cada 2 min: UNA historia por vez, respetando el espacio entre posteos (gapMin) y sin publicar de noche (salvo una historia con bono vigente).
+async function _tgMirrorTick(force) {
+  const c = await _tgCfg();
+  if (!c.mirror || !c.token || !c.channel) return { ok: false, why: 'apagado o sin configurar' };
+  if (!force && !(await _cronClaim('tgmirror', 100000))) return { ok: false, why: 'otra instancia' };
+  const now = new Date();
+  const q = _tgStoryQuery(c, now);
+  const bonusQ = Object.assign({}, q, { bonusPct: { $gt: 0 }, bonusUntil: { $gt: now } });
+  let st = await Story.findOne(bonusQ).sort({ publishedAt: 1 }).lean(); // con bono: sale enseguida (es por pocas horas)
+  if (!st && !force) {
+    if (_tgQuiet(c)) return { ok: false, why: 'horario de silencio' };
+    if (c.lastPostAt && now - new Date(c.lastPostAt) < c.gapMin * 60000) return { ok: false, why: 'esperando el espacio entre posteos' };
+  }
+  if (!st) st = await Story.findOne(q).sort({ publishedAt: 1 }).lean();
+  if (!st) return { ok: false, why: 'no hay historias nuevas' };
+  const claimed = await Story.findOneAndUpdate({ id: st.id, tgPostedAt: null }, { $set: { tgPostedAt: now } });
+  if (!claimed) return { ok: false, why: 'ya publicada' };
+  const r = await _tgPostStory(c, st);
+  if (r.ok) {
+    await Story.updateOne({ id: st.id }, { $set: { tgMsgId: (r.result && r.result.message_id) || null, tgError: null } });
+    await _tgSet({ lastPostAt: now, lastError: null });
+    logger.info(`[telegram] historia ${st.id} publicada en el canal`);
+    return { ok: true, storyId: st.id };
+  }
+  await Story.updateOne({ id: st.id }, { $set: { tgPostedAt: null, tgError: String(r.error || '').slice(0, 200) }, $inc: { tgTries: 1 } });
+  await _tgSet({ lastError: `historia ${st.title || st.id}: ${String(r.error || '').slice(0, 160)}`, lastErrorAt: now });
+  logger.warn(`[telegram] no se pudo publicar la historia ${st.id}: ${r.error}`);
+  return { ok: false, why: r.error };
+}
+
+// Datos del panel del mes (agregaciones; corre en el cron, nunca en una ruta de lectura).
+async function _tgPanelCompute() {
+  const now = new Date();
+  const ymd = _schedArtKey(now); const [y, m] = ymd.split('-').map(Number);
+  const start = new Date(`${ymd.slice(0, 7)}-01T00:00:00-03:00`);
+  const s = { monthIdx: m - 1, year: y, updatedAt: now, benefits: {}, paid: { sum: 0, count: 0 }, gifted: { sum: 0, count: 0 }, top: null, sorteo: null };
+  try {
+    const ig = await getInstallGiftConfig();
+    s.benefits = { firstPct: await getFirstDepositBonusPct(null), firstCap: await getFirstDepositCapArs(null), dailyRefundPct: await getDailyRefundPct(), installFixed: ig.enabled && ig.fixedArs > 0 ? ig.fixedArs : 0, giftRolloverX: await _giftRolloverX() };
+  } catch (_) {}
+  try {
+    const r = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: start }, titular: { $ne: 'PRUEBA TEST' } } }, { $group: { _id: null, sum: { $sum: '$amount' }, count: { $sum: 1 } } }]);
+    if (r[0]) s.paid = { sum: Math.round(r[0].sum), count: r[0].count };
+    // El más grande, sin bloqueados / secundarias / observación / staff / pruebas (mismo filtro que las historias de ganadores).
+    const rows = await PendingPayout.aggregate([{ $match: { status: 'paid', paidAt: { $gte: start }, titular: { $ne: 'PRUEBA TEST' } } }, { $sort: { amount: -1 } }, { $limit: 8 }, { $project: { userId: 1, username: 1, amount: 1 } }]);
+    const bad = new Set((await User.find({ id: { $in: rows.map((x) => x.userId) }, $or: [{ isBlocked: true }, { duplicateOf: { $ne: null } }, { 'fraudReview.status': 'watch' }, { role: { $ne: 'user' } }] }).select('id').lean()).map((u) => u.id));
+    const t = rows.find((x) => !bad.has(x.userId) && !/test|prueba/i.test(x.username || ''));
+    if (t) s.top = { amount: Math.round(t.amount), username: t.username };
+  } catch (e) { logger.warn('[telegram] premios del mes: ' + e.message); }
+  try {
+    const r = await Transaction.aggregate([{ $match: { type: { $in: CASHBACK_GIFT_TX_TYPES }, timestamp: { $gte: start }, status: { $nin: ['failed', 'cancelled'] }, description: { $not: /PRUEBA/i } } }, { $group: { _id: null, sum: { $sum: '$amount' }, count: { $sum: 1 } } }]);
+    if (r[0]) s.gifted = { sum: Math.round(r[0].sum), count: r[0].count };
+  } catch (e) { logger.warn('[telegram] regalado del mes: ' + e.message); }
+  try {
+    const so = await _sorteosCfg();
+    if (so.enabled) {
+      const pick = ['gran', 'mensual'].map((k) => so[k]).find((x) => x && x.enabled && sorteosRules.periodOf(x, now).status === 'live');
+      if (pick) {
+        const per = sorteosRules.periodOf(pick, now); const rq = so.requirements || {};
+        const req = [rq.app && 'app instalada', rq.notif && 'notificaciones', rq.telegram && 'unirte a Telegram', rq.phone && 'celular cargado', rq.deposit && 'una carga', rq.week && 'cuenta con 7 días'].filter(Boolean);
+        s.sorteo = { title: `${pick.title} (cierra el ${per.end.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })})`, prizes: (pick.prizes || []).map((p) => ({ pos: p.pos, name: p.name, value: p.value || '' })), requirements: req };
+      }
+    }
+  } catch (_) {}
+  return s;
+}
+// Cada hora: recalcula y EDITA el mensaje fijado del canal (si no existe, lo crea y lo fija).
+async function _tgPanelTick(force) {
+  const c = await _tgCfg();
+  if (!c.panel || !c.token || !c.channel) return { ok: false, why: 'apagado o sin configurar' };
+  if (!force && !(await _cronClaim('tgpanel', 50 * 60000))) return { ok: false, why: 'otra instancia' };
+  const s = await _tgPanelCompute();
+  try { await Config.set('telegramPanelStats', s, 'telegram'); } catch (_) {}
+  const text = tgChannel.panelText(s), reply_markup = tgChannel.panelButtons(c.appUrl);
+  if (c.panelMsgId) {
+    const r = await tgChannel.call(c.token, 'editMessageText', { chat_id: c.channel, message_id: c.panelMsgId, text, parse_mode: 'HTML', reply_markup, disable_web_page_preview: true });
+    if (r.ok || /not modified/i.test(r.error || '')) return { ok: true, edited: true };
+    if (!/not found|can't be edited|MESSAGE_ID_INVALID/i.test(r.error || '')) { await _tgSet({ lastError: 'panel: ' + String(r.error).slice(0, 160), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
+  }
+  const r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', reply_markup, disable_web_page_preview: true, disable_notification: true });
+  if (!r.ok) { await _tgSet({ lastError: 'panel: ' + String(r.error).slice(0, 160), lastErrorAt: new Date() }); return { ok: false, why: r.error }; }
+  await _tgSet({ panelMsgId: r.result.message_id });
+  const pin = await tgChannel.call(c.token, 'pinChatMessage', { chat_id: c.channel, message_id: r.result.message_id, disable_notification: true });
+  if (!pin.ok) await _tgSet({ lastError: 'no pude fijar el panel (¿el bot es admin con permiso de fijar?): ' + String(pin.error).slice(0, 120), lastErrorAt: new Date() });
+  return { ok: true, created: true };
+}
+// Webhook: botones del panel (ventanitas) y /start por privado (le manda el panel). Sólo con el secreto que le dimos a Telegram.
+async function _tgSetWebhook(c) {
+  if (!c.token) return { ok: false, error: 'sin token' };
+  let secret = c.webhookSecret;
+  if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _tgSet({ webhookSecret: secret }); }
+  return tgChannel.call(c.token, 'setWebhook', { url: c.appUrl + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message'], drop_pending_updates: true });
+}
+app.post('/api/telegram/webhook', async (req, res) => {
+  try {
+    const c = await _tgCfg();
+    const got = String(req.get('x-telegram-bot-api-secret-token') || '');
+    if (!c.webhookSecret || got.length !== c.webhookSecret.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(c.webhookSecret))) return res.status(401).end();
+    res.json({ ok: true }); // a Telegram se le contesta enseguida; lo demás sigue acá
+    const u = req.body || {};
+    const stats = (await getConfig('telegramPanelStats', null)) || await _tgPanelCompute();
+    if (u.callback_query && /^tg:(benef|paid|top|sorteo|serv)$/.test(String(u.callback_query.data || ''))) {
+      await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id, text: tgChannel.popupText(u.callback_query.data.slice(3), stats), show_alert: true });
+    } else if (u.callback_query) {
+      await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id });
+    } else if (u.message && u.message.chat && u.message.chat.type === 'private') {
+      await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: tgChannel.panelText(stats), parse_mode: 'HTML', reply_markup: tgChannel.panelButtons(c.appUrl), disable_web_page_preview: true });
+    }
+  } catch (e) { logger.warn('[telegram] webhook: ' + e.message); if (!res.headersSent) res.status(200).end(); }
+});
+// Panel → Configuración → NUEVO → 📣 Canal de Telegram (sólo admin general).
+app.get('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _tgCfg(); const now = new Date();
+    const queue = (c.token && c.channel && c.mirror) ? await Story.countDocuments(_tgStoryQuery(c, now)) : 0;
+    const posted = await Story.find({ tgPostedAt: { $ne: null } }).sort({ tgPostedAt: -1 }).limit(5).select('id title tgPostedAt tgMsgId').lean();
+    res.set('Cache-Control', 'no-store');
+    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null }, queue, posted });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const b = req.body || {}; const set = { updatedBy: req.user.username };
+    const token = typeof b.token === 'string' ? b.token.trim() : '';
+    if (token && !/^\d{5,15}:[A-Za-z0-9_-]{25,60}$/.test(token)) return res.status(400).json({ error: 'El token no parece el de BotFather (número:letras).' });
+    if (typeof b.channel === 'string') { const ch = b.channel.trim(); if (ch && !/^(@[A-Za-z0-9_]{4,64}|-100\d{5,20})$/.test(ch)) return res.status(400).json({ error: 'Canal: poné el @nombre del canal (ej. @picarojaoficial) o su número (-100…).' }); set.channel = ch; }
+    if (typeof b.appUrl === 'string' && b.appUrl.trim()) { if (!/^https:\/\/[^\s/]+/i.test(b.appUrl.trim())) return res.status(400).json({ error: 'El link de la app tiene que empezar con https://' }); set.appUrl = b.appUrl.trim().replace(/\/+$/, ''); }
+    if (typeof b.mirror === 'boolean') set.mirror = b.mirror;
+    if (typeof b.panel === 'boolean') set.panel = b.panel;
+    if (b.gapMin != null && Number.isFinite(Number(b.gapMin))) set.gapMin = Math.min(600, Math.max(10, Math.round(Number(b.gapMin))));
+    // El token se PRUEBA antes de guardar (getMe) y se guarda cifrado.
+    let me = null;
+    if (token) {
+      const r = await tgChannel.call(token, 'getMe', {}); if (!r.ok) return res.status(400).json({ error: 'Telegram rechazó ese token: ' + String(r.error).slice(0, 120) });
+      me = r.result; if (!_credKey()) return res.status(503).json({ error: 'No se puede cifrar ahora (falta JWT_SECRET).' });
+      Object.assign(set, { tokenEnc: _credEncrypt(token), tokenLast4: token.slice(-4), botUsername: me.username || null });
+    }
+    const prev = await _tgCfg();
+    if (!prev.since && (set.mirror !== false)) set.since = new Date(); // sólo historias desde que se prende (no inunda el canal con las viejas)
+    if (set.channel != null && set.channel !== prev.channel) set.panelMsgId = null; // canal nuevo ⇒ panel nuevo
+    await _tgSet(set);
+    const c = await _tgCfg(); const out = { success: true, bot: c.botUsername || null };
+    if (c.token && c.channel) {
+      const ch = await tgChannel.call(c.token, 'getChat', { chat_id: c.channel });
+      if (!ch.ok) return res.json(Object.assign(out, { warning: 'Guardado, pero el bot no ve el canal: agregalo como ADMINISTRADOR del canal (' + String(ch.error).slice(0, 100) + ').' }));
+      await _tgSet({ channelTitle: ch.result.title || null });
+      const meId = me ? me.id : ((await tgChannel.call(c.token, 'getMe', {})).result || {}).id;
+      const mem = meId ? await tgChannel.call(c.token, 'getChatMember', { chat_id: c.channel, user_id: meId }) : { ok: false };
+      if (!mem.ok || mem.result.status !== 'administrator') return res.json(Object.assign(out, { warning: 'Guardado, pero el bot NO es administrador del canal: agregalo como admin con permiso de publicar, editar y fijar mensajes.' }));
+      const wh = await _tgSetWebhook(c); if (!wh.ok) out.warning = 'Guardado, pero no pude activar los botones del panel: ' + String(wh.error).slice(0, 120);
+      out.channelTitle = ch.result.title || null;
+    }
+    res.json(out);
+  } catch (e) { logger.warn('[telegram] guardar: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/telegram/now', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const what = String((req.body || {}).what || '');
+    const r = what === 'panel' ? await _tgPanelTick(true) : what === 'story' ? await _tgMirrorTick(true) : null;
+    if (!r) return res.status(400).json({ error: 'Acción inválida' });
+    res.json(Object.assign({ success: !!r.ok }, r));
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+setTimeout(() => { _tgMirrorTick().catch(() => {}); setInterval(() => _tgMirrorTick().catch((e) => logger.warn('[telegram] ' + e.message)), 2 * 60000); }, 90000);
+setTimeout(() => { _tgPanelTick().catch(() => {}); setInterval(() => _tgPanelTick().catch((e) => logger.warn('[telegram] panel ' + e.message)), 60 * 60000); }, 4 * 60000);
+// Al arrancar, re-confirma el webhook (por si cambió el dominio); una sola instancia.
+setTimeout(async () => { try { if (!(await _cronClaim('tgwebhook', 30 * 60000))) return; const c = await _tgCfg(); if (c.token && c.channel) await _tgSetWebhook(c); } catch (_) {} }, 5 * 60000);
+
 async function _menuRetTick() {
   const until = new Date(Date.now() + 50 * 60000);
   try { await mongoose.connection.collection('cron_locks').updateOne({ _id: 'menuRet', until: { $lt: new Date() } }, { $set: { until } }, { upsert: true }); } catch (_) { return; } // otra instancia lo está haciendo

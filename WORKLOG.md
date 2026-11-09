@@ -8,6 +8,23 @@
 
 ## Sesión 2026-11-09
 
+### 1044. 📣 CANAL DE TELEGRAM: historias al canal (rotativo) + PANEL DEL MES fijado con botones — panel v261 (2026-11-09)
+- **Owner:** "contenido rotativo automático, siempre lo que se publica en historias va al canal, para cada uno un botón directo a su aplicación o
+  página; el canal con botones y premium: ver beneficios del mes, cuánto se regaló, cuánto hubo en premios en el mes, el premio más grande, info de
+  sorteos y del servicio completo… automáticamente subir las historias que sube a la página".
+- **Historias ⇒ canal** (`_tgMirrorTick`, 2 min, `_cronClaim('tgmirror')`): toda historia pública (`audienceUserId:null`, sin `codeDropId`) publicada
+  DESPUÉS de prender el canal (`since`) sale UNA por vez cada `gapMin` (90) minutos, nada entre las 23 y las 9 h salvo las que tienen bono vigente (salen
+  al toque). Foto: archivo del repo / subida al panel / foto automática (SVG ⇒ PNG con mupdf, `pdfImage.svgBufferToPng`); si no hay foto, va el texto.
+  Botón "🎰 Entrar a PICA ROJA" (`appUrl`) + el link externo de la historia si tiene. Reserva atómica `Story.tgPostedAt` (3 intentos, `tgTries`).
+- **Panel del mes fijado** (`_tgPanelTick`, 1 h, `_cronClaim('tgpanel')`): `_tgPanelCompute` (agregaciones: retiros pagados del mes, el más grande sin
+  bloqueados/secundarias/observación/staff/pruebas, regalos de `CASHBACK_GIFT_TX_TYPES`, beneficios vigentes, sorteo en curso) ⇒ `Config['telegramPanelStats']`
+  ⇒ edita el mensaje fijado (`panelMsgId`; si no existe lo crea y lo fija). Botones con ventanita (≤200 caracteres) por webhook `POST /api/telegram/webhook`
+  (secreto `x-telegram-bot-api-secret-token`); un /start por privado al bot devuelve el panel. Usuarios siempre tapados (`maskUser`).
+- **Config:** `Config['telegramBot']` campo a campo (`_tgSet`): token CIFRADO (`_credEncrypt`, o env `TELEGRAM_BOT_TOKEN`), channel, appUrl, mirror, panel,
+  gapMin. Panel → Configuración → NUEVO → 📣 Canal de Telegram (Guardar y probar: getMe, getChat, ¿es admin?, setWebhook). Rutas `/api/admin/telegram*` sólo admin
+  (`STAFF_DENY_MUTATIONS`). Lógica de textos en `src/services/telegramChannel.js`; test `scripts/test-telegram-channel.js`.
+- **No probado:** contra Telegram real (no hay token acá) ni el SVG ⇒ PNG con mupdf (si falla, la historia sale como texto con el botón).
+
 ### 1043-c. Instrucciones de la IA del chat reescritas: coherentes, resumidas y con el contexto completo (2026-11-09)
 - **Owner:** "revisá que las respuestas de la IA estén perfectamente bien, entendiendo todo el contexto del servicio y siempre como hablamos: resumido y
   bien explicado". `stablePrompt` tenía contradicciones: "una frase de 20 palabras" y "1 o 2 frases", "paso a paso" y "sólo el próximo paso", y dos

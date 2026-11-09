@@ -71,7 +71,12 @@ const storySchema = new mongoose.Schema({
   bonusDepositTotal: { type: Number, default: 0 },
   pushStats: { type: mongoose.Schema.Types.Mixed, default: null },
   createdBy: { type: String, default: null },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  // #1044 CANAL DE TELEGRAM: cuándo se publicó en el canal (reserva atómica: una sola instancia la manda), id del mensaje, intentos y último error.
+  tgPostedAt: { type: Date, default: null },
+  tgMsgId: { type: Number, default: null },
+  tgTries: { type: Number, default: 0 },
+  tgError: { type: String, default: null }
 });
 
 storySchema.index({ isActive: 1, expiresAt: 1, publishedAt: 1 });

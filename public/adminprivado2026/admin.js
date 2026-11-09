@@ -6349,6 +6349,7 @@ window.saveSmsEnabled = saveSmsEnabled; window.loadPublisherWelcome = loadPublis
 // #1042 BOT DE SOPORTE CON IA (Configuración → 🆕 NUEVO)
 async function loadSupportBot() {
     try { loadAppMenu(); } catch (_) {} // #1042-r
+    try { loadTgChannel(); } catch (_) {} // #1044
     const st = document.getElementById('sbState'); if (!st) return;
     try {
         const r = await authFetch('/api/admin/support-bot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
@@ -6361,6 +6362,45 @@ async function loadSupportBot() {
         const box = document.getElementById('sbStats'); if (box) box.innerHTML = '<table class="data-table" style="font-size:12px;"><tr><th>Día</th><th>Respuestas</th><th>A un agente</th><th>Beneficios post-carga</th><th>Callado por agente</th><th>Silenciados</th><th>Con lo aprendido (sin IA)</th><th>IA sin saldo</th><th>Errores IA</th></tr>' + rows + '</table>';
     } catch (_) { st.textContent = '· error de conexión'; }
 }
+// #1044 CANAL DE TELEGRAM
+async function loadTgChannel() {
+    const st = document.getElementById('tgState'), info = document.getElementById('tgInfo'); if (!st) return;
+    try {
+        const r = await authFetch('/api/admin/telegram'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
+        const c = j.config || {}; const g = (id) => document.getElementById(id);
+        if (g('tgChannel')) g('tgChannel').value = c.channel || ''; if (g('tgAppUrl')) g('tgAppUrl').value = c.appUrl || ''; if (g('tgGap')) g('tgGap').value = c.gapMin || 90;
+        if (g('tgMirror')) g('tgMirror').checked = c.mirror !== false; if (g('tgPanel')) g('tgPanel').checked = c.panel !== false;
+        if (g('tgToken')) g('tgToken').placeholder = c.hasToken ? ('guardado (…' + (c.tokenLast4 || '') + ') · pegá uno nuevo sólo para cambiarlo') : 'pegá el token de BotFather';
+        st.textContent = !c.hasToken ? '· falta el token' : !c.channel ? '· falta el canal' : (c.mirror || c.panel) ? '· ✅ conectado' + (c.channelTitle ? ' a ' + c.channelTitle : '') : '· ⏸️ apagado';
+        const f = (d) => d ? new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+        const L = [];
+        if (c.botUsername) L.push('🤖 Bot: <b>@' + escapeHtml(c.botUsername) + '</b>');
+        if (c.decryptError) L.push('⚠️ El token guardado no se puede leer (cambió la clave del servidor): pegalo de nuevo.');
+        L.push('📤 Historias esperando para el canal: <b>' + (j.queue || 0) + '</b> · último posteo: ' + f(c.lastPostAt) + (c.panelMsgId ? ' · 📌 panel fijado' : ''));
+        if ((j.posted || []).length) L.push('Últimas publicadas: ' + j.posted.map((p) => escapeHtml(p.title || p.id) + ' (' + f(p.tgPostedAt) + ')').join(' · '));
+        if (c.lastError) L.push('<span style="color:#c62828;">⚠️ Último error (' + f(c.lastErrorAt) + '): ' + escapeHtml(c.lastError) + '</span>');
+        if (info) info.innerHTML = L.join('<br>');
+    } catch (_) { st.textContent = '· error de conexión'; }
+}
+async function saveTgChannel() {
+    const g = (id) => document.getElementById(id);
+    const body = { channel: g('tgChannel').value.trim(), appUrl: g('tgAppUrl').value.trim(), gapMin: Number(g('tgGap').value) || 90, mirror: !!g('tgMirror').checked, panel: !!g('tgPanel').checked };
+    const tk = g('tgToken').value.trim(); if (tk) body.token = tk;
+    try {
+        const r = await authFetch('/api/admin/telegram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
+        g('tgToken').value = '';
+        showToast(j.warning || ('📣 Canal conectado' + (j.channelTitle ? ': ' + j.channelTitle : '')), j.warning ? 'info' : 'success'); loadTgChannel();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function tgNow(what) {
+    try {
+        const r = await authFetch('/api/admin/telegram/now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ what }) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'Error', 'error'); return; }
+        showToast(j.ok ? (what === 'panel' ? '📌 Panel del canal actualizado' : '📤 Historia publicada en el canal') : ('No se hizo: ' + (j.why || '')), j.ok ? 'success' : 'info'); loadTgChannel();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow;
 async function saveSupportBot() {
     const g = (id) => document.getElementById(id);
     const body = { classic: !!(g('sbClassic') && g('sbClassic').checked), enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), aiMaxReplies: Number(g('sbAiMax') && g('sbAiMax').value), learnedOnly: !!(g('sbLearnedOnly') && g('sbLearnedOnly').checked), autoApproveAt: Number(g('sbAutoApprove') && g('sbAutoApprove').value) || 0, extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };

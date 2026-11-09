@@ -1987,6 +1987,9 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   (`_inicioAiUsage` en `/api/admin/inicio/stats` ⇒ `_inicioAiHtml`). Si cambian los precios o se agrega un modelo, actualizar `SB_PRICES`.
 - **#1042-x:** bot con Haiku 5.5; handoff de la IA ⇒ mensaje con botón "Tengo otro problema" (sólo el botón abre el chat a un agente); saludo local al entrar
   (`/sys_support_greet` vía `/api/support/ui-mode`, `VIP.home.spGreetMsg`); el cliente ve 24 h de chat; la burbuja delega siempre en `casinoChatToggle`.
+- **Canal de Telegram (#1044):** `src/services/telegramChannel.js` (textos/botones/Bot API) + `_tg*` en server.js: `_tgMirrorTick` (historias públicas ⇒ canal,
+  una cada `gapMin`, reserva `Story.tgPostedAt`), `_tgPanelTick` (panel del mes fijado, `Config['telegramPanelStats']`), webhook `/api/telegram/webhook` (secreto),
+  `Config['telegramBot']` con `_tgSet` (token cifrado). Una historia nueva que NO deba salir en el canal ⇒ excluirla en `_tgStoryQuery`.
 - **Correcciones del bot (#1043):** `fix` en el esquema (`FIX_CODES`); hoy sólo `install_gift_topup` (`_installGiftTopup`: completa el extra por instalar al
   fijo de hoy, una vez, ref `vip-igift-fix-<id>`). Extra por instalar = `fixedArs` siempre y rollover propio `_installGiftRolloverX` (×10).
 - **Panorama de menús (#1042-y):** `AppSession.menu/chat` (los manda la app en el ping) ⇒ cron `_menuRetTick` (1 h, lock `cron_locks`) ⇒ `Config['menuRetention']` ⇒

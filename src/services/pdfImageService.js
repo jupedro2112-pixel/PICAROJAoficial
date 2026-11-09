@@ -43,4 +43,23 @@ async function pdfBufferToPng(pdfBuffer, { scale = 2 } = {}) {
   }
 }
 
-module.exports = { pdfBufferToPng };
+// #1044: SVG (fotos de las historias automáticas) → PNG para mandarlas a Telegram, que no acepta SVG. Mismo criterio: null si falla.
+async function svgBufferToPng(svgBuffer, { scale = 1 } = {}) {
+  try {
+    if (!svgBuffer || !svgBuffer.length) return null;
+    const m = await _getMupdf();
+    const doc = m.Document.openDocument(svgBuffer, 'image/svg+xml');
+    try {
+      const page = doc.loadPage(0);
+      try {
+        const pix = page.toPixmap(m.Matrix.scale(scale, scale), m.ColorSpace.DeviceRGB, false, true);
+        try { return Buffer.from(pix.asPNG()); } finally { pix.destroy(); }
+      } finally { page.destroy(); }
+    } finally { doc.destroy(); }
+  } catch (e) {
+    logger.warn(`[pdf-img] conversión SVG→PNG falló: ${e.message}`);
+    return null;
+  }
+}
+
+module.exports = { pdfBufferToPng, svgBufferToPng };
