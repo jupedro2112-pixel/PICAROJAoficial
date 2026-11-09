@@ -481,6 +481,10 @@
         // #704 (owner): entrada desde la landing (`ir=girox`) → directo a la pantalla de Girox; el menú lo elige después desde "Menú".
         if (VIP.state && VIP.state._openGiroxAfterLogin) { VIP.state._openGiroxAfterLogin = false; setMenuPref('girox', { quiet: true, auto: true }); return; }
         const only = MENU_ORDER.filter(_menuOn); if (only.length === 1) { setMenuPref(only[0], { quiet: true, auto: true }); return; } // #635: un solo menú activo → directo
+        // #1041 (owner 2026-11-09): "que siempre el menú de inicio por defecto sea el de Girox, por más que lo modifiquen; si quieren ir al
+        // menú de inicio, que pongan Volver" ⇒ al entrar SIEMPRE Girox directo (si está activo en el panel), aunque hayan elegido/fijado otro
+        // menú; el "‹ Volver" del casino los deja en el Inicio y desde ahí pueden cambiar de menú durante la sesión. (auto: no pisa su elección.)
+        if (_menuOn('girox')) { setMenuPref('girox', { quiet: true, auto: true }); return; }
         const pref = getMenuPref();
         if (pref === 'easy' && _homeMode !== 'easy') setHomeMode('easy', { persist: false });
         if (_isInstalledApp() && _menuOn('girox') && _hasDeposit()) { setMenuPref('girox', { quiet: true, auto: true }); return; } // #937: app instalada ⇒ Girox directo siempre · #980: desde la 1ª carga
@@ -715,7 +719,7 @@
         try { if (localStorage.getItem('vip_nodep') === '1') document.body.classList.add('nodep'); } catch (_) {} // #731
         try { const cl = localStorage.getItem('vip_menu_layout'); if (cl) _setMenuLayout(Number(cl)); } catch (_) {} // #638: menú 1/2 del caché, sin esperar al server
         _applyMenusEnabled(); _applyMenuLayout(); // #635: menús activos (cacheados al instante, refrescados del server)
-        const m = _modeFor(((_userPickedMenu() || isMenuFixed()) && !(_isInstalledApp() && _menuOn('girox') && _hasDeposit())) || !_menuOn('girox') ? getMenuPref() : _defaultPref()); // #512 · #836 · #937 · #980: completo hasta la 1ª carga
+        const m = _menuOn('girox') ? _modeFor('girox') : _modeFor(getMenuPref()); // #1041 (owner): SIEMPRE arranca en Girox directo (antes: #512 · #836 · #937 · #980)
         try { sessionStorage.removeItem(HOME_MODE_KEY); } catch (_) {}
         _bindEntryFrame();
         setHomeMode(m, { persist: false });

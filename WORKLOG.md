@@ -8,6 +8,14 @@
 
 ## Sesión 2026-11-09
 
+### 1041. 🎰 La app SIEMPRE arranca en Girox directo — "Volver" lleva al Inicio — PWA v673 (2026-11-09)
+- **Owner:** "que siempre el menú de inicio por defecto sea el de Girox, por más que modifiquen; que la gente, si quiere ir al menú de inicio, ponga Volver".
+- `home.js`: `_initHomeMode` y `_maybeShowMenuChooser` (lo llama ui.js al entrar) abren Girox directo SIEMPRE que el menú Girox esté activo en el panel
+  (`Config['menusEnabled']`), sin mirar `vip_menu_pref` / `vip_menu_user` / `vip_menu_fixed` / `vip_has_dep` (#836/#937/#980 quedan sólo de
+  respaldo si Girox está apagado). Se aplica con `auto:true` ⇒ no pisa la preferencia guardada. El "‹ Volver" de la barra del casino ya cerraba el
+  casino y dejaba el Inicio; durante la sesión pueden cambiar de menú (Menú / Cambiar menú) y el botón INICIO respeta lo que elijan; al volver a
+  abrir la app, otra vez Girox.
+
 ### 1040. 🎁 Bonos que figuraban como "Carga" en 1girox — ahora BONO + el resto del bono anterior (2026-11-09)
 - **Owner:** "hay cargas que está cargando como carga y son bonos, arreglalo urgente". Elegido: "bono nuevo + lo que quedaba".
 - **Causa:** en 1girox un bono con rollover PISA al bono activo (debita lo que le quedaba). Para no hacerle perder eso al cliente, `creditGift` y
