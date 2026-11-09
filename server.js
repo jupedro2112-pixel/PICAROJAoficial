@@ -15918,8 +15918,8 @@ async function _supportBotUserFacts(u) {
       const m = (x) => '$' + Math.round(Number(x) || 0).toLocaleString('es-AR');
       out.installGift = ig.status === 'claimed'
         ? `COBRADO ${m(ig.amount)}${ig.topupAt ? ` (ya se le completó la diferencia de ${m(ig.topupAmount)})` : ''}; su primera carga fue de ${m(ig.baseAmount)}`
-        : ig.status === 'expired' ? `ofrecido ${m(ig.amount)} pero VENCIÓ sin reclamarlo (se reclamaba desde la app instalada dentro del plazo)`
-          : `ofrecido y PENDIENTE: lo reclama desde la app instalada con las notificaciones activadas, con el botón del extra (vence ${ig.expiresAt ? new Date(ig.expiresAt).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'pronto'})`;
+        : ig.status === 'expired' ? `ofrecido ${m(_installGiftDue(ig, await getInstallGiftConfig()))} pero VENCIÓ sin reclamarlo (se reclamaba desde la app instalada dentro del plazo)`
+          : `ofrecido y PENDIENTE (${m(_installGiftDue(ig, await getInstallGiftConfig()))}, se juega x${await _installGiftRolloverX()}): lo reclama desde la app instalada con las notificaciones activadas, con el botón del extra (vence ${ig.expiresAt ? new Date(ig.expiresAt).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'pronto'})`;
       const chk = await _installGiftTopupCheck(u);
       if (chk.ok) out.fixInstall = `le faltan ${m(chk.diff)} (cobró ${m(chk.total - chk.diff)} con la regla anterior, que lo limitaba a lo que había cargado; hoy el extra es ${m(chk.total)})`;
     }
@@ -16810,7 +16810,8 @@ app.get('/api/install-gift/status', authMiddleware, async (req, res) => {
       await User.updateOne({ id: user.id, 'installGift.status': { $in: ['offered', 'deferred'] } }, { $set: { 'installGift.status': 'expired' } }).catch(() => {});
     }
     res.json({
-      enabled: cfg.enabled, status, amount: Number(ig.amount) || 0, baseAmount: Number(ig.baseAmount) || 0, pct: ig.pct != null ? ig.pct : cfg.pct,
+      // #1043: con monto fijo la app muestra el fijo de hoy y sin % (antes caía al % del panel: "Cargar mi 50% extra").
+      enabled: cfg.enabled, status, amount: status === 'claimed' ? (Number(ig.amount) || 0) : _installGiftDue(ig, cfg), baseAmount: Number(ig.baseAmount) || 0, pct: cfg.fixedArs > 0 ? null : (ig.pct != null ? ig.pct : cfg.pct),
       expiresAt: ig.expiresAt || null, claimedAt: ig.claimedAt || null, platform: ig.platform || null,
       appInstalled: _rouletteHasAppInstalled(user)
     });
@@ -16826,7 +16827,7 @@ app.post('/api/install-gift/defer', authMiddleware, async (req, res) => {
     await User.updateOne({ id: req.user.userId, 'installGift.status': 'offered' }, { $set: { 'installGift.status': 'deferred', 'installGift.deferredAt': new Date() } });
     const u = await User.findOne({ id: req.user.userId }).select('installGift').lean();
     const ig = (u && u.installGift) || {};
-    res.json({ success: true, status: ig.status || 'none', amount: Number(ig.amount) || 0, expiresAt: ig.expiresAt || null });
+    res.json({ success: true, status: ig.status || 'none', amount: _installGiftDue(ig, await getInstallGiftConfig()), expiresAt: ig.expiresAt || null });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 
@@ -16860,7 +16861,7 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
     }
     let amount = Math.round(Number(ig.amount) || 0);
     // #1043: ofertas hechas con la regla vieja (nunca más que la carga) ⇒ se paga el monto fijo de hoy (owner: "es 5000 el bono").
-    try { const _igc = await getInstallGiftConfig(); if (_igc.enabled && _igc.fixedArs > 0 && ig.pct == null && amount < _igc.fixedArs) amount = Math.round(_igc.fixedArs); } catch (_) {}
+    try { amount = _installGiftDue(ig, await getInstallGiftConfig()); } catch (_) {}
     if (!(amount > 0)) return res.status(400).json({ error: 'Monto inválido.', code: 'INVALID' });
     // Reserva atómica (dos toques simultáneos → uno solo acredita).
     const prevStatus = ig.status;
@@ -16874,7 +16875,7 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
     let adapter = platforms.getAdapter(pid);
     if (!adapter || typeof adapter.isConnected !== 'function' || !adapter.isConnected() || typeof adapter.creditGift !== 'function') { pid = 'girox'; adapter = girox; }
     const reference = `vip-igift-${user.id}`;
-    const credit = await adapter.creditGift(user.username, amount, { description: `${ig.pct != null ? ig.pct : ''}% extra por instalar la app (sobre la primera carga)`, reference, rolloverX: await _installGiftRolloverX() }); // #509 · #1043: ×10 propio
+    const credit = await adapter.creditGift(user.username, amount, { description: ig.pct != null ? `${ig.pct}% extra por instalar la app (sobre la primera carga)` : 'Extra por instalar la app', reference, rolloverX: await _installGiftRolloverX() }); // #509 · #1043: ×10 propio
     if (!credit || !credit.success) {
       await User.updateOne({ id: user.id }, { $set: { 'installGift.status': prevStatus, 'installGift.claimedAt': null, 'installGift.amount': Math.round(Number(ig.amount) || 0), 'installGift.lastError': String((credit && credit.error) || 'unknown').slice(0, 200) } }).catch(() => {});
       logger.error(`[install-gift] credit FAIL user=${user.username} $${amount}: ${(credit && credit.error) || 'unknown'}`);
@@ -16884,7 +16885,7 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
     await User.updateOne({ id: user.id }, { $set: { 'installGift.claimTxId': txId, 'installGift.platform': pid } }).catch(() => {});
     await Transaction.create({
       id: uuidv4(), type: 'install_gift', platform: pid, userId: user.id, username: user.username, amount,
-      description: `Extra por instalar la app (${ig.pct != null ? ig.pct : '?'}% de su primera carga de $${Number(ig.baseAmount || 0).toLocaleString('es-AR')})`,
+      description: ig.pct != null ? `Extra por instalar la app (${ig.pct}% de su primera carga de $${Number(ig.baseAmount || 0).toLocaleString('es-AR')})` : `Extra por instalar la app (monto fijo; primera carga de $${Number(ig.baseAmount || 0).toLocaleString('es-AR')})`,
       adminUsername: 'auto-install-gift', adminRole: 'system', transactionId: txId,
       metadata: { source: 'install_gift', creditedAs: credit.creditedAs || null, baseAmount: ig.baseAmount || null, pct: ig.pct != null ? ig.pct : null },
       timestamp: new Date()
@@ -16892,7 +16893,7 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
     const vars = { username: user.username, monto: amount.toLocaleString('es-AR'), pct: ig.pct != null ? ig.pct : '', plataforma: platforms.labelOf(pid, { emoji: false }) };
     const text = await renderSystemCommand('/sys_install_gift_credited', INSTALL_GIFT_CREDITED_DEFAULT, vars);
     if (text) await _sendUserSystemMessage(user, text, { metadata: { kind: 'deposit_credited', platform: pid, amount, bonus: 0, gift: 'install' } });
-    await _emitAdminOnlyChatNote(user.id, user.username, `🎁 EXTRA por instalar la app ACREDITADO: $${vars.monto} (${vars.pct}%) en ${platforms.labelOf(pid)} (regalo, ref ${reference}). No hay que hacer nada.`).catch(() => {});
+    await _emitAdminOnlyChatNote(user.id, user.username, `🎁 EXTRA por instalar la app ACREDITADO: $${vars.monto} (${ig.pct != null ? ig.pct + '%' : 'monto fijo'}, rollover x${await _installGiftRolloverX()}) en ${platforms.labelOf(pid)} (regalo, ref ${reference}). No hay que hacer nada.`).catch(() => {});
     logger.info(`[install-gift] acreditada user=${user.username} $${amount} platform=${pid} tx=${txId}`);
     res.json({ success: true, amount, platform: pid, message: `🎁 ¡Listo! Te cargamos $${vars.monto} extra en ${vars.plataforma}.` });
   } catch (e) {
@@ -16905,6 +16906,11 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
 // calculaba "nunca más que la carga" ($2.000 cargados ⇒ $2.000) y el cliente reclamaba los $5.000. CORRECCIÓN SEGURA que puede pedir la IA del chat:
 // el SERVIDOR decide si corresponde y cuánto (fijo de hoy − lo cobrado), una sola vez por cliente (reserva atómica `installGift.topupAt` + reference
 // estable `vip-igift-fix-<id>`), por creditGift (guard de cuentas secundarias, rollover global). La IA sólo dice "corregilo"; nunca elige un monto.
+// #1043: lo que VA a cobrar un extra todavía no cobrado: con monto fijo, el fijo de HOY (ofertas viejas guardaron min(fijo, carga) o un % mal rotulado).
+function _installGiftDue(ig, cfg) {
+  const a = Math.round(Number(ig && ig.amount) || 0);
+  return (cfg && cfg.enabled && cfg.fixedArs > 0) ? Math.max(a, Math.round(cfg.fixedArs)) : a;
+}
 const BOT_FIX_INSTALL_DEFAULT = '¡Tenés razón, {username}! 🙌 Te cargamos los ${monto} que faltaban del extra por instalar la app en {plataforma}. Ya tenés los ${total} completos ✅';
 async function _installGiftTopupCheck(u) {
   const cfg = await getInstallGiftConfig();

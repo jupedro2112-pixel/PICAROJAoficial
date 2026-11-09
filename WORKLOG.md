@@ -21,6 +21,9 @@
   el cliente recibe `/sys_bot_fix_install` con el monto real. Si no corresponde o falla ⇒ botón "Tengo otro problema" con el motivo en la nota.
   Sin corrección disponible, la IA explica con los datos de SU cuenta (`installGift` en `_supportBotUserFacts`). Una corrección NUEVA = código en
   `FIX_CODES` + chequeo/acción en server.js (el monto lo decide siempre el servidor, nunca la IA).
+- **2º caso (picakaren87, 07/11):** oferta HECHA y todavía SIN cobrar, con $2.000 guardados y la nota "50% EXTRA" (la nota vieja de antes de #1029).
+  `_installGiftDue(ig, cfg)` = el fijo de hoy para todo extra no cobrado: lo usan el claim, `/api/install-gift/status` (además manda `pct:null` en modo
+  fijo: la app decía "Cargar mi 50% extra") y `/defer`, y los datos de la IA. Notas/Transaction del cobro dicen "monto fijo" y el rollover.
 - **picatrini26:** si vuelve a reclamar, la IA le carga los $3.000. Los demás que cobraron de menos con la regla vieja también, sólo si reclaman.
 
 ### 1042-z. Sorteo ARRIBA en lugar del logo (sin banner debajo de la barra del casino) — PWA v691 (2026-11-09)
