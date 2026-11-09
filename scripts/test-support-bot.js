@@ -35,7 +35,7 @@ caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallb
   assert.ok(r.ok); assert.strictEqual(r.reply, '¡Hola! Para cargar tocá DEPOSITAR.'); assert.strictEqual(r.handoff, false);
   const b = lastReq.body;
   assert.strictEqual(b.model, 'claude-opus-5-5'); assert.strictEqual(b.output_config.effort, 'low');
-  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore']);
+  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer']);
   assert.strictEqual(b.output_config.format.schema.additionalProperties, false);
   assert.strictEqual(b.fallbacks, 'default'); assert.strictEqual(lastReq.opts.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
   assert.ok(!('thinking' in b) && !('temperature' in b), 'no manda thinking/temperature (Opus 5.5)');
@@ -102,12 +102,29 @@ caso('IA sin saldo (400 credit balance / 402 / 401) ⇒ unavailable (el server p
   nextErr = Object.assign(new Error('x'), { response: { status: 529, data: {} } }); r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.unavailable && r.retryable);
   nextErr = null;
   const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-  assert.ok(/if \(_supportBotAiDown\(\)\) return _supportCannedReply\(userId, username, quick, text, false\);/.test(S), 'IA en pausa ⇒ respuestas fijas');
   assert.ok(/if \(!r\.ok && r\.unavailable\) \{ _sbAiDownUntil = Date\.now\(\) \+ 30 \* 60000;/.test(S), 'pausa de 30 min');
   // primer mensaje de la charla ⇒ respuesta básica (tema o /sys_support_first) antes que la IA
   const qr = S.slice(S.indexOf('async function _supportQuickReply'), S.indexOf('async function _supportCannedReply'));
   assert.ok(qr.indexOf("renderSystemCommand('/sys_support_first'") > -1 && qr.indexOf("renderSystemCommand('/sys_support_first'") < qr.indexOf('_supportBotSchedule(userId, username)'), 'básica primero');
   assert.ok(/Espero tu comprobante para realizar la carga/.test(S) && /name: '\/sys_support_first'/.test(S));
+});
+caso('Aprende: la IA devuelve pregunta/respuesta genéricas; con handoff o ignore no se aprende nada', async () => {
+  nextResp = okResp({ reply: 'Tocá DEPOSITAR…', handoff: false, handoff_reason: '', ignore: false, learn_question: '¿Cómo cargo?', learn_answer: 'Tocá DEPOSITAR y mandá el comprobante entero.' });
+  let r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'como cargo' }] });
+  assert.strictEqual(r.learnQuestion, '¿Cómo cargo?'); assert.ok(r.learnAnswer);
+  nextResp = okResp({ reply: 'Lo paso', handoff: true, handoff_reason: 'x', ignore: false, learn_question: 'q', learn_answer: 'a' });
+  r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'no me llego' }] }); assert.strictEqual(r.learnQuestion, '');
+});
+caso('Lo aprendido: parecidas sí, distintas no, reclamos de plata NUNCA', async () => {
+  const E = [{ _id: 1, question: '¿Cómo hago para cargar?', answer: 'A' }, { _id: 2, question: '¿Cuál es el retiro mínimo?', answer: 'B', variants: [{ t: 'cuanto es lo minimo que puedo sacar' }] }, { _id: 3, question: '¿Cómo funciona el reembolso diario?', answer: 'C' }];
+  const m = (t) => { const x = bot.bestLearned(t, E); return x ? x.entry._id : null; };
+  assert.strictEqual(m('como cargo'), 1); assert.strictEqual(m('cual es el minimo para retirar'), 2); assert.strictEqual(m('cuanto es lo minimo que puedo sacar?'), 2); assert.strictEqual(m('que es el reembolso diario'), 3);
+  assert.strictEqual(m('no me llego la carga'), null); assert.strictEqual(m('cargué y no me acreditaron'), null); assert.strictEqual(m('quiero retirar'), null); assert.strictEqual(m('hola'), null);
+  assert.strictEqual(m('como cargo? me estafaron'), null);
+  const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  assert.ok(/const hit = supportBot\.bestLearned\(String\(lastUser\.content \|\| ''\), await _supportLearnedApproved\(\)\);/.test(S), 'lo aprendido antes que la IA');
+  assert.ok(/else if \(cfg\.learnedOnly \|\| !supportBot\.isAvailable\(\) \|\| _supportBotAiDown\(\)\) r = \{ ok: false/.test(S), 'sin IA ⇒ respuestas fijas');
+  assert.ok(/status: 'pending', createdAt: now/.test(S), 'lo nuevo entra para aprobar (no se usa solo)');
 });
 caso('Sin ANTHROPIC_API_KEY: isAvailable false y no llama', async () => {
   const k = process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_API_KEY; lastReq = null;
@@ -129,7 +146,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/async function casinoSupport\(\) \{[\s\S]{0,200}if \(_casinoIsOpen\(\) && !\(await spUiMode\(\)\) && _supportIntoCasino\(\)\) return;/.test(H), 'Soporte desde el casino se abre adentro');
   assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
-  assert.ok(/return c\.enabled && !c\.classic;/.test(S) && /cfg\.classic \|\| !supportBot\.isAvailable\(\)/.test(S), 'chat clásico = sin bot');
+  assert.ok(/return c\.enabled && !c\.classic && \(supportBot\.isAvailable\(\) \|\| c\.learnedOnly\);/.test(S) && /cfg\.classic \|\| \(!supportBot\.isAvailable\(\) && !cfg\.learnedOnly\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
   assert.ok(!/^#supportPanel|^\.sp-acts|^\.sp-actbar/m.test(blk) && /body\.sp-classic \.sp-actbar \{ display: none/.test(blk), 'chat clásico: nada del diseño nuevo aplica');
   assert.ok(/support_bot_mutes'\)\.findOne\(\{ _id: userId \}\)/.test(S) && /if \(r\.ok && r\.ignore\)/.test(S), 'silencio a quien molesta');

@@ -5756,6 +5756,35 @@ app.delete('/api/admin/meta-pixels/:id', authMiddleware, adminMiddleware, async 
     await Config.set('metaPixels', out, req.user.username); await _metaPixelsLoad(); res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
+// #1042-g RESPUESTAS APRENDIDAS — lista (todo el staff) y aprobar / editar / rechazar / borrar / crear (sólo admin).
+app.get('/api/admin/support-bot/learned', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : 'pending';
+    const items = await _sbLearnCol().find({ status }).sort({ count: -1, lastAt: -1 }).limit(300).toArray();
+    const counts = {}; for (const s of ['pending', 'approved', 'rejected']) counts[s] = await _sbLearnCol().countDocuments({ status: s });
+    res.json({ success: true, items: items.map((e) => ({ id: e._id, question: e.question, answer: e.answer, count: e.count || 0, uses: e.uses || 0, approvedBy: e.approvedBy || null, variants: (e.variants || []).slice(-5).map((v) => v.t), lastAt: e.lastAt })), counts });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/support-bot/learned/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general.' });
+    const b = req.body || {}; const act = String(b.action || ''); const now = new Date();
+    const q = typeof b.question === 'string' ? b.question.trim().slice(0, 300) : null, a = typeof b.answer === 'string' ? b.answer.trim().slice(0, 800) : null;
+    if (req.params.id === 'new') {
+      if (!q || !a) return res.status(400).json({ error: 'Escribí la pregunta y la respuesta.' });
+      await _sbLearnCol().insertOne({ _id: uuidv4(), question: q, answer: a, variants: [], count: 0, uses: 0, status: 'approved', approvedBy: req.user.username, approvedAt: now, createdAt: now, lastAt: now });
+    } else if (act === 'delete') {
+      await _sbLearnCol().deleteOne({ _id: req.params.id });
+    } else if (['approve', 'reject', 'save'].includes(act)) {
+      const set = { lastAt: now }; if (q) set.question = q; if (a) set.answer = a;
+      if (act === 'approve') Object.assign(set, { status: 'approved', approvedBy: req.user.username, approvedAt: now });
+      if (act === 'reject') Object.assign(set, { status: 'rejected', rejectedBy: req.user.username });
+      const r = await _sbLearnCol().updateOne({ _id: req.params.id }, { $set: set }); if (!r.matchedCount) return res.status(404).json({ error: 'No existe' });
+    } else return res.status(400).json({ error: 'Acción inválida' });
+    _sbLearnCache.at = 0;
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
 // #1042-c (owner): CHAT CLÁSICO — "un botón para que figure el chat como estaba antes de la actualización, sin IA y sin modificaciones".
 // La app lo lee al abrir Soporte (público: sólo dice si es clásico) y pone body.sp-classic (sin barra DEPOSITAR/RETIRAR/REEMBOLSOS ni cara de WhatsApp).
 app.get('/api/support/ui-mode', async (req, res) => {
@@ -5767,7 +5796,7 @@ app.get('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, r
     const cfg = await getSupportBotConfig();
     const days = []; for (let i = 0; i < 7; i++) days.push(_schedArtKey(new Date(Date.now() - i * 24 * 3600 * 1000)));
     let stats = []; try { stats = await mongoose.connection.collection('support_bot_stats').find({ _id: { $in: days } }).toArray(); } catch (_) {}
-    res.json({ success: true, config: cfg, available: supportBot.isAvailable(), aiDown: _supportBotAiDown() ? _sbAiDownWhy : '', canEdit: req.user.role === 'admin', stats: days.map((d) => Object.assign({ day: d, replies: 0, handoffs: 0, errors: 0, pausedByAgent: 0, afterDeposit: 0, muted: 0, noCredit: 0, inTok: 0, outTok: 0 }, stats.find((x) => x._id === d) || {})) });
+    res.json({ success: true, config: cfg, available: supportBot.isAvailable(), aiDown: _supportBotAiDown() ? _sbAiDownWhy : '', canEdit: req.user.role === 'admin', stats: days.map((d) => Object.assign({ day: d, replies: 0, handoffs: 0, errors: 0, pausedByAgent: 0, afterDeposit: 0, muted: 0, noCredit: 0, learnedUsed: 0, inTok: 0, outTok: 0 }, stats.find((x) => x._id === d) || {})) });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, res) => {
@@ -5776,6 +5805,8 @@ app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, 
     const b = req.body || {}; const cur = await getSupportBotConfig(); const next = Object.assign({}, cur);
     if (b.enabled != null) next.enabled = b.enabled === true;
     if (b.classic != null) next.classic = b.classic === true;
+    if (b.learnedOnly != null) next.learnedOnly = b.learnedOnly === true;
+    if (b.autoApproveAt != null && Number.isFinite(Number(b.autoApproveAt))) next.autoApproveAt = Number(b.autoApproveAt);
     if (typeof b.model === 'string' && /^claude-[a-z0-9.-]{3,40}$/.test(b.model)) next.model = b.model;
     if (['low', 'medium', 'high'].includes(b.effort)) next.effort = b.effort;
     for (const k of ['delayMinSec', 'delayMaxSec', 'pauseHours', 'handoffPauseMin', 'muteHours', 'aiMaxReplies']) if (b[k] != null && Number.isFinite(Number(b[k]))) next[k] = Number(b[k]);
@@ -15569,8 +15600,6 @@ async function _supportQuickReply(userId, username, quick, text) {
     // sigue preguntando (no entendió) ⇒ la IA; 3) la IA lo deriva a un agente (handoff, o tope `aiMaxReplies`).
     if (!explicit && await _supportBotActive()) {
       try { const mu = await mongoose.connection.collection('support_bot_mutes').findOne({ _id: userId }); if (mu && mu.until > new Date()) return; } catch (_) {} // silenciado: ni respuesta fija ni IA
-      // IA sin saldo / caída ⇒ como antes del bot (respuestas fijas).
-      if (_supportBotAiDown()) return _supportCannedReply(userId, username, quick, text, false);
       const topic = _supportTopicFromText(text);
       // #1042-f (owner): "la respuesta normal y básica SIEMPRE es al principio: espero tu comprobante para realizar la carga". Primer mensaje
       // de la charla (nada nuestro en Soporte desde el corte / 2 h) ⇒ respuesta fija del tema o, si no hay tema, /sys_support_first (+ botón que
@@ -15650,7 +15679,7 @@ async function _supportAutoReply(userId, username) {
 // sale la respuesta automática de siempre. Config['supportBot'] (panel → Configuración → 🤖 Bot de soporte).
 // ════════════════════════════════════════════════════════════════════════════
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
-const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 4, classic: false, extraInfo: '' };
+const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 4, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
 async function getSupportBotConfig() {
   let raw = null; try { raw = await getConfig('supportBot', null); } catch (_) {}
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -15660,9 +15689,9 @@ async function getSupportBotConfig() {
   const dmin = num(r.delayMinSec, SUPPORT_BOT_DEFAULT.delayMinSec, 3, 120);
   return { enabled: r.enabled == null ? SUPPORT_BOT_DEFAULT.enabled : r.enabled === true, classic: r.classic === true, model, effort, delayMinSec: dmin,
     delayMaxSec: Math.max(dmin, num(r.delayMaxSec, SUPPORT_BOT_DEFAULT.delayMaxSec, 3, 180)), pauseHours: num(r.pauseHours, SUPPORT_BOT_DEFAULT.pauseHours, 0, 72),
-    handoffPauseMin: num(r.handoffPauseMin, SUPPORT_BOT_DEFAULT.handoffPauseMin, 0, 1440), muteHours: num(r.muteHours, SUPPORT_BOT_DEFAULT.muteHours, 1, 168), aiMaxReplies: num(r.aiMaxReplies, SUPPORT_BOT_DEFAULT.aiMaxReplies, 1, 20), extraInfo: String(r.extraInfo || '').slice(0, 4000) };
+    handoffPauseMin: num(r.handoffPauseMin, SUPPORT_BOT_DEFAULT.handoffPauseMin, 0, 1440), muteHours: num(r.muteHours, SUPPORT_BOT_DEFAULT.muteHours, 1, 168), aiMaxReplies: num(r.aiMaxReplies, SUPPORT_BOT_DEFAULT.aiMaxReplies, 1, 20), learnedOnly: r.learnedOnly === true, autoApproveAt: num(r.autoApproveAt, 0, 0, 100), extraInfo: String(r.extraInfo || '').slice(0, 4000) };
 }
-async function _supportBotActive() { if (!supportBot.isAvailable()) return false; try { const c = await getSupportBotConfig(); return c.enabled && !c.classic; } catch (_) { return false; } } // #1042-c: chat CLÁSICO = sin bot
+async function _supportBotActive() { try { const c = await getSupportBotConfig(); return c.enabled && !c.classic && (supportBot.isAvailable() || c.learnedOnly); } catch (_) { return false; } } // #1042-c: chat CLÁSICO = sin bot
 
 // Datos del servicio para el bot (cacheados 5 min: se leen de la Config, no de 1girox).
 let _sbFactsCache = { at: 0, v: null };
@@ -15749,7 +15778,7 @@ function _supportBotSchedule(userId, username) {
 async function _supportBotRun(userId, username, token, t0) {
   if (_sbTimers.get(userId) !== token) return; // llegó otro mensaje: contesta el último
   const cfg = await getSupportBotConfig();
-  if (!cfg.enabled || cfg.classic || !supportBot.isAvailable()) return _supportCannedReply(userId, username, null, '', false);
+  if (!cfg.enabled || cfg.classic || (!supportBot.isAvailable() && !cfg.learnedOnly)) return _supportCannedReply(userId, username, null, '', false);
   const u = await User.findOne({ id: userId }).select('id username role createdAt isBlocked duplicateOf noWelcomeGifts fcmTokenContext fcmTokens supportSessionSince').lean();
   if (!u || u.role !== 'user') return;
   const lastUser = await Message.findOne({ senderId: userId }).sort({ timestamp: -1 }).select('id type timestamp content').lean();
@@ -15776,9 +15805,15 @@ async function _supportBotRun(userId, username, token, t0) {
     if (aiReplies >= cfg.aiMaxReplies) {
       r = { ok: true, reply: 'Para que no des más vueltas, te paso con alguien del equipo que te lo resuelve 🙌', handoff: true, handoffReason: `siguió con dudas después de ${aiReplies} respuestas de la IA` };
     } else {
-      const [facts, user, history] = await Promise.all([_supportBotFacts(cfg), _supportBotUserFacts(u), _supportBotHistory(u)]);
-      user.aiReplies = aiReplies;
-      r = await supportBot.generateReply({ facts, user, agentName, history, model: cfg.model, effort: cfg.effort });
+      // #1042-g: primero lo APRENDIDO (aprobado en el panel), sin IA. Reclamos / plata trabada nunca (bestLearned los descarta).
+      const hit = supportBot.bestLearned(String(lastUser.content || ''), await _supportLearnedApproved());
+      if (hit) r = { ok: true, reply: hit.entry.answer, handoff: false, learnedId: hit.entry._id };
+      else if (cfg.learnedOnly || !supportBot.isAvailable() || _supportBotAiDown()) r = { ok: false, error: 'sin IA (sólo lo aprendido)', noAi: true }; // ⇒ respuestas fijas de siempre
+      else {
+        const [facts, user, history] = await Promise.all([_supportBotFacts(cfg), _supportBotUserFacts(u), _supportBotHistory(u)]);
+        user.aiReplies = aiReplies;
+        r = await supportBot.generateReply({ facts, user, agentName, history, model: cfg.model, effort: cfg.effort });
+      }
     }
   } catch (e) { r = { ok: false, error: e.message }; }
   if (_sbTimers.get(userId) !== token) { _sbTyping(userId, agentName, false); return; } // escribió de nuevo mientras pensaba: contesta el último
@@ -15799,7 +15834,7 @@ async function _supportBotRun(userId, username, token, t0) {
   }
   if (!r.ok && r.unavailable) { _sbAiDownUntil = Date.now() + 30 * 60000; _sbAiDownWhy = String(r.error || '').slice(0, 200); _supportBotStat('noCredit'); }
   if (!r.ok && !r.handoff) {
-    _sbTyping(userId, agentName, false); _supportBotStat('errors');
+    _sbTyping(userId, agentName, false); if (!r.noAi) _supportBotStat('errors');
     logger.warn(`[support-bot] ${username}: sin respuesta de la IA (${r.error}) ⇒ respuesta automática de siempre`);
     return _supportCannedReply(userId, username, null, String(lastUser.content || ''), false);
   }
@@ -15827,7 +15862,9 @@ async function _supportBotRun(userId, username, token, t0) {
     if (!connectedUsers.get(userId)) _maybeSendPushFallback(userId, message);
     try { await ChatStatus.updateOne({ userId }, { $set: { lastMessageAt: new Date() } }); } catch (_) {}
     const us = r.usage || {};
-    _supportBotStat('replies', 1, { inTok: Number(us.input_tokens) || 0, outTok: Number(us.output_tokens) || 0, cacheTok: Number(us.cache_read_input_tokens) || 0 });
+    if (r.learnedId) { _supportBotStat('learnedUsed'); try { await _sbLearnCol().updateOne({ _id: r.learnedId }, { $inc: { uses: 1 }, $set: { lastUsedAt: new Date() } }); } catch (_) {} }
+    else if (r.learnQuestion) { try { await _supportLearnSave(String(lastUser.content || ''), r.learnQuestion, r.learnAnswer, cfg); } catch (e) { logger.warn(`[support-bot] aprender: ${e.message}`); } }
+    if (!r.learnedId) _supportBotStat('replies', 1, { inTok: Number(us.input_tokens) || 0, outTok: Number(us.output_tokens) || 0, cacheTok: Number(us.cache_read_input_tokens) || 0 });
   }
   if (r.handoff) {
     // TRABADO ⇒ a una persona: el chat queda ABIERTO en Soporte del panel con la nota del motivo (y el bot se corre un rato).
@@ -15848,6 +15885,32 @@ async function _supportBotRun(userId, username, token, t0) {
 }
 
 // #1042 (owner: "después de su carga, darle los beneficios: reembolsos, misiones"): mensaje corto del bot tras las 3 primeras cargas.
+// #1042-g (owner: "que la IA vaya aprendiendo y después responda el bot con lo que aprendió, todo sin IA"): cada respuesta GENERAL de la IA
+// se guarda (pregunta + respuesta genéricas, + las formas en que la preguntaron) en `support_bot_learned` como 'pending'; aprobada en el panel
+// (o sola al repetirse `autoApproveAt` veces) el bot la usa ANTES de llamar a la IA. `learnedOnly` = sin IA: lo aprendido + respuestas fijas.
+function _sbLearnCol() { return mongoose.connection.collection('support_bot_learned'); }
+let _sbLearnCache = { at: 0, v: [] };
+async function _supportLearnedApproved() {
+  if (Date.now() - _sbLearnCache.at < 60000) return _sbLearnCache.v;
+  try { const v = await _sbLearnCol().find({ status: 'approved' }).project({ question: 1, answer: 1, variants: 1 }).limit(800).toArray(); _sbLearnCache = { at: Date.now(), v }; } catch (_) {}
+  return _sbLearnCache.v;
+}
+async function _supportLearnSave(userText, q, a, cfg) {
+  const all = await _sbLearnCol().find({}).project({ question: 1, variants: 1, status: 1, count: 1 }).limit(1500).toArray();
+  let hit = null, best = 0;
+  for (const e of all) for (const c of [e.question].concat((e.variants || []).map((v) => v.t))) {
+    const sc = Math.max(supportBot.qSimilarity(q, c), supportBot.qSimilarity(userText, c)); if (sc > best) { best = sc; hit = e; }
+  }
+  const now = new Date(); const variant = { t: String(userText).slice(0, 300), at: now };
+  if (hit && best >= supportBot.LEARN_MIN_SCORE) {
+    const set = { lastAt: now }; if (hit.status === 'pending') set.answer = a; // pendiente: queda la redacción más nueva
+    if (hit.status === 'pending' && cfg.autoApproveAt > 0 && (Number(hit.count) || 0) + 1 >= cfg.autoApproveAt) { set.status = 'approved'; set.approvedBy = 'auto'; set.approvedAt = now; _sbLearnCache.at = 0; }
+    await _sbLearnCol().updateOne({ _id: hit._id }, { $inc: { count: 1 }, $set: set, $push: { variants: { $each: [variant], $slice: -25 } } });
+  } else {
+    await _sbLearnCol().insertOne({ _id: uuidv4(), question: q, answer: a, variants: [variant], count: 1, uses: 0, status: 'pending', createdAt: now, lastAt: now });
+  }
+}
+
 // #1042-f (owner): IA SIN SALDO ⇒ "que dé respuestas el bot nomás y siga normal": la IA queda en pausa 30 min (por instancia) y todo va por
 // las respuestas fijas de siempre. El panel lo muestra.
 let _sbAiDownUntil = 0, _sbAiDownWhy = '';

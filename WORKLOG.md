@@ -8,6 +8,19 @@
 
 ## Sesión 2026-11-09
 
+### 1042-g. 🧠 La IA aprende y el bot responde con lo aprendido (sin IA) — admin SW v253 (2026-11-09)
+- **Owner:** "que la IA vaya aprendiendo, que después las respuestas que da la IA las responda el bot y que después sea todo sin IA" + "ponelo
+  abajo de Soporte: Responder para IA".
+- La IA devuelve además `learn_question` / `learn_answer` (versión GENÉRICA, sólo si la duda le sirve a cualquiera; vacío si es personal, reclamo,
+  handoff o ignore). `_supportLearnSave` la guarda en `support_bot_learned` como `pending` o la suma como VARIANTE (otra forma de preguntar) a una
+  parecida (`qSimilarity` ≥ 0,7: palabras normalizadas, raíz de 4 letras, "no" cuenta).
+- `_supportBotRun`: antes de la IA busca en las APROBADAS (`bestLearned`; reclamos de plata — `COMPLAINT_RE` — nunca) ⇒ contesta el bot sin IA
+  (stats `learnedUsed`, `uses` por respuesta). `Config['supportBot'].learnedOnly` = SIN IA (lo aprendido + respuestas fijas; funciona sin
+  `ANTHROPIC_API_KEY`); con la IA sin saldo pasa lo mismo. `autoApproveAt` (0 = nunca) aprueba sola la que se preguntó N veces.
+- Panel: menú → debajo de Soporte → **🧠 Responder para IA** (`aiLearnSection`, badge de pendientes): Para aprobar / Aprobadas / Rechazadas,
+  editar, aprobar, rechazar, borrar, agregar a mano; tilde "Sin IA" y aprobación automática. Rutas `/api/admin/support-bot/learned*`
+  (cambios sólo admin). ⚠️ Si cambia un %/monto en el panel, revisar las aprobadas que lo mencionen. Test support-bot 14/14.
+
 ### 1042-f. Respuesta básica SIEMPRE primero + IA sin saldo ⇒ bot simple (2026-11-09)
 - **Owner:** "si no tiene saldo la IA, que dé respuestas el bot nomás y siga normal; la respuesta normal y básica siempre es al principio: espero tu
   comprobante para realizar la carga".

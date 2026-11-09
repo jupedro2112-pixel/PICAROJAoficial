@@ -153,6 +153,11 @@ document.addEventListener('change', function (ev) {
 <span>Soporte</span>
 <span id="supportBadge" style="display:none;background:#ff5050;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:8px;margin-left:6px;">0</span>
 </a>
+<a href="#" class="nav-item" data-section="aiLearn" title="Responder para IA: lo que aprendió la IA del chat de Soporte; lo que aprobás lo contesta el bot solo, sin IA (#1042-g)">
+<span>🧠</span>
+<span>Responder para IA</span>
+<span id="aiLearnBadge" style="display:none;background:#ffb347;color:#111;font-size:9px;font-weight:900;padding:1px 6px;border-radius:8px;margin-left:6px;">0</span>
+</a>
 <a href="#" class="nav-item" data-section="depositReviews">
 <span>⏳</span>
 <span>Comprobantes a verificar</span>
@@ -785,6 +790,7 @@ document.addEventListener('change', function (ev) {
                             <div id="sbTestOut" style="margin-top:6px;font-size:13px;white-space:pre-wrap;"></div>
                         </div>
                         <div id="sbStats" style="margin-top:8px;font-size:12px;overflow-x:auto;"></div>
+                        <p style="margin:10px 0 0;font-size:12.5px;">🧠 Lo que va aprendiendo la IA está en el menú, debajo de Soporte: <b>Responder para IA</b>.</p>
                     </div>
 
                     <div style="border:1px solid var(--p-line, #e4e4e7);border-radius:12px;padding:12px;margin-bottom:10px;">
@@ -3437,6 +3443,30 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                     </div>
                     <div id="phSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;"></div>
                     <div id="phList" style="overflow-x:auto;">Cargando…</div>
+                </div>
+            </section>
+            <!-- #1042-g (owner): "ponelo abajo de Soporte: Responder para IA" -->
+            <section id="aiLearnSection" class="section">
+                <div class="panel-header">
+                    <h2>🧠 Responder para IA</h2>
+                    <button class="refresh-btn" onclick="loadSupportLearned()" title="Refrescar">🔄</button>
+                </div>
+                <div style="padding:12px;max-width:900px;">
+                        <!-- #1042-g RESPUESTAS APRENDIDAS -->
+                        <div>
+                            
+                            <p style="margin:0 0 6px;font-size:12.5px;line-height:1.5;">Cada duda <b>general</b> que contesta la IA queda acá (pregunta + respuesta, sin datos del cliente). Las que <b>aprobás</b> las contesta el bot solo, <b>sin IA</b>, cuando alguien pregunta algo parecido; cada forma nueva de preguntar lo mismo se suma sola. Los reclamos de plata nunca se contestan con algo aprendido. Si cambiás un %, monto o regla en el panel, revisá las aprobadas que lo mencionen.</p>
+                            <label style="margin:0 0 6px;display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="sbLearnedOnly" style="width:auto;"> <span><b>Sin IA: usar sólo lo aprendido</b> <small>(lo que no sepa ⇒ respuestas fijas de siempre y, si hace falta, un agente)</small></span></label>
+                            <label style="font-size:12.5px;display:block;margin-bottom:6px;">Aprobar solas cuando se preguntan <input type="number" id="sbAutoApprove" min="0" max="100" style="width:56px;"> veces <small>(0 = nunca, las aprobás vos)</small></label>
+                            <button class="btn-primary btn-small" style="margin-bottom:8px;" onclick="saveSupportLearnSettings()">Guardar estos dos ajustes</button>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                                <button class="btn-secondary btn-small" id="sbLtab-pending" onclick="loadSupportLearned('pending')">Para aprobar</button>
+                                <button class="btn-secondary btn-small" id="sbLtab-approved" onclick="loadSupportLearned('approved')">Aprobadas</button>
+                                <button class="btn-secondary btn-small" id="sbLtab-rejected" onclick="loadSupportLearned('rejected')">Rechazadas</button>
+                                <button class="btn-secondary btn-small" onclick="supportLearnedNew()">➕ Agregar una a mano</button>
+                            </div>
+                            <div id="sbLearned" style="font-size:12.5px;"></div>
+                        </div>
                 </div>
             </section>
             <section id="supportSection" class="section">

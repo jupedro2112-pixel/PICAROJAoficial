@@ -5080,6 +5080,7 @@ function switchSection(section) {
     if (section === 'support') { loadSupport(); gsLoad(); } // #377 · #953: + gente sin acceso
     if (section === 'payReview') loadPayReview(); // #566
     if (section === 'apiFailures') loadApiFailures(); // #1020
+    if (section === 'aiLearn') { loadSupportBot(); loadSupportLearned('pending'); } // #1042-g
     if (section === 'cargasAuto') loadCargasAuto(); // #763
     if (section === 'gastos') { datosIaGate('Gastos').then(function (ok) { if (ok) loadGastos(); }); } // #770 clave
     if (section === 'phoneLog') loadPhoneLog(); // #1028 clave propia
@@ -6335,17 +6336,17 @@ async function loadSupportBot() {
     try {
         const r = await authFetch('/api/admin/support-bot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
         const c = j.config || {};
-        st.textContent = c.classic ? '· ↩️ chat clásico (sin IA)' : !j.available ? '· ⚠️ falta ANTHROPIC_API_KEY en el servidor' : j.aiDown ? '· ⚠️ la IA no responde (¿sin saldo?): contesta el bot simple · ' + j.aiDown : (c.enabled ? '· ✅ encendido' : '· ⏸️ apagado');
+        st.textContent = c.classic ? '· ↩️ chat clásico (sin IA)' : c.enabled && c.learnedOnly ? '· 🧠 sin IA: contesta con lo aprendido' : !j.available ? '· ⚠️ falta ANTHROPIC_API_KEY en el servidor' : j.aiDown ? '· ⚠️ la IA no responde (¿sin saldo?): contesta el bot simple · ' + j.aiDown : (c.enabled ? '· ✅ encendido' : '· ⏸️ apagado');
         const set = (id, v) => { const e = document.getElementById(id); if (e) { if (e.type === 'checkbox') e.checked = !!v; else e.value = v == null ? '' : v; e.disabled = !j.canEdit; } };
-        set('sbEnabled', c.enabled); set('sbClassic', c.classic); set('sbModel', c.model); set('sbDelayMin', c.delayMinSec); set('sbDelayMax', c.delayMaxSec); set('sbPause', c.pauseHours); set('sbMute', c.muteHours); set('sbAiMax', c.aiMaxReplies); set('sbExtra', c.extraInfo);
+        set('sbEnabled', c.enabled); set('sbClassic', c.classic); set('sbModel', c.model); set('sbDelayMin', c.delayMinSec); set('sbDelayMax', c.delayMaxSec); set('sbPause', c.pauseHours); set('sbMute', c.muteHours); set('sbAiMax', c.aiMaxReplies); set('sbLearnedOnly', c.learnedOnly); set('sbAutoApprove', c.autoApproveAt); set('sbExtra', c.extraInfo);
         const sel = document.getElementById('sbModel'); if (sel && c.model && ![...sel.options].some((o) => o.value === c.model)) { const o = document.createElement('option'); o.value = c.model; o.textContent = c.model; sel.appendChild(o); sel.value = c.model; }
-        const rows = (j.stats || []).map((d) => '<tr><td>' + d.day + '</td><td>' + d.replies + '</td><td>' + d.handoffs + '</td><td>' + d.afterDeposit + '</td><td>' + d.pausedByAgent + '</td><td>' + (d.muted || 0) + '</td><td>' + (d.noCredit || 0) + '</td><td>' + d.errors + '</td></tr>').join('');
-        const box = document.getElementById('sbStats'); if (box) box.innerHTML = '<table class="data-table" style="font-size:12px;"><tr><th>Día</th><th>Respuestas</th><th>A un agente</th><th>Beneficios post-carga</th><th>Callado por agente</th><th>Silenciados</th><th>IA sin saldo</th><th>Errores IA</th></tr>' + rows + '</table>';
+        const rows = (j.stats || []).map((d) => '<tr><td>' + d.day + '</td><td>' + d.replies + '</td><td>' + d.handoffs + '</td><td>' + d.afterDeposit + '</td><td>' + d.pausedByAgent + '</td><td>' + (d.muted || 0) + '</td><td>' + (d.learnedUsed || 0) + '</td><td>' + (d.noCredit || 0) + '</td><td>' + d.errors + '</td></tr>').join('');
+        const box = document.getElementById('sbStats'); if (box) box.innerHTML = '<table class="data-table" style="font-size:12px;"><tr><th>Día</th><th>Respuestas</th><th>A un agente</th><th>Beneficios post-carga</th><th>Callado por agente</th><th>Silenciados</th><th>Con lo aprendido (sin IA)</th><th>IA sin saldo</th><th>Errores IA</th></tr>' + rows + '</table>';
     } catch (_) { st.textContent = '· error de conexión'; }
 }
 async function saveSupportBot() {
     const g = (id) => document.getElementById(id);
-    const body = { classic: !!(g('sbClassic') && g('sbClassic').checked), enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), aiMaxReplies: Number(g('sbAiMax') && g('sbAiMax').value), extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };
+    const body = { classic: !!(g('sbClassic') && g('sbClassic').checked), enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), aiMaxReplies: Number(g('sbAiMax') && g('sbAiMax').value), learnedOnly: !!(g('sbLearnedOnly') && g('sbLearnedOnly').checked), autoApproveAt: Number(g('sbAutoApprove') && g('sbAutoApprove').value) || 0, extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };
     try {
         const r = await authFetch('/api/admin/support-bot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
@@ -6362,6 +6363,61 @@ async function testSupportBot() {
         out.textContent = '🤖 ' + j.reply + (j.handoff ? '\n\n➡️ Lo pasaría a un agente: ' + (j.handoffReason || '') : '');
     } catch (_) { out.textContent = '⚠️ Error de conexión'; }
 }
+// #1042-g RESPUESTAS APRENDIDAS
+let _sbLStatus = 'pending', _sbLCanEdit = false;
+async function loadSupportLearned(status) {
+    _sbLStatus = status || _sbLStatus;
+    const box = document.getElementById('sbLearned'); if (!box) return;
+    box.textContent = 'Cargando…';
+    try {
+        const r = await authFetch('/api/admin/support-bot/learned?status=' + _sbLStatus); const j = await r.json(); if (!r.ok) { box.textContent = j.error || 'Error'; return; }
+        const names = { pending: 'Para aprobar', approved: 'Aprobadas', rejected: 'Rechazadas' };
+        try { const bd = document.getElementById('aiLearnBadge'); const n = (j.counts || {}).pending || 0; if (bd) { bd.textContent = n; bd.style.display = n ? '' : 'none'; } } catch (_) {}
+        ['pending', 'approved', 'rejected'].forEach((s) => { const b = document.getElementById('sbLtab-' + s); if (b) { b.textContent = names[s] + ' (' + ((j.counts || {})[s] || 0) + ')'; b.className = s === _sbLStatus ? 'btn-primary btn-small' : 'btn-secondary btn-small'; } });
+        if (!(j.items || []).length) { box.innerHTML = '<p style="color:var(--p-muted,#777);">Nada por acá todavía.</p>'; return; }
+        box.innerHTML = j.items.map((e) => '<div class="sbL" data-id="' + escapeHtml(e.id) + '" style="border:1px solid var(--p-border,#e2e2e2);border-radius:10px;padding:8px;margin-bottom:8px;">' +
+            '<input type="text" class="sbLq" value="' + escapeHtml(e.question || '') + '" style="width:100%;font-weight:700;margin-bottom:4px;">' +
+            '<textarea class="sbLa" rows="3" style="width:100%;">' + escapeHtml(e.answer || '') + '</textarea>' +
+            '<div style="font-size:11.5px;color:var(--p-muted,#777);margin:4px 0;">Preguntada ' + e.count + ' vez/veces · usada sin IA ' + e.uses + ' vez/veces' + (e.approvedBy ? ' · aprobada por ' + escapeHtml(e.approvedBy) : '') +
+            (e.variants && e.variants.length ? '<br>Así la preguntaron: ' + e.variants.map((v) => '“' + escapeHtml(v) + '”').join(' · ') : '') + '</div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+            (_sbLStatus !== 'approved' ? '<button class="btn-primary btn-small" onclick="supportLearnedAct(this,\'approve\')">✅ Aprobar</button>' : '<button class="btn-primary btn-small" onclick="supportLearnedAct(this,\'save\')">💾 Guardar cambios</button>') +
+            (_sbLStatus !== 'rejected' ? '<button class="btn-secondary btn-small" onclick="supportLearnedAct(this,\'reject\')">🚫 Rechazar</button>' : '') +
+            '<button class="btn-secondary btn-small" onclick="supportLearnedAct(this,\'delete\')">🗑️ Borrar</button></div></div>').join('');
+    } catch (_) { box.textContent = 'Error de conexión'; }
+}
+async function supportLearnedAct(btn, action) {
+    const card = btn.closest('.sbL'); if (!card) return;
+    const body = { action, question: card.querySelector('.sbLq').value, answer: card.querySelector('.sbLa').value };
+    try {
+        const r = await authFetch('/api/admin/support-bot/learned/' + encodeURIComponent(card.dataset.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; }
+        showToast({ approve: '✅ Aprobada: el bot la usa sin IA', reject: '🚫 Rechazada', delete: '🗑️ Borrada', save: '💾 Guardada' }[action] || 'Listo', 'success');
+        loadSupportLearned();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+function supportLearnedNew() {
+    const box = document.getElementById('sbLearned'); if (!box || document.getElementById('sbLnew')) return;
+    box.insertAdjacentHTML('afterbegin', '<div id="sbLnew" style="border:2px solid var(--p-green,#2f7d57);border-radius:10px;padding:8px;margin-bottom:8px;"><input type="text" id="sbLnewQ" placeholder="Pregunta (ej.: ¿Cuál es la carga mínima?)" style="width:100%;margin-bottom:4px;"><textarea id="sbLnewA" rows="3" placeholder="Respuesta corta" style="width:100%;"></textarea><button class="btn-primary btn-small" onclick="supportLearnedCreate()">Guardar (queda aprobada)</button></div>');
+}
+async function supportLearnedCreate() {
+    const q = (document.getElementById('sbLnewQ') || {}).value, a = (document.getElementById('sbLnewA') || {}).value;
+    try {
+        const r = await authFetch('/api/admin/support-bot/learned/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, answer: a }) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; }
+        showToast('✅ Agregada', 'success'); loadSupportLearned('approved');
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function saveSupportLearnSettings() {
+    const g = (id) => document.getElementById(id);
+    try {
+        const r = await authFetch('/api/admin/support-bot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ learnedOnly: !!(g('sbLearnedOnly') && g('sbLearnedOnly').checked), autoApproveAt: Number(g('sbAutoApprove') && g('sbAutoApprove').value) || 0 }) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
+        showToast(j.config.learnedOnly ? '🧠 Sin IA: contesta con lo aprendido' : '✅ Guardado', 'success'); loadSupportBot();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.saveSupportLearnSettings = saveSupportLearnSettings;
+window.loadSupportLearned = loadSupportLearned; window.supportLearnedAct = supportLearnedAct; window.supportLearnedNew = supportLearnedNew; window.supportLearnedCreate = supportLearnedCreate;
 window.loadSupportBot = loadSupportBot; window.saveSupportBot = saveSupportBot; window.testSupportBot = testSupportBot;
 
 // #589: Página de la app (dominio público) editable
