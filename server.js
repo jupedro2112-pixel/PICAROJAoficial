@@ -30999,6 +30999,10 @@ async function _tgAdminSnapTick(force, moneyOnly) {
     // #1069 (owner: "botones para preguntarle de todo: clientes nuevos hoy, cuántos depósitos, retención, cuántos cargaron más de 2 veces, más de 5,
     // todo lo de INICIO"): resumen de CLIENTES liviano (agregaciones; corre en este cron, nunca en el webhook).
     try { snap.clients = await _tgClientsSnap(now, t0, m0); } catch (e) { logger.warn('[telegram reportes] clientes ' + e.message); }
+    // #1075 (owner: "un análisis completo de cómo ves el negocio, si es sano o qué le modificarías viendo todo lo que ofrecemos"): la OFERTA actual
+    try { const ig = await getInstallGiftConfig(); snap.offer = { firstPct: await getFirstDepositBonusPct(null), firstCap: await getFirstDepositCapArs(null), dailyRefund: await getDailyRefundPct(),
+      autoLoad: await getAutoLoadBonusPct(), giftRollover: await _giftRolloverX(), depositRollover: await getDepositRolloverX(), giftMax: await _refreshGiftMax(), withdrawMin: await getWithdrawMinArs(),
+      install: ig && ig.enabled ? (ig.fixedArs > 0 ? '$' + Math.round(ig.fixedArs).toLocaleString('es-AR') : (ig.pct || 0) + '%') : null }; } catch (e) { logger.warn('[telegram reportes] oferta ' + e.message); }
     // Mes anterior completo (para el reporte del día 1): una vez por mes.
     if (prevSnap.lastMonthKey === pmk && prevSnap.lastMonth) Object.assign(snap, { lastMonthKey: pmk, lastMonth: prevSnap.lastMonth, lastMonthPrev: prevSnap.lastMonthPrev });
     else { const ppm0 = new Date(_schedArtKey(new Date(pm0.getTime() - 15 * D)).slice(0, 7) + '-01T00:00:00-03:00'); const [lm, lmp] = await Promise.all([_bizMoney(pm0, m0), _bizMoney(ppm0, pm0)]); Object.assign(snap, { lastMonthKey: pmk, lastMonth: strip(lm), lastMonthPrev: strip(lmp) }); }
@@ -31235,8 +31239,9 @@ async function _tgAdminOnCallback(c, cq) {
     const p = (async () => (await _cronClaim('tgadminsnapf', 60000)) ? _tgAdminSnapTick(true, true) : null)().catch(() => null); _tgAdminBusy.set('snap', p); try { snap = (await p) || (await getConfig('tgadminsnap', null)) || snap; } finally { _tgAdminBusy.delete('snap'); }
   } else await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: cq.id });
   const r = tgAdmin.render(key, snap || {}); if (!r) return;
-  const e = await tgChannel.call(c.token, 'editMessageText', { chat_id: chatId, message_id: cq.message.message_id, text: r.text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: r.markup });
-  if (!e.ok && !/not modified/i.test(String(e.error))) await _tgAdminSend(c, chatId, r.text, r.markup);
+  // #1075 (owner: "cuando aprieto un botón, que quede plasmado en texto así queda guardada cada información que pido"): antes se EDITABA el mismo
+  // mensaje (se perdía lo anterior) ⇒ ahora cada consulta es un MENSAJE NUEVO con fecha y hora, y abajo los botones para seguir.
+  await _tgAdminSend(c, chatId, r.text, r.markup);
 }
 // Panel: generar el código para vincular un grupo / desvincular.
 app.post('/api/admin/telegram/admin-pair', authMiddleware, adminMiddleware, async (req, res) => {

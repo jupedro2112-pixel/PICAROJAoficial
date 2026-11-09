@@ -20,10 +20,10 @@ const SNAP = { at: new Date('2026-11-09T21:00:00Z'), today: M, todayPrev: Object
   menus: { at: new Date(), byMenu: { girox: { users: 100, back7: 60, depositors: 40, repeat: 20 } }, weeks: [{ regs: 50, firstDep: 20, depositors: 90, chatNewPct: 80 }] },
   weeklyText: 'ANÁLISIS SEMANAL\n• todo bien' };
 
-caso('Menú: 19 botones (Inicio, Clientes, Veces, Pauta, Info), todos responden con texto < 4096 y botones Actualizar / Menú', () => {
-  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 19);
+caso('Menú: 20 botones (Análisis, Inicio, Clientes, Veces, Pauta, Info), todos responden con texto < 4096 y botones Actualizar / Menú', () => {
+  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 20);
   for (const b of k) { assert.ok(/^ad:[a-z]+$/.test(b.callback_data) && b.callback_data.length <= 64); const r = ta.render(b.callback_data.slice(3), SNAP); assert.ok(r && r.text.length < 4096, b.callback_data); assert.ok(r.markup.inline_keyboard[0].some((x) => x.callback_data === 'ad:menu')); }
-  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 19);
+  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 20);
   assert.strictEqual(ta.render('nada', SNAP), null);
 });
 caso('Sin datos (snap vacío) no rompe', () => { for (const [k] of ta.MENU) assert.ok(ta.render(k, {}).text.length > 10, k); assert.ok(ta.dailyReport(null).length > 10 && ta.monthlyReport({}).length > 10); });
@@ -128,6 +128,16 @@ caso('#1071 Vincular grupo por ID: sólo admin, ID negativo, verifica con getCha
   const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
   const i = S2.indexOf("app.post('/api/admin/telegram/admin-add-id'"); assert.ok(i > 0); const b = S2.slice(i, i + 1800);
   assert.ok(/req\.user\.role !== 'admin'/.test(b) && /\^-\\d\{5,16\}\$/.test(b) && /'getChat'/.test(b) && /\['group', 'supergroup'\]\.includes/.test(b));
+});
+caso('#1075 Análisis del negocio: estado + qué cambiaría; cada botón deja un MENSAJE NUEVO (no edita)', () => {
+  const S = { at: new Date(), monthDays: 9, monthLen: 30, month: { deposits: 9e6, result: 1.5e6, giftRatio: 0.27, registered: 400, firstDeposits: 80 }, monthPrev: { deposits: 1e7 }, clients: { month: { users: 300, n2: 100, n5: 30 } }, offer: { firstPct: 100, dailyRefund: 10 } };
+  const t = ta.render('health', S).text;
+  assert.ok(/Estado general:/.test(t) && /QUÉ CAMBIARÍA/.test(t) && /LO QUE OFRECEMOS HOY/.test(t) && /Regalos altos: 27%/.test(t) && t.length < 4096);
+  assert.ok(/Sin datos/.test(ta.render('health', {}).text));
+  const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  const i = S2.indexOf('async function _tgAdminOnCallback'); const body = S2.slice(i, S2.indexOf('\n}\n', i));
+  assert.ok(!/editMessageText/.test(body) && /await _tgAdminSend\(c, chatId, r\.text, r\.markup\);/.test(body), 'cada consulta queda guardada');
+  assert.ok(/snap\.offer = \{ firstPct:/.test(S2), 'la oferta la arma el cron');
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

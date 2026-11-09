@@ -8,6 +8,13 @@
 
 ## Sesión 2026-11-09
 
+### 1075. Grupo privado: cada consulta queda guardada + 🩺 Análisis del negocio (2026-11-09)
+- **Owner:** "cuando aprieto un botón quiero que quede plasmado en texto así queda guardada cada información; y un análisis completo de cómo ves el negocio,
+  si es sano o qué le modificarías viendo todo lo que ofrecemos". (1) `_tgAdminOnCallback` ya no EDITA el mensaje: manda uno nuevo (con fecha/hora y botones
+  🔄 Otra vez / 📋 Menú) ⇒ el grupo queda como historial. (2) Botón 🩺 Análisis del negocio (`healthReport`, reglas sobre el snap, sin IA): estado
+  (🟢 sano / 🟠 estable / 🔴 en riesgo), proyección del mes, lo que anda bien, lo que preocupa, lo que ofrecemos hoy (`snap.offer`, lo arma el cron) y
+  qué cambiaría (hasta 7 acciones). Metas: regalos ≤ 20% · 1ª carga ≥ 25% de registros · 2+ cargas ≥ 40% · retención semanal ≥ 35%. 20 botones.
+
 ### 1074. Cartel de 1ª carga de la app sin texto + landing de publicista (2026-11-09) — app v709
 - **Owner:** "entré a uno que configuré al 50% y no aparece nada, ni 100 ni 50; en la landing figura 100". (1) La landing de Vercel sigue en la versión vieja:
   GitHub está 73 commits atrás (no se hizo el push) ⇒ Vercel no recibió #1062. (2) `maybeFirstDepositPopup`: un `// #839 · #974` en medio de la línea

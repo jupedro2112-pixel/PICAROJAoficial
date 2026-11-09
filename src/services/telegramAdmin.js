@@ -21,7 +21,7 @@ function chg(cur, prev) {
 
 const MENU_LBL = { full: '🏠 Completo', basic: '🧩 Básico', easy: '👆 Fácil', girox: '🎰 Girox directo', soporte: '💬 Soporte' };
 const MENU = [
-  ['inicio', '🏠 Inicio: hoy en vivo'], ['clients', '👥 Clientes y cargas'],
+  ['health', '🩺 Análisis del negocio'], ['inicio', '🏠 Inicio: hoy en vivo'], ['clients', '👥 Clientes y cargas'],
   ['loyal', '🔢 Cuántas veces cargan'], ['today', '📊 Hoy'], ['yesterday', '📆 Ayer'],
   ['week', '🗓️ Últimos 7 días'], ['month', '📅 Mes'],
   ['retention', '🔁 Retención'], ['funnel', '🪜 Embudo'],
@@ -37,7 +37,7 @@ function menuMarkup() {
   return { inline_keyboard: rows };
 }
 function backMarkup(key) {
-  return { inline_keyboard: [[{ text: '🔄 Actualizar', callback_data: 'ad:' + key }, { text: '⬅️ Menú', callback_data: 'ad:menu' }]] };
+  return { inline_keyboard: [[{ text: '🔄 Otra vez', callback_data: 'ad:' + key }, { text: '📋 Menú', callback_data: 'ad:menu' }]] };
 }
 function header(title, at) {
   const t = at ? new Date(at).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' }) : '';
@@ -123,11 +123,59 @@ function loyalReport(s) {
     return [`<b>${lbl}</b> · ${num(u)} clientes cargaron`, `1️⃣ Una sola vez: <b>${num(b.n1)}</b>${p(b.n1)}`, `2️⃣ 2 veces o más: <b>${num(b.n2)}</b>${p(b.n2)}`, `5️⃣ 5 veces o más: <b>${num(b.n5)}</b>${p(b.n5)}`, `🔟 10 veces o más: <b>${num(b.n10)}</b>${p(b.n10)}`].join('\n'); };
   return [blk(c.month || {}, 'MES EN CURSO'), '', blk(c.d30 || {}, 'ÚLTIMOS 30 DÍAS'), '', '<i>Cuantos más carguen 2+ y 5+ veces, mejor la retención: los de una sola vez son los que hay que recuperar.</i>'].join('\n');
 }
+// #1075: ANÁLISIS COMPLETO del negocio (reglas sobre los números del cron; sin IA): estado general + plata + clientes + pauta + regalos + oferta + qué cambiar.
+function healthReport(s) {
+  s = s || {}; const m = s.month || {}, mp = s.monthPrev || {}, w = s.week || {}, wp = s.weekPrev || {}, c = s.clients || {}, sp = s.spend || {}, o = s.offer || {}, b = s.board || {};
+  if (!s.month) return '<i>Sin datos todavía (se calculan cada 15 minutos).</i>';
+  let score = 0; const good = [], warn = [], todo = [];
+  const add = (ok, g, bdT, fix, w8) => { if (ok === true) { good.push(g); score += w8 || 1; } else if (ok === false) { warn.push(bdT); score -= w8 || 1; if (fix) todo.push(fix); } };
+  // Plata
+  const res = Number(m.result) || 0, dep = Number(m.deposits) || 0, gr = Number(m.giftRatio) || 0;
+  add(res > 0, `💰 El mes deja plata: resultado ${money(res)} sobre ${money(dep)} cargados (${pc(dep ? res / dep : 0)}).`, `💰 El mes da NEGATIVO: ${money(res)} (se retira más de lo que se carga).`, 'Revisar retiros grandes y regalos: el resultado del mes es negativo.', 2);
+  if (mp.deposits) add(dep >= mp.deposits * 0.95, `📈 Las cargas van ${chg(dep, mp.deposits).replace(/<\/?i>/g, '').trim() || 'parejas'} contra el mes pasado a la misma altura.`, `📉 Las cargas bajan ${chg(dep, mp.deposits).replace(/<\/?i>/g, '').trim()} contra el mes pasado a la misma altura.`, 'Las cargas bajan: reforzar la retención (aviso de reembolso, 2ª carga) antes que subir la pauta.');
+  add(gr <= 0.2, `🎁 Regalos sanos: ${pc(gr)} de lo cargado (techo sano 20%).`, `🎁 Regalos altos: ${pc(gr)} de lo cargado (techo sano 20%).`, `Bajar regalos: hoy se regala el ${pc(gr)} de lo cargado. Empezar por los que "no rinden" (botón 🎁 Regalos).`, 2);
+  // Clientes
+  const reg = Number(m.registered) || 0, fd = Number(m.firstDeposits) || 0;
+  if (reg >= 20) add(fd / reg >= 0.25, `🥇 ${pc(fd / reg)} de los registrados hace su 1ª carga (bien: ≥ 25%).`, `🥇 Sólo ${pc(fd / reg)} de los registrados carga (meta ≥ 25%).`, 'Pocos registrados cargan: revisar el primer contacto (bienvenida, chat, cómo mandar el comprobante) y el bono de 1ª carga.', 2);
+  const mo = c.month || {}; if (mo.users >= 20) {
+    const r2 = mo.n2 / mo.users; add(r2 >= 0.4, `🔁 ${pc(r2)} de los clientes del mes cargó 2+ veces (bien: ≥ 40%).`, `🔁 Sólo ${pc(r2)} cargó 2+ veces en el mes (meta ≥ 40%): mucha gente prueba una vez y se va.`, 'Mucha gente carga una sola vez: empujar la 2ª carga (oferta a las 24 h, aviso del reembolso diario).', 2);
+    const r5 = mo.n5 / mo.users; if (r5 >= 0.15) good.push(`💎 ${pc(r5)} carga 5+ veces: hay un núcleo fiel (cuidarlo: retiros rápidos, VIP).`);
+  }
+  const ret = (b.retention || []).find((x) => x.k === 1) || (b.retention || [])[0];
+  if (ret && ret.prevDepositors >= 20) add(ret.rate >= 0.35, `🔄 Retención semanal ${pc(ret.rate)} (bien: ≥ 35%).`, `🔄 Retención semanal baja: ${pc(ret.rate)} (meta ≥ 35%).`, 'Retención baja: recorrido de avisos más fuerte con quienes dejaron de cargar hace 3-7 días.');
+  if (b.funnel && b.funnel.worst) warn.push(`🪜 Donde más gente se pierde: ${esc(b.funnel.worst.label)} (${num(b.funnel.worst.lost)} personas).`);
+  // Pauta
+  const spm = sp.month || {}; if (spm.ars > 0) {
+    const net = res - spm.ars; add(net >= 0, `📣 La pauta se paga: resultado − pauta = ${money(net)}.`, `📣 La pauta todavía no se paga: resultado − pauta = ${money(net)}.`, 'La pauta no se recupera: pausar las campañas en 🔴 (botón 📣 Campañas) y pasar ese gasto a las que convierten.', 2);
+    if (fd) { const cpa = spm.usd / fd; good.push(`🎯 Costo por cliente que cargó en el mes: ${'US$' + Math.round(cpa).toLocaleString('es-AR')}.`); }
+  } else todo.push('Cargá el gasto en pauta todos los días (respondé la pregunta de las 10 h): sin eso no se puede saber si la publicidad se paga.');
+  const badCamp = (b.campaigns || []).filter((x) => x.verdict === 'bad'); if (badCamp.length) { warn.push(`📣 Campañas que no rinden: ${badCamp.slice(0, 4).map((x) => esc(x.campaign)).join(', ')}.`); todo.push(`Revisar o pausar: ${badCamp.slice(0, 4).map((x) => esc(x.campaign)).join(', ')}.`); }
+  const badGift = ((b.gifts || []).filter((x) => x.verdict === 'bad')); if (badGift.length) { warn.push(`🎁 Regalos que cuestan más de lo que hacen cargar: ${badGift.slice(0, 3).map((x) => esc(x.label)).join(', ')}.`); todo.push(`Bajar o apagar: ${badGift.slice(0, 3).map((x) => esc(x.label)).join(', ')}.`); }
+  // Operación
+  const p = s.payouts || {}; if (p.reviewN > 5) { warn.push(`🛡️ ${num(p.reviewN)} retiros esperando revisión (${money(p.reviewSum)}): la demora en pagar es lo que más espanta clientes.`); todo.push('Liberar los retiros frenados (panel → Pagos a confirmar): pagar rápido es la mejor publicidad.'); }
+  // Oferta
+  const ofL = []; if (o.firstPct != null) ofL.push(`1ª carga ${o.firstPct}%${o.firstCap ? ' hasta ' + money(o.firstCap) : ''}`); if (o.install) ofL.push(`${o.install} por instalar la app`);
+  if (o.dailyRefund) ofL.push(`reembolso diario ${o.dailyRefund}%`); if (o.autoLoad) ofL.push(`${o.autoLoad}% en cada carga automática`); if (o.giftRollover) ofL.push(`regalos ×${o.giftRollover}`); if (o.depositRollover != null) ofL.push(`cargas ×${o.depositRollover}`);
+  if (o.giftMax) ofL.push(`tope por regalo ${money(o.giftMax)}`); if (o.withdrawMin) ofL.push(`retiro mínimo ${money(o.withdrawMin)}`);
+  if (o.firstPct >= 100 && reg >= 20 && fd / reg < 0.25) todo.push(`El 100% de 1ª carga no está haciendo cargar a más gente: probar 50% en alguna landing y comparar (se configura por publicista).`);
+  if (o.firstPct >= 100 && gr > 0.2) todo.push('Con regalos altos, el 100% de 1ª carga es lo primero a revisar: probar 50% con tope más alto.');
+  if (o.autoLoad > 0 && gr > 0.2) todo.push(`El ${o.autoLoad}% en cada carga automática suma en regalos todos los días: evaluar bajarlo.`);
+  const st = score >= 4 ? '🟢 <b>SANO</b>' : score >= 0 ? '🟠 <b>ESTABLE, CON PUNTOS A CORREGIR</b>' : '🔴 <b>EN RIESGO</b>';
+  const proj = s.monthDays && s.monthLen ? `🔮 A este ritmo el mes cierra con cargas ${money(dep / s.monthDays * s.monthLen)} y resultado ${money(res / s.monthDays * s.monthLen)}.` : '';
+  const L = [`Estado general: ${st}`, proj, ''];
+  if (good.length) L.push('✅ <b>LO QUE ANDA BIEN</b>', ...good, '');
+  if (warn.length) L.push('⚠️ <b>LO QUE PREOCUPA</b>', ...warn, '');
+  if (ofL.length) L.push('🎁 <b>LO QUE OFRECEMOS HOY</b>', ofL.join(' · '), '');
+  L.push('🛠️ <b>QUÉ CAMBIARÍA</b>'); if (todo.length) todo.slice(0, 7).forEach((t, i) => L.push(`${i + 1}. ${t}`)); else L.push('Nada urgente: mantener y medir semana a semana.');
+  L.push('', '<i>Análisis por reglas con los números del mes (no es IA). Metas usadas: regalos ≤ 20% de lo cargado · 1ª carga ≥ 25% de los registros · 2+ cargas ≥ 40% · retención semanal ≥ 35%.</i>');
+  return L.filter((x, i, a) => !(x === '' && a[i - 1] === '')).join('\n');
+}
 function render(key, snap) {
   const s = snap || {}; const at = s.at;
   if (key === 'menu') return { text: `${header('PANEL DE CONTROL', at)}\nElegí qué querés ver 👇\n<i>Los números se recalculan cada 15 min (retención, embudo, regalos y campañas cada hora).</i>`, markup: menuMarkup() };
   let text;
   if (key === 'spend') text = spendReport(s).replace(/^.*\n.*\n━+\n/, header('PAUTA Y GANANCIA', at) + '\n');
+  else if (key === 'health') text = [header('ANÁLISIS DEL NEGOCIO', at), healthReport(s)].join('\n');
   else if (key === 'inicio') text = [header('INICIO · HOY EN VIVO', at), inicioReport(s)].join('\n');
   else if (key === 'clients') text = [header('CLIENTES Y CARGAS', at), clientsReport(s)].join('\n');
   else if (key === 'loyal') text = [header('CUÁNTAS VECES CARGAN', at), loyalReport(s)].join('\n');
@@ -136,7 +184,7 @@ function render(key, snap) {
     '🔁 <b>Retención</b>: cuántos de los que cargaron vuelven a cargar.', '🪜 <b>Embudo</b>: registro → 1ª carga → 2ª carga, y dónde se pierde más gente.',
     '🎁 <b>Regalos</b>: cuánto cuesta cada regalo y si conviene.', '📣 <b>Campañas</b>: clientes y plata que trae cada publicista.',
     '🚨 <b>Alertas</b>: lo que hay que mirar ya.', '📋 <b>Análisis semanal</b>: el resumen de la semana con lo que conviene cambiar.',
-    '🛡️ <b>Retiros frenados</b>: los que esperan revisión.', '🏠 <b>Inicio</b>: hoy en vivo (en la app ahora, registros, 1ª carga, cargas, volvieron, resultado). 👥 <b>Clientes y cargas</b>: cuántos cargaron y cuánto, hoy / mes / 30 días. 🔢 <b>Cuántas veces cargan</b>: clientes con 1, 2+, 5+ y 10+ cargas.', '💸 <b>Pauta y ganancia</b>: lo gastado en publicidad contra lo que entró (costo por cliente, resultado − pauta). Todos los días a las 10 h te pregunto cuánto gastaste ayer.', '🎟️ <b>Sorteo</b> · 🤖 <b>IA de soporte</b> · 📱 <b>Uso de la app</b>.', LINE,
+    '🛡️ <b>Retiros frenados</b>: los que esperan revisión.', '🩺 <b>Análisis del negocio</b>: si el negocio está sano, qué anda bien, qué preocupa, lo que ofrecemos hoy y qué cambiaría. Cada consulta queda guardada como mensaje en el grupo.', '🏠 <b>Inicio</b>: hoy en vivo (en la app ahora, registros, 1ª carga, cargas, volvieron, resultado). 👥 <b>Clientes y cargas</b>: cuántos cargaron y cuánto, hoy / mes / 30 días. 🔢 <b>Cuántas veces cargan</b>: clientes con 1, 2+, 5+ y 10+ cargas.', '💸 <b>Pauta y ganancia</b>: lo gastado en publicidad contra lo que entró (costo por cliente, resultado − pauta). Todos los días a las 10 h te pregunto cuánto gastaste ayer.', '🎟️ <b>Sorteo</b> · 🤖 <b>IA de soporte</b> · 📱 <b>Uso de la app</b>.', LINE,
     '📬 <b>REPORTES AUTOMÁTICOS</b>', '▸ Todos los días a las 9 h: cómo cerró ayer', '▸ Los lunes: la semana completa', '▸ El día 1: el mes completo', LINE,
     '<i>Escribí /menu para volver a ver la botonera. Este grupo es PRIVADO: no agregues a nadie que no deba ver los números.</i>'].join('\n');
   else if (key === 'today') text = `${header('HOY', at)}\n${moneyBlock(s.today, s.todayPrev, 'Comparado con ayer a la misma hora')}`;
@@ -229,4 +277,4 @@ function newPairCode() {
   for (let i = 0; i < 8; i++) s += A[b[i] % A.length];
   return s;
 }
-module.exports = { spendBlock, spendReport, askSpendText, MENU, KEYS, menuMarkup, backMarkup, render, dailyReport, monthlyReport, moneyBlock, newPairCode, money, pc };
+module.exports = { healthReport, spendBlock, spendReport, askSpendText, MENU, KEYS, menuMarkup, backMarkup, render, dailyReport, monthlyReport, moneyBlock, newPairCode, money, pc };
