@@ -8,6 +8,14 @@
 
 ## Sesión 2026-11-09
 
+### 1062. Bono de la landing por publicista en la landing de Vercel + Editar campaña con errores a la vista (2026-11-09)
+- **Owner:** "en el publicista configuro 50% en vez de 100% y la landing sigue con 100%"; "aparece Editar pero no se edita".
+- La landing de `picaroja.com/l/CÓDIGO` ya mostraba el % del publicista. La de Vercel (`landing/index.html`, grupospicaroja.com) tenía el 100% FIJO (#581)
+  y pedía `/api/landing/info` sin el código: ahora manda `?c=<campaña>` y, si el publicista tiene SU regla (`welcome.fromCampaign`, nuevo en la respuesta),
+  muestra ese % (y el tope); sin regla propia sigue el fijo. Se publica en Vercel aparte (push a GitHub / deploy de Vercel).
+- Panel: `submitCampaignForm` envuelve el guardado — botón "Guardando…", el error (que quedaba al pie de la ventana, fuera de la vista) sale también como
+  cartel y la ventana baja hasta él; un error de JS se avisa. Panel v274.
+
 ### 1061. Revisión antes de subir (2026-11-09)
 - Sintaxis de todo el repo OK, 26/26 pruebas, zip = último commit sin claves.
 - Arreglos: (1) `/gasto` / respuesta: "$1200" se toma en DÓLARES (pesos sólo si dice "pesos" o > 100.000). (2) El análisis tras cargar el gasto ya no

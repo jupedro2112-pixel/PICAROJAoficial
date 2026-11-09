@@ -11905,7 +11905,23 @@ async function _campaignWelcomeSave(code) {
     const r = await authFetch('/api/admin/publisher-welcome', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, pct, capArs, restPct, active: true }) });
     const j = await r.json().catch(() => ({})); return r.ok ? null : (j.error || 'No se pudo guardar el bono de la landing');
 }
+// #1062 (owner: "aparece Editar pero no se edita"): el error del guardado se escribía al PIE de la ventana (larga, fuera de la pantalla) y parecía
+// que no hacía nada. Ahora: botón "Guardando…", cualquier error también como cartel arriba + la ventana baja hasta el mensaje, y un fallo de JS se avisa.
 async function submitCampaignForm() {
+    const btn = document.querySelector('#campaignFormModal button[onclick="submitCampaignForm()"]'); const txt = btn ? btn.textContent : '';
+    if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = 'Guardando…'; }
+    try { await _submitCampaignFormInner(); }
+    catch (e) { const ed = document.getElementById('campaignFormError'); if (ed) { ed.textContent = 'No se pudo guardar: ' + (e && e.message || e); ed.style.display = ''; } }
+    finally {
+        if (btn) { btn.disabled = false; btn.textContent = txt; }
+        const ed = document.getElementById('campaignFormError');
+        if (ed && ed.style.display !== 'none' && ed.textContent && document.getElementById('campaignFormModal') && !document.getElementById('campaignFormModal').classList.contains('hidden')) {
+            try { showToast(ed.textContent, 'error'); } catch (_) {}
+            try { ed.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+        }
+    }
+}
+async function _submitCampaignFormInner() {
     const mode = document.getElementById('campaignFormMode').value;
     const code = document.getElementById('campaignFormCode').value.trim().toUpperCase();
     const publisher = document.getElementById('campaignFormPublisher').value.trim();

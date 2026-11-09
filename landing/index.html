@@ -366,8 +366,21 @@
     { id: 'jugaygana', name: 'Jugaygana', connected: false }
   ]);
   try {
-    fetch(API_BASE + '/api/landing/info').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    var _lcode = ''; try { _lcode = String(resolveCampaign() || '').toUpperCase().trim(); } catch (e) {}
+    fetch(API_BASE + '/api/landing/info' + (_lcode ? '?c=' + encodeURIComponent(_lcode) : '')).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d) return;
+      // #1062 (owner: "en el publicista configuro 50% en vez de 100% y la landing sigue con 100%"): si el publicista de este link tiene SU % de
+      // 1ª carga (panel → Publicidad → la campaña), se muestra ése; sin regla propia queda el fijo de arriba (#581).
+      try {
+        var w = d.welcome || {};
+        if (w.fromCampaign) {
+          var pc = Number(w.pct) || 0, cap = Number(w.capArs) || 0, rest = Number(w.restPct) || 0;
+          if (pc > 0) {
+            document.getElementById('bonusBig').textContent = pc + '%';
+            document.getElementById('bonusSub').textContent = BONUS_SUB + (cap > 0 ? ' · HASTA $' + cap.toLocaleString('es-AR') + (rest > 0 ? ' (+' + rest + '% DEL RESTO)' : '') : '');
+          } else { var pr = document.getElementById('bonusBig'); pr = pr && pr.closest ? pr.closest('.promo, .bonus, .hero-bonus') || pr.parentNode : null; if (pr) pr.style.display = 'none'; }
+        }
+      } catch (e) {}
       try { var md = Number(d.minDepositArs); if (md > 0) { var t = '$' + md.toLocaleString('es-AR'); document.querySelectorAll('.minAmt').forEach(function (e) { e.textContent = t; }); } } catch (e) {} // #686
       if (Array.isArray(d.platforms) && d.platforms.length) paintPlats(d.platforms);
       // #555: títulos y detalles de los servicios desde el panel (los que están apagados no se muestran)
