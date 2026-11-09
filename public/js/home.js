@@ -98,6 +98,10 @@
         // #596 (owner, limpieza): sin el popup de primera carga (queda el cartel chico del Inicio, #564) // #488: la opción de menú (barra abajo) aplica en TODOS los modos (fácil y completo)
         mode = (mode === 'full' || mode === 'mini' || mode === 'easy' || mode === 'basic') ? mode : 'play'; // #512: basic
         _homeMode = mode;
+        // #1042-m (owner: "en el completo y el básico no deja deslizar para abajo"): "Ver completas" del Inicio de Girox (ev-expanded) bloquea el
+        // scroll del cuerpo; al cambiar de menú quedaba puesto. Se suelta (y el overflow del casino, si el casino no está abierto).
+        if (mode !== 'play') { try { if (document.body.classList.contains('ev-expanded')) toggleEntryExpand(false); } catch (_) {} document.body.classList.remove('ev-expanded'); }
+        try { if (!document.body.classList.contains('casino-open') && document.body.style.overflow === 'hidden') document.body.style.overflow = ''; } catch (_) {}
         const p = _el('supportPanel');
         const cta = _el('serviceBannerCta');
         const bn = _el('serviceBanner');
@@ -1505,7 +1509,6 @@
     // ---------------- SOPORTE (chat) ----------------
     function openSupport() {
         // #267: desde la pantalla de entrada, el chat se abre como pantalla principal (modo mini).
-        if (_casinoIsOpen() && !document.body.classList.contains('sp-classic') && _supportIntoCasino()) return; // #1042-e: con Girox abierto, Soporte encima del juego
         if (_homeMode === 'play') { setHomeMode('mini'); return; }
         const p = _el('supportPanel');
         if (!p) return;
@@ -2460,6 +2463,11 @@
         if (p.parentNode !== ov) { _spCasino = { parent: p.parentNode, next: p.nextSibling, wasHidden: p.classList.contains('hidden') }; ov.appendChild(p); }
         try { toggleCasinoLoad(false); } catch (_) {}
         p.classList.remove('hidden'); p.classList.add('sp-in-casino'); document.body.classList.add('sp-casino');
+        try {
+            const h = _el('waHead');
+            if (h && !_el('spCasinoX')) h.insertAdjacentHTML('beforeend', '<button type="button" class="wa-head-btn sp-casino-x" id="spCasinoX" onclick="VIP.home.closeSupport()" aria-label="Cerrar el chat">✕</button>');
+            const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; nm.textContent = (_el('spName') && _el('spName').textContent) || 'Soporte'; } if (stt) { stt.dataset.prev = stt.textContent; stt.textContent = 'En línea'; }
+        } catch (_) {}
         _open = true; _unread = 0; _paintBadge();
         try { spPromoPaint(); } catch (_) {}
         try { VIP.chat.markReceivedAsRead(); } catch (_) {}
@@ -2471,15 +2479,22 @@
         const s = _spCasino; _spCasino = null;
         try { if (s.next && s.next.parentNode === s.parent) s.parent.insertBefore(p, s.next); else s.parent.appendChild(p); } catch (_) {}
         p.classList.remove('sp-in-casino'); document.body.classList.remove('sp-casino');
+        try { const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm && nm.dataset.prev) nm.textContent = nm.dataset.prev; if (stt && stt.dataset.prev) stt.textContent = stt.dataset.prev; } catch (_) {}
         if (s.wasHidden) p.classList.add('hidden');
         _open = !s.wasHidden;
         try { const i = _el('messageInput'); if (i) i.blur(); } catch (_) {}
         return true;
     }
-    async function casinoSupport() {
-        // Chat clásico (panel) ⇒ como antes: cierra el casino y abre Soporte afuera.
-        if (_casinoIsOpen() && !(await spUiMode()) && _supportIntoCasino()) return;
-        try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80);
+    // Botón "Soporte" del casino: como siempre (owner #1042-m: "el chat de soporte dejalo como estaba"). Lo nuevo vive en la BURBUJA.
+    function casinoSupport() { try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80); }
+    // #1042-m (owner): "modificá todo en la burbuja del chat de Girox". La burbuja abre el chat ENCIMA del juego, estilo WhatsApp, con
+    // DEPOSITAR / RETIRAR / REEMBOLSOS, titular-alias-CBU, la cinta CARGÁ Y GANÁ y la caja para escribir (es el mismo chat, mudado).
+    // Con "Chat clásico" (panel) la burbuja abre la Carga rápida como antes.
+    async function casinoChatToggle() {
+        try { if (VIP.ui._bubbleWasDragged) return; } catch (_) {}
+        if (_spCasino) { _supportOutOfCasino(); return; }
+        if (await spUiMode()) { toggleCasinoLoad(); return; }
+        if (!(_casinoIsOpen() && _supportIntoCasino())) toggleCasinoLoad();
     }
     function casinoWithdraw() { try { if (VIP.withdraw && VIP.withdraw.openWithdrawModal) VIP.withdraw.openWithdrawModal(); else VIP.ui.showToast('Retiros no disponibles ahora', 'error'); } catch (_) {} }
 
@@ -2489,7 +2504,7 @@
         const ov = _el('casinoOverlay');
         if (!ov) return;
         // El botón flotante de siempre ahora abre nuestro panel de carga (no el chat).
-        try { VIP.ui.toggleCasinoChat = function () { toggleCasinoLoad(); }; } catch (_) {}
+        try { VIP.ui.toggleCasinoChat = function () { casinoChatToggle(); }; } catch (_) {} // #1042-m: la burbuja abre el chat nuevo
         const bubble = _el('casinoSupportBubble');
         if (bubble && !bubble.dataset.quickReady) {
             bubble.dataset.quickReady = '1';

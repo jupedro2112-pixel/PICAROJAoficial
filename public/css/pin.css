@@ -3186,32 +3186,44 @@ html[data-theme="dark"] body:not(.sp-classic) .sp-acts .sp-dep { box-shadow: non
 html[data-theme="dark"] { --p-wa-bg: #0b141a; --p-wa-in: #202c33; --p-wa-in-text: #e9edef; --p-wa-out: #005c4b; --p-wa-out-text: #e9edef; --p-wa-time: #8696a0; --p-wa-line: #222d34; }
 body:not(.sp-classic) .sp-acts .sp-rf { background: var(--p-green); color: var(--p-inv); }
 body:not(.sp-classic) .sp-actbar { position: sticky; top: 0; z-index: 6; padding-bottom: 8px; border-bottom: 1px solid var(--p-border); }
-body:not(.sp-classic) #supportPanel .chat-container, body.wa-dark:not(.sp-classic) #supportPanel .chat-container, body:not(.sp-classic) #supportPanel #chatMessages { background: var(--p-wa-bg) !important; background-image: none !important; }
-body:not(.sp-classic) #supportPanel .message, body.wa-dark:not(.sp-classic) #supportPanel .message { box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; padding: 7px 10px 6px !important; font-size: 15px; line-height: 1.38; }
-body:not(.sp-classic) #supportPanel .message.usuario, body:not(.sp-classic) #supportPanel .message.admin, body:not(.sp-classic) #supportPanel .message.system, body.wa-dark:not(.sp-classic) #supportPanel .message.usuario { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border-radius: 0 12px 12px 12px !important; }
-body:not(.sp-classic) #supportPanel .message.agente, body.wa-dark:not(.sp-classic) #supportPanel .message.agente { background: var(--p-wa-out) !important; color: var(--p-wa-out-text) !important; border-radius: 12px 0 12px 12px !important; }
-body:not(.sp-classic) #supportPanel .message-time, body:not(.sp-classic) #supportPanel .msg-ticks { color: var(--p-wa-time) !important; font-size: 11px !important; }
-body:not(.sp-classic) #supportPanel .message.agente .message-time, body:not(.sp-classic) #supportPanel .message.agente .msg-ticks { color: var(--p-wa-out-text) !important; opacity: .85; }
-body:not(.sp-classic) #supportPanel .message.agente .msg-ticks.msg-read { color: #a6f3ff !important; opacity: 1; }
-body:not(.sp-classic) #supportPanel .msg-who { color: var(--p-green) !important; font-weight: 800; }
-body:not(.sp-classic) #supportPanel .chat-date-separator span { background: var(--p-wa-in) !important; color: var(--p-wa-time) !important; box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; }
-body:not(.sp-classic) #supportPanel .chat-input-container, body.home-mini:not(.sp-classic) #supportPanel .chat-input-container { background: var(--p-wa-bg) !important; border-top: 0 !important; }
-body:not(.sp-classic) #supportPanel #messageInput { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border: 1px solid var(--p-wa-line) !important; border-radius: 24px !important; }
-body:not(.sp-classic) #supportPanel .send-btn { background: var(--p-wa-out) !important; color: #fff !important; }
-body:not(.sp-classic) #supportPanel #typingIndicator { background: var(--p-wa-bg) !important; color: var(--p-green) !important; font-style: normal !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .chat-container, body.wa-dark:not(.sp-classic) #supportPanel.sp-in-casino .chat-container, body:not(.sp-classic) #supportPanel.sp-in-casino #chatMessages { background: var(--p-wa-bg) !important; background-image: none !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .message, body.wa-dark:not(.sp-classic) #supportPanel.sp-in-casino .message { box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; padding: 7px 10px 6px !important; font-size: 15px; line-height: 1.38; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .message.usuario, body:not(.sp-classic) #supportPanel.sp-in-casino .message.admin, body:not(.sp-classic) #supportPanel.sp-in-casino .message.system, body.wa-dark:not(.sp-classic) #supportPanel.sp-in-casino .message.usuario { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border-radius: 0 12px 12px 12px !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .message.agente, body.wa-dark:not(.sp-classic) #supportPanel.sp-in-casino .message.agente { background: var(--p-wa-out) !important; color: var(--p-wa-out-text) !important; border-radius: 12px 0 12px 12px !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .message-time, body:not(.sp-classic) #supportPanel.sp-in-casino .msg-ticks { color: var(--p-wa-time) !important; font-size: 11px !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .message.agente .message-time, body:not(.sp-classic) #supportPanel.sp-in-casino .message.agente .msg-ticks { color: var(--p-wa-out-text) !important; opacity: .85; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .message.agente .msg-ticks.msg-read { color: #a6f3ff !important; opacity: 1; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .msg-who { color: var(--p-green) !important; font-weight: 800; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .chat-date-separator span { background: var(--p-wa-in) !important; color: var(--p-wa-time) !important; box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .chat-input-container, body.home-mini:not(.sp-classic) #supportPanel.sp-in-casino .chat-input-container { background: var(--p-wa-bg) !important; border-top: 0 !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino #messageInput { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border: 1px solid var(--p-wa-line) !important; border-radius: 24px !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino .send-btn { background: var(--p-wa-out) !important; color: #fff !important; }
+body:not(.sp-classic) #supportPanel.sp-in-casino #typingIndicator { background: var(--p-wa-bg) !important; color: var(--p-green) !important; font-style: normal !important; }
 
 body.sp-classic .sp-actbar { display: none !important; } /* #1042-c: chat clásico */
 
 /* #1042-e (owner: "todo adentro de Girox"): Soporte ENCIMA del juego — #supportPanel mudado a #casinoOverlay (el casino sigue atrás). Las ventanas
    (.modal, guía del comprobante) quedan por encima (body.casino-open .modal / _rgMoveIn). */
-#casinoOverlay > #supportPanel.sp-in-casino { position: fixed !important; inset: 0 !important; z-index: 100004 !important; display: flex !important; flex-direction: column !important;
-  margin: 0 !important; max-height: none !important; height: 100% !important; width: 100% !important; transform: none !important; border-radius: 0 !important; background: var(--p-bg) !important;
-  padding: 0 !important; box-sizing: border-box; } /* la cabecera y la caja ya respetan --sat / --sab */
-#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar, #casinoOverlay > #supportPanel.sp-in-casino #supportIntro, #casinoOverlay > #supportPanel.sp-in-casino .support-tests { display: none !important; }
-#casinoOverlay > #supportPanel.sp-in-casino .support-head { display: flex !important; }
+#casinoOverlay > #supportPanel.sp-in-casino { position: fixed !important; inset: auto 12px calc(88px + var(--sab, env(safe-area-inset-bottom, 0px))) auto !important; z-index: 100004 !important;
+  display: flex !important; flex-direction: column !important; margin: 0 !important; width: min(380px, calc(100vw - 24px)) !important; height: min(560px, calc(100dvh - 150px - var(--sat, 0px))) !important;
+  max-height: none !important; transform: none !important; border-radius: 16px !important; overflow: hidden !important; background: var(--p-wa-bg) !important;
+  border: 1px solid var(--p-border) !important; box-shadow: 0 14px 44px rgba(0, 0, 0, .35) !important; padding: 0 !important; box-sizing: border-box; }
+/* #1042-m (owner, captura de la Carga rápida): chat CHICO y flotante sobre la burbuja (como la tarjeta de Carga rápida), no pantalla completa. */
+#casinoOverlay > #supportPanel.sp-in-casino #supportIntro, #casinoOverlay > #supportPanel.sp-in-casino .support-tests, #casinoOverlay > #supportPanel.sp-in-casino .support-head { display: none !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar { display: flex !important; padding: 8px 10px !important; min-height: 0 !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar-avatar { width: 34px !important; height: 34px !important; flex: 0 0 34px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head-fire { display: none !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-actbar { padding: 6px 8px !important; position: static !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-acts button { min-height: 36px !important; font-size: 11.5px !important; border-radius: 10px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-acts button svg { width: 15px; height: 15px; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-bk-row { padding: 3px 8px !important; font-size: 11.5px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-ticker { margin-top: 6px !important; padding: 6px 10px !important; font-size: 11.5px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-quickbar { display: none !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-input-container { padding-bottom: 7px !important; }
+#supportPanel .sp-casino-x { display: none; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-casino-x { display: inline-flex !important; align-items: center; justify-content: center; font-weight: 900; }
 #casinoOverlay > #supportPanel.sp-in-casino .chat-container { flex: 1 1 auto !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; }
 #casinoOverlay > #supportPanel.sp-in-casino #chatMessages { display: flex !important; flex: 1 1 auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-quickbar { display: flex !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .chat-input-container { display: block !important; flex: 0 0 auto; }
 
 /* #1042-i (owner): titular / alias / CBU chiquitos abajo de DEPOSITAR · RETIRAR · REEMBOLSOS, para copiar directo sin tapar el chat */
@@ -3226,13 +3238,6 @@ body:not(.sp-classic) .sp-bk-row i { flex: 0 0 auto; font-style: normal; font-we
 body:not(.sp-classic) .sp-bk-row:active i { background: var(--p-text); }
 body.sp-classic .sp-bank { display: none !important; }
 
-/* #1042-l (owner: "no aparece el chat para escribir directamente"): con el chat NUEVO la caja de escribir y los mensajes se ven SIEMPRE, también
-   antes del primer mensaje (#602/#613 escondían todo hasta elegir un tema). La presentación queda compacta arriba y los temas pasan a la barrita
-   de arriba de la caja. Con Chat clásico (body.sp-classic) sigue como antes. */
-body.home-mini:not(.sp-classic):not(.sp-sent) .chat-input-container { display: block !important; }
-body.home-mini:not(.sp-classic):not(.sp-sent) #chatMessages, body.home-mini:not(.sp-classic):not(.sp-sent) #chatMessages:empty { display: flex !important; flex: 1 1 auto !important; min-height: 0 !important; max-height: none !important; }
-body.home-mini:not(.sp-classic):not(.sp-sent) .sp-quickbar { display: flex !important; }
-body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro { margin: 8px 10px 0 !important; padding: 10px 12px !important; }
-body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-ask, body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-topics,
-body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-sla, body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-faq-btn { display: none !important; }
-body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-msg { font-size: 13px; line-height: 1.4; }
+/* #1042-m (owner: "el chat de Soporte dejalo como estaba; todo lo nuevo en la burbuja del chat de Girox"): la barra DEPOSITAR / RETIRAR /
+   REEMBOLSOS, titular-alias-CBU y la cinta sólo se ven en la burbuja (Soporte mudado al casino, .sp-in-casino). */
+#supportPanel:not(.sp-in-casino) .sp-actbar { display: none !important; }

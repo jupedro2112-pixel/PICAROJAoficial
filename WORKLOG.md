@@ -8,6 +8,20 @@
 
 ## Sesión 2026-11-09
 
+### 1042-m. Lo nuevo va en la BURBUJA de Girox (chico, flotante); Soporte vuelve a como estaba; scroll de los menús — PWA v680 (2026-11-09)
+- **Owner:** "hiciste todo en Soporte y no en el chat burbuja… el chat de Soporte dejalo como estaba, modificá todo lo que te pasé en la burbuja del
+  chat de Girox" + (captura de la Carga rápida) "que se vea así pero en la burbuja, que no tape toda la página, más chico" + "en el completo y el
+  básico no deja deslizar para abajo".
+- **Burbuja** (`#casinoSupportBubble`, `VIP.ui.toggleCasinoChat` ⇒ `casinoChatToggle`): abre el MISMO chat mudado al casino (`_supportIntoCasino`) como
+  tarjeta flotante sobre la burbuja (380 × 560 máx., como la Carga rápida): cabecera WhatsApp (nombre del turno · En línea · ✕), DEPOSITAR /
+  RETIRAR / REEMBOLSOS, titular-alias-CBU con Copiar, cinta CARGÁ Y GANÁ, mensajes y caja para escribir. Tocar la burbuja otra vez o ✕ lo cierra.
+  DEPOSITAR ⇒ la Carga rápida de siempre. Chat clásico ⇒ la burbuja abre la Carga rápida como antes.
+- **Soporte como antes:** botón Soporte del casino vuelve a cerrar el casino y abrir Soporte (#1042-e revertido); la barra, el banco y el estilo
+  WhatsApp sólo aplican a `#supportPanel.sp-in-casino`; se quitó #1042-l (caja siempre visible en Soporte). El bot y la respuesta básica siguen igual
+  (es el mismo chat).
+- **Scroll:** "Ver completas" del Inicio de Girox deja `body.ev-expanded` (overflow hidden) y al cambiar al completo / básico quedaba puesto ⇒ sin
+  scroll. `setHomeMode` lo suelta (y el overflow del casino si el casino está cerrado). **Causa probable, no confirmada en un celular.**
+
 ### 1042-l. Caja para escribir SIEMPRE a la vista en Soporte — PWA v679 (2026-11-09)
 - **Owner:** "sigue sin actualizar el chat … no aparece chat para escribir directamente". El servidor ya servía v678; lo que se veía "viejo" era la
   pantalla de antes del primer mensaje: #602/#613 escondían mensajes y caja (`body.home-mini:not(.sp-sent)`) hasta elegir un tema.

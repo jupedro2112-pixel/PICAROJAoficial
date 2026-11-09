@@ -154,13 +154,15 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/if \(aiReplies >= cfg\.aiMaxReplies\) \{\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'escalón 3: tope ⇒ agente');
   // #1042-e: todo adentro de Girox — Soporte se muda al casino, Volver vuelve al juego, DEPOSITAR usa la Carga rápida, el casino al cerrarse lo devuelve
   const H = fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8');
-  assert.ok(/async function casinoSupport\(\) \{[\s\S]{0,200}if \(_casinoIsOpen\(\) && !\(await spUiMode\(\)\) && _supportIntoCasino\(\)\) return;/.test(H), 'Soporte desde el casino se abre adentro');
+  assert.ok(/VIP\.ui\.toggleCasinoChat = function \(\) \{ casinoChatToggle\(\); \}/.test(H) && /async function casinoChatToggle\(\) \{[\s\S]{0,300}if \(await spUiMode\(\)\) \{ toggleCasinoLoad\(\); return; \}[\s\S]{0,120}_supportIntoCasino\(\)/.test(H), 'la BURBUJA de Girox abre el chat nuevo (clásico ⇒ Carga rápida)');
+  assert.ok(/function casinoSupport\(\) \{ try \{ VIP\.ui\.closeCasinoFrame\(\); \}/.test(H), 'el botón Soporte del casino, como antes');
   assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
-  { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const k = C2.lastIndexOf('#1042-l'); assert.ok(k > 0 && /body\.home-mini:not\(\.sp-classic\):not\(\.sp-sent\) \.chat-input-container \{ display: block !important; \}/.test(C2.slice(k)), 'caja para escribir siempre visible (chat nuevo)'); }
+  { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); assert.ok(/#supportPanel:not\(\.sp-in-casino\) \.sp-actbar \{ display: none !important; \}/.test(C2) && !/^body:not\(\.sp-classic\) #supportPanel /m.test(C2), 'lo nuevo sólo en la burbuja; Soporte como antes'); }
+  assert.ok(/if \(mode !== 'play'\) \{ try \{ if \(document\.body\.classList\.contains\('ev-expanded'\)\)/.test(H), 'al cambiar de menú se suelta el bloqueo de scroll');
   assert.ok(/return c\.enabled && !c\.classic && \(supportBot\.isAvailable\(\) \|\| c\.learnedOnly\);/.test(S) && /cfg\.classic \|\| \(!supportBot\.isAvailable\(\) && !cfg\.learnedOnly\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
-  assert.ok(!/^#supportPanel|^\.sp-acts|^\.sp-actbar/m.test(blk) && /body\.sp-classic \.sp-actbar \{ display: none/.test(blk), 'chat clásico: nada del diseño nuevo aplica');
+  assert.ok(!/^\.sp-acts|^\.sp-actbar|^#supportPanel \.(message|chat)/m.test(blk) && /body\.sp-classic \.sp-actbar \{ display: none/.test(blk), 'chat clásico: nada del diseño nuevo aplica');
   assert.ok(/support_bot_mutes'\)\.findOne\(\{ _id: userId \}\)/.test(S) && /if \(r\.ok && r\.ignore\)/.test(S), 'silencio a quien molesta');
   assert.ok(/status: 'open', closedAt: null/.test(S) && /kind: 'bot_handoff'/.test(S), 'handoff abre el chat con nota');
   assert.ok(/return _supportCannedReply\(userId, username, null, String\(lastUser\.content \|\| ''\), false\)/.test(S), 'si la IA falla, respuesta automática de siempre');
