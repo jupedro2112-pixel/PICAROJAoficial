@@ -13597,6 +13597,15 @@ async function initializeData() {
         if (r && r.modifiedCount) console.log('✅ /sys_recover_100 vaciado (#1029): prometía otro % en la próxima carga después de cada carga');
       }
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
+    // #1042-r (owner 2026-11-09): "dejá activado el menú Girox por ahora" ⇒ UNA vez, sólo Girox (todo en uno). Después se cambia desde el panel
+    // (Configuración → bot → 📱 Menú de la app, o Elegir menú) y esta migración no lo vuelve a tocar.
+    try {
+      if (!(await getConfig('mig1042rGiroxOnly', null))) {
+        await Config.set('menusEnabled', { basic: false, easy: false, full: false, girox: true }, 'startup-migration');
+        await Config.set('mig1042rGiroxOnly', new Date().toISOString(), 'startup-migration');
+        console.log('✅ Menú de la app: sólo Girox (#1042-r)');
+      }
+    } catch (e) { console.warn('[startup-migration] menú Girox #1042-r:', e.message); }
     // #273 (owner 2026-10-17): "agregá 33 reseñas y que en total promedie 4,7 estrellas". Se siembran UNA
   // vez (flag en Config) como reseñas aprobadas: 26×5 + 4×4 + 3×3 = 155 puntos / 33 = 4,70. Usuarios
   // ficticios (userId 'seed-review-NN', nunca chocan con clientes reales); el feed los enmascara igual.

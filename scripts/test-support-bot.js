@@ -155,10 +155,15 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   // #1042-e: todo adentro de Girox — Soporte se muda al casino, Volver vuelve al juego, DEPOSITAR usa la Carga rápida, el casino al cerrarse lo devuelve
   const H = fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8');
   assert.ok(/VIP\.ui\.toggleCasinoChat = function \(\) \{ casinoChatToggle\(\); \}/.test(H) && /async function casinoChatToggle\(\) \{[\s\S]{0,800}if \(classic\) \{ toggleCasinoLoad\(\); return; \}[\s\S]{0,120}_supportIntoCasino\(\)/.test(H), 'la BURBUJA de Girox abre el chat nuevo (clásico ⇒ Carga rápida)');
-  assert.ok(/function casinoSupport\(\) \{ try \{ VIP\.ui\.closeCasinoFrame\(\); \}/.test(H), 'el botón Soporte del casino, como antes');
+  assert.ok(/function casinoSupport\(\) \{[\s\S]{0,400}try \{ VIP\.ui\.closeCasinoFrame\(\); \} catch \(_\) \{\} setTimeout\(\(\) => \{ try \{ setHomeMode\('mini'\)/.test(H), 'el botón Soporte del casino, como antes (salvo sólo Girox)');
   assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
   { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); assert.ok(/#supportPanel:not\(\.sp-in-casino\) \.sp-actbar \{ display: none !important; \}/.test(C2) && !/^body:not\(\.sp-classic\) #supportPanel /m.test(C2), 'lo nuevo sólo en la burbuja; Soporte como antes'); }
+  { const C3 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'), I3 = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
+    assert.ok(/body\.menus-one\.no-menu-full\.no-menu-basic\.no-menu-easy \.casino-topbar \.ct-multi \{ display: none !important; \}/.test(C3) && /class="casino-back ct-multi"/.test(H) && /id="ctTelegram"/.test(H), 'sólo Girox: sin Volver ni Menú, con Telegram');
+    assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
+    ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
+    assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez'); }
   assert.ok(/const sentAny = await Message\.findOne[\s\S]{0,200}if \(sentAny\) return;\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'IA falla y no salió respuesta fija ⇒ aviso + agente (nunca un visto)');
   assert.ok(/if \(!r\.reply\) r\.reply = /.test(S), 'silencio sólo después de una frase de cierre');
   assert.ok(/VIP\.ui\.showModal = function \(id\) \{ try \{ _modalIntoCasino\(id\); \}/.test(H) && /_modalsBackAll\(\); \} catch/.test(H), 'ventanas adentro de Girox');

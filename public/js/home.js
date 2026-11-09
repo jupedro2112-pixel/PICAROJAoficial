@@ -2501,6 +2501,8 @@
             if (t === 'ruleta') { into('rouletteModal'); return svcRoulette(); }
             if (t === 'referidos') { into('referralModal'); return VIP.ui.openReferralModal(); }
             if (t === 'refund') { into('unifiedRefundModal'); return svcRefund(); }
+            if (t === 'fueguito') { into('fireModal'); return VIP.fire.showFireModal(); }
+            if (t === 'sms') { into('verifyPhoneModal'); return openVerifyPhone(); }
             if (t === 'withdraw') { into('withdrawModal'); return spWithdraw(); }
         } catch (_) {}
         return spDeposit();
@@ -2517,6 +2519,7 @@
             if (h && !_el('spCasinoX')) h.insertAdjacentHTML('beforeend', '<button type="button" class="wa-head-btn sp-casino-x" id="spCasinoX" onclick="VIP.home.closeSupport()" aria-label="Cerrar el chat">✕</button>');
             const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; nm.textContent = (_el('spName') && _el('spName').textContent) || 'Soporte'; } if (stt) { stt.dataset.prev = stt.textContent; stt.textContent = 'En línea'; }
         } catch (_) {}
+        try { const u = (VIP.state && VIP.state.currentUser) || {}; const b = _el('spInfoSms'); if (b) b.style.display = u.phoneVerified === true ? 'none' : ''; } catch (_) {} // #1042-r
         _open = true; _unread = 0; _paintBadge();
         try { VIP.chat.scrollToBottom(); } catch (_) {}
         setTimeout(() => { try { spPromoPaint(); } catch (_) {} try { VIP.chat.markReceivedAsRead(); } catch (_) {} try { VIP.chat.scrollToBottom(); } catch (_) {} }, 60); // #1042-q: primero se muestra, después se pinta lo demás
@@ -2534,7 +2537,12 @@
         return true;
     }
     // Botón "Soporte" del casino: como siempre (owner #1042-m: "el chat de soporte dejalo como estaba"). Lo nuevo vive en la BURBUJA.
-    function casinoSupport() { try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80); }
+    function casinoSupport() {
+        // #1042-r: con sólo Girox (todo en uno) no se sale del casino: Soporte abre el chat nuevo adentro (clásico ⇒ Carga rápida, como la burbuja).
+        if (_onlyGirox()) { if (document.body.classList.contains('sp-classic')) { toggleCasinoLoad(true); return; } if (!_spCasino) _supportIntoCasino(); return; }
+        try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80);
+    }
+    function _onlyGirox() { return _menuOn('girox') && MENU_ORDER.filter(_menuOn).length === 1 && _casinoIsOpen(); }
     // #1042-m (owner): "modificá todo en la burbuja del chat de Girox". La burbuja abre el chat ENCIMA del juego, estilo WhatsApp, con
     // DEPOSITAR / RETIRAR / REEMBOLSOS, titular-alias-CBU, la cinta CARGÁ Y GANÁ y la caja para escribir (es el mismo chat, mudado).
     // Con "Chat clásico" (panel) la burbuja abre la Carga rápida como antes.
@@ -2750,11 +2758,14 @@
             overlay.insertAdjacentHTML('afterbegin',
                 '<div id="casinoTopBar" class="casino-topbar">' +
                   '<div class="casino-topbar-row">' +
-                    '<button type="button" class="casino-back" onclick="VIP.ui.closeCasinoFrame()">‹ Volver</button>' +
+                    '<button type="button" class="casino-back ct-multi" onclick="VIP.ui.closeCasinoFrame()">‹ Volver</button>' +
+                    // #1042-r (owner): con SÓLO Girox activo (todo en uno, body.menus-one) no hay Volver ni Menú: Telegram · Historias · [logo] ·
+                    // Soporte · Info · Perfil (el orden lo pone pin.css con `order`).
+                    '<button type="button" class="tn-btn ct-one" id="ctTelegram" onclick="VIP.home.openTelegramInvite()" title="Telegram"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 4.5 2.8 11.7c-.9.4-.9 1.6.1 1.9l4.6 1.4 1.8 5.6c.3.8 1.3 1 1.9.4l2.6-2.5 4.9 3.6c.7.5 1.7.1 1.9-.7l3-15.3c.2-1-.8-1.9-1.8-1.5Z"/><path d="m8 15 10-7.5"/></svg></span><span class="tn-lbl">Telegram</span></button>' +
                     // #700/#701 (owner): accesos en UNA sola línea con el mismo formato de la barra principal (ícono + etiqueta chica):
                     // Historias · Menú · Info · Perfil. Sin el texto "Estás en Girox · para cambiar, salí" (#701: le sacaba lugar al juego).
                     // #703/#707 (owner): orden Volver · Menú · [PICA ROJA OFICIAL con el logo, bien centrado] · Historias · Info · Perfil
-                    '<button type="button" class="tn-btn" onclick="VIP.home.casinoFullMenu()" title="Elegir menú"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span><span class="tn-lbl">Menú</span></button>' +
+                    '<button type="button" class="tn-btn ct-multi" onclick="VIP.home.casinoFullMenu()" title="Elegir menú"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span><span class="tn-lbl">Menú</span></button>' +
                     // #917 (owner 2026-10-24): "acá adentro de Girox poné Sorteo mensual (NOVEDAD) con ese tamaño, sacá PICA ROJA y que se pueda
                     // expandir desde ahí adentro": el pill del medio abre la pantalla del sorteo (js/sorteos.js pinta el subtítulo).
                     // #935 (owner, captura de la gemela): con el sorteo ABIERTO va un banner DEBAJO de la barra y en el medio queda PICA ROJA; si lo

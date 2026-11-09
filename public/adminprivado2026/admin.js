@@ -6184,6 +6184,22 @@ async function saveMenusEnabled() {
     try { const r = await authFetch('/api/admin/menus-enabled', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ menus: menus }) }); const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } showToast('Menús guardados ✓', 'success'); loadMenusEnabled(); } catch (_) { showToast('No se pudo', 'error'); }
 }
 window.loadMenusEnabled = loadMenusEnabled; window.saveMenusEnabled = saveMenusEnabled;
+// #1042-r (owner): "que se pueda elegir qué menú queremos: Girox, completo o básico" desde la tarjeta del bot (mismo Config['menusEnabled']).
+const APP_MENU_MAP = { girox: { basic: false, easy: false, full: false, girox: true }, full: { basic: false, easy: false, full: true, girox: false }, basic: { basic: true, easy: false, full: false, girox: false }, all: { basic: true, easy: true, full: true, girox: true } };
+async function loadAppMenu() {
+    try { const r = await authFetch('/api/admin/menus-enabled'); const j = await r.json(); if (!r.ok) return; const m = j.menus || {};
+        const k = Object.keys(APP_MENU_MAP).find(function (x) { const t = APP_MENU_MAP[x]; return ['basic', 'easy', 'full', 'girox'].every(function (y) { return (m[y] !== false) === t[y]; }); }) || 'custom';
+        const sel = document.getElementById('sbAppMenu'); if (sel) sel.value = k;
+    } catch (_) {}
+}
+async function saveAppMenu() {
+    const sel = document.getElementById('sbAppMenu'); if (!sel || !APP_MENU_MAP[sel.value]) return;
+    try { const r = await authFetch('/api/admin/menus-enabled', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ menus: APP_MENU_MAP[sel.value] }) }); const j = await r.json();
+        if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); loadAppMenu(); return; }
+        showToast('📱 Menú de la app: ' + sel.options[sel.selectedIndex].text, 'success'); try { loadMenusEnabled(); } catch (_) {}
+    } catch (_) { showToast('No se pudo guardar', 'error'); }
+}
+window.loadAppMenu = loadAppMenu; window.saveAppMenu = saveAppMenu;
 window.loadMenuLayout = loadMenuLayout; window.saveMenuLayout = saveMenuLayout;
 async function loadRegistrationMode() {
     try {
@@ -6332,6 +6348,7 @@ window.loadPhoneLog = loadPhoneLog; window.phoneLogChangePin = phoneLogChangePin
 window.saveSmsEnabled = saveSmsEnabled; window.loadPublisherWelcome = loadPublisherWelcome; window.savePublisherWelcome = savePublisherWelcome;
 // #1042 BOT DE SOPORTE CON IA (Configuración → 🆕 NUEVO)
 async function loadSupportBot() {
+    try { loadAppMenu(); } catch (_) {} // #1042-r
     const st = document.getElementById('sbState'); if (!st) return;
     try {
         const r = await authFetch('/api/admin/support-bot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }

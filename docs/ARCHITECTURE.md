@@ -1973,3 +1973,7 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - La burbuja del casino muda `#supportPanel` a `#casinoOverlay` como tarjeta flotante (estilo nuevo scopeado a `.sp-in-casino`); Soporte normal sin cambios.
 - Panel: con el bot activo, la sección **Soporte** (`/api/admin/support/conversations`) lista todo, pero ABIERTO sólo lo que necesita una persona (handoff del bot,
   chat ya atendido por el equipo, reclamo sin respuesta del bot en 3 min); lo que resolvió la IA queda en Cerrados con "🤖 IA" (y en **Chat completo**). Mismo canal `support`.
+- **Sólo Girox (#1042-r):** `Config['menusEnabled']` = sólo girox ⇒ barra del casino sin Volver/Menú, con Telegram · Historias · logo · Soporte · Info ·
+  Perfil; Soporte abre el chat nuevo adentro. Se elige en el panel (tarjeta del bot → 📱 Menú de la app o Elegir menú). Migración `mig1042rGiroxOnly`.
+- **Ventanas adentro de Girox (#1042-o/p):** `VIP.ui.showModal` envuelto + `_modalIntoCasino(id)` (con observador) mudan la ventana a `#casinoOverlay`
+  y la devuelven al cerrarse o al salir del casino. Fila de servicio `#spInfoBar` y botón de info del bot (`info_topic` ⇒ `go_section`) usan `VIP.home.spInfo`.
