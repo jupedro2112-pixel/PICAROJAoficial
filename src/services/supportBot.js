@@ -220,7 +220,8 @@ async function generateReply(p) {
   const ignore = out.ignore === true && !handoff; // si hay que pasarlo a una persona, nunca se ignora
   const reply = String(out.reply || '').trim().slice(0, ignore ? 300 : 1500); // con ignore, a lo sumo una frase de cierre
   const learnQ = (!handoff && !ignore) ? String(out.learn_question || '').trim().slice(0, 300) : '';
-  const learnA = learnQ ? String(out.learn_answer || '').trim().slice(0, 800) : '';
+  let learnA = learnQ ? String(out.learn_answer || '').trim().slice(0, 800) : '';
+  if (!learnIsSafe(learnQ, learnA)) learnA = '';
   return { ok: true, reply, handoff, ignore, learnQuestion: learnA ? learnQ : '', learnAnswer: learnA, handoffReason: String(out.handoff_reason || '').slice(0, 300), usage: d.usage || null, model: d.model || body.model };
 }
 
@@ -241,6 +242,9 @@ function qSimilarity(a, b) {
 // Reclamos / plata trabada: nunca se contestan con algo aprendido (van a la IA o a un agente).
 const COMPLAINT_RE = /no me (lleg|acredit|pag|carg|aparec|figur)|no (lleg|acredit|aparec)|reclam|estaf|robar|robo|devolv|bloque|demor|tarda|perd[ií] (la|mi|plata)|denunc|abogad|defensa del consumidor/i;
 const LEARN_MIN_SCORE = 0.7;
+// Seguridad: nada que pueda servir para estafar a OTROS clientes entra a lo aprendido (links, números largos tipo CBU/CVU/teléfono, mails, @).
+const UNSAFE_LEARN_RE = /https?:|www\.|\.(com|net|org|ar|me|io|bet)\b|\d[\d .-]{8,}\d|@|t\.me|wa\.me|whats ?app|telegram/i;
+function learnIsSafe(q, a) { return !!(q && a) && !UNSAFE_LEARN_RE.test(String(q)) && !UNSAFE_LEARN_RE.test(String(a)); }
 /** Mejor respuesta aprendida para `text` entre `entries` [{_id, question, variants:[{t}], answer}]; null si no hay o es un reclamo. */
 function bestLearned(text, entries) {
   if (!text || COMPLAINT_RE.test(String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) return null;
@@ -253,4 +257,4 @@ function bestLearned(text, entries) {
   return best;
 }
 
-module.exports = { isAvailable, generateReply, stablePrompt, serviceFactsText, userFactsText, DEFAULT_MODEL, qTokens, qSimilarity, bestLearned, LEARN_MIN_SCORE, COMPLAINT_RE };
+module.exports = { isAvailable, generateReply, stablePrompt, serviceFactsText, userFactsText, DEFAULT_MODEL, qTokens, qSimilarity, bestLearned, LEARN_MIN_SCORE, COMPLAINT_RE, learnIsSafe };

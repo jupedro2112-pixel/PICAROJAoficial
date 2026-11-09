@@ -4652,7 +4652,9 @@ const STAFF_DENY_MUTATIONS = [
   /^\/api\/users\/[^/]+$/i, // PUT/DELETE /api/users/:id (editar saldo / borrar cliente)
   // #995 (seguridad): contactos y links que ve TODO cliente (WhatsApp/Telegram de soporte VIP, canal y soporte de la comunidad):
   // un agente podía poner su propio número y recibir transferencias / comprobantes / claves.
-  /^\/api\/admin\/(soporte-vip|community)(\/|$)/i
+  /^\/api\/admin\/(soporte-vip|community)(\/|$)/i,
+  // #1042-g (seguridad): lo que dice el bot a TODOS los clientes (config, respuestas aprendidas, prueba que gasta IA): sólo admin.
+  /^\/api\/admin\/support-bot(\/|$)/i
 ];
 const adminMiddleware = (req, res, next) => {
   if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'withdrawer' && req.user.role !== 'comunidad') {
@@ -15808,7 +15810,7 @@ async function _supportBotRun(userId, username, token, t0) {
       // #1042-g: primero lo APRENDIDO (aprobado en el panel), sin IA. Reclamos / plata trabada nunca (bestLearned los descarta).
       const hit = supportBot.bestLearned(String(lastUser.content || ''), await _supportLearnedApproved());
       if (hit) r = { ok: true, reply: hit.entry.answer, handoff: false, learnedId: hit.entry._id };
-      else if (cfg.learnedOnly || !supportBot.isAvailable() || _supportBotAiDown()) r = { ok: false, error: 'sin IA (sólo lo aprendido)', noAi: true }; // ⇒ respuestas fijas de siempre
+      else if (cfg.learnedOnly || !supportBot.isAvailable() || _supportBotAiDown() || !_sbAiBudgetOk()) r = { ok: false, error: 'sin IA (sólo lo aprendido / tope por hora)', noAi: true }; // ⇒ respuestas fijas de siempre
       else {
         const [facts, user, history] = await Promise.all([_supportBotFacts(cfg), _supportBotUserFacts(u), _supportBotHistory(u)]);
         user.aiReplies = aiReplies;
@@ -15863,7 +15865,7 @@ async function _supportBotRun(userId, username, token, t0) {
     try { await ChatStatus.updateOne({ userId }, { $set: { lastMessageAt: new Date() } }); } catch (_) {}
     const us = r.usage || {};
     if (r.learnedId) { _supportBotStat('learnedUsed'); try { await _sbLearnCol().updateOne({ _id: r.learnedId }, { $inc: { uses: 1 }, $set: { lastUsedAt: new Date() } }); } catch (_) {} }
-    else if (r.learnQuestion) { try { await _supportLearnSave(String(lastUser.content || ''), r.learnQuestion, r.learnAnswer, cfg); } catch (e) { logger.warn(`[support-bot] aprender: ${e.message}`); } }
+    else if (r.learnQuestion) { try { await _supportLearnSave(String(lastUser.content || ''), r.learnQuestion, r.learnAnswer, cfg, userId); } catch (e) { logger.warn(`[support-bot] aprender: ${e.message}`); } }
     if (!r.learnedId) _supportBotStat('replies', 1, { inTok: Number(us.input_tokens) || 0, outTok: Number(us.output_tokens) || 0, cacheTok: Number(us.cache_read_input_tokens) || 0 });
   }
   if (r.handoff) {
@@ -15895,8 +15897,9 @@ async function _supportLearnedApproved() {
   try { const v = await _sbLearnCol().find({ status: 'approved' }).project({ question: 1, answer: 1, variants: 1 }).limit(800).toArray(); _sbLearnCache = { at: Date.now(), v }; } catch (_) {}
   return _sbLearnCache.v;
 }
-async function _supportLearnSave(userText, q, a, cfg) {
-  const all = await _sbLearnCol().find({}).project({ question: 1, variants: 1, status: 1, count: 1 }).limit(1500).toArray();
+async function _supportLearnSave(userText, q, a, cfg, userId) {
+  if (!supportBot.learnIsSafe(q, a)) return; // links / números largos / contactos: nunca se aprenden (no se le pueden pasar a otros clientes)
+  const all = await _sbLearnCol().find({}).project({ question: 1, variants: 1, status: 1, count: 1, users: 1 }).limit(1500).toArray();
   let hit = null, best = 0;
   for (const e of all) for (const c of [e.question].concat((e.variants || []).map((v) => v.t))) {
     const sc = Math.max(supportBot.qSimilarity(q, c), supportBot.qSimilarity(userText, c)); if (sc > best) { best = sc; hit = e; }
@@ -15904,16 +15907,24 @@ async function _supportLearnSave(userText, q, a, cfg) {
   const now = new Date(); const variant = { t: String(userText).slice(0, 300), at: now };
   if (hit && best >= supportBot.LEARN_MIN_SCORE) {
     const set = { lastAt: now }; if (hit.status === 'pending') set.answer = a; // pendiente: queda la redacción más nueva
-    if (hit.status === 'pending' && cfg.autoApproveAt > 0 && (Number(hit.count) || 0) + 1 >= cfg.autoApproveAt) { set.status = 'approved'; set.approvedBy = 'auto'; set.approvedAt = now; _sbLearnCache.at = 0; }
-    await _sbLearnCol().updateOne({ _id: hit._id }, { $inc: { count: 1 }, $set: set, $push: { variants: { $each: [variant], $slice: -25 } } });
+    // Aprobación automática por CLIENTES DISTINTOS (mínimo 3): una sola persona repitiendo la pregunta no puede hacer aprobar nada.
+    const users = new Set((hit.users || []).map(String)); if (userId) users.add(String(userId));
+    if (hit.status === 'pending' && cfg.autoApproveAt > 0 && users.size >= Math.max(3, cfg.autoApproveAt)) { set.status = 'approved'; set.approvedBy = 'auto'; set.approvedAt = now; _sbLearnCache.at = 0; }
+    const upd = { $inc: { count: 1 }, $set: set, $push: { variants: { $each: [variant], $slice: -25 } } };
+    if (userId) upd.$addToSet = { users: String(userId) };
+    await _sbLearnCol().updateOne({ _id: hit._id }, upd);
   } else {
-    await _sbLearnCol().insertOne({ _id: uuidv4(), question: q, answer: a, variants: [variant], count: 1, uses: 0, status: 'pending', createdAt: now, lastAt: now });
+    await _sbLearnCol().insertOne({ _id: uuidv4(), question: q, answer: a, variants: [variant], users: userId ? [String(userId)] : [], count: 1, uses: 0, status: 'pending', createdAt: now, lastAt: now });
   }
 }
 
 // #1042-f (owner): IA SIN SALDO ⇒ "que dé respuestas el bot nomás y siga normal": la IA queda en pausa 30 min (por instancia) y todo va por
 // las respuestas fijas de siempre. El panel lo muestra.
 let _sbAiDownUntil = 0, _sbAiDownWhy = '';
+// Seguridad de costos: tope de llamadas a la IA por hora y por instancia (spam o muchas cuentas a la vez no pueden gastar sin límite).
+const SB_AI_HOURLY_CAP = Math.max(10, Number(process.env.SUPPORT_BOT_HOURLY_CAP) || 400);
+let _sbAiBucket = { hour: -1, n: 0 };
+function _sbAiBudgetOk() { const h = Math.floor(Date.now() / 3600000); if (_sbAiBucket.hour !== h) _sbAiBucket = { hour: h, n: 0 }; if (_sbAiBucket.n >= SB_AI_HOURLY_CAP) return false; _sbAiBucket.n++; return true; }
 function _supportBotAiDown() { return Date.now() < _sbAiDownUntil; }
 const SUPPORT_FIRST_DEFAULT = '👋 ¡Hola! Espero tu comprobante para realizar la carga 📸 Mandá la captura ENTERA (titular, CUIT, fecha y hora, monto y N° de operación).';
 async function _supportBotAfterDeposit(user) {

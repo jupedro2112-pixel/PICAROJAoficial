@@ -123,8 +123,19 @@ caso('Lo aprendido: parecidas sí, distintas no, reclamos de plata NUNCA', async
   assert.strictEqual(m('como cargo? me estafaron'), null);
   const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
   assert.ok(/const hit = supportBot\.bestLearned\(String\(lastUser\.content \|\| ''\), await _supportLearnedApproved\(\)\);/.test(S), 'lo aprendido antes que la IA');
-  assert.ok(/else if \(cfg\.learnedOnly \|\| !supportBot\.isAvailable\(\) \|\| _supportBotAiDown\(\)\) r = \{ ok: false/.test(S), 'sin IA ⇒ respuestas fijas');
+  assert.ok(/else if \(cfg\.learnedOnly \|\| !supportBot\.isAvailable\(\) \|\| _supportBotAiDown\(\) \|\| !_sbAiBudgetOk\(\)\) r = \{ ok: false/.test(S), 'sin IA ⇒ respuestas fijas');
   assert.ok(/status: 'pending', createdAt: now/.test(S), 'lo nuevo entra para aprobar (no se usa solo)');
+});
+caso('Seguridad de lo aprendido: sin links / CBU / teléfonos / contactos; auto-aprobación sólo por 3+ clientes distintos; rutas sólo admin; tope por hora', async () => {
+  assert.ok(bot.learnIsSafe('¿Cómo cargo?', 'Tocá DEPOSITAR y mandá el comprobante entero.'));
+  for (const bad of ['Transferí al CBU 0000003100012345678901', 'Escribinos a soporte@x.com', 'Entrá a https://pagina-falsa.com', 'Mandá al 11 2345-6789', 'Hablanos por WhatsApp', 'mirá www.algo.net']) assert.ok(!bot.learnIsSafe('q', bad), bad);
+  nextResp = okResp({ reply: 'ok', handoff: false, handoff_reason: '', ignore: false, learn_question: '¿Dónde transfiero?', learn_answer: 'Al CBU 0000003100012345678901' });
+  const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'donde transfiero' }] }); assert.strictEqual(r.learnAnswer, '');
+  const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  assert.ok(/users\.size >= Math\.max\(3, cfg\.autoApproveAt\)/.test(S), 'auto-aprobación por clientes distintos');
+  assert.ok(/if \(!supportBot\.learnIsSafe\(q, a\)\) return;/.test(S));
+  assert.ok(/\/\^\\\/api\\\/admin\\\/support-bot\(\\\/\|\$\)\/i/.test(S), 'STAFF_DENY_MUTATIONS cubre /api/admin/support-bot');
+  assert.ok(/!_sbAiBudgetOk\(\)/.test(S), 'tope de IA por hora');
 });
 caso('Sin ANTHROPIC_API_KEY: isAvailable false y no llama', async () => {
   const k = process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_API_KEY; lastReq = null;

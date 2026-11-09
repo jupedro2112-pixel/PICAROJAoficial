@@ -8,6 +8,16 @@
 
 ## Sesión 2026-11-09
 
+### 1042-h. Revisión de seguridad antes de subir (2026-11-09)
+- **Riesgo encontrado y cerrado:** con "aprobar solas" un cliente podía repetir una pregunta N veces y hacer aprobar una respuesta trucha (otro CBU,
+  un link) que el bot después le daba a TODOS. Ahora: la auto-aprobación cuenta CLIENTES DISTINTOS (mínimo 3, `users` con $addToSet) y nada con
+  links, números largos (CBU/CVU/teléfono), mails, @, WhatsApp/Telegram entra a lo aprendido (`supportBot.learnIsSafe`, también al leer la IA).
+- Doble candado: `/api/admin/support-bot*` en `STAFF_DENY_MUTATIONS` (además del chequeo de rol en cada ruta).
+- Tope de costo: `_sbAiBudgetOk` (400 llamadas/hora por instancia, env `SUPPORT_BOT_HOURLY_CAP`); pasado el tope ⇒ lo aprendido + respuestas fijas.
+- Revisado sin cambios: mensajes del bot escapados en app y panel (no hay inyección de HTML); `/api/support/ui-mode` público sólo devuelve
+  `classic`; el bot sólo ve los datos del propio cliente; sin claves en el código. 22/22 tests (support-bot 15/15), 151 archivos con `node --check`,
+  HTML balanceado (igual que en GitHub), test-vip-exports OK. **No probado en un celular ni contra la API real.**
+
 ### 1042-g. 🧠 La IA aprende y el bot responde con lo aprendido (sin IA) — admin SW v253 (2026-11-09)
 - **Owner:** "que la IA vaya aprendiendo, que después las respuestas que da la IA las responda el bot y que después sea todo sin IA" + "ponelo
   abajo de Soporte: Responder para IA".
