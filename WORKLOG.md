@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1072. Landing de publicista al 50% seguía diciendo 100% (2026-11-09) — panel v277
+- **Owner:** "pongo 50 y sigue diciendo 100%, en landing y carga al 100%". Encontrado:
+  1. **La landing de Vercel (grupospicaroja.com) nunca recibió el arreglo #1062:** GitHub está 70 commits atrás (último push #1039) y Vercel publica desde
+     GitHub ⇒ sigue con el 100% fijo. Se arregla con `git push origin main`.
+  2. El cartel de la APP "Primera carga: +X%" (`/api/first-deposit-promo`) leía el % GENERAL ⇒ ahora `getFirstDepositBonusPct({ id: userId })` y su tope.
+  3. Panel → Editar campaña: si el % no se guardaba, el cartel "Campaña guardada" tapaba el error al instante ⇒ ahora la ventana queda abierta con el
+     error en rojo; sólo dice "Campaña y bono guardados" si se guardaron los dos.
+- La carga (`resolveAutoBonus`) ya usaba el % del publicista del cliente (`acquisitionCampaign`); el cambio tarda hasta 1 min (caché por instancia).
+
 ### 1071. Grupo privado de Telegram: vincular escribiendo el ID del grupo (2026-11-09) — panel v276
 - **Owner:** "el id para que hable en el grupo es -1528942 ejemplo". El ID ya se guarda solo al Aprobar / `/vincular`; se suma un respaldo: tarjeta
   📊 Grupo privado → 🆔 ID del grupo + ➕ Vincular por ID (`POST /api/admin/telegram/admin-add-id`, sólo admin, ID negativo, `getChat` confirma que es un

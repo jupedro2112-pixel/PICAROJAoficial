@@ -12050,8 +12050,12 @@ async function _submitCampaignFormInner() {
             alert(`⚠️ ${data.skipped.length} key(s) NO se agregaron (las demás sí):\n\n${det}\n\nRevisá esas y volvé a pegarlas.`);
         }
         // #1048: bono de la 1ª carga de esta landing (después de crear/guardar la campaña: el servidor exige que exista)
-        try { const wErr = await _campaignWelcomeSave(mode === 'create' ? code : String(document.getElementById('campaignFormOriginalCode').value || '').toUpperCase()); if (wErr) showToast('Campaña guardada, pero el bono no: ' + escapeHtml(wErr), 'error'); } catch (_) {}
-        showToast(data.renamedUsers ? `Campaña guardada · ${data.renamedUsers} usuario(s) reasignado(s) al renombrar` : 'Campaña guardada', 'success');
+        // #1072 (owner: "pongo 50 y sigue diciendo 100%"): si el bono NO se guardó, el cartel verde "Campaña guardada" tapaba el error al
+        // instante y parecía guardado ⇒ ahora la ventana queda ABIERTA con el error en rojo. Con el código renombrado se guarda en el NUEVO.
+        let wErr = null;
+        try { wErr = await _campaignWelcomeSave(mode === 'create' ? code : (code || String(document.getElementById('campaignFormOriginalCode').value || '').toUpperCase())); } catch (e) { wErr = (e && e.message) || 'error de conexión'; }
+        if (wErr) { errorDiv.textContent = '⚠️ La campaña se guardó, pero el % de bono NO: ' + wErr + '. Tocá Guardar de nuevo.'; errorDiv.style.display = ''; loadCampaigns(); return; }
+        showToast(data.renamedUsers ? `Campaña guardada · ${data.renamedUsers} usuario(s) reasignado(s) al renombrar` : 'Campaña y bono guardados', 'success');
         closeCampaignFormModal();
         loadCampaigns();
     } catch (err) {

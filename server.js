@@ -16826,10 +16826,10 @@ app.get('/api/first-deposit-promo', authMiddleware, async (req, res) => {
       res.set('Cache-Control', 'no-store');
       return res.json({ show: false, noGifts: true, noDeposits: n === 0, depositsCount: n, pct: 0, pctApp: 0, extra: 0, extraMonto: 0, installGiftEnabled: false, text });
     }
-    const pct = await getFirstDepositBonusPct(); const ig = await getInstallGiftConfig();
+    const pct = await getFirstDepositBonusPct({ id: userId }); const ig = await getInstallGiftConfig(); // #1072 (owner: "puse 50 y sigue diciendo 100%"): el % del PUBLICISTA del cliente (antes siempre el general)
     const fixed = ig && ig.enabled && ig.fixedArs > 0 ? Math.round(ig.fixedArs) : 0; // #974 extra fijo
     const extra = ig && ig.enabled && !fixed ? (Number(ig.pct) || 0) : 0; const pctApp = pct + extra;
-    const cap = await getFirstDepositCapArs(); const fmt = (v) => Math.round(v).toLocaleString('es-AR');
+    const cap = await getFirstDepositCapArs({ id: userId }); const fmt = (v) => Math.round(v).toLocaleString('es-AR');
     const text = await renderSystemCommand('/sys_first_deposit_popup', FIRST_DEPOSIT_POPUP_DEFAULT, { pct, pctApp, extra, extraMonto: fmt(fixed), tope: cap > 0 ? fmt(cap) : 'sin tope' }); // #839 · #974
     res.set('Cache-Control', 'no-store');
     res.json({ show: n === 0 && pct > 0, noDeposits: n === 0, depositsCount: n, pct, pctApp, extra, extraMonto: fixed, capArs: cap, installGiftEnabled: extra > 0 || fixed > 0, text }); // #675: noDeposits para la guía · #690: depositsCount (la franja de carga mínima se muestra hasta la 3ª carga)
