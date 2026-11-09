@@ -457,7 +457,7 @@
             const j = await _fdPromoLoad();
             if (!j || !j.show) return;
             const p = _el('fdPct'), pa = _el('fdPctApp'), ap = _el('fdApp'), tx = _el('fdTxt');
-            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (_fdExtraTxt(j) || '0%') + ' EXTRA'; // #839 · #974 if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || '';
+            if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (_fdExtraTxt(j) || '0%') + ' EXTRA'; /* #839 · #974 */ if (ap) ap.style.display = j.installGiftEnabled ? '' : 'none'; if (tx) tx.textContent = j.text || ''; // #1074: el // de antes se comía el texto del cartel
             try { sessionStorage.setItem('vip_fd_seen', '1'); } catch (_) {}
             VIP.ui.showModal('fdModal');
         } catch (_) {}
