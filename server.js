@@ -3388,9 +3388,17 @@ async function _depositWithBonus(adapter, username, amount, description, referen
     return r0;
   }
   const mult = await _bonusMultiplierFor(adapter);
-  let r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonus, bonusMultiplier: mult }));
+  // #1040 (owner: "cargas que figuran como carga y son bonos" ⇒ bono nuevo + lo que quedaba): un bono con rollover en 1girox PISA al bono
+  // activo (le debita el resto). Se reclama lo pendiente y se le SUMA al bono adjunto lo que le quedaba (`bonusCarryOver`); si no se pudo
+  // reclamar, el bono sale igual (como antes). Si 1girox rechaza el total por rango, el camino de abajo lo manda aparte (creditGift arrastra igual).
+  let bonusSend = bonus;
+  if (mult > 0 && typeof adapter.bonusCarryOver === 'function') {
+    try { const co = await adapter.bonusCarryOver(username); if (co && co.ok && co.carry > 0) { bonusSend = Math.round((bonus + co.carry) * 100) / 100; logger.info(`[auto-bonus] ${username}: bono activo $${co.carry} ⇒ bono de la carga $${bonus} + resto = $${bonusSend}`); } } catch (_) {}
+  }
+  let r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonusSend, bonusMultiplier: mult }));
   // si rechaza el ×N de la carga: se prueba ×2 (siempre aceptado) y recién después sin rollover propio — misma reference, un 422 no movió plata
-  for (const fb of [2, 1, 0]) { /* #903 (owner): ×3 → ×2 → ×1 (y sólo si 1girox no acepta ninguno, sin rollover propio + alerta) */ if (!(_multRejected(r) && depMult > 0 && depMult !== fb)) break; logger.warn(`[auto-bonus] ${username}: 1girox rechazó el rollover ×${depMult} de la carga (${r.code || r.error}) ⇒ pruebo ×${fb}`); depMult = fb; r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonus, bonusMultiplier: mult })); }
+  for (const fb of [2, 1, 0]) { /* #903 (owner): ×3 → ×2 → ×1 (y sólo si 1girox no acepta ninguno, sin rollover propio + alerta) */ if (!(_multRejected(r) && depMult > 0 && depMult !== fb)) break; logger.warn(`[auto-bonus] ${username}: 1girox rechazó el rollover ×${depMult} de la carga (${r.code || r.error}) ⇒ pruebo ×${fb}`); depMult = fb; r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonusSend, bonusMultiplier: mult })); }
+  if (r.success && bonusSend !== bonus) r.carriedBonus = Math.round((bonusSend - bonus) * 100) / 100;
   let needSeparate = false;
   if (!r.success && (r.code === 'bonus_out_of_range' || (r.httpStatus === 422 && /bon(o|us)/i.test(String(r.error || ''))))) {
     logger.warn(`[auto-bonus] ${username}: 1girox rechazó la carga por el bono $${bonus} (${r.code || r.error}) ⇒ carga sin bono + bono aparte`);
@@ -9857,7 +9865,7 @@ app.post('/api/refunds/claim/daily', authMiddleware, async (req, res) => {
         throw e;
       }
 
-      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
+      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
       if (!depositResult.success) {
         await RefundClaim.deleteOne({ id: _refundClaimId }).catch(() => {});
         return res.json({ success: false, message: 'Error al acreditar el reembolso: ' + depositResult.error, canClaim: true });
@@ -10004,7 +10012,7 @@ app.post('/api/refunds/claim/weekly', authMiddleware, async (req, res) => {
         throw e;
       }
 
-      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
+      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
 
       if (!depositResult.success) {
         // No se pudo acreditar → liberar la reserva para permitir reintentar.
@@ -10170,7 +10178,7 @@ app.post('/api/refunds/claim/monthly', authMiddleware, async (req, res) => {
         throw e;
       }
 
-      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
+      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
 
       if (!depositResult.success) {
         // No se pudo acreditar → liberar la reserva para permitir reintentar.
@@ -10739,7 +10747,7 @@ app.post('/api/vip/level-bonus/claim', authMiddleware, authLimiter, async (req, 
     const adapter = platforms.getAdapter(pid) || girox;
     const _lvlAmt = _capGift(level.levelUpBonusArs); // #1010
     const ref = `vip-lvl-${user.id}-${idx}`;
-    const r = await adapter.creditUserBalance(user.username, _lvlAmt, ref, { multiplier: await _giftRolloverX(), description: `Bono por alcanzar el nivel VIP ${level.name}` }); // #659: rollover global
+    const r = await adapter.creditUserBalance(user.username, _lvlAmt, ref, { multiplier: await _giftRolloverX(), description: `Bono por alcanzar el nivel VIP ${level.name}`, carryOver: true /* #1040 */ }); // #659: rollover global
     if (!r || !r.success) {
       logger.warn(`[vip] reclamo nivel ${level.name} de ${user.username} en ${pid} falló: ${(r && r.error) || 's/detalle'}`);
       return res.status(503).json({ error: 'No pudimos acreditar el bono ahora. Probá en unos minutos.' });
@@ -16968,6 +16976,8 @@ async function _creditFireReward(username, amount, desc, ref, mult) {
   if (!(mult > 0)) {
     return girox.creditUserBalance(username, amount, ref, { description: desc });
   }
+  // #1040: con bono activo ya no cae a "Carga": creditGift manda BONO nuevo + lo que quedaba del anterior (mismo criterio que el resto).
+  if (Number.isInteger(mult)) return girox.creditGift(username, amount, { description: desc, reference: ref, rolloverX: mult, noGiftGuard: true });
   let why = null;
   try {
     const cfg = await girox.getPlatformConfig();

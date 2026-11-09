@@ -438,6 +438,12 @@ reintento manda la misma reference y la plataforma responde `duplicate:true`.
 > instalar ($5.000 fijo), reembolsos (diario/semanal/mensual y acumulativo), ruleta, VIP, rakeback = BONO ×5 (`_giftRolloverX`, sin número
 > propio). Referidos (pago automático del día 1, `referralPayoutService`) = BONO ×`referralRolloverX` (1) vía `creditGift`. `creditGift`
 > cae a CARGA con el mismo rollover (misma reference) si el multiplicador no está en `bonus.multipliers` o el jugador ya tiene un bono activo.
+> **#1040 (2026-11-09):** con un bono ACTIVO ya NO cae a carga: `bonusCarryOver` (giroxService) reclama lo "a reclamar" y devuelve el
+> `bonus_locked`, que se SUMA al bono nuevo (1girox cancela el viejo y debita el resto, pero vuelve adentro del nuevo; el rollover arranca de cero
+> sobre el total). Lo usan `creditGift`, `_creditFireReward` (delega en creditGift), `_depositWithBonus` (bono pegado a la carga) y
+> `creditUserBalance(..., {multiplier, carryOver:true})` (reembolsos diario/semanal/mensual y bono de nivel VIP). Sigue cayendo a CARGA sólo si el
+> total pasa `bonus.fixed_max`, si no se pudo reclamar lo pendiente o si el multiplicador no está permitido. Lo grabado como regalo (Transaction) es
+> el monto del regalo, sin el arrastre (`carriedBonus` en el resultado). Bonificación manual del panel / lotes / welcome code: sin arrastre (siguen estrictos).
 
 1girox tiene el feature "Rollover y Bonos" **activo**. Consecuencias:
 
@@ -485,11 +491,11 @@ reintento manda la misma reference y la plataforma responde `duplicate:true`.
   **`creditGift(username, amount, {description, reference, rolloverX})`**
   (2026-09-11, giroxService): regalo CON rollover genérico. rolloverX 0 →
   `creditUserBalance` (bono 0). rolloverX > 0 → `/bonus` con ese multiplier
-  tras precheck (config) + lectura FRESCA del jugador: con bono activo (> $50
-  bloqueado o a reclamar) cae a DEPÓSITO con `wagering.multiplier` (misma
-  reference — no le pisa el bono); rechazo de negocio → depósito; transitorio
-  → se devuelve al caller. Lo usa el reembolso acumulativo. (El fueguito sigue
-  con `_creditFireReward`, misma lógica.)
+  tras precheck (config) + lectura FRESCA del jugador: con bono activo, desde
+  #1040 va igual como BONO con el resto del bono viejo sumado (`bonusCarryOver`;
+  antes caía a DEPÓSITO y figuraba como Carga); rechazo de negocio → depósito; transitorio
+  → se devuelve al caller. Lo usa el reembolso acumulativo. (El fueguito con
+  rollover entero delega en `creditGift` desde #1040.)
   Con `opts.multiplier` explícito (Bonificación del panel, welcome code cash,
   lotes): `/bonus` ESTRICTO sin fallback (un rechazo se ve como error). ⚠️ Ojo
   con "bono sobre bono": un bono con rollover a quien ya tiene uno activo PISA

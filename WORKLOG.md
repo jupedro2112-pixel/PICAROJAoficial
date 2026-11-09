@@ -4,7 +4,25 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-08**
+> **Última actualización: 2026-11-09**
+
+## Sesión 2026-11-09
+
+### 1040. 🎁 Bonos que figuraban como "Carga" en 1girox — ahora BONO + el resto del bono anterior (2026-11-09)
+- **Owner:** "hay cargas que está cargando como carga y son bonos, arreglalo urgente". Elegido: "bono nuevo + lo que quedaba".
+- **Causa:** en 1girox un bono con rollover PISA al bono activo (debita lo que le quedaba). Para no hacerle perder eso al cliente, `creditGift` y
+  `_creditFireReward` mandaban el regalo como DEPÓSITO con rollover cuando el cliente ya tenía un bono vivo ⇒ figuraba como Carga (bono aparte de la
+  carga, misiones, instalar app, ruleta, código sorpresa, reseñas, reembolso acumulativo, fueguito). Los reembolsos diario/semanal/mensual, el bono VIP
+  (`/bonus` estricto) y el bono pegado a la carga, en cambio, sí pisaban y el cliente PERDÍA el resto.
+- **Arreglo:** `giroxService.bonusCarryOver(username)` (lectura fresca: reclama lo "a reclamar" y devuelve `bonus_locked`) ⇒ el bono nuevo sale por
+  `/bonus` con monto = regalo + resto (descripción "(+ $X que quedaban del bono anterior)"). En `creditGift`, `creditUserBalance` con
+  `carryOver:true` (reembolsos ×3 rutas y nivel VIP), `_depositWithBonus` (bono adjunto) y `_creditFireReward` (delega en `creditGift` si el
+  rollover es entero). Cae a carga como antes sólo si regalo + resto pasa `bonus.fixed_max`, si falla el reclamo de lo pendiente o si 1girox no acepta
+  el multiplicador (ej. referidos ×1 — hoy apagados). Lo grabado en Transaction sigue siendo el regalo (el resto no es regalo nuevo; `carriedBonus`).
+- **Efecto lateral bueno:** el reintento de un regalo que ya entró ya no cambia de ruta (antes, con el bono recién dado, el reintento iba por /deposit);
+  ahora va por /bonus con la misma reference ⇒ duplicate.
+- **Lo que ya figuró como Carga NO se corrige solo** (quedó así en 1girox). Test: `scripts/test-gift-rollovers.js` (20 casos, 6 nuevos: el 1girox
+  falso ahora aplica "bono sobre bono" y `/bonus/claim`). Todos los `scripts/test-*.js` OK.
 
 ## Sesión 2026-11-08
 

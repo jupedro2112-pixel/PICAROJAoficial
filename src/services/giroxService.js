@@ -1044,19 +1044,26 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
   // lo usan el botón Bonificación del panel, el welcome code cash y los lotes, donde
   // un bonus_out_of_range tiene que verse como error (no convertirse en carga).
   if (opts && opts.multiplier != null) {
+    // #1040: `carryOver` (reembolsos, nivel VIP) ⇒ con rollover >0 el bono nuevo PISA al activo: se le suma lo que le quedaba (bonusCarryOver).
+    let sendAmt = amt; let carry = 0; let desc = opts.description || '';
+    if (opts.carryOver && Number(opts.multiplier) > 0) {
+      const co = await bonusCarryOver(username);
+      if (!co.ok) return { success: false, error: co.reason, code: 'claim_failed', httpStatus: 503 };
+      if (co.carry > 0) { carry = co.carry; sendAmt = Math.round((amt + carry) * 100) / 100; desc = `${desc || 'Bono'} (+ $${carry.toLocaleString('es-AR')} que quedaban del bono anterior)`; logger.info(`[girox] bono a ${username} $${amt} con bono activo $${carry} ⇒ $${sendAmt}`); }
+    }
     const body = {
-      amount: amt,
+      amount: sendAmt,
       multiplier: Number(opts.multiplier),
       reference: _buildReference('bonus', reference)
     };
     // El endpoint /bonus no documenta `description`, pero se manda igual para que el
     // historial de la plataforma no quede sin contexto (un campo extra se ignora).
-    if (opts.description) body.description = String(opts.description).slice(0, 500);
+    if (desc) body.description = String(desc).slice(0, 500);
     const r = await _request({
       method: 'post',
       path: `/players/${encodeURIComponent(String(username))}/bonus`,
       body,
-      label: `bonus(${username}, $${amt}, x${body.multiplier}, ref=${body.reference})`,
+      label: `bonus(${username}, $${sendAmt}, x${body.multiplier}, ref=${body.reference})`,
       username
     });
     if (!r.ok) return { success: false, error: r.error, code: r.code, httpStatus: r.httpStatus };
@@ -1064,6 +1071,7 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
     _invalidatePlayer(username);
     const out = _moneyResult(r.data);
     out.creditedAs = 'bonus';
+    if (carry > 0) { out.carriedBonus = carry; out.bonusTotal = sendAmt; }
     return out;
   }
 
@@ -1116,9 +1124,9 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
  * Con rollover > 0 un /bonus PISA el bono activo del jugador (le debita lo que le
  * quedaba). Por eso, antes de mandarlo: (a) precheck contra GET /config (bono
  * suelto habilitado, multiplier permitido, monto en fixed_min/max) y (b) lectura
- * FRESCA del jugador — si tiene bono bloqueado o sin reclamar por más de
- * GIFT_BONUS_GUARD_MIN_ARS, se cae a DEPÓSITO con `wagering.multiplier` (misma
- * reference: la idempotencia no se rompe). Un rechazo de negocio del /bonus (422,
+ * FRESCA del jugador — si tiene bono activo, #1040: se le SUMA lo que le quedaba
+ * al bono nuevo (`bonusCarryOver`) para que siga figurando como BONO sin perder
+ * nada (antes caía a DEPÓSITO y figuraba como "Carga"). Un rechazo de negocio del /bonus (422,
  * feature_disabled, bonus_out_of_range, invalid_multiplier) también cae a
  * depósito; un error transitorio (red/429/5xx) se devuelve tal cual para que el
  * caller reintente con la MISMA reference (un timeout puede haber acreditado).
@@ -1128,7 +1136,26 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
  *
  * @returns misma forma que depositToUser + { creditedAs: 'bonus'|'deposit', fallbackReason? }
  */
-const GIFT_BONUS_GUARD_MIN_ARS = 50; // resto ≤ $50 de bono viejo: se pisa (mismo piso que la Bonificación del panel)
+/**
+ * #1040: antes de otorgar un bono CON ROLLOVER (que en 1girox PISA al bono activo y le debita lo que le quedaba) se prepara el arrastre:
+ *  - reclama los bonos "a reclamar" (rollover ya cumplido) para que la cancelación no se los lleve;
+ *  - devuelve `carry` = `bonus_locked` del jugador (lo que le queda del bono vivo) para SUMARLO al bono nuevo.
+ * Devuelve { ok:true, carry } o { ok:false, reason } (no se pudo reclamar lo pendiente ⇒ el caller no debe pisar el bono).
+ * Si no se puede leer el jugador se sigue con carry 0 (mismo criterio de antes: la plataforma valida).
+ */
+async function bonusCarryOver(username) {
+  let info = null;
+  try { info = await getUserInfoByName(username, { fresh: true }); } catch (_) { return { ok: true, carry: 0 }; }
+  if (!info) return { ok: true, carry: 0 };
+  const locked = Number(info.bonusLocked) || 0;
+  const claim = Number(info.claimableTotal) || 0;
+  if (claim > 0) {
+    const c = await claimPendingBonus(username);
+    if (!c.success) return { ok: false, reason: `tiene $${claim} de bono a reclamar y no se pudo reclamar (${c.code || c.error}) — un bono nuevo podría llevárselo` };
+    logger.info(`[girox] ${username}: se reclamó su bono pendiente ($${c.amount || claim}) antes de otorgar uno nuevo`);
+  }
+  return { ok: true, carry: locked > 0 ? Math.round(locked * 100) / 100 : 0 };
+}
 async function creditGift(username, amount, opts = {}) {
   const amt = _normalizeAmount(amount);
   if (amt === null) return { success: false, error: 'Monto inválido', code: 'invalid_amount' };
@@ -1154,22 +1181,36 @@ async function creditGift(username, amount, opts = {}) {
     }
   } catch (_) { /* sin config disponible: se intenta el bono igual, la plataforma valida */ }
 
+  // #1040 (owner 2026-11-09: "hay cargas que está cargando como carga y son bonos"): antes, con un bono activo del jugador, el regalo
+  // caía a DEPÓSITO con rollover (figuraba como "Carga" en 1girox) para no pisarle el bono viejo. Ahora (decisión del owner) va SIEMPRE
+  // como BONO y se le SUMA lo que le quedaba del bono anterior (`bonus_locked`): 1girox cancela el viejo y debita ese resto, pero vuelve
+  // adentro del nuevo ⇒ el cliente no pierde nada; el rollover arranca de cero sobre el total. Los bonos "a reclamar" (rollover ya
+  // cumplido) se reclaman antes para que la cancelación no se los lleve. Sólo cae a carga si el total pasa el `fixed_max` del bono o si no se
+  // pudo reclamar lo pendiente. Lo que se graba como regalo (Transaction) sigue siendo `amount`: el arrastre no es un regalo nuevo.
+  let carry = 0;
+  let sendAmt = amt;
+  let sendDesc = description;
   if (viaBonus) {
-    try {
-      // fresh:true — decisión de plata: no leer el cache corto de 8s.
-      const info = await getUserInfoByName(username, { fresh: true });
-      const locked = info ? (Number(info.bonusLocked) || 0) : 0;
-      const claim = info ? (Number(info.claimableTotal) || 0) : 0;
-      if (locked + claim > GIFT_BONUS_GUARD_MIN_ARS) {
-        viaBonus = false;
-        why = `el jugador ya tiene un bono activo (bloqueado $${locked}, a reclamar $${claim}) — otorgar otro lo pisaría`;
+    const co = await bonusCarryOver(username);
+    if (!co.ok) { viaBonus = false; why = co.reason; }
+    else if (co.carry > 0) {
+      carry = co.carry;
+      sendAmt = Math.round((amt + carry) * 100) / 100;
+      let mx = 0;
+      try { const c2 = await getPlatformConfig(); mx = Number(c2.success && c2.config && c2.config.bonus && c2.config.bonus.fixed_max) || 0; } catch (_) {}
+      if (mx > 0 && sendAmt > mx) {
+        viaBonus = false; carry = 0; sendAmt = amt;
+        why = `el jugador tiene un bono activo de $${co.carry} y regalo + resto ($${amt + co.carry}) pasa el máximo de bono fijo ($${mx})`;
+      } else {
+        sendDesc = `${description || 'Bono'} (+ $${carry.toLocaleString('es-AR')} que quedaban del bono anterior)`;
+        logger.info(`[girox] regalo a ${username} $${amt} con bono activo $${carry} ⇒ bono nuevo de $${sendAmt} ×${roll} (se arrastra el resto)`);
       }
-    } catch (_) { /* si no se pudo leer, se sigue: la plataforma valida igual */ }
+    }
   }
 
   if (viaBonus) {
-    const r = await creditUserBalance(username, amt, reference, { multiplier: roll, description, noGiftGuard: true });
-    if (r && r.success) { r.creditedAs = 'bonus'; r.claimRequired = true; return r; }
+    const r = await creditUserBalance(username, sendAmt, reference, { multiplier: roll, description: sendDesc, noGiftGuard: true });
+    if (r && r.success) { r.creditedAs = 'bonus'; r.claimRequired = true; if (carry > 0) { r.carriedBonus = carry; r.bonusTotal = sendAmt; } return r; }
     const definitivo = r && (['feature_disabled', 'bonus_out_of_range', 'validation_error', 'invalid_multiplier', 'player_not_found'].includes(r.code) || r.httpStatus === 422);
     if (!definitivo) return r; // transitorio: no cambiar de vía
     why = `la plataforma rechazó el bono (${r.code || r.error})`;
@@ -1654,6 +1695,7 @@ module.exports = {
   getPlayerStats,
   getPlayersStatsBatch,
   creditGift,
+  bonusCarryOver, // #1040
   formatStatsDate,
   // configuración del sitio
   getPlatformConfig,

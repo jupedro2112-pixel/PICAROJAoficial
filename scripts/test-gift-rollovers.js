@@ -19,9 +19,9 @@ const ROOT = path.join(__dirname, '..');
 
 // ---------------------------------------------------------------- 1girox falso
 const api = {
-  cfg: null, players: {}, refs: new Map(), ops: [], fail: null,
+  cfg: null, players: {}, refs: new Map(), ops: [], fail: null, claimFail: false,
   reset(cfg) {
-    this.cfg = cfg; this.players = {}; this.refs = new Map(); this.ops = []; this.fail = null;
+    this.cfg = cfg; this.players = {}; this.refs = new Map(); this.ops = []; this.fail = null; this.claimFail = false;
   },
   player(u) { return this.players[u] || (this.players[u] = { username: u, balance: 0, bonusLocked: 0, claimable: 0 }); },
 };
@@ -35,6 +35,11 @@ async function fakeAxios({ method, url, data }) {
   if (method === 'get' && m) {
     const pl = api.player(decodeURIComponent(m[1]));
     return { status: 200, data: { player: { id: 1, username: pl.username, balance: pl.balance, wagering: { available: pl.balance - pl.bonusLocked, locked: pl.bonusLocked, bonus_locked: pl.bonusLocked, claimable_total: pl.claimable, claimable: [] } } } };
+  }
+  m = p.match(/^\/players\/([^/]+)\/bonus\/claim$/);
+  if (method === 'post' && m) { // #1040: reclamar libera lo "a reclamar" al disponible
+    const pl = api.player(decodeURIComponent(m[1])); if (api.claimFail) throw httpErr(422, { error: { code: 'nothing_to_claim', message: 'x' } });
+    const a = pl.claimable; pl.claimable = 0; api.ops.push({ kind: 'claim', amount: a }); return { status: 200, data: { amount: a, claimed: [] } };
   }
   m = p.match(/^\/players\/([^/]+)\/(deposit|bonus)$/);
   if (method === 'post' && m) {
@@ -65,8 +70,9 @@ async function fakeAxios({ method, url, data }) {
       bonusAmount: data.bonus_amount != null ? Number(data.bonus_amount) : null, bonusMultiplier: data.bonus_multiplier != null ? Number(data.bonus_multiplier) : null, noBonus: !!data.no_bonus };
     api.ops.push(op); api.refs.set(data.reference, op);
     pl.balance += amt + (op.bonusAmount || 0);
-    if (kind === 'bonus' && op.multiplier > 0) pl.bonusLocked += amt;
-    if (kind === 'deposit' && op.bonusAmount && op.bonusMultiplier > 0) pl.bonusLocked += op.bonusAmount;
+    // regla "bono sobre bono" de 1girox (manual 2.8): un bono con rollover PISA al activo y debita lo que le quedaba
+    if (kind === 'bonus' && op.multiplier > 0) { pl.balance -= pl.bonusLocked; pl.bonusLocked = amt; }
+    if (kind === 'deposit' && op.bonusAmount && op.bonusMultiplier > 0) { pl.balance -= pl.bonusLocked; pl.bonusLocked = op.bonusAmount; }
     return { status: 200, data: { duplicate: false, balance: pl.balance, operation: { reference: data.reference, ledger_id: id, type: kind } } };
   }
   throw httpErr(404, { error: { code: 'not_found', message: p } });
@@ -178,11 +184,39 @@ caso('Reembolso diario/semanal/mensual: /bonus estricto ×5 (creditUserBalance c
   const r = await g.creditUserBalance('ana', 3000, 'vip-refund-x', { multiplier: 5, description: 'Reembolso' });
   assert.ok(r.success); assert.deepStrictEqual([api.ops[0].kind, api.ops[0].multiplier], ['bonus', 5]);
 });
-caso('Regalo ×5 con un bono ACTIVO del cliente: no se lo pisa, entra como CARGA ×5 (mismo rollover)', async () => {
+caso('#1040 Regalo ×5 con un bono ACTIVO: va como BONO ×5 con lo que le quedaba sumado (el cliente no pierde nada)', async () => {
   api.reset(clone(CFG_AGOSTO)); const g = freshGirox(); api.player('ana').bonusLocked = 8000; api.player('ana').balance = 8000;
   const r = await g.creditGift('ana', 2000, { description: 'Misión', reference: 'vip-mis-1', rolloverX: 5 });
-  assert.ok(r.success); assert.strictEqual(r.creditedAs, 'deposit');
-  assert.deepStrictEqual([api.ops[0].kind, api.ops[0].multiplier], ['deposit', 5]);
+  assert.ok(r.success); assert.strictEqual(r.creditedAs, 'bonus'); assert.strictEqual(r.carriedBonus, 8000);
+  assert.deepStrictEqual([api.ops[0].kind, api.ops[0].multiplier, api.ops[0].amount], ['bonus', 5, 10000]);
+  assert.strictEqual(api.player('ana').balance, 10000); assert.strictEqual(api.player('ana').bonusLocked, 10000);
+});
+caso('#1040 Bono "a reclamar" pendiente: se reclama primero y después va el BONO', async () => {
+  api.reset(clone(CFG_AGOSTO)); const g = freshGirox(); api.player('ana').claimable = 3000; api.player('ana').balance = 3000;
+  const r = await g.creditGift('ana', 2000, { reference: 'vip-mis-2', rolloverX: 5 });
+  assert.ok(r.success); assert.strictEqual(r.creditedAs, 'bonus');
+  assert.deepStrictEqual(api.ops.map((o) => o.kind), ['claim', 'bonus']); assert.strictEqual(api.ops[1].amount, 2000);
+});
+caso('#1040 No se pudo reclamar lo pendiente: no se pisa, entra como CARGA ×5 (como antes)', async () => {
+  api.reset(clone(CFG_AGOSTO)); const g = freshGirox(); api.player('ana').claimable = 3000; api.claimFail = true;
+  const r = await g.creditGift('ana', 2000, { reference: 'vip-mis-3', rolloverX: 5 });
+  assert.ok(r.success); assert.strictEqual(r.creditedAs, 'deposit'); assert.strictEqual(api.ops[0].amount, 2000);
+});
+caso('#1040 Regalo + resto pasa el fixed_max del bono: CARGA ×5 sólo por el regalo', async () => {
+  const c = clone(CFG_AGOSTO); c.bonus.fixed_max = 9000; api.reset(c); const g = freshGirox(); api.player('ana').bonusLocked = 8000; api.player('ana').balance = 8000;
+  const r = await g.creditGift('ana', 2000, { reference: 'vip-mis-4', rolloverX: 5 });
+  assert.ok(r.success); assert.strictEqual(r.creditedAs, 'deposit'); assert.deepStrictEqual([api.ops[0].kind, api.ops[0].amount], ['deposit', 2000]);
+});
+caso('#1040 Reembolso (/bonus estricto con carryOver) con bono activo: suma el resto', async () => {
+  api.reset(clone(CFG_AGOSTO)); const g = freshGirox(); api.player('ana').bonusLocked = 1500; api.player('ana').balance = 1500;
+  const r = await g.creditUserBalance('ana', 3000, 'vip-refund-y', { multiplier: 5, description: 'Reembolso', carryOver: true });
+  assert.ok(r.success); assert.strictEqual(r.carriedBonus, 1500); assert.deepStrictEqual([api.ops[0].kind, api.ops[0].amount], ['bonus', 4500]);
+});
+caso('#1040 Carga con bono adjunto y bono activo: el bono de la carga lleva sumado el resto', async () => {
+  api.reset(clone(CFG_AGOSTO)); const g = freshGirox(); const s = serverFns(g, SRV_CFG); api.player('ana').bonusLocked = 4000; api.player('ana').balance = 4000;
+  const r = await s._depositWithBonus(g, 'ana', 10000, 'Carga', 'vip-dep-9', 5000);
+  assert.ok(r.success); assert.strictEqual(r.carriedBonus, 4000); assert.strictEqual(api.ops[0].bonusAmount, 9000);
+  assert.strictEqual(api.player('ana').balance, 19000);
 });
 caso('Referidos ×1 con la config de agosto (bono sin ×1): entra como CARGA ×1, reference del pago', async () => {
   api.reset(clone(CFG_AGOSTO)); const g = freshGirox();
