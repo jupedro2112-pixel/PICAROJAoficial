@@ -157,6 +157,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/async function casinoSupport\(\) \{[\s\S]{0,200}if \(_casinoIsOpen\(\) && !\(await spUiMode\(\)\) && _supportIntoCasino\(\)\) return;/.test(H), 'Soporte desde el casino se abre adentro');
   assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
+  { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const k = C2.lastIndexOf('#1042-l'); assert.ok(k > 0 && /body\.home-mini:not\(\.sp-classic\):not\(\.sp-sent\) \.chat-input-container \{ display: block !important; \}/.test(C2.slice(k)), 'caja para escribir siempre visible (chat nuevo)'); }
   assert.ok(/return c\.enabled && !c\.classic && \(supportBot\.isAvailable\(\) \|\| c\.learnedOnly\);/.test(S) && /cfg\.classic \|\| \(!supportBot\.isAvailable\(\) && !cfg\.learnedOnly\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
   assert.ok(!/^#supportPanel|^\.sp-acts|^\.sp-actbar/m.test(blk) && /body\.sp-classic \.sp-actbar \{ display: none/.test(blk), 'chat clásico: nada del diseño nuevo aplica');

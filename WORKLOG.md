@@ -8,6 +8,12 @@
 
 ## Sesión 2026-11-09
 
+### 1042-l. Caja para escribir SIEMPRE a la vista en Soporte — PWA v679 (2026-11-09)
+- **Owner:** "sigue sin actualizar el chat … no aparece chat para escribir directamente". El servidor ya servía v678; lo que se veía "viejo" era la
+  pantalla de antes del primer mensaje: #602/#613 escondían mensajes y caja (`body.home-mini:not(.sp-sent)`) hasta elegir un tema.
+- pin.css: con el chat nuevo (`body:not(.sp-classic)`) mensajes + caja + barrita de temas siempre visibles; la presentación queda compacta arriba
+  (sin la pregunta ni los botones grandes). Chat clásico: igual que antes.
+
 ### 1042-k. Respuestas cargadas a mano con el mismo candado (2026-11-09)
 - Agregar / editar en 🧠 Responder para IA rechaza links, CBU/CVU, teléfonos y mails (`learnIsSafe`, como lo aprendido por la IA): el CBU y el alias
   ya están arriba del chat y cambian. Guía para el equipo (PDF, fuera del repo) con retiros, bot de soporte y cómo completar Responder para IA.

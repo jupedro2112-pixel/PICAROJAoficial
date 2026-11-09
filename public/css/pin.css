@@ -3225,3 +3225,14 @@ body:not(.sp-classic) .sp-bk-row b { flex: 1; min-width: 0; overflow: hidden; te
 body:not(.sp-classic) .sp-bk-row i { flex: 0 0 auto; font-style: normal; font-weight: 800; font-size: 11px; color: var(--p-inv); background: var(--p-green); border-radius: 999px; padding: 3px 9px; }
 body:not(.sp-classic) .sp-bk-row:active i { background: var(--p-text); }
 body.sp-classic .sp-bank { display: none !important; }
+
+/* #1042-l (owner: "no aparece el chat para escribir directamente"): con el chat NUEVO la caja de escribir y los mensajes se ven SIEMPRE, también
+   antes del primer mensaje (#602/#613 escondían todo hasta elegir un tema). La presentación queda compacta arriba y los temas pasan a la barrita
+   de arriba de la caja. Con Chat clásico (body.sp-classic) sigue como antes. */
+body.home-mini:not(.sp-classic):not(.sp-sent) .chat-input-container { display: block !important; }
+body.home-mini:not(.sp-classic):not(.sp-sent) #chatMessages, body.home-mini:not(.sp-classic):not(.sp-sent) #chatMessages:empty { display: flex !important; flex: 1 1 auto !important; min-height: 0 !important; max-height: none !important; }
+body.home-mini:not(.sp-classic):not(.sp-sent) .sp-quickbar { display: flex !important; }
+body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro { margin: 8px 10px 0 !important; padding: 10px 12px !important; }
+body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-ask, body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-topics,
+body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-sla, body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-faq-btn { display: none !important; }
+body.home-mini:not(.sp-classic):not(.sp-sent) #supportIntro .sp-msg { font-size: 13px; line-height: 1.4; }
