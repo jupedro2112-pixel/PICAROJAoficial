@@ -3288,12 +3288,3 @@ body:not(.sp-classic) #ctSupport { display: none !important; }
 
 /* #1064 (owner: "que quede en línea recta, que se vea la página de Girox"): se REVIRTIERON #1058 (servicios en varias filas, cinta en 2 líneas, tarjeta
    más alta) y #1060 (centrado con fondo). La burbuja vuelve a como estaba: fila de servicios en UNA línea que se desliza y la tarjeta chica. */
-/* #1065 (owner, captura: "así está bien, que se vea más chiquito el chat"): misma burbuja flotante, más CHICA para que se vea más de Girox
-   alrededor: 340 px de ancho (antes 380) y hasta 480 px de alto (antes 560), con respaldo en vh para iPhone sin dvh. Cabecera y botones un poco
-   más compactos. Nada más cambia (fila de servicios en una línea, cinta, posición abajo a la derecha). */
-#casinoOverlay > #supportPanel.sp-in-casino { width: min(340px, calc(100vw - 32px)) !important; height: min(480px, calc(100vh - 190px - var(--sat, 0px))) !important; }
-@supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: min(480px, calc(100dvh - 190px - var(--sat, 0px))) !important; } }
-#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar { padding: 6px 10px !important; }
-#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar-avatar { width: 30px !important; height: 30px !important; flex: 0 0 30px !important; }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-acts button { min-height: 32px !important; font-size: 11px !important; }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-bk-row { padding: 2px 8px !important; font-size: 11px !important; }

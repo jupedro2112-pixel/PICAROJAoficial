@@ -8,6 +8,9 @@
 
 ## Sesión 2026-11-09
 
+### 1066. Burbuja como estaba (revierte #1065) (2026-11-09)
+- **Owner:** "hacelo como estaba, por favor". pin.css del chat igual al de antes de #1058 (= la captura de producción). App v706.
+
 ### 1065. Burbuja de Girox más chica (2026-11-09)
 - **Owner (captura):** "así está bien, que se vea más chiquito el chat". Misma burbuja: 340 px de ancho (antes 380) y hasta 480 px de alto (antes 560),
   cabecera / botones / filas del CBU un poco más compactos. Sólo CSS al final de pin.css. App v705.
