@@ -3243,9 +3243,9 @@ body.sp-classic .sp-bank { display: none !important; }
 #supportPanel:not(.sp-in-casino) .sp-actbar { display: none !important; }
 /* #1042-p (owner): fila de info abajo del chat de la burbuja de Girox (Sorteos · Misiones · Ruleta diaria · Referidos). Sólo en la burbuja. */
 .sp-infobar { display: none; }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar { display: flex !important; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 6px 8px 2px; background: var(--p-wa-bg, var(--p-card)); }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar { display: flex !important; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 6px 0 0; margin: 0; background: transparent; } /* #1042-s: arriba, debajo de la cinta */
 #casinoOverlay > #supportPanel.sp-in-casino .sp-infobar::-webkit-scrollbar { display: none; }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar button { flex: 0 0 auto; border: 1px solid var(--p-border); background: var(--p-card); color: var(--p-text); border-radius: 999px; padding: 6px 11px; font-size: 11.5px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar button { flex: 0 0 auto; border: 1px solid var(--p-border); background: var(--p-card); color: var(--p-text); border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
 body.no-ref #spInfoBar .ref-only { display: none !important; }
 /* #1042-r (owner): SÓLO Girox activo (body.menus-one, todo en uno): sin Volver ni Menú; Telegram · Historias · [logo] · Soporte · Info · Perfil. */
 .casino-topbar .ct-one { display: none !important; }

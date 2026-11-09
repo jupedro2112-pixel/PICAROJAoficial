@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1042-s. Fila de servicio ARRIBA + "modo normal" vuelve TODO (también el menú) — PWA v686 / panel v257 (2026-11-09)
+- **Owner:** "la sección que te dije que pongas abajo del chat no se ve, ponela arriba sin que tape el escribiendo; en el botón de configuración de este
+  chat hacemos todos estos cambios: si pongo el normal, que siga todo igual de punta a punta, hasta con el menú".
+- `#spInfoBar` pasó adentro de `#spActBar` (debajo de la cinta), arriba de los mensajes; el "escribiendo…" queda abajo libre.
+- Tilde del panel renombrado "↩️ Modo normal / chat clásico (TODO como antes)": además de lo que ya hacía (sin IA, chat y burbuja como antes, Soporte
+  del panel sin filtro), `/api/public/menu-layout` devuelve el menú de ANTES (`_menusEnabledEffective` ⇒ `Config['menusEnabledBefore1042r']`, guardado
+  por la migración de #1042-r; si no quedó guardado, todos los menús). Lo elegido en "Menú de la app" queda guardado y vuelve al destildar.
+  Si la migración de #1042-r ya corrió con una versión anterior, no hay copia guardada ⇒ el modo normal ofrece todos los menús (como antes de #1042).
+
 ### 1042-r. Sólo Girox TODO EN UNO + menú elegible desde la tarjeta del bot + servicio completo en la burbuja — PWA v685 / panel v256 (2026-11-09)
 - **Owner:** "agregá en lo mismo de la IA que se pueda elegir qué menú queremos (Girox, completo, básico) y dejá activado Girox por ahora; dentro de
   Girox, si está configurado así, no pongas Volver ni Menú, que sea todo en uno; Telegram donde está Menú y al lado Historias; después del logo

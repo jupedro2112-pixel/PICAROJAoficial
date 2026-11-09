@@ -5981,7 +5981,14 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
 // #635 (owner): qué MENÚS puede elegir la gente (Básico · Intermedio · Completo). Config['menusEnabled'] = {basic,easy,full}; al menos uno activo.
 // #670: + girox ("Girox directo": entra a jugar al toque, con carga rápida y retiro adentro)
 function _menusEnabledNorm(v) { const m = { basic: !(v && v.basic === false), easy: !(v && v.easy === false), full: !(v && v.full === false), girox: !(v && v.girox === false) }; return (m.basic || m.easy || m.full || m.girox) ? m : { basic: true, easy: true, full: true, girox: true }; }
-app.get('/api/public/menu-layout', async (req, res) => { try { const v = await getConfig('menuLayout', 1); const menus = _menusEnabledNorm(await getConfig('menusEnabled', null)); res.set('Cache-Control', 'no-store'); res.json({ layout: Number(v) === 2 ? 2 : 1, menus }); } catch (_) { res.json({ layout: 1, menus: { basic: true, easy: true, full: true } }); } });
+// #1042-s (owner): "si pongo el normal (Chat clásico), que siga todo igual de punta a punta, hasta con el menú" ⇒ con Chat clásico la app recibe
+// el menú de ANTES del cambio a sólo Girox (Config['menusEnabledBefore1042r'], o todos si no quedó guardado); el elegido queda guardado para cuando se vuelva.
+async function _menusEnabledEffective() {
+  let classic = false; try { classic = !!(await getSupportBotConfig()).classic; } catch (_) {}
+  if (classic) return _menusEnabledNorm(await getConfig('menusEnabledBefore1042r', null));
+  return _menusEnabledNorm(await getConfig('menusEnabled', null));
+}
+app.get('/api/public/menu-layout', async (req, res) => { try { const v = await getConfig('menuLayout', 1); const menus = await _menusEnabledEffective(); res.set('Cache-Control', 'no-store'); res.json({ layout: Number(v) === 2 ? 2 : 1, menus }); } catch (_) { res.json({ layout: 1, menus: { basic: true, easy: true, full: true } }); } });
 app.get('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => { try { res.json({ success: true, menus: _menusEnabledNorm(await getConfig('menusEnabled', null)) }); } catch (_) { res.status(500).json({ error: 'Error' }); } });
 app.post('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -13601,6 +13608,8 @@ async function initializeData() {
     // (Configuración → bot → 📱 Menú de la app, o Elegir menú) y esta migración no lo vuelve a tocar.
     try {
       if (!(await getConfig('mig1042rGiroxOnly', null))) {
+        // #1042-s: se guarda el menú que había, para que "Chat clásico" vuelva a él (todo como antes, hasta el menú).
+        if (!(await getConfig('menusEnabledBefore1042r', null))) await Config.set('menusEnabledBefore1042r', _menusEnabledNorm(await getConfig('menusEnabled', null)), 'startup-migration');
         await Config.set('menusEnabled', { basic: false, easy: false, full: false, girox: true }, 'startup-migration');
         await Config.set('mig1042rGiroxOnly', new Date().toISOString(), 'startup-migration');
         console.log('✅ Menú de la app: sólo Girox (#1042-r)');

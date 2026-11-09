@@ -1977,3 +1977,5 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   Perfil; Soporte abre el chat nuevo adentro. Se elige en el panel (tarjeta del bot → 📱 Menú de la app o Elegir menú). Migración `mig1042rGiroxOnly`.
 - **Ventanas adentro de Girox (#1042-o/p):** `VIP.ui.showModal` envuelto + `_modalIntoCasino(id)` (con observador) mudan la ventana a `#casinoOverlay`
   y la devuelven al cerrarse o al salir del casino. Fila de servicio `#spInfoBar` y botón de info del bot (`info_topic` ⇒ `go_section`) usan `VIP.home.spInfo`.
+- **Modo normal / chat clásico (#1042-s):** con `Config['supportBot'].classic` la app vuelve a TODO lo anterior: sin IA, chat/burbuja como antes, Soporte del
+  panel sin filtro y `/api/public/menu-layout` con el menú de antes (`menusEnabledBefore1042r`). Fila de servicio `#spInfoBar` adentro de `#spActBar` (arriba).

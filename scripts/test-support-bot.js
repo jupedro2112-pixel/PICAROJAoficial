@@ -163,7 +163,10 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
     assert.ok(/body\.menus-one\.no-menu-full\.no-menu-basic\.no-menu-easy \.casino-topbar \.ct-multi \{ display: none !important; \}/.test(C3) && /class="casino-back ct-multi"/.test(H) && /id="ctTelegram"/.test(H), 'sólo Girox: sin Volver ni Menú, con Telegram');
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
-    assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez'); }
+    assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');
+    assert.ok(/if \(classic\) return _menusEnabledNorm\(await getConfig\('menusEnabledBefore1042r', null\)\)/.test(S) && /const menus = await _menusEnabledEffective\(\)/.test(S), 'modo normal / clásico: también el menú de antes');
+    const ab = I3.indexOf('id="spActBar"'), ib = I3.indexOf('id="spInfoBar"'), cc = I3.indexOf('class="chat-container"');
+    assert.ok(ab > 0 && ib > ab && ib < cc, 'fila de servicio ARRIBA (adentro de la barra), no abajo'); }
   assert.ok(/const sentAny = await Message\.findOne[\s\S]{0,200}if \(sentAny\) return;\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'IA falla y no salió respuesta fija ⇒ aviso + agente (nunca un visto)');
   assert.ok(/if \(!r\.reply\) r\.reply = /.test(S), 'silencio sólo después de una frase de cierre');
   assert.ok(/VIP\.ui\.showModal = function \(id\) \{ try \{ _modalIntoCasino\(id\); \}/.test(H) && /_modalsBackAll\(\); \} catch/.test(H), 'ventanas adentro de Girox');

@@ -6367,7 +6367,7 @@ async function saveSupportBot() {
     try {
         const r = await authFetch('/api/admin/support-bot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
-        showToast(j.config.classic ? '↩️ Chat clásico activado (sin IA)' : j.config.enabled ? '🤖 Bot de soporte encendido' : '⏸️ Bot de soporte apagado', 'success'); loadSupportBot();
+        showToast(j.config.classic ? '↩️ Modo normal: todo como antes (chat, bot y menú)' : j.config.enabled ? '🤖 Bot de soporte encendido' : '⏸️ Bot de soporte apagado', 'success'); loadSupportBot();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function testSupportBot() {
