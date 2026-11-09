@@ -8,6 +8,12 @@
 
 ## Sesión 2026-11-09
 
+### 1058. Chat de la burbuja de Girox: servicios a la vista en todos los teléfonos (2026-11-09)
+- **Owner (captura en iPhone):** "se corta, que se vea bien en todos los teléfonos; los botones de misiones etc. son importantes, que nada falle".
+- `#spInfoBar` (Reembolsos · Sorteos · Misiones · Ruleta · Fueguito · Referidos · Verificar celular · Tengo otro problema) deja de ser carrusel horizontal:
+  pasa a varias filas (`flex-wrap`), todos visibles. La cinta "CARGÁ Y GANÁ" muestra el texto entero (el carrusel no arrancaba si se medía oculta).
+  La tarjeta crece hasta 600 px con alto de respaldo en `vh` (iPhone sin `dvh`) y en pantallas bajas (≤ 700 px) usa más alto. Sólo CSS al final de pin.css. App v699.
+
 ### 1057. DEPOSITAR del chat ⇒ directo a "Cómo mandar el comprobante" (2026-11-09)
 - **Owner (capturas):** el botón DEPOSITAR de la cabecera del chat (DEPOSITAR / RETIRAR / REEMBOLSOS) abría la Carga rápida del casino; tiene que ir directo
   a la guía del comprobante. Ahora llama `VIP.autoload.pickReceipt('depositar')` (la guía ya se muda adentro del casino; con "no volver a mostrar", abre el

@@ -3286,3 +3286,19 @@ body:not(.sp-classic) #ctSupport { display: none !important; }
 #loginScreen #lgStoriesRing, #loginScreen #helpTelegramBtn, #loginScreen .lg-hero, #loginScreen .lg-trustrow, #loginScreen .lg-play-box,
 #loginScreen #lgSoon, #loginScreen .lg-sys, #loginScreen #lgTrust, #loginScreen .lg-alt, #loginScreen .lg-sec-reviews, #loginScreen #lgPop { display: none !important; }
 
+/* #1058 (owner, captura en iPhone: "se corta; que se vea bien en todos los teléfonos, los botones de misiones etc. son importantes"). La fila de
+   servicios de la burbuja de Girox ya no es un carrusel horizontal (en iPhone quedaba cortada y no se notaba que se deslizaba): pasa a varias filas, con
+   todos los botones a la vista. La cinta "CARGÁ Y GANÁ" muestra el texto entero en dos líneas (el carrusel no arrancaba si se medía estando oculta). */
+#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar { flex-wrap: wrap !important; overflow: visible !important; justify-content: flex-start; gap: 5px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar button { flex: 1 1 auto !important; min-width: 0; max-width: 100%; padding: 5px 8px !important; font-size: 11px !important; line-height: 1.2; text-align: center; white-space: nowrap; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-ticker .sp-tk-win { white-space: normal !important; overflow: visible !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-ticker .sp-tk-txt { white-space: normal !important; padding-left: 0 !important; animation: none !important; display: inline; line-height: 1.25; }
+/* Pantallas angostas (iPhone SE / mini, 360-375 px) o bajas: todo un poco más chico para que quede lugar para el chat. */
+@media (max-width: 380px), (max-height: 700px) {
+  #casinoOverlay > #supportPanel.sp-in-casino .sp-infobar button { padding: 4px 7px !important; font-size: 10.5px !important; }
+}
+/* #1058: la tarjeta crece un poco (la fila de servicios ahora ocupa 2-3 renglones) y tiene altura de respaldo en vh para iPhone viejos sin dvh. */
+#casinoOverlay > #supportPanel.sp-in-casino { height: calc(100vh - 150px - var(--sat, 0px)) !important; max-height: 600px !important; }
+@supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: calc(100dvh - 150px - var(--sat, 0px)) !important; } }
+@media (max-height: 700px) { #casinoOverlay > #supportPanel.sp-in-casino { bottom: calc(76px + var(--sab, env(safe-area-inset-bottom, 0px))) !important; height: calc(100vh - 120px - var(--sat, 0px)) !important; }
+  @supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: calc(100dvh - 120px - var(--sat, 0px)) !important; } } }
