@@ -24,6 +24,7 @@
 
     let _unread = 0;
     let _open = false;
+    let _spPromo = null, _spCasino = null; // #1042: arriba de todo (se usan desde openSupport/closeSupport)
     let _platforms = null;
     let _platformsAt = 0;
 
@@ -452,7 +453,6 @@
     function fdClose() { try { VIP.ui.hideModal('fdModal'); } catch (_) { const m = _el('fdModal'); if (m) m.classList.add('hidden'); } }
     function fdGo() { fdClose(); if (_casinoIsOpen()) { spDeposit(); return; } /* #1042-e: adentro de Girox */ try { easyLoad(); } catch (_) { setHomeMode('full'); } }
     // #1042: barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo con VER (abre el cartel del bono de 1ª carga).
-    let _spPromo = null;
     // #1042-c: CHAT CLÁSICO desde el panel ⇒ body.sp-classic (sin barra ni cara de WhatsApp; el CSS nuevo no aplica).
     async function spUiMode() {
         try { const r = await fetch('/api/support/ui-mode', { cache: 'no-store' }); const j = await r.json(); document.body.classList.toggle('sp-classic', !!(j && j.classic)); } catch (_) {}
@@ -2433,7 +2433,6 @@
     // #687: salir del casino y abrir el chat de Soporte (modo mini)
     // #1042-e (owner: "todo esto adentro de Girox, que no se abran cosas por afuera"): Soporte se abre ENCIMA del juego (el casino sigue
     // abierto atrás). El mismo #supportPanel se muda adentro de #casinoOverlay (ids, listeners y socket intactos) y vuelve al cerrar.
-    let _spCasino = null;
     function _casinoIsOpen() { try { return document.body.classList.contains('casino-open') && !!_el('casinoOverlay') && _el('casinoOverlay').style.display !== 'none'; } catch (_) { return false; } }
     function _supportIntoCasino() {
         const ov = _el('casinoOverlay'), p = _el('supportPanel'); if (!ov || !p) return false;
