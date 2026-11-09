@@ -8,6 +8,19 @@
 
 ## Sesión 2026-11-09
 
+### 1042-b. Bot: "¿sos un bot?" + silencio a quien molesta · chat de Soporte estilo WhatsApp + REEMBOLSOS — PWA v675, admin SW v249 (2026-11-09)
+- **Owner (captura):** que a "¿sos un bot?" conteste "Soy Tati, del equipo del casino, te atiendo por chat."; que a quien molesta se le deje de
+  contestar; DEPOSITAR y RETIRAR siempre arriba, REEMBOLSOS en el mismo recuadro, y que el chat parezca WhatsApp.
+- **"¿Sos un bot?":** una frase corta con el nombre del turno ("Soy Tati, la asistente virtual del equipo de soporte 😊 Si querés te paso con una
+  persona"). NO se usó la frase exacta del owner porque da a entender que es una persona: el bot no se hace pasar por humano si se lo preguntan
+  (límite de la IA, avisado al owner).
+- **Molesta ⇒ silencio:** campo `ignore` en la respuesta de la IA (sólo si ya se le pidió volver al tema; nunca con plata, reclamos, juego
+  problemático o menores: ahí gana el handoff). Server: `support_bot_mutes` (`until` = ahora + `Config['supportBot'].muteHours`, 12 h, panel) ⇒ el
+  bot no contesta ni cae a la respuesta automática; nota interna 🤖🔇 en el panel; un agente puede escribirle normal. Stats `muted`.
+- **App:** `#spActBar` fija arriba (sticky) con DEPOSITAR · RETIRAR · REEMBOLSOS (`svcRefund`); dentro de `#supportPanel` el chat toma cara de
+  WhatsApp con tokens `--p-wa-*` (fondo crema / burbujas blancas / verdes del cliente con tildes / caja redonda / enviar verde; nocturno = WhatsApp
+  oscuro). Test support-bot 11/11, 22/22 tests OK.
+
 ### 1042. 🤖 Bot de soporte con IA + chat con DEPOSITAR/RETIRAR y cinta "CARGÁ Y GANÁ" — PWA v674, admin SW v248 (2026-11-09)
 - **Owner (con capturas de otra sala de referencia):** "armá ese tipo de chat; al tocar VER que salte 100% y $5.000 si instalás nuestra app; un bot
   que conteste con todo el contexto del servicio, que parezca una persona real, a los 10/15 s, y siempre incentive a cargar con los beneficios"

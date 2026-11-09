@@ -35,7 +35,7 @@ caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallb
   assert.ok(r.ok); assert.strictEqual(r.reply, '¡Hola! Para cargar tocá DEPOSITAR.'); assert.strictEqual(r.handoff, false);
   const b = lastReq.body;
   assert.strictEqual(b.model, 'claude-opus-5-5'); assert.strictEqual(b.output_config.effort, 'low');
-  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason']);
+  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore']);
   assert.strictEqual(b.output_config.format.schema.additionalProperties, false);
   assert.strictEqual(b.fallbacks, 'default'); assert.strictEqual(lastReq.opts.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
   assert.ok(!('thinking' in b) && !('temperature' in b), 'no manda thinking/temperature (Opus 5.5)');
@@ -48,7 +48,7 @@ caso('Prompt: fijo cacheado primero; datos del servicio y del cliente (etapa sin
   assert.ok(/ETAPA: sin carga/.test(dyn)); assert.ok(/Califica para el bono de primera carga \(100%\)/.test(dyn)); assert.ok(/\$5\.000 en fichas/.test(dyn));
   assert.ok(/TU NOMBRE EN ESTE TURNO: Sofía/.test(dyn)); assert.ok(/referidos está pausado/.test(dyn));
   const fixed = b.system[0].text;
-  assert.ok(/BIEN RESUMIDO/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /no lo niegues/.test(fixed) && /Juego responsable/.test(fixed));
+  assert.ok(/BIEN RESUMIDO/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /sin negarlo ni hacerte pasar/.test(fixed) && /Soy Tati, la asistente virtual/.test(fixed) && /Juego responsable/.test(fixed));
 });
 caso('Cliente sin bono de bienvenida: el prompt dice que NO se lo ofrezca', async () => {
   nextResp = okResp({ reply: 'ok', handoff: false, handoff_reason: '' });
@@ -70,6 +70,14 @@ caso('Handoff: la IA marca que lo tome una persona (carga trabada) ⇒ reply + h
   nextResp = okResp({ reply: 'Ya lo paso al equipo que lo revisa.', handoff: true, handoff_reason: 'carga de $5.000 no acreditada' });
   const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'cargue 5000 y no me llego' }] });
   assert.ok(r.ok && r.handoff); assert.strictEqual(r.handoffReason, 'carga de $5.000 no acreditada');
+});
+caso('Molesta ⇒ ignore: sin texto para el cliente; si además hay que pasarlo a una persona, gana el handoff', async () => {
+  nextResp = okResp({ reply: 'chau', handoff: false, handoff_reason: '', ignore: true });
+  let r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'jajaja tonto' }] });
+  assert.ok(r.ok && r.ignore); assert.strictEqual(r.reply, '');
+  nextResp = okResp({ reply: 'Lo paso al equipo.', handoff: true, handoff_reason: 'reclamo de retiro', ignore: true });
+  r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'devolveme la plata' }] });
+  assert.ok(r.ok && r.handoff && !r.ignore && r.reply);
 });
 caso('Refusal ⇒ no ok y handoff (lo toma una persona); max_tokens ⇒ no ok; JSON roto ⇒ no ok', async () => {
   nextResp = { stop_reason: 'refusal', content: [] }; let r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] });
@@ -97,6 +105,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/'metadata\.bot': \{ \$ne: true \}/.test(S), 'la pausa cuenta sólo personas, no al bot');
   assert.ok(/support_bot_claims'\)\.insertOne\(\{ _id: lastUser\.id/.test(S), 'una respuesta por mensaje (multi-instancia)');
   assert.ok(/lastUser\.type !== 'text'/.test(S), 'imágenes (comprobantes) no las contesta el bot');
+  assert.ok(/support_bot_mutes'\)\.findOne\(\{ _id: userId \}\)/.test(S) && /if \(r\.ok && r\.ignore\)/.test(S), 'silencio a quien molesta');
   assert.ok(/status: 'open', closedAt: null/.test(S) && /kind: 'bot_handoff'/.test(S), 'handoff abre el chat con nota');
   assert.ok(/return _supportCannedReply\(userId, username, null, String\(lastUser\.content \|\| ''\), false\)/.test(S), 'si la IA falla, respuesta automática de siempre');
   // #1030: el botón del bot para adjuntar va por la GUÍA del comprobante (target receipt ⇒ VIP.autoload.sendReceipt ⇒ pickReceipt), nunca al selector directo

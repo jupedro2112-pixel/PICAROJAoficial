@@ -1925,12 +1925,13 @@
                     <button class="theme-topbar-btn" id="themeToggleBtn" title="Cambiar modo claro / oscuro" aria-label="Cambiar modo claro u oscuro">🌙</button>
                     <button type="button" class="support-load-btn" onclick="VIP.home.closeSupport()" title="Volver al sistema de cargas">Cargar</button>
                 </div>
-                <!-- #1042 (owner, captura de referencia): DEPOSITAR / RETIRAR arriba del chat + cinta "CARGÁ Y GANÁ · … VER" que abre el
+                <!-- #1042 (owner, captura de referencia): DEPOSITAR / RETIRAR / REEMBOLSOS siempre arriba del chat + cinta "CARGÁ Y GANÁ · … VER" que abre el
                      cartel del 100% + $5.000 instalando nuestra app (fdModal). Sin bono de 1ª carga para ese cliente ⇒ la cinta muestra el reembolso. -->
                 <div class="sp-actbar" id="spActBar">
                     <div class="sp-acts">
                         <button type="button" class="sp-dep" onclick="VIP.home.spDeposit()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>DEPOSITAR</button>
                         <button type="button" class="sp-wd" onclick="VIP.home.spWithdraw()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>RETIRAR</button>
+                        <button type="button" class="sp-rf" onclick="VIP.home.svcRefund()"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></svg>REEMBOLSOS</button>
                     </div>
                     <button type="button" class="sp-ticker" id="spTicker" hidden onclick="VIP.home.spPromoOpen()"><i class="sp-tk-dot"></i><span class="sp-tk-win"><span class="sp-tk-txt" id="spTickerTxt">CARGÁ Y GANÁ · 100% en tu primera carga</span></span><b>VER</b></button>
                 </div>
@@ -2753,7 +2754,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v674</div>
+                    <div class="pf-build" id="appBuildTag">app v675</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2782,7 +2783,7 @@
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v674</div> <!-- #790: espejo de #appBuildTag -->
+                <div class="pf-build pf-build-min" id="pfBuildMini">app v675</div> <!-- #790: espejo de #appBuildTag -->
                 <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
                 <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>

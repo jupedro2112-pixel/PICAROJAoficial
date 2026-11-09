@@ -1955,6 +1955,8 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   (`support_bot_claims`, `_id` = id del mensaje); una persona respondió mientras esperaba.
 - **IA:** Messages API por HTTP, modelo de `Config['supportBot'].model` (default `claude-opus-5-5`), `output_config {effort, format json_schema}`,
   `fallbacks:"default"` + beta `server-side-fallback-2026-07-01`. `stop_reason` `refusal` ⇒ handoff; `max_tokens` / JSON roto / error ⇒ respuesta fija.
+- **Silencio (#1042-b):** la IA devuelve `ignore:true` (con reply vacío) cuando sólo molestan ⇒ `support_bot_mutes {_id:userId, until}` y nota
+  `bot_muted`; mientras dure, `_supportBotRun` sale sin contestar. `handoff` siempre gana sobre `ignore`.
 - **Colecciones sin modelo:** `support_bot_claims` (también `afterdep-<userId>-<día>`), `support_bot_stats` (por día ART: replies, handoffs, errors,
   pausedByAgent, afterDeposit, tokens).
 - **Front:** `#spActBar` (DEPOSITAR / RETIRAR / `#spTicker`) dentro de `#supportPanel`; `VIP.home.spPromoPaint/spPromoOpen/spDeposit/spWithdraw`;
