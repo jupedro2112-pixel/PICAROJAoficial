@@ -3260,3 +3260,8 @@ body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .tn-
 #casinoOverlay > #supportPanel.sp-in-casino .plat-play-now[onclick^="VIP.home.playNow"] { display: none !important; }
 /* #1042-u: "Tengo otro problema" (va directo a un agente) se distingue del resto */
 #casinoOverlay > #supportPanel.sp-in-casino .sp-infobar .sp-ib-help { border-color: var(--p-red, #e60023) !important; color: var(--p-red, #e60023) !important; }
+
+/* #1049 (owner: "sacá el soporte de arriba porque se van a equivocar"): con el chat nuevo, el Soporte vive en la BURBUJA; el botón de la barra del
+   casino se oculta (con el chat clásico queda, porque ahí es el único acceso). */
+body:not(.sp-classic) #ctSupport { display: none !important; }
+

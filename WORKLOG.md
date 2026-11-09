@@ -8,6 +8,12 @@
 
 ## Sesión 2026-11-09
 
+### 1049. IA: quejas de un JUEGO ⇒ soporte de la plataforma; sin el botón Soporte arriba del casino — app v695 (2026-11-09)
+- **Owner:** "siempre que se quejan de algún juego, decirles que hablen al soporte de la página, que nosotros brindamos el servicio de cargas/descargas; y sacá
+  el soporte de arriba porque se van a equivocar". Prompt (`supportBot.js`, sección QUEJAS DE UN JUEGO): juego colgado, jugada no pagada, error de partida,
+  reglas o resultados ⇒ soporte de la plataforma de juego (adentro del casino), sin handoff; si además hay un problema de carga/retiro, handoff.
+  `#ctSupport` oculto con el chat nuevo (`body:not(.sp-classic)` en pin.css); con el chat clásico queda (es el único acceso ahí).
+
 ### 1048. Bono de 1ª carga en el formulario de la LANDING + 2ª revisión completa (3 revisores) — panel v269 (2026-11-09)
 - **Owner:** "cuando se cree la landing que se pueda configurar el % de la primera carga, y si entran con esa landing que cargue automática con ese %".
   Formulario de campaña: "% de bono / Hasta (carga $) / % sobre el resto" (al crear viene 50%). Guarda la MISMA regla de #1024 (`Config['publisherWelcome']`,

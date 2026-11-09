@@ -233,6 +233,13 @@ caso('#1045 Pase a un agente: va a SOPORTE (no reabre en Chats), queda abierto c
   assert.ok(/socket\.on\('support_handoff'/.test(A) && /ESPERA AGENTE/.test(A));
 });
 
+caso('#1049 Quejas de juegos ⇒ soporte de la plataforma (nosotros: cargas y retiros), sin handoff; sin el botón Soporte arriba del casino (chat nuevo)', () => {
+  const B = require('fs').readFileSync(require('path').join(__dirname, '..', 'src', 'services', 'supportBot.js'), 'utf8');
+  assert.ok(/QUEJAS DE UN JUEGO/.test(B) && /SOPORTE DE LA PLATAFORMA DE JUEGO/.test(B) && /Sin handoff y sin ignore/.test(B));
+  const C = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'css', 'pin.css'), 'utf8');
+  assert.ok(/body:not\(\.sp-classic\) #ctSupport \{ display: none !important; \}/.test(C));
+});
+
 (async () => {
   let ok = 0;
   for (const c of casos) { try { await c.fn(); ok++; console.log('✅ ' + c.n); } catch (e) { console.log('❌ ' + c.n + '\n   ' + (e && e.message)); } }
