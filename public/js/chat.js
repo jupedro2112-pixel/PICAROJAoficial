@@ -106,10 +106,11 @@ VIP.chat = (function () {
         // #384: respuesta automática de Soporte con botón al sector (carga automática / retirar premio).
         if (md.kind === 'go_section' || (md.target === 'terms' && md.label)) { // #702: + refund (info de reembolso) y terms (Bases y condiciones, dentro de la app)
             const t = String(md.target || 'full');
-            const act = t === 'receipt' ? "VIP.autoload.sendReceipt()" /* #905: comprobante no válido ⇒ adjuntarlo de nuevo */ : t === 'withdraw' ? "VIP.withdraw.openWithdrawModal()"
-                : t === 'refund' ? "VIP.home.svcRefund()"
+            // #1042-p: retiro / reembolso / sorteo / misiones / ruleta / referidos pasan por VIP.home.spInfo (con Girox abierto, la ventana se abre adentro)
+            const INFO_T = ['withdraw', 'refund', 'sorteo', 'misiones', 'ruleta', 'referidos'];
+            const act = t === 'receipt' ? "VIP.autoload.sendReceipt()" /* #905: comprobante no válido ⇒ adjuntarlo de nuevo */
                 : t === 'terms' ? "VIP.home.openTerms()"
-                : t === 'sorteo' ? "VIP.sorteos.open('mensual')" /* #944: explicación del sorteo ⇒ abre la ventana del sorteo */
+                : INFO_T.includes(t) ? "VIP.home.spInfo('" + t + "')"
                 : "VIP.home.spDeposit()"; /* #1042-e: con Girox abierto ⇒ Carga rápida del casino; si no, la carga automática de siempre */
             const label = escapeHtml(String(md.label || (t === 'withdraw' ? '💸 Ir a Retirar premio' : '⚡ Ir a Carga automática')));
             if (t === 'terms') return `<button type="button" class="chat-terms-mini" onclick="${act}">📄 Bases y condiciones</button>`; // #878: chico, no molesta

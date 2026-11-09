@@ -2469,17 +2469,41 @@
     function _casinoIsOpen() { try { return document.body.classList.contains('casino-open') && !!_el('casinoOverlay') && _el('casinoOverlay').style.display !== 'none'; } catch (_) { return false; } }
     let _casUnread = 0;
     const _mHome = new Map();
+    // Ventanas que se abren con hidden / style.display (sorteos, ruleta) también vuelven solas: un observador las devuelve al cerrarse.
+    function _modalShown(m) { return !(m.hidden || m.classList.contains('hidden') || m.style.display === 'none'); }
     function _modalIntoCasino(id) {
         if (!_casinoIsOpen()) return;
         const m = _el(id), ov = _el('casinoOverlay'); if (!m || !ov || m.parentNode === ov) return;
-        _mHome.set(id, { parent: m.parentNode, next: m.nextSibling, pos: m.style.position, inset: m.style.inset, z: m.style.zIndex });
-        ov.appendChild(m); m.style.position = 'fixed'; m.style.inset = '0'; m.style.zIndex = '100006';
+        const h = { parent: m.parentNode, next: m.nextSibling, pos: m.style.position, inset: m.style.inset, z: m.style.zIndex, obs: null };
+        _mHome.set(id, h);
+        ov.appendChild(m); m.style.position = 'fixed'; m.style.inset = '0'; m.style.setProperty('z-index', '100006', 'important');
+        try {
+            h.obs = new MutationObserver(() => { if (h.shownOnce && !_modalShown(m)) _modalBack(id); else if (_modalShown(m)) h.shownOnce = true; });
+            h.obs.observe(m, { attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+            if (_modalShown(m)) h.shownOnce = true;
+        } catch (_) {}
     }
     function _modalBack(id) {
         const h = _mHome.get(id); if (!h) return; _mHome.delete(id);
+        try { if (h.obs) h.obs.disconnect(); } catch (_) {}
         const m = _el(id); if (!m) return;
         try { if (h.next && h.next.parentNode === h.parent) h.parent.insertBefore(m, h.next); else h.parent.appendChild(m); } catch (_) {}
-        m.style.position = h.pos; m.style.inset = h.inset; m.style.zIndex = h.z;
+        m.style.position = h.pos; m.style.inset = h.inset; m.style.removeProperty('z-index'); if (h.z) m.style.zIndex = h.z;
+    }
+    // #1042-p (owner): "un botón de info sobre lo que pregunta (sorteo, reembolso, misiones…)" + fila abajo del chat de la burbuja. Abre la
+    // ventana de cada cosa; con Girox abierto, ADENTRO del casino (encima del chat), sin mandarlo al menú completo.
+    function spInfo(t) {
+        t = String(t || '');
+        const into = (id) => { try { _modalIntoCasino(id); } catch (_) {} };
+        try {
+            if (t === 'sorteo' || t === 'sorteos') { into('srtModal'); return VIP.sorteos.open('mensual'); }
+            if (t === 'misiones') { into('missionsModal'); return openMissions(); }
+            if (t === 'ruleta') { into('rouletteModal'); return svcRoulette(); }
+            if (t === 'referidos') { into('referralModal'); return VIP.ui.openReferralModal(); }
+            if (t === 'refund') { into('unifiedRefundModal'); return svcRefund(); }
+            if (t === 'withdraw') { into('withdrawModal'); return spWithdraw(); }
+        } catch (_) {}
+        return spDeposit();
     }
     function _modalsBackAll() { Array.from(_mHome.keys()).forEach(_modalBack); }
     function _supportIntoCasino() {
@@ -3058,7 +3082,7 @@
 
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
-        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,

@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1042-p. Bot más resumido + botón de INFO + fila de info en la burbuja — PWA v683 (2026-11-09)
+- **Owner:** "resumí un poco más los mensajes, y poné un botón de info sobre lo que pregunta (sorteo, reembolso, misiones…), y abajo del chat:
+  sorteos, misiones, ruleta diaria, referidos".
+- supportBot.js: campo nuevo `info_topic` (enum `INFO_TOPICS`) en el esquema; prompt "UNA frase corta (~20 palabras), el detalle va en el botón".
+  server.js `_sbInfoButton` ⇒ `metadata.kind:'go_section'` con target (full/withdraw/refund/sorteo/misiones/ruleta/referidos); comprobante sigue igual.
+- PWA: chat.js manda esos targets a `VIP.home.spInfo(t)`, que abre la ventana de cada cosa; con Girox abierto la muda adentro del casino
+  (`_modalIntoCasino` ahora con observador: ventanas con hidden / style.display también vuelven solas). Fila `#spInfoBar` (🎟️ Sorteos · 🎯 Misiones
+  · 🎡 Ruleta diaria · 👥 Referidos, este último `ref-only`) sólo en el chat de la burbuja.
+
 ### 1042-o. Bot nunca deja en visto + ventanas adentro de Girox — PWA v682 (2026-11-09)
 - **Owner:** "probé 2 respuestas, respondió, pero la tercera me clavó el visto" + "el cartel del 100% al apretar VER en el chat de Girox aparece
   recién cuando voy al menú completo".

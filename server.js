@@ -15785,6 +15785,17 @@ function _supportBotSchedule(userId, username) {
   const t0 = Date.now();
   setTimeout(() => { _supportBotRun(userId, username, token, t0).catch((e) => logger.warn(`[support-bot] ${username}: ${e.message}`)); }, 3500);
 }
+const SB_INFO_BTN = {
+  carga: { target: 'full', label: '⚡ Cargar' }, retiro: { target: 'withdraw', label: '💸 Retirar' }, reembolso: { target: 'refund', label: 'ℹ️ Info de reembolsos' },
+  sorteo: { target: 'sorteo', label: 'ℹ️ Info del sorteo' }, misiones: { target: 'misiones', label: 'ℹ️ Misiones' }, ruleta: { target: 'ruleta', label: 'ℹ️ Ruleta diaria' },
+  referidos: { target: 'referidos', label: 'ℹ️ Referidos' }
+};
+function _sbInfoButton(r, reply) {
+  if (r.handoff) return {};
+  if ((!r.infoTopic || r.infoTopic === 'carga') && /comprobante|captura|la foto/i.test(reply)) return { kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante' };
+  const b = r.infoTopic && SB_INFO_BTN[r.infoTopic];
+  return b ? { kind: 'go_section', target: b.target, label: b.label } : {};
+}
 async function _supportBotRun(userId, username, token, t0) {
   if (_sbTimers.get(userId) !== token) return; // llegó otro mensaje: contesta el último
   const cfg = await getSupportBotConfig();
@@ -15871,7 +15882,8 @@ async function _supportBotRun(userId, username, token, t0) {
     const message = await Message.create({ id: uuidv4(), senderId: 'support-bot', senderUsername: agentName, senderRole: 'admin', receiverId: userId, receiverRole: 'user',
       content: reply, type: 'text', channel: 'support', timestamp: new Date(), read: false,
       // Si habla del comprobante, va con el botón "Adjuntar comprobante": abre la GUÍA de 3 pasos (#1030, VIP.autoload.sendReceipt ⇒ pickReceipt), nunca el selector directo.
-      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, (!r.handoff && /comprobante|captura|la foto/i.test(reply)) ? { kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante' } : {}) });
+      // #1042-p (owner): botón de INFO del tema que preguntó (la IA elige info_topic); con Girox abierto se abre adentro del casino.
+      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, _sbInfoButton(r, reply)) });
     io.to(`user_${userId}`).emit('new_message', message);
     io.to(`chat_${userId}`).emit('new_message', message);
     notifyAdmins('new_message', { message, userId, username });

@@ -35,7 +35,7 @@ caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallb
   assert.ok(r.ok); assert.strictEqual(r.reply, '¡Hola! Para cargar tocá DEPOSITAR.'); assert.strictEqual(r.handoff, false);
   const b = lastReq.body;
   assert.strictEqual(b.model, 'claude-opus-5-5'); assert.strictEqual(b.output_config.effort, 'low');
-  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer']);
+  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic']);
   assert.strictEqual(b.output_config.format.schema.additionalProperties, false);
   assert.strictEqual(b.fallbacks, 'default'); assert.strictEqual(lastReq.opts.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
   assert.ok(!('thinking' in b) && !('temperature' in b), 'no manda thinking/temperature (Opus 5.5)');
@@ -48,7 +48,7 @@ caso('Prompt: fijo cacheado primero; datos del servicio y del cliente (etapa sin
   assert.ok(/ETAPA: sin carga/.test(dyn)); assert.ok(/Califica para el bono de primera carga \(100%\)/.test(dyn)); assert.ok(/\$5\.000 en fichas/.test(dyn));
   assert.ok(/TU NOMBRE EN ESTE TURNO: Sofía/.test(dyn)); assert.ok(/referidos está pausado/.test(dyn));
   const fixed = b.system[0].text;
-  assert.ok(/NO tienen nada que ver con el servicio/.test(fixed) && /la gente viene a JUGAR/.test(fixed) && /MAPA DE LA APP/.test(fixed)); assert.ok(/BIEN RESUMIDO/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /sin negarlo ni hacerte pasar/.test(fixed) && /Soy Tati, la asistente virtual/.test(fixed) && /Juego responsable/.test(fixed));
+  assert.ok(/NO tienen nada que ver con el servicio/.test(fixed) && /la gente viene a JUGAR/.test(fixed) && /MAPA DE LA APP/.test(fixed)); assert.ok(/MUY RESUMIDO/.test(fixed) && /info_topic/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /sin negarlo ni hacerte pasar/.test(fixed) && /Soy Tati, la asistente virtual/.test(fixed) && /Juego responsable/.test(fixed));
 });
 caso('Cliente sin bono de bienvenida: el prompt dice que NO se lo ofrezca', async () => {
   nextResp = okResp({ reply: 'ok', handoff: false, handoff_reason: '' });

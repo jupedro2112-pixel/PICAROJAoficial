@@ -25,6 +25,8 @@ const logger = require('../utils/logger');
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-opus-5-5';
+// #1042-p: temas con botón de info abajo de la respuesta (la app abre esa ventana; con Girox abierto, adentro del casino).
+const INFO_TOPICS = ['none', 'carga', 'retiro', 'reembolso', 'sorteo', 'misiones', 'ruleta', 'referidos'];
 // Respuesta en JSON con esquema fijo: el texto para el cliente + si hay que pasarlo a una persona.
 const REPLY_SCHEMA = {
   type: 'object',
@@ -34,9 +36,10 @@ const REPLY_SCHEMA = {
     handoff_reason: { type: 'string', description: 'Motivo corto para el equipo (vacío si handoff es false).' },
     ignore: { type: 'boolean', description: 'true para cortar la charla y dejar de contestarle: molesta, o pregunta cosas que no tienen nada que ver con el servicio.' },
     learn_question: { type: 'string', description: 'Si la duda es GENERAL (le sirve a cualquier cliente), la pregunta en forma genérica y corta; vacío si es personal, un reclamo o no es del servicio.' },
-    learn_answer: { type: 'string', description: 'Respuesta GENÉRICA reutilizable para learn_question (sin nombres, sin datos de esta cuenta); vacío si learn_question está vacío.' }
+    learn_answer: { type: 'string', description: 'Respuesta GENÉRICA reutilizable para learn_question (sin nombres, sin datos de esta cuenta); vacío si learn_question está vacío.' },
+    info_topic: { type: 'string', enum: INFO_TOPICS, description: 'Botón de INFO que va abajo de tu respuesta para que vea el detalle en la app: el tema del que pregunta, o "none".' }
   },
-  required: ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer'],
+  required: ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic'],
   additionalProperties: false
 };
 
@@ -55,7 +58,8 @@ function stablePrompt() {
     '',
     'CÓMO ESCRIBÍS',
     '- Como una persona real de soporte por chat: español rioplatense (vos, cargá, mirá), cálido y directo.',
-    '- BIEN RESUMIDO (pedido del dueño): 1 o 2 frases cortas, tipo WhatsApp. Nada de títulos, listas, negritas ni markdown. Como mucho un emoji.',
+    '- MUY RESUMIDO (pedido del dueño): UNA frase corta (como mucho unas 20 palabras), tipo WhatsApp; dos sólo si de verdad hace falta. Nada de títulos, listas, negritas ni markdown. Como mucho un emoji.',
+    '- El detalle NO va en el texto: elegí info_topic (sorteo, reembolso, misiones, ruleta, referidos, retiro, carga) y abajo de tu mensaje le aparece un botón que abre esa info en la app. Podés decir "tocá el botón de abajo".',
     '- No repitas el saludo si ya saludaste en la charla. No te presentes de nuevo.',
     '- Respondé exactamente lo que preguntan, con los datos de abajo. Si falta algo, preguntá una sola cosa concreta.',
     '- SIN VOLVER LOCO A NADIE (dueño): UNA sola idea por mensaje y, si hay pasos, sólo el PRÓXIMO paso. Nunca varias opciones ni varias pantallas a la vez.',
@@ -225,7 +229,8 @@ async function generateReply(p) {
   const learnQ = (!handoff && !ignore) ? String(out.learn_question || '').trim().slice(0, 300) : '';
   let learnA = learnQ ? String(out.learn_answer || '').trim().slice(0, 800) : '';
   if (!learnIsSafe(learnQ, learnA)) learnA = '';
-  return { ok: true, reply, handoff, ignore, learnQuestion: learnA ? learnQ : '', learnAnswer: learnA, handoffReason: String(out.handoff_reason || '').slice(0, 300), usage: d.usage || null, model: d.model || body.model };
+  const infoTopic = INFO_TOPICS.includes(out.info_topic) && out.info_topic !== 'none' ? out.info_topic : null;
+  return { ok: true, reply, handoff, ignore, infoTopic, learnQuestion: learnA ? learnQ : '', learnAnswer: learnA, handoffReason: String(out.handoff_reason || '').slice(0, 300), usage: d.usage || null, model: d.model || body.model };
 }
 
 // ── #1042-g RESPUESTAS APRENDIDAS: comparar preguntas sin IA (palabras normalizadas, raíz de 4 letras, "no" cuenta) ──
@@ -260,4 +265,5 @@ function bestLearned(text, entries) {
   return best;
 }
 
-module.exports = { isAvailable, generateReply, stablePrompt, serviceFactsText, userFactsText, DEFAULT_MODEL, qTokens, qSimilarity, bestLearned, LEARN_MIN_SCORE, COMPLAINT_RE, learnIsSafe };
+module.exports = {
+  INFO_TOPICS, isAvailable, generateReply, stablePrompt, serviceFactsText, userFactsText, DEFAULT_MODEL, qTokens, qSimilarity, bestLearned, LEARN_MIN_SCORE, COMPLAINT_RE, learnIsSafe };
