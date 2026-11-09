@@ -8,6 +8,23 @@
 
 ## Sesión 2026-11-09
 
+### 1053. Auditoría de SEGURIDAD de TODO el sistema + auditoría de REGALOS (2026-11-09)
+- **Owner:** "revisá bien la seguridad, que no haya ningún ingreso o modificación de parte de nadie; estoy generando muchos depósitos y poca venta, mirá fino los regalos".
+- Arreglado (seguridad, test `scripts/test-security-1053.js`):
+  - Link de acceso: un DEPOSITOR ya no lo genera para clientes que ya cargaron (link + cambio de clave forzado = entrar y retirar a su CBU). Queda log de quién lo genera.
+  - Push: los agentes sólo mandan a UN cliente (`/send`); masivas, por usuarios, plantillas y estrategia = sólo el admin general (notificationRoutes `requireAdmin`).
+  - Login por CÓDIGO SMS (login, verificación, reset) sólo para `role:'user'` (el staff entraba sin clave con un token de 90 días).
+  - Código temporal: vence a las 24 h (antes 7 días) y cada error cuenta para el bloqueo por cuenta.
+  - El staff ya no recibe `pendingAccessCode` en `GET /api/users/:id`.
+  - "asd123" (clave pública vieja) en una cuenta que YA cargó: no entra, se le pone clave al azar (+tokenVersion) y recupera por SMS / Soporte (`DEFAULT_PASSWORD_REVOKED`).
+- Arreglado (regalos): bono que TIPEA el agente en la carga manual ⇒ `_capGift`, 0 a secundarias / marcadas / bloqueadas, agentes hasta 50% de la carga;
+  bono de 1ª carga con reserva ATÓMICA (`User.firstDepositBonusAt`, `_reserveFirstDepositBonus`): dos transferencias seguidas ya no cobran dos veces.
+- **Señalado, sin cambiar (decisión del owner):** depositor puede cargar fichas sin comprobante ni tope (poner tope por carga/día a agentes); "entrar sin clave"
+  sin vencimiento; publicista con link de acceso a sus clientes; Render (verificar JWT_SECRET distinto y sin token de hgcash) y `LANDING_DEFAULT_PASSWORD` en SSM;
+  webhook hgcash sin chequear `accountId` (fan-out). Regalos: 10% en TODA carga automática (el más caro), ruleta dorada diaria con premios en plata ×1/×3,
+  historia con bono 100% semanal, 1ª carga + extra por instalar ($5.000 fijo de #1043 = 350% de una carga de $2.000), tres reembolsos sobre la misma pérdida,
+  base del reembolso diario que puede contar plata del bono, semáforo de Negocio que compara regalos contra depósitos (debería ser contra cargas − retiros).
+
 ### 1052. Ingreso y registro en NEGRO, sólo Registrate / Iniciar sesión — app v696 (2026-11-09)
 - **Owner:** "en el registro se pierden las palabras del registro por SMS por el fondo; poné fondo negro, tapá todo el servicio, dejá sólo Registrate / Iniciar
   sesión, sacá historias y Telegram". pin.css (final): tokens `--p-*` redefinidos SÓLO dentro de `#loginScreen` (negro, letras blancas, inputs oscuros) y fuera

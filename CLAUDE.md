@@ -84,6 +84,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   Staff: sesión de 8 h y logout revoca (tokenVersion). Login con bloqueo por cuenta (10 fallos / 15 min) y claves de Datos/INICIO con 6 intentos.
   **#995:** el chequeo compara la ruta sin barras finales (no sacarlo); antifraude del retiro fail-closed (`level:'unchecked'` ⇒ revisión);
   bono de historia una vez por historia (`User.storyBonusUsed`); carga manual repetida en 90 s pide confirmar (`DUP_DEPOSIT`). Detalle: ARCHITECTURE "#995".
+- **SEGURIDAD #1053:** link de acceso de un depositor sólo para clientes SIN cargas; push masivas / plantillas sólo admin (agentes: `/send` a uno);
+  login por código SMS sólo `role:'user'`; "asd123" en cuenta con cargas ⇒ `DEFAULT_PASSWORD_REVOKED`; bono que tipea el agente pasa por `_capGift`; el bono de
+  1ª carga se reserva con `_reserveFirstDepositBonus` (un camino NUEVO de bono de 1ª carga tiene que usarla). Test `scripts/test-security-1053.js`.
 - **EL REPO ES PÚBLICO en GitHub (#413).** Nunca escribir claves, hashes, tokens ni API keys en código ni en docs (ni en el
   WORKLOG al citar pedidos del owner: reemplazar por "[clave]"). Credenciales siempre por env/SSM o por el panel (cifradas).
   La clave del admin `iginte1000` se rotó el 2026-10-18 y vive sólo en manos del owner.

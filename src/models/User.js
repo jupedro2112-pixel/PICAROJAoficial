@@ -705,6 +705,7 @@ const userSchema = new mongoose.Schema({
   },
   // #995 (seguridad): historias cuyo bono ya se USÓ en una carga (últimas 30): no se puede volver a reclamar mientras la historia siga vigente.
   storyBonusUsed: { type: [String], default: [] },
+  firstDepositBonusAt: { type: Date, default: null }, // #1053: reserva atómica del bono de 1ª carga (no se cobra dos veces)
   dailyRouletteWonAt: { type: Date, default: null },
 
   // ============================================

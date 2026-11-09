@@ -6312,10 +6312,11 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       const code = String(temporaryCode).trim();
       const codeOk = userObj.pendingAccessCode
         && userObj.phoneVerificationPending === true
-        && (!userObj.pendingAccessCodeAt || Date.now() - new Date(userObj.pendingAccessCodeAt).getTime() < 7 * 86400000) // #965
+        && userObj.pendingAccessCodeAt && Date.now() - new Date(userObj.pendingAccessCodeAt).getTime() < 24 * 3600000 // #965 → #1053: 24 h
         && safeCompare(code, String(userObj.pendingAccessCode));
       if (!codeOk) {
         logger.debug(`Invalid temporary code for ${loginIdentifier}`);
+        _loginFail(_lk); // #1053: cuenta para el bloqueo (antes se podía probar sin límite por cuenta)
         return res.status(401).json({ error: 'Código temporal inválido o vencido' });
       }
       isValidPassword = true;
@@ -6337,6 +6338,18 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       // cambio de contraseña.
     }
     
+    // #1053 (seguridad): la clave pública "asd123" (cuentas viejas de landing/agente) abría cuentas CON plata: entraba cualquiera y
+    // cambiaba la clave sin saber la actual. Si la cuenta ya cargó, no entra: se le pone una clave al azar y se recupera por SMS o Soporte.
+    if (isValidPassword && isDefaultPassword && !isAdminRole(userObj.role) && userObj.loginWithoutPassword !== true) {
+      try {
+        if (await Transaction.exists({ $or: [{ userId: userObj.id }, { username: userObj.username }], type: 'deposit', status: { $nin: ['failed', 'cancelled'] } })) {
+          await User.updateOne({ id: userObj.id }, { $set: { password: await bcrypt.hash(crypto.randomBytes(18).toString('hex'), 10) }, $inc: { tokenVersion: 1 } });
+          logger.warn(`[login] ${userObj.username}: clave por defecto en cuenta con cargas ⇒ anulada (recupera por SMS / Soporte)`);
+          _loginFail(_lk);
+          return res.status(403).json({ error: 'Por seguridad tu clave venció. Entrá con "🔑 Olvidé mi contraseña" (te llega un SMS) o escribinos por Soporte.', code: 'DEFAULT_PASSWORD_REVOKED' });
+        }
+      } catch (_) {}
+    }
     if (!isValidPassword) {
       logger.debug(`Wrong password for ${loginIdentifier}`);
       { _loginFail(_lk); return res.status(401).json({ error: 'Credenciales inválidas' }); }
@@ -7625,7 +7638,7 @@ app.post('/api/auth/login-otp-request', authLimiter, smsIpLimiter, async (req, r
 
     if (!(await getSmsEnabled())) return res.status(503).json({ error: await _smsOffText(), code: 'SMS_OFF' }); // #1023 (igual para todos: no revela nada)
     // Check if user exists with this phone (verified)
-    const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true }).lean();
+    const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true, role: 'user' }).lean(); // #1053: el staff no entra por SMS
 
     // ANTI-ENUMERATION: Always respond the same way
     if (user) {
@@ -7663,7 +7676,7 @@ app.post('/api/auth/login-otp-verify', authLimiter, async (req, res) => {
       return res.status(400).json({ error: otpResult.error || 'Código incorrecto o expirado' });
     }
 
-    const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true });
+    const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true, role: 'user' }); // #1053: el staff no entra por SMS
     if (!user) {
       return res.status(400).json({ error: 'Código incorrecto o expirado' });
     }
@@ -7772,7 +7785,7 @@ app.post('/api/auth/verify-reset-otp', sensitiveLimiter, async (req, res) => {
     }
 
     // Buscar usuario con ese teléfono verificado
-    const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true }).lean();
+    const user = await User.findOne({ phone: normalizedPhone, phoneVerified: true, role: 'user' }).lean(); // #1053: el staff no entra por SMS
 
     if (!user) {
       return res.status(400).json({ error: 'Código incorrecto o expirado' });
@@ -11467,7 +11480,14 @@ async function _agentDepositHandler(req, res, body) {
     if (typeof _adapter.isConnected === 'function' && !_adapter.isConnected()) {
       return res.status(400).json({ error: `${platforms.labelOf(_platformId)} no tiene API conectada todavía: no se puede cargar desde acá. Cargalo en su panel o mandale el link al cliente.`, code: 'platform_not_connected', platform: _platformId });
     }
-    const _agentBonus = parseFloat(bonus) || 0;
+    let _agentBonus = parseFloat(bonus) || 0; // #1053 (revisión de regalos): antes iba sin tope ni control
+    if (_agentBonus > 0) {
+      if (user.duplicateOf || _isFlagged(user) || user.isBlocked) _agentBonus = 0;
+      else {
+        if (req.user.role !== 'admin') _agentBonus = Math.min(_agentBonus, Math.round((parseFloat(amount) || 0) * 0.5)); // agentes: hasta 50% de la carga
+        try { _agentBonus = await _capGift(_agentBonus); } catch (_) {}
+      }
+    }
     const _auto = await resolveAutoBonus(user, parseFloat(amount), req.user.username || 'agente', { payer: (body && body._payer) || null }); // #1033
     const _effectiveBonus = _auto.bonus > 0 ? _auto.bonus : _agentBonus;
     const bonusRequested = _effectiveBonus > 0;
@@ -15465,6 +15485,11 @@ async function getFirstDepositBonusPct(who) {
 }
 // ¿Es la primera carga real del cliente? Se evalúa ANTES de persistir la Transaction de la carga en curso
 // (así lo hacen /api/admin/deposit y _hgcashCreditToPlatform) ⇒ 0 cargas previas = primera.
+async function _reserveFirstDepositBonus(user, pct, label) { // #1053: marca atómica (webhook + consulta del banco o dos instancias a la vez)
+  const r = await User.updateOne({ id: user.id, firstDepositBonusAt: null }, { $set: { firstDepositBonusAt: new Date() } });
+  if (!r || !r.modifiedCount) return { claimed: false };
+  return { pct, claimed: true, source: 'first_deposit', label, revert: async () => { await User.updateOne({ id: user.id }, { $set: { firstDepositBonusAt: null } }).catch(() => {}); } };
+}
 async function _isFirstRealDeposit(user) {
   try {
     const n = await Transaction.countDocuments({
@@ -16512,7 +16537,7 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   let c = { claimed: false };
   if (!blockWelcome) {
     const fp0 = await getFirstDepositBonusPct(user); // #1024: el del publicista del cliente, si tiene
-    if (fp0 > 0 && await _isFirstRealDeposit(user)) c = { pct: fp0, claimed: true, source: 'first_deposit', label: `bono de bienvenida de la primera carga (${fp0}%)`, revert: async () => {} };
+    if (fp0 > 0 && await _isFirstRealDeposit(user)) c = await _reserveFirstDepositBonus(user, fp0, `bono de bienvenida de la primera carga (${fp0}%)`);
   } else {
     // #839: que se SEPA por qué una primera carga entró sin el bono de bienvenida (antes no quedaba rastro visible para el agente).
     try {
@@ -16534,7 +16559,7 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   // hgcash), con el tope. Va ANTES del 10% de carga automática (#274): en la primera carga manda éste.
   if (!c.claimed && !blockWelcome) {
     const fp = await getFirstDepositBonusPct(user); // #1024
-    if (fp > 0 && await _isFirstRealDeposit(user)) c = { pct: fp, claimed: true, source: 'first_deposit', label: `bono de bienvenida de la primera carga (${fp}%)`, revert: async () => {} };
+    if (fp > 0 && await _isFirstRealDeposit(user)) c = await _reserveFirstDepositBonus(user, fp, `bono de bienvenida de la primera carga (${fp}%)`);
   }
   // #274 (owner 2026-10-17): "la bonificación de la carga automática es del 10%, dice 0%". Toda carga
   // AUTOMÁTICA (hgcash) sin otro bono pendiente lleva el % de Config['autoLoadBonusPct'] (el mismo que
@@ -22102,7 +22127,7 @@ app.get('/api/users/:userId', authMiddleware, async (req, res) => {
     
     // #413 (seguridad): el cliente ve SOLO sus campos públicos (antes '-password' exponía notas internas, tags, IP, tokens FCM…).
     const user = adminRoles.includes(req.user.role)
-      ? await User.findOne({ id: userId }).select('-password -accessLinkHash -installLinks -phoneKey').lean() // #1033: hashes/llaves internas no viajan al panel
+      ? await User.findOne({ id: userId }).select('-password -accessLinkHash -installLinks -phoneKey -pendingAccessCode -tokenVersion').lean() // #1033: hashes/llaves internas no viajan al panel
       : await User.findOne({ id: userId }).select(USER_PUBLIC_FIELDS).lean();
     
     if (!user) {
@@ -24746,6 +24771,15 @@ app.post('/api/admin/users/:userId/access-link', authMiddleware, adminMiddleware
     if (!['admin', 'depositor'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Solo el admin general o un depositor pueden generar links de acceso.' });
     }
+    // #1053 (seguridad): con un link + el cambio de clave forzado, un agente podía entrar a la cuenta de un cliente con saldo y retirar a su CBU.
+    // El depositor sólo puede para clientes SIN cargas reales (altas nuevas); para el resto, sólo el admin general.
+    if (req.user.role !== 'admin') {
+      const _t = await User.findOne({ id: req.params.userId }).select('id username').lean();
+      if (_t && await Transaction.exists({ $or: [{ userId: _t.id }, { username: _t.username }], type: 'deposit', status: { $nin: ['failed', 'cancelled'] } })) {
+        return res.status(403).json({ error: 'Este cliente ya cargó: el link de acceso lo genera sólo el admin general (seguridad).', code: 'ADMIN_ONLY_FOR_DEPOSITORS' });
+      }
+    }
+    logger.warn(`[access-link] generado por ${req.user.username} (${req.user.role}) para userId=${req.params.userId}`);
     const { userId } = req.params;
     const user = await User.findOne({ id: userId }).select('id username role isBlocked').lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });

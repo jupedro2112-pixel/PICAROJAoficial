@@ -143,6 +143,11 @@ async function requireAdmin(req, res, next) {
   }
 
   const adminRoles = ['admin', 'depositor', 'withdrawer'];
+  // #1053 (seguridad): un agente podía mandar push a TODOS los clientes ("transferí a este CBU") y cambiar plantillas.
+  // Los agentes sólo pueden mandar a UN cliente (POST /send); todo lo demás que no sea leer, sólo el admin general.
+  if (decoded.role !== 'admin' && req.method !== 'GET' && req.method !== 'HEAD' && !/^\/send\/?$/.test(req.path)) {
+    return res.status(403).json({ error: 'Solo el admin general.' });
+  }
   if (!adminRoles.includes(decoded.role)) {
     _dlog('[NOTIF-ADMIN] requireAdmin — role not allowed:', decoded.role);
     return res.status(403).json({ error: 'No tienes permisos de administrador' });
