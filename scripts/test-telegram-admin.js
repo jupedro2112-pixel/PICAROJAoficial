@@ -48,5 +48,14 @@ caso('Revisión: Config.collection SIEMPRE con la key en minúsculas (getConfig 
   const bad = [...S.matchAll(/Config\.collection\.\w+\(\{ key: '([^']+)'/g)].map((m) => m[1]).filter((k) => k !== k.toLowerCase());
   assert.deepStrictEqual(bad, []);
 });
+caso('#1047 Sólo con el token: canal detectado solo (my_chat_member), grupo PENDIENTE hasta aprobar en el panel, webhook con sólo el token', () => {
+  const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/allowed_updates: \['callback_query', 'message', 'my_chat_member'\]/.test(S));
+  assert.ok(/if \(st === 'administrator' && !c\.channel\) \{/.test(S), 'canal sólo si no hay uno cargado');
+  assert.ok(/adminPending: pend\.concat/.test(S) && !/adminChats: pend/.test(S), 'un grupo agregado NUNCA queda vinculado sin aprobar');
+  assert.ok(/app\.post\('\/api\/admin\/telegram\/admin-approve', authMiddleware, adminMiddleware, async \(req, res\) => \{ \/\/ #1047\n  if \(req\.user\.role !== 'admin'\)/.test(S));
+  assert.ok(/const c = await _tgCfg\(\); if \(c\.token\) await _tgSetWebhook\(c\);/.test(S));
+  assert.ok(/if \(u\.my_chat_member\) \{ await _tgOnMyChatMember\(c, u\.my_chat_member\); return; \}/.test(S));
+});
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

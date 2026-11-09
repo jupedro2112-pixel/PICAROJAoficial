@@ -809,10 +809,10 @@ document.addEventListener('change', function (ev) {
                     <div style="border:2px solid var(--p-red, #e60023);border-radius:12px;padding:12px;margin-bottom:10px;">
                         <h4 style="margin:0 0 4px;">📣 Canal de Telegram <span id="tgState" style="font-weight:700;font-size:12.5px;"></span></h4>
                         <p style="margin:0 0 8px;font-size:12.5px;line-height:1.5;"><b>Cada historia</b> que sale en la app (las tuyas y las automáticas) se publica también en el canal con su foto y el botón <b>🎰 Entrar a PICA ROJA</b>, <b>repartidas en el día</b> (una cada X minutos, nada de noche salvo las que tienen bono). Arriba del canal queda <b>fijado un panel del mes</b> que se actualiza solo cada hora: beneficios, premios pagados, lo regalado, el premio más grande y el sorteo, con botones que abren una ventanita. No van al canal las historias personales ni los códigos sorpresa.</p>
-                        <p style="margin:0 0 8px;font-size:12px;line-height:1.5;color:var(--p-muted,#777);"><b>Cómo conectarlo:</b> 1) En BotFather copiá el token del bot y pegalo acá (se guarda cifrado; nunca lo pegues en otro lado). 2) En Telegram agregá el bot como <b>administrador del canal</b> con permiso de publicar, editar y fijar mensajes. 3) Escribí el @ del canal y tocá Guardar: te avisa si falta algo.</p>
+                        <p style="margin:0 0 8px;font-size:12px;line-height:1.5;color:var(--p-muted,#777);"><b>Cómo conectarlo (todo lo demás es automático):</b> 1) Pegá el token del bot (BotFather) y tocá Guardar. 2) En Telegram agregá el bot como <b>administrador del canal</b> (publicar, editar y borrar mensajes): el canal se conecta SOLO y aparece el panel fijado. 3) Para el grupo de reportes: agregá el bot a tu grupo y tocá <b>✅ Aprobar</b> abajo. Todo lo de abajo ya viene configurado; cambialo sólo si querés.</p>
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">
                             <label style="font-size:12.5px;">Token del bot <input type="password" id="tgToken" autocomplete="off" placeholder="pegalo sólo para cambiarlo" style="width:100%;"></label>
-                            <label style="font-size:12.5px;">Canal (@nombre o -100…) <input type="text" id="tgChannel" placeholder="@picarojaoficial" style="width:100%;"></label>
+                            <label style="font-size:12.5px;">Canal (se completa solo) <input type="text" id="tgChannel" placeholder="se completa al agregar el bot al canal" style="width:100%;"></label>
                             <label style="font-size:12.5px;">Link del botón <input type="text" id="tgAppUrl" placeholder="https://picaroja.com" style="width:100%;"></label>
                             <label style="font-size:12.5px;">Minutos entre posteos <input type="number" id="tgGap" min="10" max="600" style="width:100%;"></label>
                         </div>
@@ -830,11 +830,12 @@ document.addEventListener('change', function (ev) {
                         </div>
                         <div style="margin-top:8px;padding:8px;border:1px solid var(--p-border,#ddd);border-radius:10px;">
                             <div style="font-weight:700;font-size:13px;">🔒 Grupo privado de reportes</div>
-                            <p style="margin:4px 0;font-size:12px;color:var(--p-muted,#777);">Un grupo de Telegram tuyo con botones para ver ventas del día, del mes, retención, embudo, regalos, campañas, alertas, retiros frenados, sorteo e IA. Pasos: 1) creá el grupo y agregá al bot; 2) tocá "Generar código"; 3) mandá en el grupo el comando que aparece (vale 15 min, un solo uso). Todo el que esté en el grupo ve los números.</p>
+                            <p style="margin:4px 0;font-size:12px;color:var(--p-muted,#777);">Un grupo de Telegram tuyo con botones para ver ventas del día y del mes, retención, embudo, regalos, campañas, alertas, retiros frenados, sorteo e IA. <b>Agregá el bot a tu grupo y aparece acá para aprobarlo</b> (un toque). Si no aparece, usá el código. Todo el que esté en el grupo ve los números.</p>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                                <button class="btn-secondary btn-small" onclick="tgAdminPair()">🔑 Generar código</button>
+                                <button class="btn-secondary btn-small" onclick="tgAdminPair()">🔑 Vincular con código (alternativa)</button>
                                 <code id="tgAdminCmd" style="font-size:13px;user-select:all;"></code>
                             </div>
+                            <div id="tgAdminPending" style="margin-top:6px;font-size:12.5px;"></div>
                             <div id="tgAdminChats" style="margin-top:6px;font-size:12.5px;"></div>
                             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;font-size:12.5px;">
                                 <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="tgRepDaily" style="width:auto;"> Resumen de ayer (9 h)</label>

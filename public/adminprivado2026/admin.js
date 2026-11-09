@@ -6383,6 +6383,7 @@ async function loadTgChannel() {
         const dr = c.drop || {}; if (g('tgDropOn')) g('tgDropOn').checked = dr.on !== false; if (g('tgDropAmount')) g('tgDropAmount').value = dr.amount || 5000; if (g('tgDropMax')) g('tgDropMax').value = dr.maxClaims || 10; if (g('tgDropEvery')) g('tgDropEvery').value = dr.everyDays || 15; if (g('tgDropHours')) g('tgDropHours').value = dr.hours || 48;
         if (g('tgSorteoPost')) g('tgSorteoPost').checked = c.sorteoPost !== false;
         const ar = c.adminReports || {}; if (g('tgRepDaily')) g('tgRepDaily').checked = ar.daily !== false; if (g('tgRepWeekly')) g('tgRepWeekly').checked = ar.weekly !== false; if (g('tgRepMonthly')) g('tgRepMonthly').checked = ar.monthly !== false;
+        if (g('tgAdminPending')) g('tgAdminPending').innerHTML = (c.adminPending || []).map((x) => '🕒 <b>' + escapeHtml(x.title || x.id) + '</b> <span style="color:#888;">(agregado' + (x.by ? ' por ' + escapeHtml(x.by) : '') + ')</span> <button class="btn-primary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminApprove(this.dataset.id, true)">✅ Aprobar</button> <button class="btn-secondary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminApprove(this.dataset.id, false)">Descartar</button>').join('<br>');
         if (g('tgAdminChats')) g('tgAdminChats').innerHTML = (c.adminChats || []).length ? c.adminChats.map((x) => '✅ <b>' + escapeHtml(x.title || x.id) + '</b> <span style="color:#888;">(vinculado ' + escapeHtml(x.at ? new Date(x.at).toLocaleDateString('es-AR') : '') + (x.by ? ' por ' + escapeHtml(x.by) : '') + ')</span> <button class="btn-secondary btn-small" data-id="' + escapeHtml(x.id) + '" onclick="tgAdminUnlink(this.dataset.id)">Desvincular</button>').join('<br>') : '<span style="color:#888;">Ningún grupo vinculado todavía.</span>';
         if (g('tgMirror')) g('tgMirror').checked = c.mirror !== false; if (g('tgPanel')) g('tgPanel').checked = c.panel !== false;
         if (g('tgToken')) g('tgToken').placeholder = c.hasToken ? ('guardado (…' + (c.tokenLast4 || '') + ') · pegá uno nuevo sólo para cambiarlo') : 'pegá el token de BotFather';
@@ -6394,6 +6395,8 @@ async function loadTgChannel() {
         L.push('📤 Historias esperando para el canal: <b>' + (j.queue || 0) + '</b> · último posteo: ' + f(c.lastPostAt) + (c.panelMsgId ? ' · 📌 panel fijado' : ''));
         if ((j.posted || []).length) L.push('Últimas publicadas: ' + j.posted.map((p) => escapeHtml(p.title || p.id) + ' (' + f(p.tgPostedAt) + ')').join(' · '));
         const ld = j.lastDrop; L.push('🎁 Código de Telegram: ' + (ld ? '<b>' + escapeHtml(ld.code) + '</b> ' + ld.claims + '/' + ld.maxClaims + ' (' + (ld.status === 'active' ? 'activo' : ld.status === 'completed' ? 'agotado' : 'vencido') + ', ' + f(ld.startsAt) + ')' : 'todavía no salió') + ' · próximo: ' + f(c.dropNextAt));
+        if (c.channelCandidate) L.push('🔁 El bot también es admin de <b>' + escapeHtml(c.channelCandidate.title || c.channelCandidate.id) + '</b>. <button class="btn-secondary btn-small" onclick="tgUseChannel()">Usar ese canal</button>');
+        if (c.hasToken && !c.channel) L.push('👉 Falta un paso: agregá a <b>@' + escapeHtml(c.botUsername || 'tu bot') + '</b> como administrador de tu canal y se conecta solo (tocá 🔄 en unos segundos).');
         if (c.lastError) L.push('<span style="color:#c62828;">⚠️ Último error (' + f(c.lastErrorAt) + '): ' + escapeHtml(c.lastError) + '</span>');
         if (info) info.innerHTML = L.join('<br>');
     } catch (_) { st.textContent = '· error de conexión'; }
@@ -6432,6 +6435,16 @@ async function tgAdminPair() {
         showToast('🔑 Mandá en el grupo el comando que aparece (vale 15 min)', 'success');
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
+async function tgAdminApprove(id, approve) { // #1047: grupo agregado ⇒ aprobar / descartar con un toque
+    try {
+        const r = await authFetch('/api/admin/telegram/admin-approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, approve }) });
+        const j = await r.json().catch(() => ({})); if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
+        showToast(approve ? '✅ Grupo aprobado: ya ve los reportes' : 'Grupo descartado (el bot sale del grupo)', 'success'); loadTgChannel();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function tgUseChannel() {
+    try { const r = await authFetch('/api/admin/telegram/use-channel', { method: 'POST' }); if (!r.ok) { showToast('No se pudo', 'error'); return; } showToast('📣 Canal cambiado', 'success'); loadTgChannel(); } catch (_) { showToast('Error de conexión', 'error'); }
+}
 async function tgAdminUnlink(id) {
     try {
         const r = await authFetch('/api/admin/telegram/admin-unlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
@@ -6439,7 +6452,7 @@ async function tgAdminUnlink(id) {
         showToast('🔒 Grupo desvinculado', 'success'); loadTgChannel();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
-window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow; window.tgAdminPair = tgAdminPair; window.tgAdminUnlink = tgAdminUnlink;
+window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow; window.tgAdminPair = tgAdminPair; window.tgAdminApprove = tgAdminApprove; window.tgUseChannel = tgUseChannel; window.tgAdminUnlink = tgAdminUnlink;
 async function saveSupportBot() {
     const g = (id) => document.getElementById(id);
     const body = { classic: !!(g('sbClassic') && g('sbClassic').checked), enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), aiMaxReplies: Number(g('sbAiMax') && g('sbAiMax').value), learnedOnly: !!(g('sbLearnedOnly') && g('sbLearnedOnly').checked), autoApproveAt: Number(g('sbAutoApprove') && g('sbAutoApprove').value) || 0, extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };

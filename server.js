@@ -30964,6 +30964,33 @@ async function _tgAdminOnMessage(c, msg) {
   const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c, chat.id, r.text, r.markup);
   return true;
 }
+// #1047 (owner: "todo automatizado, que sólo tenga que completar el token"): cuando agregan al bot a un CANAL como admin y no hay canal cargado,
+// ese canal queda conectado solo (y arranca el panel). Cuando lo agregan a un GRUPO, queda PENDIENTE de aprobación en el panel (un botón, sin
+// códigos): nunca se mandan números a un grupo que el admin no aprobó (cualquiera podría agregar al bot a su grupo). Si lo sacan, se desconecta.
+async function _tgOnMyChatMember(c, upd) {
+  const chat = upd.chat || {}; const st = (upd.new_chat_member && upd.new_chat_member.status) || ''; const by = String((upd.from && (upd.from.username || upd.from.first_name)) || '').slice(0, 40);
+  const inside = st === 'administrator' || st === 'member' || st === 'creator'; const out = st === 'left' || st === 'kicked';
+  if (chat.type === 'channel') {
+    if (st === 'administrator' && !c.channel) {
+      await _tgSet({ channel: String(chat.id), channelTitle: String(chat.title || '').slice(0, 80) || null, panelMsgId: null, since: c.since || new Date(), lastError: null });
+      logger.info(`[telegram] canal conectado solo: ${chat.title} (${chat.id}) por ${by}`);
+      setTimeout(() => { _tgPanelTick(true).catch(() => {}); }, 3000);
+    } else if (String(chat.id) === String(c.channel) && (out || st === 'member')) {
+      await _tgSet({ lastError: 'El bot ya no es administrador del canal: volvé a agregarlo como admin.', lastErrorAt: new Date() });
+    } else if (st === 'administrator' && String(chat.id) !== String(c.channel) && !String(c.channel).startsWith('@')) {
+      await _tgSet({ channelCandidate: { id: String(chat.id), title: String(chat.title || '').slice(0, 80), at: new Date(), by } });
+    } else if (st === 'administrator' && String(c.channel).startsWith('@')) { // cargado como @nombre: se guarda el título si es el mismo
+      try { const g = await tgChannel.call(c.token, 'getChat', { chat_id: c.channel }); if (g.ok && String(g.result.id) === String(chat.id)) await _tgSet({ channelTitle: g.result.title || null, lastError: null }); else await _tgSet({ channelCandidate: { id: String(chat.id), title: String(chat.title || '').slice(0, 80), at: new Date(), by } }); } catch (_) {}
+    }
+    return;
+  }
+  if (chat.type !== 'group' && chat.type !== 'supergroup') return;
+  if (out) { await _tgSet({ adminChats: (c.adminChats || []).filter((x) => String(x.id) !== String(chat.id)), adminPending: (c.adminPending || []).filter((x) => String(x.id) !== String(chat.id)) }); return; }
+  if (!inside || _tgAdminLinked(c, chat.id)) return;
+  const pend = (c.adminPending || []).filter((x) => String(x.id) !== String(chat.id) && new Date(x.at) > new Date(Date.now() - 7 * 86400000));
+  await _tgSet({ adminPending: pend.concat([{ id: chat.id, title: String(chat.title || '').slice(0, 80), at: new Date(), by }]).slice(-5) });
+  await _tgAdminSend(c, chat.id, '👋 <b>Hola, soy el bot de PICA ROJA.</b>\nPara ver los reportes en este grupo, el administrador tiene que APROBARLO en el panel:\nConfiguración → 🆕 NUEVO → 📣 Canal de Telegram → 🔒 Grupo de reportes → ✅ Aprobar.');
+}
 // Botones 'ad:*' del grupo: SÓLO en un chat vinculado; edita el mismo mensaje (no llena el grupo).
 const _tgAdminBusy = new Map();
 async function _tgAdminOnCallback(c, cq) {
@@ -30990,6 +31017,32 @@ app.post('/api/admin/telegram/admin-pair', authMiddleware, adminMiddleware, asyn
     res.json({ success: true, code, until, bot: c.botUsername || null, command: '/vincular' + (c.botUsername ? '@' + c.botUsername : '') + ' ' + code });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
+app.post('/api/admin/telegram/admin-approve', authMiddleware, adminMiddleware, async (req, res) => { // #1047
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _tgCfg(); const id = String((req.body || {}).id || ''); const ok = (req.body || {}).approve !== false;
+    const p = (c.adminPending || []).find((x) => String(x.id) === id); if (!p) return res.status(404).json({ error: 'Ese grupo ya no está pendiente.' });
+    const set = { adminPending: (c.adminPending || []).filter((x) => String(x.id) !== id) };
+    if (ok) set.adminChats = (c.adminChats || []).filter((x) => String(x.id) !== id).concat([{ id: p.id, title: p.title, at: new Date(), by: req.user.username }]).slice(-5);
+    await _tgSet(set);
+    if (ok) {
+      logger.info(`[telegram reportes] grupo aprobado: ${p.title} (${p.id}) por ${req.user.username}`);
+      const c2 = await _tgCfg();
+      await _tgAdminSend(c2, p.id, '✅ <b>Grupo aprobado.</b> Acá ves los números con los botones, y llegan solos el resumen de ayer (9 h), el análisis semanal (lunes) y el cierre del mes (día 1).\n⚠️ Todo el que esté en este grupo ve los números.');
+      _tgAdminSnapTick(true).catch(() => {}).then(async () => { const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c2, p.id, r.text, r.markup); });
+    } else if (c.token) tgChannel.call(c.token, 'leaveChat', { chat_id: p.id }).catch(() => {});
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/telegram/use-channel', authMiddleware, adminMiddleware, async (req, res) => { // #1047: cambiar al canal donde se agregó al bot
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _tgCfg(); if (!c.channelCandidate) return res.status(404).json({ error: 'No hay otro canal.' });
+    await _tgSet({ channel: c.channelCandidate.id, channelTitle: c.channelCandidate.title || null, channelCandidate: null, panelMsgId: null, lastError: null });
+    setTimeout(() => { _tgPanelTick(true).catch(() => {}); }, 2000);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
 app.post('/api/admin/telegram/admin-unlink', authMiddleware, adminMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
   try {
@@ -31004,7 +31057,7 @@ async function _tgSetWebhook(c) {
   if (!c.token) return { ok: false, error: 'sin token' };
   let secret = c.webhookSecret;
   if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _tgSet({ webhookSecret: secret }); }
-  return tgChannel.call(c.token, 'setWebhook', { url: c.appUrl + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message'], drop_pending_updates: true });
+  return tgChannel.call(c.token, 'setWebhook', { url: c.appUrl + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message', 'my_chat_member'], drop_pending_updates: true }); // #1047: my_chat_member = lo agregaron/sacaron de un canal o grupo
 }
 const _tgPrivSeen = new Map(); // revisión: freno por chat privado (2 s)
 app.post('/api/telegram/webhook', async (req, res) => {
@@ -31014,6 +31067,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
     if (!c.webhookSecret || got.length !== c.webhookSecret.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(c.webhookSecret))) return res.status(401).end();
     res.json({ ok: true }); // a Telegram se le contesta enseguida; lo demás sigue acá
     const u = req.body || {};
+    if (u.my_chat_member) { await _tgOnMyChatMember(c, u.my_chat_member); return; } // #1047
     // #1046: grupo privado de reportes (vincular / menú / botones ad:*) — antes que todo lo demás.
     if (u.callback_query && /^ad:[a-z]+$/.test(String(u.callback_query.data || ''))) { await _tgAdminOnCallback(c, u.callback_query); return; }
     if (u.message && u.message.chat && u.message.chat.type !== 'private') { await _tgAdminOnMessage(c, u.message); return; }
@@ -31050,7 +31104,7 @@ app.get('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res)
     const queue = (c.token && c.channel && c.mirror) ? await Story.countDocuments(_tgStoryQuery(c, now)) : 0;
     const posted = await Story.find({ tgPostedAt: { $ne: null } }).sort({ tgPostedAt: -1 }).limit(5).select('id title tgPostedAt tgMsgId').lean();
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false, adminChats: (c.adminChats || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), adminReports: Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {}), adminPairUntil: c.adminPairUntil || null }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
+    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false, adminChats: (c.adminChats || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), adminReports: Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {}), adminPairUntil: c.adminPairUntil || null, adminPending: (c.adminPending || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), channelCandidate: c.channelCandidate || null }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
@@ -31089,6 +31143,9 @@ app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res
       if (!mem.ok || mem.result.status !== 'administrator') return res.json(Object.assign(out, { warning: 'Guardado, pero el bot NO es administrador del canal: agregalo como admin con permiso de publicar, editar y fijar mensajes.' }));
       const wh = await _tgSetWebhook(c); if (!wh.ok) out.warning = 'Guardado, pero no pude activar los botones del panel: ' + String(wh.error).slice(0, 120);
       out.channelTitle = ch.result.title || null;
+    } else if (c.token) { // #1047: sólo el token ⇒ se activa el webhook y el canal / grupo se conectan solos al agregar el bot
+      const wh = await _tgSetWebhook(c);
+      out.warning = wh.ok ? `✅ Token guardado. Ahora agregá a @${c.botUsername || 'tu bot'} como ADMINISTRADOR de tu canal (publicar, editar y borrar mensajes): se conecta solo.` : 'Token guardado, pero no pude activar el bot: ' + String(wh.error).slice(0, 120);
     }
     res.json(out);
   } catch (e) { logger.warn('[telegram] guardar: ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
@@ -31107,7 +31164,7 @@ app.post('/api/admin/telegram/now', authMiddleware, adminMiddleware, async (req,
 setTimeout(() => { _tgMirrorTick().catch(() => {}); setInterval(() => _tgMirrorTick().catch((e) => logger.warn('[telegram] ' + e.message)), 2 * 60000); }, 90000);
 setTimeout(() => { _tgPanelTick().catch(() => {}); setInterval(() => _tgPanelTick().catch((e) => logger.warn('[telegram] panel ' + e.message)), 60 * 60000); }, 4 * 60000);
 // Al arrancar, re-confirma el webhook (por si cambió el dominio); una sola instancia.
-setTimeout(async () => { try { if (!(await _cronClaim('tgwebhook', 30 * 60000))) return; const c = await _tgCfg(); if (c.token && c.channel) await _tgSetWebhook(c); } catch (_) {} }, 5 * 60000);
+setTimeout(async () => { try { if (!(await _cronClaim('tgwebhook', 30 * 60000))) return; const c = await _tgCfg(); if (c.token) await _tgSetWebhook(c); } catch (_) {} }, 5 * 60000); // #1047: sólo con el token (el canal se detecta solo)
 
 async function _menuRetTick() {
   const until = new Date(Date.now() + 50 * 60000);
