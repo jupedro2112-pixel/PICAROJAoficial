@@ -8,6 +8,17 @@
 
 ## Sesión 2026-11-09
 
+### 1042-y. INICIO abajo: PANORAMA para comparar menús, chat, pauta y retención — PWA v690 / panel v260 (2026-11-09)
+- **Owner:** "que todo vaya donde tiene que ir en INICIO para comparar, gastando siempre más o menos lo mismo en pauta: la retención de cada uno, cuál
+  menú es mejor para la gente en retención y todos los datos necesarios para medir; ponelo en la parte inferior".
+- La app manda en cada ping `menu` (`VIP.home.menuNow`: girox/full/basic/easy/soporte) y `chat` (`chatNow`: new/classic) ⇒ `AppSession.menu/chat`.
+- `_menuRetCompute` (cron `_menuRetTick` cada hora, lock en `cron_locks`; nunca en la ruta, #1015) ⇒ `Config['menuRetention']`: por menú y por chat
+  (30 d; cada persona en el menú que más usó): personas, nuevas, volvieron 7 d, 2+ días, días activos, min/persona, cargaron, repiten, $/persona,
+  cargas/cargador; y 8 semanas: pauta (`Config['adSpend']` prorrateado por día), registros (publi), costo x registro, 1ª carga, costo x cliente,
+  repiten, volvieron después, lo que cargaron los nuevos, retorno (cargas de los nuevos / pauta), cargas totales, mezcla de menús y % chat nuevo.
+- Panel: `#inMenus` al final de INICIO (`loadInicioMenus`, `_inicioMenusHtml`, 🏆 al mejor con ≥ 30 personas, "Recalcular ahora"). Sesiones viejas
+  figuran como "antes de medir". El saludo local ya no dispara el cartel "Te respondió Soporte" (sólo el globito).
+
 ### 1042-x. IA = Haiku 5.5 + a Soporte SÓLO por el botón + saludo al entrar + chat de 24 h + burbuja siempre nueva — PWA v689 / panel v259 (2026-11-09)
 - **Owner:** "si la gente quiere ir a soporte que no sea por la IA, que sea apretando el botón de abajo; que el bot dé la bienvenida, felicidades por su
   premio, respuestas prolijas y sencillas" · "siempre que entro a la app abre el chat burbuja viejo la primera vez; cerrando y abriendo, el nuevo" ·

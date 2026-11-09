@@ -23313,9 +23313,10 @@ app.post('/api/activity/ping', authMiddleware, async (req, res) => {
     } catch (_) {}
     const last = await AppSession.findOne({ userId }).sort({ lastPingAt: -1 }).select('id lastPingAt').lean();
     if (last && now - new Date(last.lastPingAt) < 3 * 60 * 1000) {
-      await AppSession.updateOne({ id: last.id }, { $set: { lastPingAt: now, mode: String((req.body && req.body.mode) || '').slice(0, 10) || null }, $inc: { pings: 1 } });
+      const _mn = ['full', 'basic', 'easy', 'girox', 'soporte'].includes(req.body && req.body.menu) ? req.body.menu : null, _ch = ['new', 'classic'].includes(req.body && req.body.chat) ? req.body.chat : null; // #1042-y
+      await AppSession.updateOne({ id: last.id }, { $set: Object.assign({ lastPingAt: now, mode: String((req.body && req.body.mode) || '').slice(0, 10) || null }, _mn ? { menu: _mn } : {}, _ch ? { chat: _ch } : {}), $inc: { pings: 1 } });
     } else {
-      await AppSession.create({ id: uuidv4(), userId, username: req.user.username, dateKey: datosIa.dateKeyART(now), startedAt: now, lastPingAt: now, pings: 1, installed: !!(req.body && req.body.installed), mode: String((req.body && req.body.mode) || '').slice(0, 10) || null });
+      await AppSession.create({ id: uuidv4(), userId, username: req.user.username, dateKey: datosIa.dateKeyART(now), startedAt: now, lastPingAt: now, pings: 1, installed: !!(req.body && req.body.installed), mode: String((req.body && req.body.mode) || '').slice(0, 10) || null , menu: ['full', 'basic', 'easy', 'girox', 'soporte'].includes(req.body && req.body.menu) ? req.body.menu : null, chat: ['new', 'classic'].includes(req.body && req.body.chat) ? req.body.chat : null });
     }
     res.json({ ok: true });
   } catch (e) { res.json({ ok: false }); }
@@ -30395,6 +30396,91 @@ async function _weeklyCloseDo(mon, weekKey) {
   return close;
 }
 setTimeout(() => { _weeklyCloseTick().catch((e) => logger.warn('[cierre semanal] ' + e.message)); setInterval(() => { _weeklyCloseTick().catch((e) => logger.warn('[cierre semanal] ' + e.message)); }, 30 * 60000); }, 13 * 60000);
+// ═══ #1042-y RETENCIÓN POR MENÚ (owner: "en INICIO, abajo: para comparar gastando más o menos lo mismo en pauta, la retención de cada uno, cuál menú
+// es mejor para la gente y todos los datos para medir"). La app manda en cada ping qué MENÚ usa (full/basic/easy/girox/soporte) y qué CHAT
+// (new/classic) ⇒ AppSession.menu/chat. Esto lo calcula un CRON cada hora con lock (nunca en la ruta de lectura, #1015) y lo deja en
+// Config['menuRetention']; INICIO sólo lo lee. Sesiones viejas (antes de medir) usan `mode` (play = completo o Girox, sin distinguir).
+const MENU_RET_REAL = { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } };
+const MENU_RET_TZ = 'America/Argentina/Buenos_Aires';
+async function _menuRetCompute() {
+  const now = new Date(); const D = 86400000;
+  const d30 = new Date(now - 30 * D), d7 = new Date(now - 7 * D);
+  const menuExpr = { $ifNull: ['$menu', { $concat: ['old-', { $ifNull: ['$mode', '?'] }] }] };
+  // 1) por persona: el menú que más usó en 30 días + días activos, sesiones, minutos
+  const rows = await AppSession.aggregate([
+    { $match: { startedAt: { $gte: d30 } } },
+    { $group: { _id: { u: '$userId', m: menuExpr }, n: { $sum: 1 }, days: { $addToSet: '$dateKey' }, ms: { $sum: { $subtract: ['$lastPingAt', '$startedAt'] } }, last: { $max: '$lastPingAt' }, chatNew: { $sum: { $cond: [{ $eq: ['$chat', 'new'] }, 1, 0] } }, chatOld: { $sum: { $cond: [{ $eq: ['$chat', 'classic'] }, 1, 0] } } } },
+    { $sort: { n: -1 } },
+    { $group: { _id: '$_id.u', menu: { $first: '$_id.m' }, n: { $sum: '$n' }, days: { $push: '$days' }, ms: { $sum: '$ms' }, last: { $max: '$last' }, chatNew: { $sum: '$chatNew' }, chatOld: { $sum: '$chatOld' } } }
+  ]).allowDiskUse(true);
+  const ids = rows.map((r) => r._id);
+  const dep = new Map();
+  for (let i = 0; i < ids.length; i += 5000) {
+    const part = await Transaction.aggregate([{ $match: Object.assign({ userId: { $in: ids.slice(i, i + 5000) }, timestamp: { $gte: d30 } }, MENU_RET_REAL) },
+      { $group: { _id: '$userId', n: { $sum: 1 }, total: { $sum: '$amount' }, days: { $addToSet: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: MENU_RET_TZ } } } } }]);
+    part.forEach((x) => dep.set(x._id, x));
+  }
+  const users = new Map(); for (let i = 0; i < ids.length; i += 5000) (await User.find({ id: { $in: ids.slice(i, i + 5000) } }).select('id createdAt role').lean()).forEach((u) => users.set(u.id, u));
+  const blank = () => ({ users: 0, newUsers: 0, activeDays: 0, sessions: 0, minutes: 0, back7: 0, multiDay: 0, depositors: 0, repeat: 0, deposits: 0, total: 0, newDepositors: 0 });
+  const byMenu = {}, byChat = { new: blank(), classic: blank() };
+  const add = (b, r, u, d, days) => {
+    b.users++; b.sessions += r.n; b.minutes += r.ms / 60000; b.activeDays += days;
+    if (days >= 2) b.multiDay++; if (r.last >= d7) b.back7++;
+    const isNew = u && u.createdAt && new Date(u.createdAt) >= d30; if (isNew) b.newUsers++;
+    if (d) { b.depositors++; b.deposits += d.n; b.total += d.total; if (d.days.length >= 2) b.repeat++; if (isNew) b.newDepositors++; }
+  };
+  for (const r of rows) {
+    const u = users.get(r._id); if (!u || u.role !== 'user') continue;
+    const days = new Set([].concat(...r.days)).size, d = dep.get(r._id);
+    const m = String(r.menu || '?'); (byMenu[m] = byMenu[m] || blank()); add(byMenu[m], r, u, d, days);
+    if (r.chatNew || r.chatOld) add(r.chatNew >= r.chatOld ? byChat.new : byChat.classic, r, u, d, days);
+  }
+  // 2) semanas (lunes a domingo, hora AR): pauta, registros, primeras cargas, costo por cliente, retención de los que entraron, menú y chat dominante
+  const spend = (await getConfig('adSpend', [])) || [];
+  const todayKey = _schedArtKey(now); const t = new Date(todayKey + 'T12:00:00Z'); const dow = (t.getUTCDay() + 6) % 7;
+  const weeks = [];
+  for (let w = 0; w < 8; w++) {
+    const mon = new Date(t.getTime() - (dow + 7 * w) * D); const monKey = mon.toISOString().slice(0, 10);
+    const sunKey = new Date(mon.getTime() + 6 * D).toISOString().slice(0, 10);
+    const start = new Date(monKey + 'T03:00:00Z'), end = new Date(start.getTime() + 7 * D);
+    let ad = 0;
+    for (const e of spend) {
+      const f = new Date(String(e.from) + 'T12:00:00Z'), to = new Date(String(e.to) + 'T12:00:00Z'); const nd = Math.round((to - f) / D) + 1; if (!(nd > 0)) continue;
+      const a = Math.max(f.getTime(), mon.getTime()), b = Math.min(to.getTime(), mon.getTime() + 6 * D); if (b < a) continue;
+      ad += (Number(e.amount) || 0) * (Math.round((b - a) / D) + 1) / nd;
+    }
+    const regs = await User.find({ role: 'user', createdAt: { $gte: start, $lt: end } }).select('id acquisitionSource acquisitionCampaign').lean();
+    const rIds = regs.map((u) => u.id);
+    const fromAds = regs.filter((u) => u.acquisitionSource === 'landing' || (u.acquisitionCampaign && u.acquisitionCampaign !== 'INGRESO')).length;
+    const rd = rIds.length ? await Transaction.aggregate([{ $match: Object.assign({ userId: { $in: rIds } }, MENU_RET_REAL) },
+      { $group: { _id: '$userId', first: { $min: '$timestamp' }, total: { $sum: '$amount' }, days: { $addToSet: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: MENU_RET_TZ } } } } }]) : [];
+    const firstDep = rd.length, repeat = rd.filter((x) => x.days.length >= 2).length, cohortTotal = rd.reduce((a, x) => a + x.total, 0);
+    const back = rIds.length ? (await AppSession.distinct('userId', { userId: { $in: rIds }, startedAt: { $gte: new Date(end.getTime()) } })).length : 0;
+    const allDep = await Transaction.aggregate([{ $match: Object.assign({ timestamp: { $gte: start, $lt: end } }, MENU_RET_REAL) }, { $group: { _id: null, n: { $sum: 1 }, total: { $sum: '$amount' }, users: { $addToSet: '$userId' } } }]);
+    const mix = await AppSession.aggregate([{ $match: { startedAt: { $gte: start, $lt: end } } }, { $group: { _id: menuExpr, n: { $sum: 1 } } }, { $sort: { n: -1 } }]);
+    const chatMix = await AppSession.aggregate([{ $match: { startedAt: { $gte: start, $lt: end }, chat: { $in: ['new', 'classic'] } } }, { $group: { _id: '$chat', n: { $sum: 1 } } }]);
+    const ms = mix.reduce((a, x) => a + x.n, 0), cs = chatMix.reduce((a, x) => a + x.n, 0);
+    weeks.push({ week: monKey, to: sunKey, partial: w === 0, adSpend: Math.round(ad), regs: regs.length, fromAds, firstDep, repeat, cohortTotal: Math.round(cohortTotal), backAfter: back,
+      deposits: allDep[0] ? allDep[0].n : 0, depositsTotal: allDep[0] ? Math.round(allDep[0].total) : 0, depositors: allDep[0] ? allDep[0].users.length : 0,
+      menuMix: mix.slice(0, 4).map((x) => ({ menu: x._id, pct: ms ? Math.round(x.n * 100 / ms) : 0 })), chatNewPct: cs ? Math.round(((chatMix.find((x) => x._id === 'new') || {}).n || 0) * 100 / cs) : null });
+  }
+  const menusEnabled = await getConfig('menusEnabled', null).catch(() => null), bot = await getSupportBotConfig().catch(() => ({}));
+  return { at: now.toISOString(), byMenu, byChat, weeks, current: { menusEnabled, chat: bot.classic ? 'classic' : 'new' } };
+}
+async function _menuRetTick() {
+  const until = new Date(Date.now() + 50 * 60000);
+  try { await mongoose.connection.collection('cron_locks').updateOne({ _id: 'menuRet', until: { $lt: new Date() } }, { $set: { until } }, { upsert: true }); } catch (_) { return; } // otra instancia lo está haciendo
+  try { const v = await _menuRetCompute(); await Config.set('menuRetention', v, 'cron'); } catch (e) { logger.warn('[retención por menú] ' + e.message); }
+}
+setTimeout(() => { _menuRetTick(); setInterval(_menuRetTick, 60 * 60000); }, 3 * 60000);
+app.get('/api/admin/inicio/menus', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
+    if (req.query.refresh === '1') { try { await mongoose.connection.collection('cron_locks').deleteOne({ _id: 'menuRet', until: { $lt: new Date(Date.now() + 45 * 60000) } }); } catch (_) {} _menuRetTick().catch(() => {}); }
+    res.set('Cache-Control', 'no-store'); res.json({ success: true, data: (await getConfig('menuRetention', null)) || null });
+  } catch (e) { res.status(500).json({ error: 'Error' }); }
+});
+
 app.get('/api/admin/inicio/weekly-analysis', authMiddleware, adminMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo administradores' });
   try {

@@ -164,6 +164,9 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
     assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');
+    { const A4 = fs.readFileSync(path.join(ROOT, 'public/adminprivado2026/admin.js'), 'utf8'), AC = fs.readFileSync(path.join(ROOT, 'public/js/activity.js'), 'utf8'), M = fs.readFileSync(path.join(ROOT, 'src/models/AppSession.js'), 'utf8');
+      assert.ok(/menu: _menuNow\(\), chat: _chatNow\(\)/.test(AC) && /menu: \{ type: String/.test(M) && /chat: \{ type: String/.test(M), 'la app informa menú y chat en cada ping');
+      assert.ok(/async function _menuRetTick\(/.test(S) && /cron_locks/.test(S) && /Config\.set\('menuRetention'/.test(S) && /app\.get\('\/api\/admin\/inicio\/menus'/.test(S) && /loadInicioMenus\(\); \/\/ #1042-y/.test(A4), 'INICIO: panorama de menús por cron con lock (la ruta sólo lee)'); }
     { const U3 = fs.readFileSync(path.join(ROOT, 'public/js/ui.js'), 'utf8'), C3 = fs.readFileSync(path.join(ROOT, 'public/js/chat.js'), 'utf8');
       assert.ok(/VIP\.home\.casinoChatToggle\) return VIP\.home\.casinoChatToggle\(\)/.test(U3), 'burbuja: el primer toque abre el chat nuevo');
       assert.ok(/if \(r\.handoff\) \{\n    const why = /.test(S) && /target: 'problema', label: '🆘 Tengo otro problema'/.test(S) && C3.includes("'problema']"), 'a Soporte sólo por el botón (la IA manda al botón)');

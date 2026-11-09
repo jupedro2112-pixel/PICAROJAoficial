@@ -92,6 +92,14 @@
     let _headObs = null;
 
     function getHomeMode() { return _homeMode; }
+    // #1042-y: qué MENÚ está usando de verdad (para medir la retención por menú en INICIO): Girox abierto ⇒ 'girox'; si no, según el modo.
+    function menuNow() {
+        try { if (_casinoIsOpen() && (_curPref === 'girox' || getMenuPref() === 'girox' || _onlyGirox())) return 'girox'; } catch (_) {}
+        const m = _homeMode; if (m === 'easy') return 'easy'; if (m === 'basic') return 'basic'; if (m === 'mini') return 'soporte';
+        if (m === 'play' || m === 'full') { const p = _curPref || getMenuPref(); return p === 'girox' ? 'girox' : 'full'; }
+        return null;
+    }
+    function chatNow() { try { return document.body.classList.contains('sp-classic') ? 'classic' : 'new'; } catch (_) { return null; } }
     function setHomeMode(mode, opts) {
         _applyMenuLayout(); // #482
         setTimeout(function () { try { loadStrategy(false); } catch (_) {} }, 600); // #504
@@ -1575,6 +1583,8 @@
     // plataforma abre el chat sola (tiene botones que hay que tocar).
     function _onIncoming(message) {
         if (!message || message.senderRole === 'user') return;
+        // #1042-x/y: el saludo de entrada (local) sólo marca el globito de la burbuja: sin cartel "Te respondió Soporte" ni contador del chat
+        if (message.id === 'local-greet') { try { if (!_spCasino) { _casUnread = Math.max(_casUnread, 1); const b = _el('casinoChatBadge'); if (b) { b.textContent = '1'; b.style.display = 'block'; } } } catch (_) {} return; }
         const md = message.metadata;
         if (md && md.kind === 'platform_choice' && !md.chosen) {
             if (!_open) openSupport();
@@ -3118,6 +3128,7 @@
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
         casinoChatToggle, spGreetMsg, // #1042-x
+        menuNow, chatNow, // #1042-y
         supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806

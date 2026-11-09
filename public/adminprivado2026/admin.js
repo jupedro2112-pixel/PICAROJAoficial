@@ -18799,8 +18799,58 @@ async function loadInicio() {
         if (r.status === 423) { const pin = window.prompt('🔒 Clave de INICIO:', ''); if (!pin) { _renderInicio(box, _inicioEmpty(day), note('🔒 Protegido con clave: tocá 🔄 para ingresarla.')); return; } sessionStorage.setItem('inicio_pin', pin); r = await _inicioFetch('/api/admin/inicio/stats' + (day ? '?day=' + day : '')); if (r.status === 423) { sessionStorage.removeItem('inicio_pin'); _renderInicio(box, _inicioEmpty(day), note('❌ Clave incorrecta: tocá 🔄 para probar de nuevo.')); return; } }
         const d = await r.json(); if (!r.ok) throw new Error(d.error || 'error');
         _renderInicio(box, d, '');
+        loadInicioMenus(); // #1042-y
         if (d.isToday) _inTimer = setTimeout(() => { if (document.getElementById('inicioSection') && document.getElementById('inicioSection').classList.contains('active')) loadInicio(); }, 60000);
     } catch (e) { _renderInicio(box, _inicioEmpty(day), note('⚠️ No se pudo cargar (' + escHtml(e.message) + '). Tocá 🔄.')); }
+}
+// #1042-y (owner): "abajo en INICIO, para comparar gastando más o menos lo mismo en pauta: la retención de cada uno, cuál menú es mejor para la
+// gente y todos los datos para medir". Lo calcula un cron cada hora (Config['menuRetention']); acá sólo se pinta.
+let _inMenusData = null;
+async function loadInicioMenus(refresh) {
+    const box = document.getElementById('inMenus'); if (!box) return;
+    if (_inMenusData && !refresh) box.innerHTML = _inicioMenusHtml(_inMenusData);
+    try {
+        const r = await _inicioFetch('/api/admin/inicio/menus' + (refresh ? '?refresh=1' : '')); if (!r.ok) return;
+        const j = await r.json(); _inMenusData = j.data || { empty: true };
+        const b2 = document.getElementById('inMenus'); if (b2) b2.innerHTML = _inicioMenusHtml(_inMenusData);
+        if (refresh) showToast('Recalculando: en 1-2 minutos tocá 🔄', 'info');
+    } catch (_) {}
+}
+const IN_MENU_LBL = { full: '🏠 Completo', basic: '🧩 Básico', easy: '👆 Fácil', girox: '🎰 Girox directo (todo en uno)', soporte: '💬 Soporte', 'old-play': '🏠/🎰 Completo o Girox (antes de medir)', 'old-full': '🏠 Completo (antes)', 'old-easy': '👆 Fácil (antes)', 'old-basic': '🧩 Básico (antes)', 'old-mini': '💬 Soporte (antes)', 'old-?': '❔ Sin dato' };
+function _inicioMenusHtml(D) {
+    const head = '<h3 class="in-h">🧭 Panorama para comparar: menús, chat, pauta y retención</h3>';
+    const btn = '<button class="btn btn-small" onclick="loadInicioMenus(true)">🔄 Recalcular ahora</button>';
+    if (!D || D.empty || !D.byMenu) return head + '<div class="card" style="padding:.6rem">⏳ Todavía no está calculado (se arma solo cada hora). ' + btn + '</div>';
+    const n = (x) => x == null ? '—' : Math.round(Number(x)).toLocaleString('es-AR'); const m = (x) => '$' + n(x);
+    const pc = (a, b) => b ? Math.round(a * 100 / b) + '%' : '—';
+    const cols = '<tr><th></th><th>Personas</th><th>Nuevas (30 d)</th><th title="Entraron en los últimos 7 días">Volvieron (7 d)</th><th title="Entraron 2 días distintos o más">2+ días</th><th>Días activos</th><th>Min / persona</th><th>Cargaron</th><th title="Cargaron 2 días distintos o más">Repiten carga</th><th>$ por persona</th><th>Cargas / cargador</th></tr>';
+    const metr = (b) => ({ back: b.users ? b.back7 / b.users : 0, rep: b.users ? b.repeat / b.users : 0, arpu: b.users ? b.total / b.users : 0 });
+    const tbl = (obj, lbl, minUsers) => {
+        const keys = Object.keys(obj).filter((k) => obj[k] && obj[k].users > 0).sort((a, b) => obj[b].users - obj[a].users);
+        if (!keys.length) return '<div style="color:#9ab;padding:.3rem">Sin datos todavía.</div>';
+        const ok = keys.filter((k) => obj[k].users >= minUsers);
+        const best = (f) => ok.length > 1 ? ok.reduce((a, k) => metr(obj[k])[f] > metr(obj[a])[f] ? k : a, ok[0]) : null;
+        const bB = best('back'), bR = best('rep'), bA = best('arpu');
+        const star = (k, w) => k === w ? ' 🏆' : '';
+        return '<div style="overflow:auto"><table class="data-table" style="width:100%;font-size:.82rem"><thead>' + cols + '</thead><tbody>' + keys.map((k) => { const b = obj[k];
+            return '<tr><td><b>' + escHtml(lbl[k] || k) + '</b>' + (b.users < minUsers ? ' <small style="color:#9ab">(pocos datos)</small>' : '') + '</td><td>' + n(b.users) + '</td><td>' + n(b.newUsers) + '</td><td>' + pc(b.back7, b.users) + star(k, bB) + '</td><td>' + pc(b.multiDay, b.users)
+                + '</td><td>' + (b.users ? (b.activeDays / b.users).toFixed(1) : '—') + '</td><td>' + (b.users ? (b.minutes / b.users).toFixed(0) : '—') + '</td><td>' + pc(b.depositors, b.users) + '</td><td>' + pc(b.repeat, b.users) + star(k, bR) + '</td><td>' + m(b.users ? b.total / b.users : 0) + star(k, bA) + '</td><td>' + (b.depositors ? (b.deposits / b.depositors).toFixed(1) : '—') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    };
+    const cur = D.current || {}; const me = cur.menusEnabled && typeof cur.menusEnabled === 'object' ? Object.keys(cur.menusEnabled).filter((k) => cur.menusEnabled[k] !== false).map((k) => IN_MENU_LBL[k] || k).join(' · ') : 'todos';
+    const wk = (D.weeks || []).map((w) => {
+        const cpr = w.regs ? w.adSpend / w.regs : 0, cpc = w.firstDep ? w.adSpend / w.firstDep : 0, roas = w.adSpend ? w.cohortTotal / w.adSpend : 0;
+        return '<tr><td><b>' + escHtml(w.week.slice(5)) + '→' + escHtml(w.to.slice(5)) + '</b>' + (w.partial ? ' <small>(en curso)</small>' : '') + '</td><td>' + (w.adSpend ? m(w.adSpend) : '<small style="color:#9ab">sin cargar</small>') + '</td><td>' + n(w.regs) + ' <small>(' + n(w.fromAds) + ' publi)</small></td><td>' + (w.adSpend && w.regs ? m(cpr) : '—')
+            + '</td><td>' + n(w.firstDep) + ' <small>' + pc(w.firstDep, w.regs) + '</small></td><td>' + (w.adSpend && w.firstDep ? m(cpc) : '—') + '</td><td>' + pc(w.repeat, w.firstDep) + '</td><td>' + (w.partial ? '—' : pc(w.backAfter, w.regs)) + '</td><td>' + m(w.cohortTotal) + '</td><td>' + (w.adSpend ? roas.toFixed(2) + '×' : '—')
+            + '</td><td>' + m(w.depositsTotal) + ' <small>(' + n(w.depositors) + ')</small></td><td><small>' + ((w.menuMix || []).map((x) => escHtml((IN_MENU_LBL[x.menu] || x.menu).replace(/^\S+\s/, '')) + ' ' + x.pct + '%').join('<br>') || '—') + '</small></td><td>' + (w.chatNewPct == null ? '—' : w.chatNewPct + '% nuevo') + '</td></tr>';
+    }).join('');
+    return head + '<div class="card" style="padding:.5rem .7rem;margin-bottom:.4rem;font-size:.85rem">Ahora: menús activos <b>' + escHtml(me) + '</b> · chat <b>' + (cur.chat === 'classic' ? 'clásico (Modo normal)' : 'nuevo con IA') + '</b> · calculado ' + escHtml(new Date(D.at).toLocaleString('es-AR')) + ' ' + btn + '</div>'
+        + '<h4 style="margin:.5rem 0 .2rem">Por MENÚ (últimos 30 días · cada persona cuenta en el menú que más usó)</h4>' + tbl(D.byMenu, IN_MENU_LBL, 30)
+        + '<h4 style="margin:.6rem 0 .2rem">Por CHAT (nuevo con IA vs clásico)</h4>' + tbl(D.byChat || {}, { new: '🤖 Chat nuevo (IA + botones)', classic: '💬 Chat clásico' }, 30)
+        + '<h4 style="margin:.6rem 0 .2rem">Semana por semana (para comparar con pauta parecida)</h4><div style="overflow:auto"><table class="data-table" style="width:100%;font-size:.8rem"><thead><tr><th>Semana</th><th>Pauta</th><th>Registros</th><th>Costo x registro</th><th>1ª carga</th><th>Costo x cliente</th><th title="De los que hicieron 1ª carga, cuántos cargaron otro día">Repiten</th><th title="De los registrados esa semana, cuántos entraron a la app DESPUÉS de esa semana">Volvieron después</th><th title="Todo lo que cargaron hasta hoy los registrados esa semana">Cargaron los nuevos</th><th title="Lo que cargaron los nuevos / la pauta">Retorno</th><th>Cargas totales (cargadores)</th><th>Menú usado</th><th>Chat</th></tr></thead><tbody>' + wk + '</tbody></table></div>'
+        + '<div class="card" style="padding:.5rem .7rem;margin-top:.4rem;font-size:.8rem;color:#9ab;line-height:1.45"><b>Cómo leerlo:</b> compará semanas con <b>pauta parecida</b> (cargala en Datos IA → Gasto en pauta; si no, la columna queda vacía). '
+        + 'Lo que importa: <b>Costo x cliente</b> (más bajo = mejor), <b>Repiten</b> y <b>Volvieron después</b> (más alto = la gente se queda) y <b>Retorno</b> (más de 1× = lo que cargan los nuevos ya cubre la pauta; ojo que cargas no es ganancia). '
+        + 'En las tablas de menú y chat, 🏆 marca el mejor (sólo entre los que tienen 30 personas o más). El menú y el chat se miden desde esta versión (v690); lo anterior figura como "antes de medir". '
+        + 'Con un solo menú activo no hay contra qué comparar: para saber cuál retiene más, dejá una semana un menú y otra semana otro, con pauta parecida, y mirá la tabla semanal. Es una comparación de lo que pasó, no una prueba perfecta: otras cosas (bonos, días de cobro, feriados) también mueven los números.</div>';
 }
 // #1042-w (owner): "cuánto va consumiendo la IA día a día, para ir midiendo" — costo real del bot de Soporte por día (US$ y pesos con la cotización USDT).
 function _inicioAiHtml(ai, n) {
@@ -18867,7 +18917,7 @@ function _renderInicio(box, d, notice) {
             grp('📲 Aceptación de la app (clientes que cargaron alguna vez)', // #913: base = cargadores, no registrados
                 box1('💳', 'Cargaron alguna vez', n(d.adoption.depositors), 'de ' + n(d.adoption.totalUsers) + ' registrados', '#6366f1') +
                 box1('📲', 'Instalaron la app', n(d.adoption.withApp), d.adoption.appPct + '% de los que cargaron', '#0ea5e9') +
-                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b')) + _inicioCohortsHtml(d.cohorts, n) + _inicioAiHtml(d.ai, n); // #971 · #1042-w
+                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b')) + _inicioCohortsHtml(d.cohorts, n) + _inicioAiHtml(d.ai, n) + '<div id="inMenus"></div>'; // #971 · #1042-w · #1042-y
     }
 }
 

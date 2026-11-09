@@ -11,7 +11,9 @@ const schema = new mongoose.Schema({
   lastPingAt: { type: Date, default: Date.now },
   pings: { type: Number, default: 1 },
   installed: { type: Boolean, default: false },              // app instalada (standalone)
-  mode: { type: String, default: null }                      // easy | full | mini | play (dónde estaba)
+  mode: { type: String, default: null },                     // easy | full | mini | play (dónde estaba)
+  menu: { type: String, default: null },                     // #1042-y: full | basic | easy | girox | soporte (menú que usa)
+  chat: { type: String, default: null }                      // #1042-y: new | classic (chat de Soporte)
 });
 schema.index({ userId: 1, lastPingAt: -1 });
 schema.index({ startedAt: 1 }, { expireAfterSeconds: 180 * 24 * 3600 });
