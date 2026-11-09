@@ -246,7 +246,7 @@ VIP.chat = (function () {
         const platformHtml = _renderPlatformWidget(message);
         // #377: respuestas de Soporte firmadas con la persona de turno (Martín / Sofía / Agustina).
         const _who = (!isFromUser && message.type !== 'system' && message.senderRole !== 'system' && (message.channel === 'support' || (message.metadata && message.metadata.agentName)))
-            ? `<div class="msg-who">${escapeHtml((message.metadata && message.metadata.agentName) || message.senderUsername || 'Soporte')} · Soporte</div>` : '';
+            ? `<div class="msg-who">${escapeHtml((message.metadata && message.metadata.agentName) || message.senderUsername || 'Carga aquí')} · Carga aquí</div>` : '';
         msgDiv.innerHTML = `${_who}${contentHtml}${platformHtml}<span class="message-time">${time}${ticksHtml}</span>`;
 
         if (imageUrl) {

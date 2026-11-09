@@ -1526,7 +1526,7 @@
 
     function _paintWaHeadName() {
         // #305 (owner): la cabecera dice "Carga manual" (antes "Cargas <plataforma>") y el avatar es un asistente fijo.
-        try { const n = _el('waHeadName'); if (n) n.textContent = 'Soporte'; } catch (_) {} // #373: era "Carga manual"
+        try { const n = _el('waHeadName'); if (n) n.textContent = 'Carga aquí'; } catch (_) {} // #373: era "Carga manual" · #1059: 'Carga aquí'
     }
 
     // ---------------- SOPORTE (chat) ----------------
@@ -2807,7 +2807,7 @@
                     '<span class="casino-brand" id="casinoBrand" aria-label="PICA ROJA oficial"><span class="cb-box"><img src="/icons/icon-192x192.png" alt=""><span class="cb-txt"><b>PICA ROJA</b><small>OFICIAL</small></span></span></span>' +
                     '<button type="button" class="casino-brand casino-srt" id="casinoSrtBtn" hidden onclick="VIP.sorteos.casinoPill()" aria-label="Sorteo"><span class="cb-box"><span class="cb-ico" data-srt-brand-ico>🏆</span><span class="cb-txt"><b data-srt-brand-title>Sorteo mensual</b><small data-srt-brand-sub>NOVEDAD</small></span></span></button>' +
                     // #994 (owner): Soporte vive ARRIBA en la barra del casino (salió del panel de Carga rápida)
-                    '<button type="button" class="tn-btn" id="ctSupport" onclick="VIP.home.casinoSupport()" title="Soporte: hablá con una persona"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12.5a7.5 7.5 0 0 1-11 6.6L4 20l1.2-4.4A7.5 7.5 0 1 1 20 12.5z"/><path d="M8.5 11.5h7M8.5 14.5h4.5"/></svg></span><span class="tn-lbl">Soporte</span></button>' +
+                    '<button type="button" class="tn-btn" id="ctSupport" onclick="VIP.home.casinoSupport()" title="Carga aquí: cargas, retiros y bonos"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12.5a7.5 7.5 0 0 1-11 6.6L4 20l1.2-4.4A7.5 7.5 0 1 1 20 12.5z"/><path d="M8.5 11.5h7M8.5 14.5h4.5"/></svg></span><span class="tn-lbl">Carga aquí</span></button>' +
                     '<button type="button" class="tn-btn tn-stories" id="ctStories" onclick="VIP.stories.open()" title="Historias"><span class="tn-ico st-ring"><span class="st-core">▶</span><span class="st-badge" id="ctStoriesBadge" style="display:none">1</span></span><span class="tn-lbl">Historias</span></button>' +
                     '<button type="button" class="tn-btn" onclick="VIP.home.casinoInfo()" title="Información del servicio"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5.5M12 7.6v.2"/></svg></span><span class="tn-lbl">Info</span></button>' +
                     '<button type="button" class="tn-btn" onclick="VIP.home.openProfile()" title="Tu perfil"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c.8-4 3.9-6 7.5-6s6.7 2 7.5 6"/></svg></span><span class="tn-lbl">Perfil</span></button>' +

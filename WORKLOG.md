@@ -8,6 +8,12 @@
 
 ## Sesión 2026-11-09
 
+### 1059. Juegos ⇒ soporte DENTRO de Girox; nuestro chat se llama "Carga aquí" (2026-11-09)
+- **Owner:** "si hablan de un juego, que hablen al soporte dentro de Girox; a la IA y a la que nosotros tenemos llamada soporte, pongamos Carga aquí".
+- IA (`supportBot.js`, QUEJAS DE UN JUEGO): manda al soporte que está ADENTRO de Girox y aclara que nosotros somos "Carga aquí" (cargas, retiros, bonos).
+- PWA: "Soporte" ⇒ "Carga aquí" en la barra de arriba (`navManual`), el botón del casino (`ctSupport`), la cabecera del chat (`waHeadName`, `· Carga aquí`),
+  la firma de los mensajes y la burbuja del casino (antes "CARGA RÁPIDA"). Ids sin cambiar. El soporte de visitantes sin cuenta sigue como "Soporte". App v700.
+
 ### 1058. Chat de la burbuja de Girox: servicios a la vista en todos los teléfonos (2026-11-09)
 - **Owner (captura en iPhone):** "se corta, que se vea bien en todos los teléfonos; los botones de misiones etc. son importantes, que nada falle".
 - `#spInfoBar` (Reembolsos · Sorteos · Misiones · Ruleta · Fueguito · Referidos · Verificar celular · Tengo otro problema) deja de ser carrusel horizontal:

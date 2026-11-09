@@ -1397,14 +1397,14 @@ VIP.ui._showCasinoFrame = function() {
       // el soporte propio de la página del casino. Con el logo de la app y
       // "CARGA RÁPIDA" a la vista queda claro que es NUESTRO chat de cargas.
       '<button type="button" id="casinoSupportBubble" onclick="VIP.ui.toggleCasinoChat()" ' +
-        'title="Carga rápida 1GIROX — arrastrame si te tapa el juego" style="position:absolute;z-index:6;right:16px;' +
+        'title="Carga aquí — arrastrame si te tapa el juego" style="position:absolute;z-index:6;right:16px;' +
         'bottom:calc(18px + env(safe-area-inset-bottom,0px));border-radius:28px;' +
         'background:linear-gradient(135deg,#128c4a,#25d366);color:#fff;border:none;' +
         'box-shadow:0 6px 20px rgba(0,0,0,0.55);cursor:pointer;' +
         'display:flex;align-items:center;gap:8px;padding:8px 14px 8px 8px;">' +
         '<img src="/icons/icon-96x96.png" alt="1G" style="width:32px;height:32px;border-radius:50%;' +
         'background:#0d0d1a;padding:3px;object-fit:contain;flex:0 0 auto;">' +
-        '<span style="font-weight:800;font-size:12px;letter-spacing:0.4px;white-space:nowrap;">CARGA RÁPIDA</span>' + // #723: simple, sin avisos
+        '<span style="font-weight:800;font-size:12px;letter-spacing:0.4px;white-space:nowrap;">CARGA AQUÍ</span>' + // #723: simple, sin avisos · #1059: 'Carga aquí' (el soporte de juegos es el de Girox)
         '<span id="casinoChatBadge" style="display:none;position:absolute;top:-2px;right:-2px;' +
         'background:#e53935;color:#fff;border-radius:11px;min-width:20px;height:20px;line-height:20px;' +
         'font-size:12px;font-weight:800;padding:0 5px;text-align:center;">0</span></button>' +
