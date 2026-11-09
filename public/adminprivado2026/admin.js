@@ -2260,7 +2260,7 @@ function addMessageToChat(message, isOutgoing = false) {
         msgDiv.innerHTML = `
             <div class="message-header">
                 <span class="icon icon-user"></span>
-                <span>${escapeHtml(message.senderUsername)}</span>
+                <span>${message.metadata && message.metadata.bot ? '🤖 ' : ''}${escapeHtml(message.senderUsername)}${message.metadata && message.metadata.bot ? ' (bot)' : ''}</span>
             </div>
             <div class="message-content">${formatMessageContent(message)}</div>
             <div class="message-time">${formatChatTime(message.timestamp || new Date())}</div>
@@ -6329,6 +6329,41 @@ async function loadPhoneLog() {
 }
 window.loadPhoneLog = loadPhoneLog; window.phoneLogChangePin = phoneLogChangePin;
 window.saveSmsEnabled = saveSmsEnabled; window.loadPublisherWelcome = loadPublisherWelcome; window.savePublisherWelcome = savePublisherWelcome;
+// #1042 BOT DE SOPORTE CON IA (Configuración → 🆕 NUEVO)
+async function loadSupportBot() {
+    const st = document.getElementById('sbState'); if (!st) return;
+    try {
+        const r = await authFetch('/api/admin/support-bot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
+        const c = j.config || {};
+        st.textContent = !j.available ? '· ⚠️ falta ANTHROPIC_API_KEY en el servidor' : (c.enabled ? '· ✅ encendido' : '· ⏸️ apagado');
+        const set = (id, v) => { const e = document.getElementById(id); if (e) { if (e.type === 'checkbox') e.checked = !!v; else e.value = v == null ? '' : v; e.disabled = !j.canEdit; } };
+        set('sbEnabled', c.enabled); set('sbModel', c.model); set('sbDelayMin', c.delayMinSec); set('sbDelayMax', c.delayMaxSec); set('sbPause', c.pauseHours); set('sbExtra', c.extraInfo);
+        const sel = document.getElementById('sbModel'); if (sel && c.model && ![...sel.options].some((o) => o.value === c.model)) { const o = document.createElement('option'); o.value = c.model; o.textContent = c.model; sel.appendChild(o); sel.value = c.model; }
+        const rows = (j.stats || []).map((d) => '<tr><td>' + d.day + '</td><td>' + d.replies + '</td><td>' + d.handoffs + '</td><td>' + d.afterDeposit + '</td><td>' + d.pausedByAgent + '</td><td>' + d.errors + '</td></tr>').join('');
+        const box = document.getElementById('sbStats'); if (box) box.innerHTML = '<table class="data-table" style="font-size:12px;"><tr><th>Día</th><th>Respuestas</th><th>A un agente</th><th>Beneficios post-carga</th><th>Callado por agente</th><th>Errores IA</th></tr>' + rows + '</table>';
+    } catch (_) { st.textContent = '· error de conexión'; }
+}
+async function saveSupportBot() {
+    const g = (id) => document.getElementById(id);
+    const body = { enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };
+    try {
+        const r = await authFetch('/api/admin/support-bot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
+        showToast(j.config.enabled ? '🤖 Bot de soporte encendido' : '⏸️ Bot de soporte apagado', 'success'); loadSupportBot();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function testSupportBot() {
+    const t = document.getElementById('sbTestText'), out = document.getElementById('sbTestOut'), stg = document.getElementById('sbTestStage'); if (!t || !out) return;
+    if (!t.value.trim()) { showToast('Escribí un mensaje de prueba', 'info'); return; }
+    out.textContent = '⏳ Pensando…';
+    try {
+        const r = await authFetch('/api/admin/support-bot/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t.value, stage: stg ? stg.value : 'nuevo' }) });
+        const j = await r.json(); if (!r.ok) { out.textContent = '⚠️ ' + (j.error || 'No respondió'); return; }
+        out.textContent = '🤖 ' + j.reply + (j.handoff ? '\n\n➡️ Lo pasaría a un agente: ' + (j.handoffReason || '') : '');
+    } catch (_) { out.textContent = '⚠️ Error de conexión'; }
+}
+window.loadSupportBot = loadSupportBot; window.saveSupportBot = saveSupportBot; window.testSupportBot = testSupportBot;
+
 // #589: Página de la app (dominio público) editable
 async function loadPublicBaseUrl() {
     try {
@@ -7057,6 +7092,7 @@ async function loadInstallBonusPct() {
     try { loadDatosIaPin(); } catch (_) {} // #590
     try { loadRegistrationMode(); } catch (_) {} // #421
     try { loadPublisherWelcome(); } catch (_) {} // #1024
+    try { loadSupportBot(); } catch (_) {} // #1042
     try { loadBankOutage(); } catch (_) {} // #442
     try { loadWebhooksCard(); } catch (_) {} // #562 webhooks salientes
     const form = document.getElementById('installBonusPctForm');
@@ -8825,7 +8861,7 @@ function createMessageElement(message) {
     msgDiv.innerHTML = `
         <div class="message-header">
             <span class="icon icon-user"></span>
-            <span>${escapeHtml(message.senderUsername || 'Usuario')}</span>
+            <span>${message.metadata && message.metadata.bot ? '🤖 ' : ''}${escapeHtml(message.senderUsername || 'Usuario')}${message.metadata && message.metadata.bot ? ' (bot)' : ''}</span>
         </div>
         <div class="message-content">${content}</div>
         <div class="message-time">${time}${ticks}</div>
@@ -17902,7 +17938,7 @@ function _spMsgHtml(m) {
     const mine = m.senderRole !== 'user';
     const sys = m.type === 'system' || m.senderRole === 'system';
     const body = m.type === 'image' ? '<a href="' + escapeHtml(m.content) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(m.content) + '" style="max-width:220px;max-height:220px;border-radius:8px;display:block;"></a>' : escapeHtml(m.content || '').replace(/\n/g, '<br>');
-    const who = mine && !sys ? '<div style="font-size:10px;color:#9ab;margin-bottom:2px;">' + escapeHtml(m.senderUsername || '') + (m.metadata && m.metadata.agent && m.metadata.agent !== m.senderUsername ? ' <span style="color:#666;">(' + escapeHtml(m.metadata.agent) + ')</span>' : '') + (m.channel === 'support' ? ' · soporte' : '') + '</div>' : '';
+    const who = mine && !sys ? '<div style="font-size:10px;color:#9ab;margin-bottom:2px;">' + (m.metadata && m.metadata.bot ? '🤖 ' : '') + escapeHtml(m.senderUsername || '') + (m.metadata && m.metadata.agent && m.metadata.agent !== m.senderUsername ? ' <span style="color:#666;">(' + escapeHtml(m.metadata.agent) + ')</span>' : '') + (m.channel === 'support' ? ' · soporte' : '') + '</div>' : '';
     const bg = sys ? (m.adminOnly ? 'rgba(38,224,127,0.12)' : 'rgba(255,170,0,0.12)') : (mine ? 'rgba(37,211,102,0.18)' : 'rgba(255,255,255,0.08)');
     return '<div style="align-self:' + (mine || sys ? 'flex-end' : 'flex-start') + ';max-width:78%;background:' + bg + ';border-radius:12px;padding:7px 10px;color:#eee;font-size:13px;">' + who + (sys && m.adminOnly ? '<div style="font-size:10px;color:#26e07f;">🔒 INTERNO</div>' : '') + body + '<div style="font-size:10px;color:#888;text-align:right;margin-top:3px;">' + t + '</div></div>';
 }

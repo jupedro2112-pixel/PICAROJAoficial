@@ -1944,3 +1944,19 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   `#lgStoriesLive`; adentro `#storiesLive` en `#navHistorias` (`_paintButton`). Estilos al final de pin.css (bloque #1039), todo con tokens.
 - **Sorteo:** `_sorteoChecksOf` suma `week` (`SORTEO_WEEK_DAYS`=7 desde `user.createdAt`; sin fecha = cumple), `_sorteoMissing` lo incluye,
   `requirements.week` default true (`sorteos.defaults`), fila en sorteos.js y tilde en el panel.
+
+## Bot de soporte con IA (#1042, 2026-11-09)
+- **Dónde:** `src/services/supportBot.js` (sin Mongo: arma el pedido y lee la respuesta) + server.js `getSupportBotConfig`, `_supportBotFacts`,
+  `_supportBotUserFacts`, `_supportBotHistory`, `_supportBotSchedule` / `_supportBotRun`, `_supportBotAfterDeposit`, rutas `/api/admin/support-bot*`.
+- **Disparo:** `_supportQuickReply` (socket `send_message` y `POST /api/messages/send`, 1,2 s después del mensaje del cliente). Texto libre con el bot
+  activo ⇒ bot; chips de tema ⇒ `_supportCannedReply` (respuesta fija de siempre, también el respaldo si la IA falla).
+- **Cuándo NO contesta:** último mensaje del cliente no es texto; una persona del staff escribió en las últimas `pauseHours`; hubo `bot_handoff` en los
+  últimos `handoffPauseMin`; otro mensaje del cliente llegó mientras pensaba (contesta el último); otra instancia ya reclamó ese mensaje
+  (`support_bot_claims`, `_id` = id del mensaje); una persona respondió mientras esperaba.
+- **IA:** Messages API por HTTP, modelo de `Config['supportBot'].model` (default `claude-opus-5-5`), `output_config {effort, format json_schema}`,
+  `fallbacks:"default"` + beta `server-side-fallback-2026-07-01`. `stop_reason` `refusal` ⇒ handoff; `max_tokens` / JSON roto / error ⇒ respuesta fija.
+- **Colecciones sin modelo:** `support_bot_claims` (también `afterdep-<userId>-<día>`), `support_bot_stats` (por día ART: replies, handoffs, errors,
+  pausedByAgent, afterDeposit, tokens).
+- **Front:** `#spActBar` (DEPOSITAR / RETIRAR / `#spTicker`) dentro de `#supportPanel`; `VIP.home.spPromoPaint/spPromoOpen/spDeposit/spWithdraw`;
+  el cartel es `fdModal` (mismo que el popup de primera carga).
+

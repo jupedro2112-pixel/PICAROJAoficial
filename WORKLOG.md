@@ -8,6 +8,36 @@
 
 ## Sesión 2026-11-09
 
+### 1042. 🤖 Bot de soporte con IA + chat con DEPOSITAR/RETIRAR y cinta "CARGÁ Y GANÁ" — PWA v674, admin SW v248 (2026-11-09)
+- **Owner (con capturas de otra sala de referencia):** "armá ese tipo de chat; al tocar VER que salte 100% y $5.000 si instalás nuestra app; un bot
+  que conteste con todo el contexto del servicio, que parezca una persona real, a los 10/15 s, y siempre incentive a cargar con los beneficios"
+  + "bien resumido, llevarlo siempre a mandar bien la foto del comprobante; al principio sin charla, directo a la carga; después de la carga los
+  beneficios (reembolsos, misiones); si se traba algo, que vaya solo a Soporte y se abra al agente del panel". Elegido: "bot primero, humano toma".
+- **IA:** `src/services/supportBot.js` llama a la API de Anthropic por axios (mismo patrón y misma `ANTHROPIC_API_KEY` de SSM que los comprobantes;
+  sin SDK porque no está en el package-lock y EB instala con el lock). Modelo `claude-opus-5-5` (panel: Sonnet 5.5 / Haiku 5.5), esfuerzo `low`,
+  salida JSON con esquema `{reply, handoff, handoff_reason}`, `fallbacks:"default"` (beta `server-side-fallback-2026-07-01`). Prompt fijo cacheado
+  (estilo, etapas, comprobante entero, reglas) + datos vivos: `_supportBotFacts` (Config: mínimos, rollovers, bono 1ª carga y tope, extra por
+  instalar, reembolsos, referidos, plataformas, textos `/sys_support_topic_*` y `extraInfo` del panel; caché 5 min) y `_supportBotUserFacts`
+  (etapa sin carga / ya cargó, si califica al bono — respeta `_noWelcomeActive` y secundarias —, app instalada, comprobantes pendientes, último
+  retiro, bloqueado). Historia: lo que el cliente ve en Soporte desde el corte de sesión (20 líneas, imágenes como "[mandó una imagen]").
+- **Límites (aceptados):** escribe como persona del turno (`getSupportAgentName`) pero si le preguntan EN SERIO si es un bot no lo niega; no
+  incentiva a quien muestra juego problemático / parece menor (deriva); nunca opera plata ni inventa datos.
+- **Flujo (server.js `_supportBot*`):** `_supportQuickReply`: texto libre + bot activo ⇒ `_supportBotSchedule` (los chips de tema siguen con su
+  respuesta fija). Debounce 3,5 s por cliente (contesta el último mensaje), "escribiendo…" (`admin_typing` con el nombre), espera hasta 10–15 s
+  desde el mensaje, claim único `support_bot_claims` (= id del mensaje, multi-instancia), no contesta si una PERSONA escribió en `pauseHours` (2 h)
+  ni `handoffPauseMin` (30) tras pasarlo a un agente. Mensaje: `senderId:'support-bot'`, `channel:'support'`, `metadata.bot:true` (panel lo marca
+  🤖 … (bot)). **Handoff ⇒ ChatStatus `open` + nota interna 🤖➡️👤 (`metadata.kind:'bot_handoff'`)**. IA caída ⇒ `_supportCannedReply` (la de
+  siempre). Imágenes no (las contesta el circuito de comprobantes). Estadísticas por día en `support_bot_stats`.
+- **Beneficios post-carga:** `_supportBotAfterDeposit` (desde `maybeSendRecoveryMessage`, 25 s después) en las 3 primeras cargas, una vez por día,
+  texto `/sys_bot_after_deposit` ({username} {reembolso} {nombre}).
+- **Panel:** Configuración → 🆕 NUEVO → 🤖 Bot de soporte (encender, modelo, espera, pausa, info extra, Probar como cliente nuevo / que cargó,
+  estadísticas 7 días). Rutas `GET/POST /api/admin/support-bot`, `POST /api/admin/support-bot/test` (cambiar y probar: sólo admin). Default ENCENDIDO
+  (sin `ANTHROPIC_API_KEY` no hace nada).
+- **App:** barra `#spActBar` en el chat de Soporte: DEPOSITAR (→ carga automática) / RETIRAR (→ modal de retiro) + cinta `#spTicker` "CARGÁ Y GANÁ ·
+  100% en tu primera carga + $5.000 instalando nuestra app · VER" (`_fdPromoLoad`; sin bono para ese cliente ⇒ cinta de reembolso) que abre
+  `fdModal` (ahora "CARGÁ Y GANÁ", "Y +$5.000 EXTRA instalando nuestra app", "¡Tomá tu bono!"). Estilos en pin.css con tokens (modo nocturno).
+- Test nuevo `scripts/test-support-bot.js` (10 casos, API falsa). 22/22 tests OK. **No probado contra la API real ni en un celular.**
+
 ### 1041. 🎰 La app SIEMPRE arranca en Girox directo — "Volver" lleva al Inicio — PWA v673 (2026-11-09)
 - **Owner:** "que siempre el menú de inicio por defecto sea el de Girox, por más que modifiquen; que la gente, si quiere ir al menú de inicio, ponga Volver".
 - `home.js`: `_initHomeMode` y `_maybeShowMenuChooser` (lo llama ui.js al entrar) abren Girox directo SIEMPRE que el menú Girox esté activo en el panel

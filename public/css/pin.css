@@ -3158,3 +3158,24 @@ html[data-theme="dark"] .lg-soon { background: var(--p-surface-2); color: var(--
 .lg-steps span.on i { background: var(--p-red); color: #fff; }
 /* referidos apagados (#1039): sin accesos ni menciones */
 body.no-ref #referralBtn, body.no-ref .ez-ref, body.no-ref .svc-ref, body.no-ref .lg-sy[data-s="referidos"], body.no-ref #quickRefHint, body.no-ref #registerReferralGroup, body.no-ref .ref-only { display: none !important; }
+
+/* #1042 (owner, captura de referencia): barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo "CARGÁ Y GANÁ · … VER".
+   Colores sólo por tokens (modo nocturno incluido). */
+.sp-actbar { padding: 8px 10px 0; background: var(--p-bg); }
+.sp-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sp-acts button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border-radius: 12px; font: 800 14.5px/1 var(--p-font); letter-spacing: .03em; cursor: pointer; border: 1px solid transparent; }
+.sp-acts .sp-dep { background: var(--p-red); color: var(--p-inv); box-shadow: 0 4px 14px rgba(210, 58, 78, .28); }
+.sp-acts .sp-dep:active { background: var(--p-red-dark); }
+.sp-acts .sp-wd { background: var(--p-card); color: var(--p-text); border-color: var(--p-border-hi); }
+.sp-ticker { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--p-red-soft); color: var(--p-red-dark); font: 800 12.5px/1.2 var(--p-font); text-align: left; cursor: pointer; }
+.sp-ticker[hidden] { display: none; }
+.sp-tk-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--p-red); animation: spTkPulse 1.4s ease-in-out infinite; }
+.sp-tk-win { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
+.sp-tk-txt { display: inline-block; white-space: nowrap; }
+.sp-ticker.sp-tk-run .sp-tk-txt { padding-left: 100%; animation: spTkRun 14s linear infinite; }
+.sp-ticker b { flex: 0 0 auto; color: var(--p-red); font-weight: 900; letter-spacing: .06em; }
+@keyframes spTkRun { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes spTkPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .sp-ticker.sp-tk-run .sp-tk-txt { animation: none; padding-left: 0; } .sp-tk-win { text-overflow: ellipsis; } .sp-tk-dot { animation: none; } }
+html[data-theme="dark"] .sp-ticker { background: rgba(210, 58, 78, .16); color: var(--p-text); }
+html[data-theme="dark"] .sp-acts .sp-dep { box-shadow: none; }

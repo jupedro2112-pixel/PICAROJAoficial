@@ -1,0 +1,110 @@
+#!/usr/bin/env node
+/**
+ * test-support-bot.js — #1042: el bot de soporte (src/services/supportBot.js) contra una API de Anthropic FALSA (no gasta nada).
+ * Verifica el pedido (modelo, esfuerzo, esquema JSON, fallbacks + header beta, conversación que arranca con el cliente, datos del
+ * cliente según la etapa) y la lectura de la respuesta (handoff, refusal, errores). También mira que server.js tenga los frenos
+ * (pausa por agente, una respuesta por mensaje, imágenes afuera) y que nunca responda 502.
+ *
+ * Corre con `node` pelado (sin node_modules):  node scripts/test-support-bot.js
+ */
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const Module = require('module');
+
+const ROOT = path.join(__dirname, '..');
+let lastReq = null; let nextResp = null; let nextErr = null;
+const fakeAxios = { post: async (url, body, opts) => { lastReq = { url, body, opts }; if (nextErr) throw nextErr; return { data: nextResp }; } };
+const _orig = Module._load;
+Module._load = function (req) {
+  if (req === 'axios') return fakeAxios;
+  if (/utils\/logger$/.test(req)) return { info() {}, warn() {}, error() {}, debug() {} };
+  return _orig.apply(this, arguments);
+};
+process.env.ANTHROPIC_API_KEY = 'test-key';
+const bot = require(path.join(ROOT, 'src/services/supportBot.js'));
+
+const casos = []; const caso = (n, fn) => casos.push({ n, fn });
+const okResp = (o, extra) => Object.assign({ stop_reason: 'end_turn', model: 'claude-opus-5-5', content: [{ type: 'text', text: JSON.stringify(o) }], usage: { input_tokens: 900, output_tokens: 40 } }, extra || {});
+const FACTS = { minDeposit: 2000, withdrawMin: 5000, depositRolloverX: 1, giftRolloverX: 5, firstDepositPct: 100, firstDepositCap: 15000, installGiftOn: true, installGiftFixed: 5000, refunds: { daily: 'sobre todo lo perdido 10%' }, referralsOn: false, platforms: 'Girox', officialTexts: ['Carga mínima $2.000'] };
+const USER_NEW = { username: 'ana', accountDays: 0, realDeposits: 0, welcomeEligible: true, firstDepositPct: 100, appInstalled: false, pendingReceipts: 0, payout: '' };
+
+caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallbacks default + header beta', async () => {
+  nextErr = null; nextResp = okResp({ reply: '¡Hola! Para cargar tocá DEPOSITAR.', handoff: false, handoff_reason: '' });
+  const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, agentName: 'Sofía', history: [{ role: 'user', text: 'hola' }] });
+  assert.ok(r.ok); assert.strictEqual(r.reply, '¡Hola! Para cargar tocá DEPOSITAR.'); assert.strictEqual(r.handoff, false);
+  const b = lastReq.body;
+  assert.strictEqual(b.model, 'claude-opus-5-5'); assert.strictEqual(b.output_config.effort, 'low');
+  assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason']);
+  assert.strictEqual(b.output_config.format.schema.additionalProperties, false);
+  assert.strictEqual(b.fallbacks, 'default'); assert.strictEqual(lastReq.opts.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
+  assert.ok(!('thinking' in b) && !('temperature' in b), 'no manda thinking/temperature (Opus 5.5)');
+  assert.strictEqual(lastReq.opts.headers['x-api-key'], 'test-key');
+});
+caso('Prompt: fijo cacheado primero; datos del servicio y del cliente (etapa sin carga, bono, $5.000 app, nombre del turno)', async () => {
+  const b = lastReq.body;
+  assert.ok(b.system[0].cache_control); assert.ok(!b.system[1].cache_control);
+  const dyn = b.system[1].text;
+  assert.ok(/ETAPA: sin carga/.test(dyn)); assert.ok(/Califica para el bono de primera carga \(100%\)/.test(dyn)); assert.ok(/\$5\.000 en fichas/.test(dyn));
+  assert.ok(/TU NOMBRE EN ESTE TURNO: Sofía/.test(dyn)); assert.ok(/referidos está pausado/.test(dyn));
+  const fixed = b.system[0].text;
+  assert.ok(/BIEN RESUMIDO/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /no lo niegues/.test(fixed) && /Juego responsable/.test(fixed));
+});
+caso('Cliente sin bono de bienvenida: el prompt dice que NO se lo ofrezca', async () => {
+  nextResp = okResp({ reply: 'ok', handoff: false, handoff_reason: '' });
+  await bot.generateReply({ facts: FACTS, user: Object.assign({}, USER_NEW, { welcomeEligible: false, welcomeWhy: 'cuenta secundaria' }), history: [{ role: 'user', text: 'hay bono?' }] });
+  assert.ok(/NO tiene bono de bienvenida por ahora \(cuenta secundaria\)/.test(lastReq.body.system[1].text));
+});
+caso('Conversación: arranca con el cliente, junta turnos seguidos del mismo rol y termina en el cliente', async () => {
+  nextResp = okResp({ reply: 'dale', handoff: false, handoff_reason: '' });
+  await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'assistant', text: '[aviso automático] Bienvenido' }, { role: 'user', text: 'hola' }, { role: 'user', text: 'quiero cargar' }, { role: 'assistant', text: 'Tocá DEPOSITAR' }, { role: 'user', text: 'listo' }] });
+  const m = lastReq.body.messages;
+  assert.deepStrictEqual(m.map((x) => x.role), ['user', 'assistant', 'user']); assert.strictEqual(m[0].content, 'hola\nquiero cargar');
+});
+caso('Si el último mensaje no es del cliente: no llama a la IA', async () => {
+  lastReq = null;
+  const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'hola' }, { role: 'assistant', text: 'hola!' }] });
+  assert.ok(!r.ok); assert.strictEqual(lastReq, null);
+});
+caso('Handoff: la IA marca que lo tome una persona (carga trabada) ⇒ reply + handoff + motivo', async () => {
+  nextResp = okResp({ reply: 'Ya lo paso al equipo que lo revisa.', handoff: true, handoff_reason: 'carga de $5.000 no acreditada' });
+  const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'cargue 5000 y no me llego' }] });
+  assert.ok(r.ok && r.handoff); assert.strictEqual(r.handoffReason, 'carga de $5.000 no acreditada');
+});
+caso('Refusal ⇒ no ok y handoff (lo toma una persona); max_tokens ⇒ no ok; JSON roto ⇒ no ok', async () => {
+  nextResp = { stop_reason: 'refusal', content: [] }; let r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] });
+  assert.ok(!r.ok && r.handoff);
+  nextResp = { stop_reason: 'max_tokens', content: [{ type: 'text', text: '{"reply":"a' }] }; r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] });
+  assert.ok(!r.ok && !r.handoff);
+  nextResp = { stop_reason: 'end_turn', content: [{ type: 'text', text: 'no json' }] }; r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] });
+  assert.ok(!r.ok);
+});
+caso('Error de la API (429 / red) ⇒ no ok y reintentable (el server cae a la respuesta automática)', async () => {
+  nextErr = Object.assign(new Error('rate'), { response: { status: 429, data: { error: { message: 'rate limited' } } } });
+  let r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.ok && r.retryable);
+  nextErr = new Error('ECONNRESET'); r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.ok && r.retryable);
+  nextErr = null;
+});
+caso('Sin ANTHROPIC_API_KEY: isAvailable false y no llama', async () => {
+  const k = process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_API_KEY; lastReq = null;
+  assert.strictEqual(bot.isAvailable(), false);
+  const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.ok); assert.strictEqual(lastReq, null);
+  process.env.ANTHROPIC_API_KEY = k;
+});
+caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por mensaje, sólo texto, chips con respuesta fija, sin 502)', async () => {
+  const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  assert.ok(/if \(!explicit && await _supportBotActive\(\)\) \{ _supportBotSchedule\(userId, username\); return; \}/.test(S), 'texto libre ⇒ bot; chips ⇒ respuesta fija');
+  assert.ok(/'metadata\.bot': \{ \$ne: true \}/.test(S), 'la pausa cuenta sólo personas, no al bot');
+  assert.ok(/support_bot_claims'\)\.insertOne\(\{ _id: lastUser\.id/.test(S), 'una respuesta por mensaje (multi-instancia)');
+  assert.ok(/lastUser\.type !== 'text'/.test(S), 'imágenes (comprobantes) no las contesta el bot');
+  assert.ok(/status: 'open', closedAt: null/.test(S) && /kind: 'bot_handoff'/.test(S), 'handoff abre el chat con nota');
+  assert.ok(/return _supportCannedReply\(userId, username, null, '', false\)/.test(S), 'si la IA falla, respuesta automática de siempre');
+  const routes = S.slice(S.indexOf("app.post('/api/admin/support-bot/test'"), S.indexOf("app.get('/api/admin/meta-pixels'"));
+  assert.ok(!/status\(502\)/.test(routes), 'nunca 502 (Cloudflare lo tapa)');
+});
+
+(async () => {
+  let ok = 0;
+  for (const c of casos) { try { await c.fn(); ok++; console.log('✅ ' + c.n); } catch (e) { console.log('❌ ' + c.n + '\n   ' + (e && e.message)); } }
+  console.log(`\n${ok}/${casos.length} casos OK`); process.exit(ok === casos.length ? 0 : 1);
+})();

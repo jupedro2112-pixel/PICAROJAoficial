@@ -72,6 +72,7 @@ const ChatDelay = require('./src/models/ChatDelay');
 const Comprobante = require('./src/models/Comprobante');
 const BlockEvent = require('./src/models/BlockEvent'); // #996: historial de bloqueos (permanente)
 const comprobanteAi = require('./src/services/comprobanteAiService');
+const supportBot = require('./src/services/supportBot'); // #1042 bot de soporte con IA
 const BankMovement = require('./src/models/BankMovement');
 const HgcashCharge = require('./src/models/HgcashCharge');
 const PendingPayout = require('./src/models/PendingPayout');
@@ -1767,6 +1768,7 @@ function resolveSysContent(cmd, fallback) {
 async function maybeSendRecoveryMessage(user) {
   try {
     if (!user) return;
+    setTimeout(() => { _supportBotAfterDeposit(user).catch(() => {}); }, 25000); // #1042: beneficios después de la carga (bot de soporte)
     const tags = Array.isArray(user.tags) ? user.tags.map(t => String(t).toLowerCase()) : [];
     if (tags.includes('comunidad') || tags.includes('no comunidad')) return;
     const content = await renderSystemCommand(
@@ -5752,6 +5754,43 @@ app.delete('/api/admin/meta-pixels/:id', authMiddleware, adminMiddleware, async 
     const list = (await getConfig('metaPixels', [])) || []; const out = list.filter((p) => String(p.id) !== String(req.params.id));
     if (out.length === list.length) return res.status(404).json({ error: 'No existe' });
     await Config.set('metaPixels', out, req.user.username); await _metaPixelsLoad(); res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+// #1042 BOT DE SOPORTE CON IA — config, estadísticas (7 días) y prueba. Sólo el admin general cambia o prueba (la prueba gasta IA).
+app.get('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const cfg = await getSupportBotConfig();
+    const days = []; for (let i = 0; i < 7; i++) days.push(_schedArtKey(new Date(Date.now() - i * 24 * 3600 * 1000)));
+    let stats = []; try { stats = await mongoose.connection.collection('support_bot_stats').find({ _id: { $in: days } }).toArray(); } catch (_) {}
+    res.json({ success: true, config: cfg, available: supportBot.isAvailable(), canEdit: req.user.role === 'admin', stats: days.map((d) => Object.assign({ day: d, replies: 0, handoffs: 0, errors: 0, pausedByAgent: 0, afterDeposit: 0, inTok: 0, outTok: 0 }, stats.find((x) => x._id === d) || {})) });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general puede cambiar el bot.' });
+    const b = req.body || {}; const cur = await getSupportBotConfig(); const next = Object.assign({}, cur);
+    if (b.enabled != null) next.enabled = b.enabled === true;
+    if (typeof b.model === 'string' && /^claude-[a-z0-9.-]{3,40}$/.test(b.model)) next.model = b.model;
+    if (['low', 'medium', 'high'].includes(b.effort)) next.effort = b.effort;
+    for (const k of ['delayMinSec', 'delayMaxSec', 'pauseHours', 'handoffPauseMin']) if (b[k] != null && Number.isFinite(Number(b[k]))) next[k] = Number(b[k]);
+    if (typeof b.extraInfo === 'string') next.extraInfo = b.extraInfo.slice(0, 4000);
+    await Config.set('supportBot', next, req.user.username);
+    _sbFactsCache = { at: 0, v: null };
+    res.json({ success: true, config: await getSupportBotConfig() });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/support-bot/test', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general.' });
+    if (!supportBot.isAvailable()) return res.status(503).json({ error: 'Falta ANTHROPIC_API_KEY en el servidor.' });
+    const text = String((req.body && req.body.text) || '').trim().slice(0, 1000); if (!text) return res.status(400).json({ error: 'Escribí un mensaje de prueba.' });
+    const stage = (req.body && req.body.stage) === 'cargo' ? 'cargo' : 'nuevo';
+    const cfg = await getSupportBotConfig();
+    const user = { username: 'cliente_prueba', accountDays: stage === 'cargo' ? 12 : 0, realDeposits: stage === 'cargo' ? 4 : 0, lastDepositDays: stage === 'cargo' ? 1 : null,
+      welcomeEligible: stage === 'nuevo', firstDepositPct: stage === 'nuevo' ? await getFirstDepositBonusPct(null) : 0, welcomeWhy: '', appInstalled: false, pendingReceipts: 0, payout: '', blocked: false };
+    const r = await supportBot.generateReply({ facts: await _supportBotFacts(cfg), user, agentName: await getSupportAgentName(), history: [{ role: 'user', text }], model: cfg.model, effort: cfg.effort });
+    if (!r.ok) return res.status(503).json({ error: r.error || 'La IA no respondió' });
+    res.json({ success: true, reply: r.reply, handoff: r.handoff, handoffReason: r.handoffReason, model: r.model, usage: r.usage });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.get('/api/admin/meta-pixels', authMiddleware, adminMiddleware, async (req, res) => {
@@ -14412,6 +14451,12 @@ async function initializeData() {
       response: '🤝 Te derivamos a nuestro equipo de Comunidad. En breve te atendemos por aquí. ¡Gracias!'
     },
     {
+      name: '/sys_bot_after_deposit',
+      description: '#1042 Bot de soporte: mensaje con los BENEFICIOS que manda el bot (firmado por la persona del turno) ~25 s después de cada una de las 3 primeras cargas de un cliente (una vez por día). Variables: {username}, {reembolso} (% diario), {nombre}. Vacío = no se envía. Sólo con el bot encendido.',
+      type: 'message',
+      response: SUPPORT_BOT_AFTER_DEP_DEFAULT
+    },
+    {
       name: '/sys_recover_100',
       description: 'Oferta de "100% de recuperación" que se envía tras cada carga (manual o automática). NO se envía a clientes con la etiqueta "comunidad" o "no comunidad". Sin variables. Si lo dejás vacío, no se envía.',
       type: 'message',
@@ -15506,6 +15551,16 @@ async function _supportQuickReply(userId, username, quick, text) {
     }
     // #702: tema por chip (carga / retiro / reembolso / otro) o por palabras clave del texto libre
     const explicit = ['carga', 'retiro', 'reembolso', 'otro', 'bono'].includes(quick);
+    // #1042: con el BOT de IA activo, el texto libre lo contesta el bot (los botones de tema siguen con su respuesta fija). Si la IA
+    // falla, el bot cae a la respuesta automática de siempre (`_supportCannedReply`).
+    if (!explicit && await _supportBotActive()) { _supportBotSchedule(userId, username); return; }
+    return _supportCannedReply(userId, username, quick, text, explicit);
+  } catch (e) { logger.warn(`[support] quick-reply: ${e.message}`); }
+}
+async function _supportCannedReply(userId, username, quick, text, explicit) {
+  try {
+    const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+    const u = { id: userId, username };
     let topic = explicit ? quick : _supportTopicFromText(text);
     if (!topic) return _supportAutoReply(userId, username);
     // #784 (owner: "se rompió, no contesta automático; cada botón tiene que tener su respuesta"): el botón de TEMA tocado por el
@@ -15549,6 +15604,200 @@ async function _supportAutoReply(userId, username) {
     if (agentRecent) return;
     await _sendUserSystemMessage({ id: userId, username }, txt, { metadata: { kind: 'support_ack', channel: 'support', target: 'terms', label: '📄 Bases y condiciones' } }); // #702: + botón
   } catch (e) { logger.warn(`[support] auto-respuesta: ${e.message}`); }
+}
+// ════════════════════════════════════════════════════════════════════════════
+// #1042 BOT DE SOPORTE CON IA (owner 2026-11-09). La lógica de la IA está en src/services/supportBot.js; acá: cuándo contesta, con qué
+// datos y cómo se publica. Reglas del owner: contesta primero (10-15 s, con "escribiendo…"), bien resumido; con quien no cargó va directo
+// a la carga; recuerda cómo mandar el comprobante; después de cargar cuenta los beneficios; si algo se traba ⇒ abre el chat en Soporte
+// del panel con una nota para el agente. Si un agente (persona) escribe en el chat, el bot se calla ahí `pauseHours`. Si la IA falla,
+// sale la respuesta automática de siempre. Config['supportBot'] (panel → Configuración → 🤖 Bot de soporte).
+// ════════════════════════════════════════════════════════════════════════════
+const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
+const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, extraInfo: '' };
+async function getSupportBotConfig() {
+  let raw = null; try { raw = await getConfig('supportBot', null); } catch (_) {}
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const num = (v, d, a, b) => { const n = Number(v); return Number.isFinite(n) ? Math.min(b, Math.max(a, n)) : d; };
+  const model = /^claude-[a-z0-9.-]{3,40}$/.test(String(r.model || '')) ? String(r.model) : SUPPORT_BOT_DEFAULT.model;
+  const effort = ['low', 'medium', 'high'].includes(r.effort) ? r.effort : SUPPORT_BOT_DEFAULT.effort;
+  const dmin = num(r.delayMinSec, SUPPORT_BOT_DEFAULT.delayMinSec, 3, 120);
+  return { enabled: r.enabled == null ? SUPPORT_BOT_DEFAULT.enabled : r.enabled === true, model, effort, delayMinSec: dmin,
+    delayMaxSec: Math.max(dmin, num(r.delayMaxSec, SUPPORT_BOT_DEFAULT.delayMaxSec, 3, 180)), pauseHours: num(r.pauseHours, SUPPORT_BOT_DEFAULT.pauseHours, 0, 72),
+    handoffPauseMin: num(r.handoffPauseMin, SUPPORT_BOT_DEFAULT.handoffPauseMin, 0, 1440), extraInfo: String(r.extraInfo || '').slice(0, 4000) };
+}
+async function _supportBotActive() { if (!supportBot.isAvailable()) return false; try { return (await getSupportBotConfig()).enabled; } catch (_) { return false; } }
+
+// Datos del servicio para el bot (cacheados 5 min: se leen de la Config, no de 1girox).
+let _sbFactsCache = { at: 0, v: null };
+async function _supportBotFacts(cfg) {
+  if (_sbFactsCache.v && Date.now() - _sbFactsCache.at < 5 * 60 * 1000) return Object.assign({}, _sbFactsCache.v, { extraInfo: cfg.extraInfo });
+  const f = {};
+  const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+  try { f.minDeposit = await getMinDepositArs(); f.withdrawMin = await getWithdrawMinArs(); } catch (_) {}
+  try { f.depositRolloverX = await getDepositRolloverX(); f.giftRolloverX = await _giftRolloverX(); } catch (_) {}
+  try { f.firstDepositPct = await getFirstDepositBonusPct(null); f.firstDepositCap = await getFirstDepositCapArs(null); } catch (_) {}
+  try { const ig = await getInstallGiftConfig(); f.installGiftOn = !!ig.enabled; f.installGiftFixed = ig.fixedArs || 0; f.installGiftPct = ig.pct; } catch (_) {}
+  try {
+    const tbp = await getRefundTiersByPeriod();
+    const linea = (ts) => (ts || []).map((t) => (t.max === null ? (t.min ? `más de ${money(t.min)}` : 'sobre todo lo perdido') : `hasta ${money(t.max)}`) + ` ${t.pct}%`).join(', ');
+    f.refunds = { daily: linea(tbp.daily), weekly: linea(tbp.weekly), monthly: linea(tbp.monthly) };
+  } catch (_) {}
+  try { f.referralsOn = await _referralsEnabled(); } catch (_) {}
+  try { f.platforms = (await platforms.listEnabled()).filter((p) => p.connected !== false).map((p) => p.name).join(', '); } catch (_) {}
+  // Los textos oficiales de Soporte (COMANDOS) también son conocimiento del bot: lo que el equipo edita ahí, el bot lo usa.
+  try {
+    const vars = { min: money(f.minDeposit), retiro_min: money(f.withdrawMin), rollover: String(f.giftRolloverX), carga: String(f.depositRolloverX) };
+    const t = [];
+    for (const [cmd, def] of [['/sys_support_topic_carga', SUPPORT_TOPIC_CARGA_DEFAULT], ['/sys_support_topic_retiro', SUPPORT_TOPIC_RETIRO_DEFAULT], ['/sys_support_topic_bono', SUPPORT_TOPIC_BONO_DEFAULT], ['/sys_support_quick_cargar', SUPPORT_QUICK_CARGAR_DEFAULT], ['/sys_support_quick_retirar', SUPPORT_QUICK_RETIRAR_DEFAULT]]) {
+      try { const x = await renderSystemCommand(cmd, def, vars); if (x) t.push(String(x).replace(/\s+/g, ' ').slice(0, 500)); } catch (_) {}
+    }
+    f.officialTexts = t;
+  } catch (_) {}
+  _sbFactsCache = { at: Date.now(), v: f };
+  return Object.assign({}, f, { extraInfo: cfg.extraInfo });
+}
+// Datos del cliente para el bot (lo justo para no prometerle algo que no le toca y saber si tiene algo trabado).
+async function _supportBotUserFacts(u) {
+  const day = 24 * 3600 * 1000; const now = Date.now();
+  const out = { username: u.username, accountDays: Math.max(0, Math.floor((now - new Date(u.createdAt || now).getTime()) / day)), realDeposits: 0, lastDepositDays: null,
+    welcomeEligible: false, welcomeWhy: '', firstDepositPct: 0, appInstalled: false, pendingReceipts: 0, payout: '', blocked: !!u.isBlocked };
+  try {
+    const q = { userId: u.id, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['payout_refund', 'install_bonus', 'welcome_gift', 'welcome_code'] }, description: { $not: /PRUEBA/i } };
+    out.realDeposits = await Transaction.countDocuments(q);
+    if (out.realDeposits) { const last = await Transaction.findOne(q).sort({ timestamp: -1 }).select('timestamp').lean(); if (last) out.lastDepositDays = Math.floor((now - new Date(last.timestamp).getTime()) / day); }
+  } catch (_) {}
+  if (!out.realDeposits) {
+    try {
+      if (u.duplicateOf) out.welcomeWhy = 'cuenta secundaria';
+      else if (await _noWelcomeActive(u)) out.welcomeWhy = 'los regalos de bienvenida llegan al ser cliente frecuente';
+      else { out.firstDepositPct = await getFirstDepositBonusPct(u); out.welcomeEligible = out.firstDepositPct > 0; }
+    } catch (_) {}
+  }
+  try { out.appInstalled = u.fcmTokenContext === 'standalone' || (Array.isArray(u.fcmTokens) && u.fcmTokens.some((t) => t && t.context === 'standalone')); } catch (_) {}
+  try { out.pendingReceipts = await Comprobante.countDocuments({ userId: u.id, reviewStatus: 'pending' }); } catch (_) {}
+  try {
+    const pp = await PendingPayout.findOne({ userId: u.id }).sort({ createdAt: -1 }).select('status amount createdAt').lean();
+    if (pp && now - new Date(pp.createdAt).getTime() < 7 * day) {
+      const st = { pending_review: 'en revisión (todavía no se pagó)', paying: 'pagándose ahora', paid: 'pagado', failed: 'con un problema en el pago', cancelled: 'cancelado / rechazado' }[pp.status] || pp.status;
+      out.payout = `$${Math.round(pp.amount || 0).toLocaleString('es-AR')}, ${st}, pedido hace ${Math.round((now - new Date(pp.createdAt).getTime()) / 60000)} min`;
+    }
+  } catch (_) {}
+  return out;
+}
+// La charla para la IA: lo que ve el cliente en Soporte (desde el corte de la sesión), últimas 20 líneas, sin imágenes ni notas internas.
+async function _supportBotHistory(u) {
+  const since = new Date(Math.max(Date.now() - 24 * 3600 * 1000, (await getSupportChannelSince() || new Date(0)).getTime(), u.supportSessionSince ? new Date(u.supportSessionSince).getTime() : 0));
+  const rows = await Message.find({ $or: [{ senderId: u.id }, { receiverId: u.id }], adminOnly: { $ne: true }, timestamp: { $gte: since } })
+    .sort({ timestamp: -1 }).limit(20).select('senderId type content metadata').lean();
+  return rows.reverse().map((m) => {
+    const mine = m.senderId === u.id;
+    const txt = m.type === 'image' ? '[mandó una imagen]' : m.type === 'video' ? '[mandó un video]' : String(m.content || '').slice(0, 1500);
+    if (mine) return { role: 'user', text: txt };
+    return { role: 'assistant', text: m.type === 'system' ? '[aviso automático] ' + txt : txt };
+  });
+}
+async function _supportBotStat(field, n = 1, extra = null) {
+  try { await mongoose.connection.collection('support_bot_stats').updateOne({ _id: _schedArtKey(new Date()) }, { $inc: Object.assign({ [field]: n }, extra || {}) }, { upsert: true }); } catch (_) {}
+}
+const _sbTimers = new Map(); // userId → token (debounce en esta instancia: varios mensajes seguidos ⇒ una sola respuesta)
+function _sbTyping(userId, name, on) {
+  try { io.to(`user_${userId}`).emit(on ? 'admin_typing' : 'admin_stop_typing', { adminId: 'support-bot', adminName: name, isTyping: !!on }); } catch (_) {}
+}
+function _supportBotSchedule(userId, username) {
+  const token = Date.now() + Math.random();
+  _sbTimers.set(userId, token);
+  const t0 = Date.now();
+  setTimeout(() => { _supportBotRun(userId, username, token, t0).catch((e) => logger.warn(`[support-bot] ${username}: ${e.message}`)); }, 3500);
+}
+async function _supportBotRun(userId, username, token, t0) {
+  if (_sbTimers.get(userId) !== token) return; // llegó otro mensaje: contesta el último
+  const cfg = await getSupportBotConfig();
+  if (!cfg.enabled || !supportBot.isAvailable()) return _supportCannedReply(userId, username, null, '', false);
+  const u = await User.findOne({ id: userId }).select('id username role createdAt isBlocked duplicateOf noWelcomeGifts fcmTokenContext fcmTokens supportSessionSince').lean();
+  if (!u || u.role !== 'user') return;
+  const lastUser = await Message.findOne({ senderId: userId }).sort({ timestamp: -1 }).select('id type timestamp content').lean();
+  if (!lastUser || lastUser.type !== 'text') return; // imágenes = comprobantes: los contesta su propio circuito
+  // ¿Una PERSONA del equipo escribió hace poco? ⇒ el bot se calla en este chat.
+  if (cfg.pauseHours > 0) {
+    const human = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, timestamp: { $gte: new Date(Date.now() - cfg.pauseHours * 3600 * 1000) } }).select('_id').lean();
+    if (human) { _supportBotStat('pausedByAgent'); return; }
+  }
+  // ¿El bot ya lo pasó a una persona hace poco? ⇒ no sigue contestando (lo toma el agente); si nadie aparece en ese rato, vuelve.
+  if (cfg.handoffPauseMin > 0) {
+    const ho = await Message.findOne({ receiverId: userId, 'metadata.kind': 'bot_handoff', timestamp: { $gte: new Date(Date.now() - cfg.handoffPauseMin * 60000) } }).select('_id').lean();
+    if (ho) return;
+  }
+  const agentName = await getSupportAgentName();
+  _sbTyping(userId, agentName, true);
+  let r;
+  try {
+    const [facts, user, history] = await Promise.all([_supportBotFacts(cfg), _supportBotUserFacts(u), _supportBotHistory(u)]);
+    r = await supportBot.generateReply({ facts, user, agentName, history, model: cfg.model, effort: cfg.effort });
+  } catch (e) { r = { ok: false, error: e.message }; }
+  if (_sbTimers.get(userId) !== token) { _sbTyping(userId, agentName, false); return; } // escribió de nuevo mientras pensaba: contesta el último
+  if (!r.ok && !r.handoff) {
+    _sbTyping(userId, agentName, false); _supportBotStat('errors');
+    logger.warn(`[support-bot] ${username}: sin respuesta de la IA (${r.error}) ⇒ respuesta automática de siempre`);
+    return _supportCannedReply(userId, username, null, String(lastUser.content || ''), false);
+  }
+  // Que no parezca instantáneo: espera hasta completar los 10-15 s desde el mensaje del cliente.
+  const target = (cfg.delayMinSec + Math.random() * (cfg.delayMaxSec - cfg.delayMinSec)) * 1000;
+  const wait = Math.max(0, t0 + target - Date.now());
+  if (wait) await new Promise((res) => setTimeout(res, wait));
+  if (_sbTimers.get(userId) !== token) { _sbTyping(userId, agentName, false); return; }
+  // Una sola respuesta por mensaje del cliente aunque haya varias instancias (índice único = id del mensaje).
+  try { await mongoose.connection.collection('support_bot_claims').insertOne({ _id: lastUser.id, userId, at: new Date() }); } catch (e) { _sbTyping(userId, agentName, false); return; }
+  // ¿Respondió una persona mientras tanto? ⇒ no se pisa.
+  const humanNow = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, timestamp: { $gt: lastUser.timestamp } }).select('_id').lean();
+  _sbTyping(userId, agentName, false);
+  if (humanNow) return;
+  // Pasado a una persona sin texto de la IA (p. ej. la IA no quiso responder): el cliente igual recibe un aviso corto.
+  const reply = (r.ok && r.reply) ? r.reply : (r.handoff ? 'Ya te paso con alguien del equipo, en breve te responde 🙌' : '');
+  if (reply) {
+    const message = await Message.create({ id: uuidv4(), senderId: 'support-bot', senderUsername: agentName, senderRole: 'admin', receiverId: userId, receiverRole: 'user',
+      content: reply, type: 'text', channel: 'support', metadata: { channel: 'support', agentName, agent: 'bot', bot: true }, timestamp: new Date(), read: false });
+    io.to(`user_${userId}`).emit('new_message', message);
+    io.to(`chat_${userId}`).emit('new_message', message);
+    notifyAdmins('new_message', { message, userId, username });
+    if (!connectedUsers.get(userId)) _maybeSendPushFallback(userId, message);
+    try { await ChatStatus.updateOne({ userId }, { $set: { lastMessageAt: new Date() } }); } catch (_) {}
+    const us = r.usage || {};
+    _supportBotStat('replies', 1, { inTok: Number(us.input_tokens) || 0, outTok: Number(us.output_tokens) || 0, cacheTok: Number(us.cache_read_input_tokens) || 0 });
+  }
+  if (r.handoff) {
+    // TRABADO ⇒ a una persona: el chat queda ABIERTO en Soporte del panel con la nota del motivo (y el bot se corre un rato).
+    _supportBotStat('handoffs');
+    try { await ChatStatus.updateOne({ userId }, { $set: { userId, username, status: 'open', closedAt: null, closedBy: null, lastMessageAt: new Date() } }, { upsert: true }); } catch (_) {}
+    try {
+      const note = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: userId, receiverRole: 'user',
+        content: `🤖➡️👤 EL BOT LO PASA A UN AGENTE: ${r.handoffReason || r.error || 'necesita una persona'}. Respondé acá (mientras escribas, el bot no contesta en este chat).`,
+        type: 'system', adminOnly: true, metadata: { kind: 'bot_handoff', reason: r.handoffReason || null }, timestamp: new Date(), read: false });
+      io.to(`chat_${userId}`).emit('new_message', note);
+      notifyAdmins('new_message', { message: note, userId, username });
+      notifyAdmins('chat_reopened', { userId, username, by: 'bot' });
+    } catch (_) {}
+    logger.info(`[support-bot] ${username} ⇒ agente (${r.handoffReason || r.error})`);
+  } else if (reply) {
+    try { await delayClockResolve(userId, { responded: true, agentId: 'support-bot', agentUsername: 'bot', via: 'bot' }); } catch (_) {}
+  }
+}
+
+// #1042 (owner: "después de su carga, darle los beneficios: reembolsos, misiones"): mensaje corto del bot tras las 3 primeras cargas.
+async function _supportBotAfterDeposit(user) {
+  if (!user || !user.id || !(await _supportBotActive())) return;
+  const q = { userId: user.id, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['payout_refund', 'install_bonus', 'welcome_gift', 'welcome_code'] }, description: { $not: /PRUEBA/i } };
+  const n = await Transaction.countDocuments(q); if (!(n >= 1 && n <= 3)) return;
+  try { await mongoose.connection.collection('support_bot_claims').insertOne({ _id: `afterdep-${user.id}-${_schedArtKey(new Date())}`, userId: user.id, at: new Date() }); } catch (_) { return; }
+  const agentName = await getSupportAgentName();
+  let pct = 0; try { pct = await getDailyRefundPct(); } catch (_) {}
+  const content = await renderSystemCommand('/sys_bot_after_deposit', SUPPORT_BOT_AFTER_DEP_DEFAULT, { username: user.username, reembolso: String(pct), nombre: agentName });
+  if (!content) return;
+  const message = await Message.create({ id: uuidv4(), senderId: 'support-bot', senderUsername: agentName, senderRole: 'admin', receiverId: user.id, receiverRole: 'user',
+    content, type: 'text', channel: 'support', metadata: { channel: 'support', agentName, agent: 'bot', bot: true, kind: 'bot_after_deposit' }, timestamp: new Date(), read: false });
+  io.to(`user_${user.id}`).emit('new_message', message);
+  io.to(`chat_${user.id}`).emit('new_message', message);
+  notifyAdmins('new_message', { message, userId: user.id, username: user.username });
+  _supportBotStat('afterDeposit');
 }
 // El cliente sólo ve el chat desde esta fecha (el chat viejo de cargas queda oculto para él; el panel lo ve entero).
 let _supportSinceCache = { at: 0, value: null };

@@ -101,6 +101,7 @@
         const cta = _el('serviceBannerCta');
         const bn = _el('serviceBanner');
         document.body.classList.toggle('home-mini', mode === 'mini');
+        if (mode === 'mini') setTimeout(() => { try { spPromoPaint(); } catch (_) {} }, 300); // #1042: cinta de promo del chat
         document.body.classList.toggle('home-play', mode === 'play');
         document.body.classList.toggle('home-full', mode === 'full'); // #269: carga automática SENCILLA (CSS esconde lo demás)
         document.body.classList.toggle('home-easy', mode === 'easy' || mode === 'basic'); // #366: MENÚ FÁCIL (#512: básico reusa el ocultado)
@@ -399,7 +400,7 @@
     // #974: el extra por instalar puede ser un monto fijo ($5.000) o un % → un solo texto para las dos formas.
     const _fdExtraTxt = (j) => { if (!j) return ''; const m = Number(j.extraMonto) || 0; if (m > 0) return '$' + m.toLocaleString('es-AR'); const e = Number(j.extra) || 0; return e > 0 ? e + '%' : ''; };
     const _FD_NOTE_INNER = (pct, extra) => '<span class="fd-l1">🎁 <b>Primera carga: +<span class="fd-pct">' + pct + '%</span> automático</b></span>' +
-        '<span class="fd-app"' + (extra ? '' : ' hidden') + '>📲 Después, <b>+<span class="fd-pct-app">' + extra + '</span> EXTRA</b> instalando la app y activando las notificaciones</span>';
+        '<span class="fd-app"' + (extra ? '' : ' hidden') + '>📲 Y <b>+<span class="fd-pct-app">' + extra + '</span> EXTRA</b> instalando nuestra app</span>'; // #1042 (owner): "100% y $5.000 si instalás nuestra app"
     function _fdNotesPaint() {
         _fdPromoLoad().then((j) => {
             _fdJ = j || null;
@@ -450,6 +451,30 @@
     }
     function fdClose() { try { VIP.ui.hideModal('fdModal'); } catch (_) { const m = _el('fdModal'); if (m) m.classList.add('hidden'); } }
     function fdGo() { fdClose(); try { easyLoad(); } catch (_) { setHomeMode('full'); } }
+    // #1042: barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo con VER (abre el cartel del bono de 1ª carga).
+    let _spPromo = null;
+    async function spPromoPaint() {
+        const tk = _el('spTicker'), tx = _el('spTickerTxt'); if (!tk || !tx) return;
+        try {
+            const j = await _fdPromoLoad(); _spPromo = j || null;
+            if (j && j.show && Number(j.pct) > 0) {
+                const extra = _fdExtraTxt(j);
+                tx.textContent = 'CARGÁ Y GANÁ · ' + j.pct + '% en tu primera carga' + (extra ? ' + ' + extra + ' instalando nuestra app' : '') + ' · ¡nunca fue tan fácil!';
+            } else tx.textContent = 'REEMBOLSO DIARIO · te devolvemos parte de lo que pierdas · misiones y ruleta todos los días';
+            tk.hidden = false;
+            const win = tk.querySelector('.sp-tk-win'); tk.classList.toggle('sp-tk-run', !!(win && tx.scrollWidth > win.clientWidth + 4));
+        } catch (_) { tk.hidden = true; }
+    }
+    function spPromoOpen() {
+        const j = _spPromo;
+        if (!(j && j.show && Number(j.pct) > 0)) { try { svcRefund(); } catch (_) {} return; }
+        const p = _el('fdPct'), pa = _el('fdPctApp'), ap = _el('fdApp'), t = _el('fdTxt');
+        const extra = _fdExtraTxt(j);
+        if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (extra || '0%') + ' EXTRA'; if (ap) ap.style.display = extra ? '' : 'none'; if (t) t.textContent = j.text || '';
+        try { VIP.ui.showModal('fdModal'); } catch (_) { const m = _el('fdModal'); if (m) m.classList.remove('hidden'); }
+    }
+    function spDeposit() { try { setHomeMode('full'); } catch (_) {} }
+    function spWithdraw() { try { VIP.withdraw.openWithdrawModal(); } catch (_) {} }
     function openMenuChooser() {
         const m = _el('menuChooser'); if (!m) return;
         // #795 (owner): el recuadro marcado es el menú ACTUAL (antes el CSS marcaba siempre "Menú completo").
@@ -1452,6 +1477,7 @@
         if (_homeMode === 'play') { setHomeMode('mini'); return; }
         const p = _el('supportPanel');
         if (!p) return;
+        try { spPromoPaint(); } catch (_) {} // #1042
         p.classList.remove('hidden');
         document.body.classList.add('support-open');
         try { const bb = _el('supportBubble'); if (bb) bb.style.visibility = 'hidden'; } catch (_) {}
@@ -2919,7 +2945,7 @@
 
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
-        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spWithdraw, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,
