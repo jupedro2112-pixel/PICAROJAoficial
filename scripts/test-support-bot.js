@@ -95,6 +95,20 @@ caso('Error de la API (429 / red) ⇒ no ok y reintentable (el server cae a la r
   nextErr = new Error('ECONNRESET'); r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.ok && r.retryable);
   nextErr = null;
 });
+caso('IA sin saldo (400 credit balance / 402 / 401) ⇒ unavailable (el server pausa la IA y contesta el bot simple)', async () => {
+  nextErr = Object.assign(new Error('x'), { response: { status: 400, data: { error: { message: 'Your credit balance is too low to access the Anthropic API.' } } } });
+  let r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.ok && r.unavailable);
+  nextErr = Object.assign(new Error('x'), { response: { status: 401, data: {} } }); r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(r.unavailable);
+  nextErr = Object.assign(new Error('x'), { response: { status: 529, data: {} } }); r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.unavailable && r.retryable);
+  nextErr = null;
+  const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  assert.ok(/if \(_supportBotAiDown\(\)\) return _supportCannedReply\(userId, username, quick, text, false\);/.test(S), 'IA en pausa ⇒ respuestas fijas');
+  assert.ok(/if \(!r\.ok && r\.unavailable\) \{ _sbAiDownUntil = Date\.now\(\) \+ 30 \* 60000;/.test(S), 'pausa de 30 min');
+  // primer mensaje de la charla ⇒ respuesta básica (tema o /sys_support_first) antes que la IA
+  const qr = S.slice(S.indexOf('async function _supportQuickReply'), S.indexOf('async function _supportCannedReply'));
+  assert.ok(qr.indexOf("renderSystemCommand('/sys_support_first'") > -1 && qr.indexOf("renderSystemCommand('/sys_support_first'") < qr.indexOf('_supportBotSchedule(userId, username)'), 'básica primero');
+  assert.ok(/Espero tu comprobante para realizar la carga/.test(S) && /name: '\/sys_support_first'/.test(S));
+});
 caso('Sin ANTHROPIC_API_KEY: isAvailable false y no llama', async () => {
   const k = process.env.ANTHROPIC_API_KEY; delete process.env.ANTHROPIC_API_KEY; lastReq = null;
   assert.strictEqual(bot.isAvailable(), false);

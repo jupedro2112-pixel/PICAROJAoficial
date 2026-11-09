@@ -5767,7 +5767,7 @@ app.get('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, r
     const cfg = await getSupportBotConfig();
     const days = []; for (let i = 0; i < 7; i++) days.push(_schedArtKey(new Date(Date.now() - i * 24 * 3600 * 1000)));
     let stats = []; try { stats = await mongoose.connection.collection('support_bot_stats').find({ _id: { $in: days } }).toArray(); } catch (_) {}
-    res.json({ success: true, config: cfg, available: supportBot.isAvailable(), canEdit: req.user.role === 'admin', stats: days.map((d) => Object.assign({ day: d, replies: 0, handoffs: 0, errors: 0, pausedByAgent: 0, afterDeposit: 0, muted: 0, inTok: 0, outTok: 0 }, stats.find((x) => x._id === d) || {})) });
+    res.json({ success: true, config: cfg, available: supportBot.isAvailable(), aiDown: _supportBotAiDown() ? _sbAiDownWhy : '', canEdit: req.user.role === 'admin', stats: days.map((d) => Object.assign({ day: d, replies: 0, handoffs: 0, errors: 0, pausedByAgent: 0, afterDeposit: 0, muted: 0, noCredit: 0, inTok: 0, outTok: 0 }, stats.find((x) => x._id === d) || {})) });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, res) => {
@@ -14457,6 +14457,12 @@ async function initializeData() {
       response: '🤝 Te derivamos a nuestro equipo de Comunidad. En breve te atendemos por aquí. ¡Gracias!'
     },
     {
+      name: '/sys_support_first',
+      description: '#1042-f Soporte: PRIMERA respuesta (básica) al primer mensaje de la charla cuando no habla de un tema puntual. Va con el botón "📸 Adjuntar comprobante" (abre la guía). Después contesta el bot de IA. Variable: {nombre} (persona del turno).',
+      type: 'message',
+      response: SUPPORT_FIRST_DEFAULT
+    },
+    {
       name: '/sys_bot_after_deposit',
       description: '#1042 Bot de soporte: mensaje con los BENEFICIOS que manda el bot (firmado por la persona del turno) ~25 s después de cada una de las 3 primeras cargas de un cliente (una vez por día). Variables: {username}, {reembolso} (% diario), {nombre}. Vacío = no se envía. Sólo con el bot encendido.',
       type: 'message',
@@ -15563,7 +15569,22 @@ async function _supportQuickReply(userId, username, quick, text) {
     // sigue preguntando (no entendió) ⇒ la IA; 3) la IA lo deriva a un agente (handoff, o tope `aiMaxReplies`).
     if (!explicit && await _supportBotActive()) {
       try { const mu = await mongoose.connection.collection('support_bot_mutes').findOne({ _id: userId }); if (mu && mu.until > new Date()) return; } catch (_) {} // silenciado: ni respuesta fija ni IA
+      // IA sin saldo / caída ⇒ como antes del bot (respuestas fijas).
+      if (_supportBotAiDown()) return _supportCannedReply(userId, username, quick, text, false);
       const topic = _supportTopicFromText(text);
+      // #1042-f (owner): "la respuesta normal y básica SIEMPRE es al principio: espero tu comprobante para realizar la carga". Primer mensaje
+      // de la charla (nada nuestro en Soporte desde el corte / 2 h) ⇒ respuesta fija del tema o, si no hay tema, /sys_support_first (+ botón que
+      // abre la guía del comprobante). La IA recién entra en el mensaje siguiente.
+      try {
+        const uu = await User.findOne({ id: userId }).select('supportSessionSince').lean();
+        const since = new Date(Math.max(Date.now() - 2 * 3600 * 1000, uu && uu.supportSessionSince ? new Date(uu.supportSessionSince).getTime() : 0));
+        const ours = await Message.findOne({ receiverId: userId, adminOnly: { $ne: true }, timestamp: { $gte: since }, $or: [{ channel: 'support' }, { 'metadata.channel': 'support' }] }).select('_id').lean();
+        if (!ours) {
+          if (topic) return _supportCannedReply(userId, username, quick, text, false);
+          const t = await renderSystemCommand('/sys_support_first', SUPPORT_FIRST_DEFAULT, { nombre: await getSupportAgentName() });
+          if (t) { await _sendUserSystemMessage(u, t, { metadata: { kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante', channel: 'support', topic: 'first' } }); return; }
+        }
+      } catch (_) {}
       if (topic) {
         const recent = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.topic': topic, timestamp: { $gte: new Date(Date.now() - 2 * 3600 * 1000) } }).select('_id').lean();
         if (!recent) return _supportCannedReply(userId, username, quick, text, false); // escalón 1: respuesta simple
@@ -15776,6 +15797,7 @@ async function _supportBotRun(userId, username, token, t0) {
     if (!r.reply) return;
     _sbTyping(userId, agentName, true); // #1042-d: fuera de tema ⇒ una frase de cierre y después silencio
   }
+  if (!r.ok && r.unavailable) { _sbAiDownUntil = Date.now() + 30 * 60000; _sbAiDownWhy = String(r.error || '').slice(0, 200); _supportBotStat('noCredit'); }
   if (!r.ok && !r.handoff) {
     _sbTyping(userId, agentName, false); _supportBotStat('errors');
     logger.warn(`[support-bot] ${username}: sin respuesta de la IA (${r.error}) ⇒ respuesta automática de siempre`);
@@ -15826,6 +15848,11 @@ async function _supportBotRun(userId, username, token, t0) {
 }
 
 // #1042 (owner: "después de su carga, darle los beneficios: reembolsos, misiones"): mensaje corto del bot tras las 3 primeras cargas.
+// #1042-f (owner): IA SIN SALDO ⇒ "que dé respuestas el bot nomás y siga normal": la IA queda en pausa 30 min (por instancia) y todo va por
+// las respuestas fijas de siempre. El panel lo muestra.
+let _sbAiDownUntil = 0, _sbAiDownWhy = '';
+function _supportBotAiDown() { return Date.now() < _sbAiDownUntil; }
+const SUPPORT_FIRST_DEFAULT = '👋 ¡Hola! Espero tu comprobante para realizar la carga 📸 Mandá la captura ENTERA (titular, CUIT, fecha y hora, monto y N° de operación).';
 async function _supportBotAfterDeposit(user) {
   if (!user || !user.id || !(await _supportBotActive())) return;
   const q = { userId: user.id, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['payout_refund', 'install_bonus', 'welcome_gift', 'welcome_code'] }, description: { $not: /PRUEBA/i } };

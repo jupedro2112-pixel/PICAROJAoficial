@@ -6335,12 +6335,12 @@ async function loadSupportBot() {
     try {
         const r = await authFetch('/api/admin/support-bot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
         const c = j.config || {};
-        st.textContent = c.classic ? '· ↩️ chat clásico (sin IA)' : !j.available ? '· ⚠️ falta ANTHROPIC_API_KEY en el servidor' : (c.enabled ? '· ✅ encendido' : '· ⏸️ apagado');
+        st.textContent = c.classic ? '· ↩️ chat clásico (sin IA)' : !j.available ? '· ⚠️ falta ANTHROPIC_API_KEY en el servidor' : j.aiDown ? '· ⚠️ la IA no responde (¿sin saldo?): contesta el bot simple · ' + j.aiDown : (c.enabled ? '· ✅ encendido' : '· ⏸️ apagado');
         const set = (id, v) => { const e = document.getElementById(id); if (e) { if (e.type === 'checkbox') e.checked = !!v; else e.value = v == null ? '' : v; e.disabled = !j.canEdit; } };
         set('sbEnabled', c.enabled); set('sbClassic', c.classic); set('sbModel', c.model); set('sbDelayMin', c.delayMinSec); set('sbDelayMax', c.delayMaxSec); set('sbPause', c.pauseHours); set('sbMute', c.muteHours); set('sbAiMax', c.aiMaxReplies); set('sbExtra', c.extraInfo);
         const sel = document.getElementById('sbModel'); if (sel && c.model && ![...sel.options].some((o) => o.value === c.model)) { const o = document.createElement('option'); o.value = c.model; o.textContent = c.model; sel.appendChild(o); sel.value = c.model; }
-        const rows = (j.stats || []).map((d) => '<tr><td>' + d.day + '</td><td>' + d.replies + '</td><td>' + d.handoffs + '</td><td>' + d.afterDeposit + '</td><td>' + d.pausedByAgent + '</td><td>' + (d.muted || 0) + '</td><td>' + d.errors + '</td></tr>').join('');
-        const box = document.getElementById('sbStats'); if (box) box.innerHTML = '<table class="data-table" style="font-size:12px;"><tr><th>Día</th><th>Respuestas</th><th>A un agente</th><th>Beneficios post-carga</th><th>Callado por agente</th><th>Silenciados</th><th>Errores IA</th></tr>' + rows + '</table>';
+        const rows = (j.stats || []).map((d) => '<tr><td>' + d.day + '</td><td>' + d.replies + '</td><td>' + d.handoffs + '</td><td>' + d.afterDeposit + '</td><td>' + d.pausedByAgent + '</td><td>' + (d.muted || 0) + '</td><td>' + (d.noCredit || 0) + '</td><td>' + d.errors + '</td></tr>').join('');
+        const box = document.getElementById('sbStats'); if (box) box.innerHTML = '<table class="data-table" style="font-size:12px;"><tr><th>Día</th><th>Respuestas</th><th>A un agente</th><th>Beneficios post-carga</th><th>Callado por agente</th><th>Silenciados</th><th>IA sin saldo</th><th>Errores IA</th></tr>' + rows + '</table>';
     } catch (_) { st.textContent = '· error de conexión'; }
 }
 async function saveSupportBot() {

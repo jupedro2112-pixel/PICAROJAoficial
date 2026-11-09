@@ -197,7 +197,9 @@ async function generateReply(p) {
     const st = e.response && e.response.status;
     const msg = (e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message;
     logger.warn(`[support-bot] la IA falló (${st || 'red'}): ${msg}`);
-    return { ok: false, error: `IA ${st || 'red'}: ${msg}`, retryable: !st || st === 429 || st >= 500 };
+    // Sin saldo / clave inválida / cuenta sin permiso: no se arregla reintentando ⇒ el server deja la IA en pausa y contesta el bot simple.
+    const unavailable = st === 401 || st === 402 || st === 403 || (st === 400 && /credit balance|billing|purchase credits/i.test(String(msg)));
+    return { ok: false, error: `IA ${st || 'red'}: ${msg}`, retryable: !st || st === 429 || st >= 500, unavailable };
   }
   const d = resp.data || {};
   if (d.stop_reason === 'refusal') return { ok: false, error: 'la IA no quiso responder (refusal)', handoff: true };

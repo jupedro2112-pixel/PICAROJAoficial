@@ -8,6 +8,14 @@
 
 ## Sesión 2026-11-09
 
+### 1042-f. Respuesta básica SIEMPRE primero + IA sin saldo ⇒ bot simple (2026-11-09)
+- **Owner:** "si no tiene saldo la IA, que dé respuestas el bot nomás y siga normal; la respuesta normal y básica siempre es al principio: espero tu
+  comprobante para realizar la carga".
+- Primer mensaje de la charla (nada nuestro en Soporte desde `supportSessionSince` / 2 h) ⇒ respuesta fija del tema o, sin tema, `/sys_support_first`
+  ("👋 ¡Hola! Espero tu comprobante para realizar la carga 📸 …", COMANDOS) con el botón "📸 Adjuntar comprobante" (guía). La IA entra desde el 2º.
+- `supportBot.generateReply` marca `unavailable` (400 "credit balance" / 401 / 402 / 403) ⇒ `_sbAiDownUntil` 30 min (por instancia): todo va por
+  `_supportCannedReply` como antes del bot. Panel: "⚠️ la IA no responde (¿sin saldo?)" + columna "IA sin saldo". Test support-bot 12/12.
+
 ### 1042-e. Todo adentro de Girox — PWA v677 (2026-11-09)
 - **Owner:** "todo esto adentro de Girox, que no se abran cosas por afuera". Antes, Soporte desde el casino CERRABA el casino y llevaba al chat.
 - `home.js`: `casinoSupport` / `openSupport` con el casino abierto ⇒ `_supportIntoCasino` muda `#supportPanel` adentro de `#casinoOverlay`

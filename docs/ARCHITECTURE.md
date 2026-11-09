@@ -1957,6 +1957,8 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   `fallbacks:"default"` + beta `server-side-fallback-2026-07-01`. `stop_reason` `refusal` ⇒ handoff; `max_tokens` / JSON roto / error ⇒ respuesta fija.
 - **Tres escalones (#1042-d):** texto libre ⇒ respuesta fija si hay tema nuevo ⇒ si no, IA ⇒ tope `aiMaxReplies` o handoff ⇒ agente.
   Fuera de tema ⇒ frase de cierre + `ignore`. Silenciado ⇒ ni respuesta fija por palabras ni IA.
+- **Primero lo básico / IA sin saldo (#1042-f):** primer mensaje de la charla ⇒ respuesta fija (tema o `/sys_support_first`); `unavailable`
+  (sin saldo / 401 / 403) ⇒ IA en pausa 30 min (`_sbAiDownUntil`, por instancia) y respuestas fijas.
 - **Silencio (#1042-b):** la IA devuelve `ignore:true` (con reply vacío) cuando sólo molestan ⇒ `support_bot_mutes {_id:userId, until}` y nota
   `bot_muted`; mientras dure, `_supportBotRun` sale sin contestar. `handoff` siempre gana sobre `ignore`.
 - **Colecciones sin modelo:** `support_bot_claims` (también `afterdep-<userId>-<día>`), `support_bot_stats` (por día ART: replies, handoffs, errors,
