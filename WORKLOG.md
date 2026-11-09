@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1043-c. Instrucciones de la IA del chat reescritas: coherentes, resumidas y con el contexto completo (2026-11-09)
+- **Owner:** "revisá que las respuestas de la IA estén perfectamente bien, entendiendo todo el contexto del servicio y siempre como hablamos: resumido y
+  bien explicado". `stablePrompt` tenía contradicciones: "una frase de 20 palabras" y "1 o 2 frases", "paso a paso" y "sólo el próximo paso", y dos
+  lugares con "decile que lo pasás al equipo" o "te paso con una persona", aunque desde #1042-x el bot NUNCA pasa solo (handoff ⇒ botón). Reescrito con
+  cada regla una sola vez: 1-2 frases (~25 palabras), una idea, el próximo paso y qué botón; handoff explicado como botón; mapa de la app con la burbuja
+  adentro de Girox; comprobante en una frase; retirar ⇒ lo disponible lo ve en RETIRAR; reclamos de bonos ⇒ `fix` o explicación con sus datos.
+- **Datos nuevos para la IA** (`_supportBotFacts`): tope por regalo (`giftMax`) y bono de 2ª carga (pct / horas / validez, "no lo prometas").
+  Antes podía inventarlos. Las frases que exige `test-support-bot.js` se mantienen.
+
 ### 1043. Extra por instalar = $5.000 SIEMPRE, con rollover ×10 propio, y la IA lo CORRIGE sola si quedó de menos (2026-11-09)
 - **Owner** (captura: picatrini26 cargó $2.000, instaló la app y le llegaron "$2.000 extra"; preguntó "¿No era 5mil?"): "es 5000 el bono, si falla algo
   quiero que la IA corrija si es necesario y si no que le explique bien" + "lo de instalar la app que sea rollover x10, solamente eso, el resto x5".

@@ -15872,6 +15872,7 @@ async function _supportBotFacts(cfg) {
   try { f.minDeposit = await getMinDepositArs(); f.withdrawMin = await getWithdrawMinArs(); } catch (_) {}
   try { f.depositRolloverX = await getDepositRolloverX(); f.giftRolloverX = await _giftRolloverX(); } catch (_) {}
   try { f.firstDepositPct = await getFirstDepositBonusPct(null); f.firstDepositCap = await getFirstDepositCapArs(null); } catch (_) {}
+  try { f.giftMax = await _refreshGiftMax(); const sc = await getStrategyConfig(); const sd = sc && sc.secondDeposit; if (sd && sd.enabled && sd.pct > 0) f.secondDeposit = { pct: sd.pct, afterHours: sd.afterHours, validHours: sd.validHours }; } catch (_) {} // #1043-c: datos que la IA no tenía
   try { const ig = await getInstallGiftConfig(); f.installGiftOn = !!ig.enabled; f.installGiftFixed = ig.fixedArs || 0; f.installGiftPct = ig.pct; f.installGiftRolloverX = await _installGiftRolloverX(); } catch (_) {}
   try {
     const tbp = await getRefundTiersByPeriod();
