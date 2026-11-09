@@ -8,6 +8,12 @@
 
 ## Sesión 2026-11-09
 
+### 1042-z. Sorteo ARRIBA en lugar del logo (sin banner debajo de la barra del casino) — PWA v691 (2026-11-09)
+- **Owner:** "el sorteo semanal sacalo de ahí para no perder lugar y ponelo arriba donde está el logo de PICA ROJA". `paintCasino`: `openBar=false`
+  (nunca el banner `#casinoSrtBar`); con sorteo, la píldora del medio reemplaza al logo y abre la hoja chica (`VIP.sorteos.casinoPill` ⇒ `openMini`).
+- Pregunta del owner "¿para las landing se puede configurar el beneficio de la primera carga?": YA existe (#1024, `Config['publisherWelcome']`, panel →
+  Configuración → 🆕 NUEVO → bono de 1ª carga por publicista: %, tope, % del resto, pausar). Sin cambios de código.
+
 ### 1042-y. INICIO abajo: PANORAMA para comparar menús, chat, pauta y retención — PWA v690 / panel v260 (2026-11-09)
 - **Owner:** "que todo vaya donde tiene que ir en INICIO para comparar, gastando siempre más o menos lo mismo en pauta: la retención de cada uno, cuál
   menú es mejor para la gente en retención y todos los datos necesarios para medir; ponelo en la parte inferior".

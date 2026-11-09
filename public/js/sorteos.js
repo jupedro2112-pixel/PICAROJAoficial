@@ -237,13 +237,16 @@
     // Empieza en… · Ver más ▾" y un – para cerrarlo) y en el medio de la barra queda PICA ROJA; CERRADO, queda la píldora "Sorteo mensual" en el
     // medio y tocarla vuelve a abrir el banner. El estado se recuerda en el teléfono (vip_srt_casino_bar).
     function _casinoBarOpen() { try { return localStorage.getItem('vip_srt_casino_bar') === 'open'; } catch (_) { return false; } } // #937: al iniciar, resumido (píldora) sin abrir
+    function casinoPill() { const list = (_data && _data.enabled && _data.sorteos) || []; const s0 = list.find((x) => x.status === 'live') || list[0]; openMini(s0 ? s0.key : 'mensual'); } // #1042-z
     function casinoBar(open) { try { localStorage.setItem('vip_srt_casino_bar', open ? 'open' : 'closed'); } catch (_) {} paintCasino(); }
     function paintCasino() {
         const list = (_data && _data.enabled && _data.sorteos) || [];
         const s0 = list.find((x) => x.status === 'live') || list[0];
         const btn = _el('casinoSrtBtn'), brand = _el('casinoBrand'), bar = _el('casinoSrtBar');
         if (!btn && !bar) return;
-        const openBar = !!s0 && _casinoBarOpen();
+        // #1042-z (owner: "el sorteo sacalo de ahí para no perder lugar y ponelo arriba donde está el logo de PICA ROJA"): ya no hay banner
+        // debajo de la barra; con sorteo, la píldora del medio (en lugar del logo) abre la hoja chica del sorteo.
+        const openBar = false;
         if (brand) brand.hidden = !!s0 && !openBar;
         if (btn) {
             btn.hidden = !s0 || openBar;
@@ -316,5 +319,5 @@
         load(); clearInterval(_poll); _poll = setInterval(load, 5 * 60 * 1000);
         try { document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); }); } catch (_) {}
     }
-    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, paintCasino, casinoBar, join, terms, termsClose, tcToggle, tgOpen };
+    VIP.sorteos = { init, load, open, close, closeInline, openMini, closeMini, goMenu, paintCasino, casinoBar, casinoPill, join, terms, termsClose, tcToggle, tgOpen };
 })();
