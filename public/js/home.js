@@ -896,7 +896,7 @@
         const msg = _el('serviceBannerMsg');
         if (!msg || !hb || typeof hb !== 'object') return;
         // #267: el % también va en el botón "Carga automática" de la pantalla de entrada.
-        try { const ap = _el('evAutoSub'); if (ap && hb.pct != null && hb.pct !== '') ap.textContent = hb.pct + '% en todas tus cargas'; } catch (_) {}
+        try { const ap = _el('evAutoSub'); if (ap && hb.pct != null && hb.pct !== '' && Number(hb.pct) > 0) ap.textContent = hb.pct + '% en todas tus cargas'; } catch (_) {}
         if (hb.text === null || hb.text === '') { msg.style.display = 'none'; return; }
         msg.innerHTML = _esc(hb.text).replace(/(\d+(?:[.,]\d+)?\s?%)/g, '<em>$1</em>');
         msg.style.display = '';

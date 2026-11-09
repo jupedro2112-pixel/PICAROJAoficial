@@ -7330,7 +7330,7 @@ app.get('/api/platforms', authMiddleware, async (req, res) => {
     const [load, loadSub, withdraw, withdrawSub, homeText, newsText, refundPromo, supText, supSla, giroxNewsText, giroxNewsSince] = await Promise.all([
       rc('/sys_load_btn', LOAD_BTN_DEFAULT, btnVars), rc('/sys_load_btn_sub', LOAD_BTN_SUB_DEFAULT, btnVars),
       rc('/sys_withdraw_btn', WITHDRAW_BTN_DEFAULT, btnVars), rc('/sys_withdraw_btn_sub', WITHDRAW_BTN_SUB_DEFAULT, btnVars),
-      rc('/sys_home_banner', HOME_BANNER_DEFAULT, { pct: autoPct }),
+      autoPct > 0 ? rc('/sys_home_banner', HOME_BANNER_DEFAULT, { pct: autoPct }) : Promise.resolve(''), // #1053: con 0% no hay cartel de "0% en todas tus cargas"
       dailyPct > 0 ? rc('/sys_entry_news', ENTRY_NEWS_DEFAULT, { pct: dailyPct }) : Promise.resolve(null),
       rc('/sys_refund_promo', REFUND_PROMO_DEFAULT, { pct: dailyPct }),
       rc('/sys_support_intro', SUPPORT_INTRO_DEFAULT, { nombre: supportName }), rc('/sys_support_sla', SUPPORT_SLA_DEFAULT, {}),
@@ -7345,7 +7345,7 @@ app.get('/api/platforms', authMiddleware, async (req, res) => {
       // #385: textos de los botones de abajo de la carga automática (COMANDOS). #266 homeBanner · #349 entryNews · #372 refundPromo ·
       // #373 supportIntro (nombre de turno #377). text === null ⇒ el comando se vació en COMANDOS → la app no lo muestra.
       actionBtns: { load, loadSub, withdraw, withdrawSub },
-      homeBanner: { pct: autoPct, text: homeText },
+      homeBanner: { pct: autoPct > 0 ? autoPct : null, text: homeText },
       entryNews: { pct: dailyPct, text: dailyPct > 0 ? newsText : null },
       refundPromo,
       supportIntro: { name: supportName, text: supText || '', sla: supSla || '' },
@@ -13761,7 +13761,7 @@ async function initializeData() {
   // del chat decía "0% en todas tus cargas" (y la carga hgcash no bonificaba). Se fuerza UNA vez a 10;
   // después el panel (COMANDOS → Bonos automáticos) manda, incluso si lo ponen en 0 a propósito.
   try {
-    if (!(await getConfig('migration_autoloadpct_10_v1_done', false))) {
+    if (false && !(await getConfig('migration_autoloadpct_10_v1_done', false))) { // #1053: nunca más lo prende solo
       const cur = Number(await getConfig('autoLoadBonusPct', null));
       if (!Number.isFinite(cur) || cur <= 0) {
         await Config.set('autoLoadBonusPct', AUTO_LOAD_BONUS_PCT_DEFAULT, 'startup-migration');
@@ -15431,7 +15431,7 @@ async function getInstallBonusEnabled() {
 // PWA ("cargando de forma automática tenés un {pct}% en todas tus cargas"). Desde #274 es además el
 // bono REAL de toda carga hgcash sin otro bono pendiente (resolveAutoBonus, con tope). Config
 // ['autoLoadBonusPct'], editable en COMANDOS → Bonos automáticos.
-const AUTO_LOAD_BONUS_PCT_DEFAULT = 10;
+const AUTO_LOAD_BONUS_PCT_DEFAULT = 0; // #1053 (owner: "ese 10% está desactivado"): sin valor guardado = APAGADO (antes 10)
 async function getAutoLoadBonusPct() {
   try {
     const n = Number(await getConfig('autoLoadBonusPct', null));

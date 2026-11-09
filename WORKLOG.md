@@ -8,6 +8,11 @@
 
 ## Sesión 2026-11-09
 
+### 1054. Bono en TODA carga automática: APAGADO por defecto y a la vista — app v697, panel v272 (2026-11-09)
+- **Owner:** "ese 10% fijo está desactivado, desactivalo desde configuración" y "extra por instalar: $5.000 fijo siempre" (se deja #1043 como está).
+  `AUTO_LOAD_BONUS_PCT_DEFAULT` = 0 (sin valor guardado = apagado) y la migración #281 que lo forzaba a 10 ya no corre. Configuración → 🆕 NUEVO → 💸 muestra
+  si está prendido y lo apaga (POST `install-bonus-config {autoLoadPct:0}`). Con 0% la app no muestra "0% en todas tus cargas" (`/sys_home_banner` vacío).
+
 ### 1053. Auditoría de SEGURIDAD de TODO el sistema + auditoría de REGALOS (2026-11-09)
 - **Owner:** "revisá bien la seguridad, que no haya ningún ingreso o modificación de parte de nadie; estoy generando muchos depósitos y poca venta, mirá fino los regalos".
 - Arreglado (seguridad, test `scripts/test-security-1053.js`):

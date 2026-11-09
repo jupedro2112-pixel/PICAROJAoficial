@@ -6557,6 +6557,25 @@ async function saveClaudeDev(remove) {
         showToast(j.githubWarn ? '⚠️ ' + escapeHtml(j.githubWarn) : (t ? '🔒 Token verificado con GitHub y guardado cifrado' : '✅ Guardado'), j.githubWarn ? 'info' : 'success'); loadClaudeDev();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
+// #1053 (owner): el % en TODA carga automática (el regalo que más cuesta) se ve y se apaga desde Configuración → NUEVO.
+async function loadAutoPctCard() {
+    const el = document.getElementById('autoPctState'); if (!el) return;
+    try {
+        const r = await authFetch('/api/admin/install-bonus-config'); const j = await r.json().catch(() => ({})); if (!r.ok) return;
+        const v = Number(j.autoLoadPct) || 0;
+        el.innerHTML = v > 0 ? '<span style="color:#c62828;">🔴 PRENDIDO: ' + v + '% en toda carga automática sin otro bono</span>' : '<span style="color:#2e7d32;">✅ APAGADO (0%)</span>';
+        const b = document.getElementById('autoPctOffBtn'); if (b) b.hidden = !(v > 0);
+    } catch (_) {}
+}
+async function autoPctOff() {
+    if (!confirm('¿Apagar el bono en toda carga automática (0%)?')) return;
+    try {
+        const r = await authFetch('/api/admin/install-bonus-config', { method: 'POST', body: JSON.stringify({ autoLoadPct: 0 }) });
+        const j = await r.json().catch(() => ({})); if (!r.ok) { showToast(escapeHtml(j.error || 'No se pudo'), 'error'); return; }
+        showToast('✅ Bono en carga automática APAGADO', 'success'); loadAutoPctCard();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.loadAutoPctCard = loadAutoPctCard; window.autoPctOff = autoPctOff;
 window.loadClaudeDev = loadClaudeDev; window.saveClaudeDev = saveClaudeDev;
 window.loadSupportBot = loadSupportBot; window.saveSupportBot = saveSupportBot; window.testSupportBot = testSupportBot;
 
@@ -7290,6 +7309,7 @@ async function loadInstallBonusPct() {
     try { loadPublisherWelcome(); } catch (_) {} // #1024
     try { loadSupportBot(); } catch (_) {} // #1042
     try { loadClaudeDev(); } catch (_) {} // #1051
+    try { loadAutoPctCard(); } catch (_) {} // #1053
     try { loadBankOutage(); } catch (_) {} // #442
     try { loadWebhooksCard(); } catch (_) {} // #562 webhooks salientes
     const form = document.getElementById('installBonusPctForm');
@@ -7309,7 +7329,7 @@ async function loadInstallBonusPct() {
         if (enChk) { enChk.checked = j.enabled === true; enChk.disabled = !j.canEdit; }
         // #266: % del cartel "servicio completo" del chat principal de la app
         const alIn = document.getElementById('autoLoadPctInput');
-        if (alIn) { alIn.value = j.autoLoadPct != null ? j.autoLoadPct : 10; alIn.disabled = !j.canEdit; }
+        if (alIn) { alIn.value = j.autoLoadPct != null ? j.autoLoadPct : 0; alIn.disabled = !j.canEdit; }
         const alBtn = document.getElementById('autoLoadPctSaveBtn');
         if (alBtn) alBtn.style.display = j.canEdit ? '' : 'none';
         // #299: carga mínima informativa
