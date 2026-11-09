@@ -341,7 +341,15 @@ VIP.chat = (function () {
         });
 
         // #1042-x: saludo de entrada (local) al final de lo que ya hay
-        try { const g = VIP.home && VIP.home.spGreetMsg && VIP.home.spGreetMsg(); if (g) { VIP.state.processedMessageIds.add(g.id); const w = createMessageElement(g); if (w) fragment.appendChild(w); } } catch (_) {}
+        // #1042-z: va en su lugar por hora (los mensajes posteriores quedan debajo, no salta al final en cada render)
+        try {
+            const g = VIP.home && VIP.home.spGreetMsg && VIP.home.spGreetMsg();
+            if (g) {
+                VIP.state.processedMessageIds.add(g.id); const w = createMessageElement(g);
+                if (w) { const gt = new Date(g.timestamp).getTime(); const after = Array.from(fragment.querySelectorAll('[data-message-id]')).find((el, i) => { const m = messages.find((x) => x.id === el.getAttribute('data-message-id')); return m && new Date(m.timestamp).getTime() > gt; });
+                    if (after) fragment.insertBefore(w, after); else fragment.appendChild(w); }
+            }
+        } catch (_) {}
         container.innerHTML = '';
         container.appendChild(fragment);
         // #401: la presentación de Soporte (#supportIntro) desaparece cuando el cliente YA escribió en esta sesión del

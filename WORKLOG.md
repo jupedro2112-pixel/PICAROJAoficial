@@ -11,6 +11,11 @@
 ### 1042-z. Sorteo ARRIBA en lugar del logo (sin banner debajo de la barra del casino) — PWA v691 (2026-11-09)
 - **Owner:** "el sorteo semanal sacalo de ahí para no perder lugar y ponelo arriba donde está el logo de PICA ROJA". `paintCasino`: `openBar=false`
   (nunca el banner `#casinoSrtBar`); con sorteo, la píldora del medio reemplaza al logo y abre la hoja chica (`VIP.sorteos.casinoPill` ⇒ `openMini`).
+- Revisión independiente de #1042-t…y (sin errores que rompan ni toquen plata) ⇒ 3 arreglos (PWA v692): (1) después de "Tengo otro problema" el texto
+  libre ya no recibe respuestas fijas (espera a la persona mientras haya `bot_handoff` < `handoffPauseMin`); (2) el saludo de entrada va en su lugar
+  por hora (antes saltaba al final en cada render) y marca el globito aunque el chat no esté armado; (3) aprender del agente: sólo la PRIMERA
+  respuesta a esa pregunta, `fromAgent:true`, nunca pisa ni se pisa la redacción y NUNCA se auto-aprueba. Pendiente menor: el día del deploy el
+  costo de la IA de instancias viejas no se suma (sólo el tablero).
 - Pregunta del owner "¿para las landing se puede configurar el beneficio de la primera carga?": YA existe (#1024, `Config['publisherWelcome']`, panel →
   Configuración → 🆕 NUEVO → bono de 1ª carga por publicista: %, tope, % del resto, pausar). Sin cambios de código.
 

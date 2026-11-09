@@ -470,7 +470,10 @@
         try {
             const r = await fetch('/api/support/ui-mode', { cache: 'no-store' }); const j = await r.json(); document.body.classList.toggle('sp-classic', !!(j && j.classic));
             const had = !!_spGreet; _spGreet = (j && !j.classic && j.greet) ? { text: String(j.greet), agent: j.agent || 'Soporte' } : null;
-            if (_spGreet && !had) { try { VIP.chat.addMessageToChat(spGreetMsg()); } catch (_) {} }
+            if (_spGreet && !had) { // #1042-z: si el chat todavía no está armado, igual marca el globito; renderMessages lo pone después
+                if (document.getElementById('chatMessages')) { try { VIP.chat.addMessageToChat(spGreetMsg()); } catch (_) {} }
+                else { try { _onIncoming({ id: 'local-greet', senderRole: 'admin' }); } catch (_) {} }
+            }
         } catch (_) {}
         return document.body.classList.contains('sp-classic');
     }

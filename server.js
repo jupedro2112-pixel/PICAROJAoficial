@@ -15711,6 +15711,12 @@ async function _supportQuickReply(userId, username, quick, text) {
     // sigue preguntando (no entendió) ⇒ la IA; 3) la IA lo deriva a un agente (handoff, o tope `aiMaxReplies`).
     const _t0 = new Date(Date.now() - 1500); // #1042-v: desde acá se mira si salió alguna respuesta
     if (!explicit && await _supportBotActive()) {
+      // #1042-z (revisión): pasado a una persona hace poco (bot_handoff) y nadie del equipo contestó todavía ⇒ ni respuesta fija ni IA: espera a la persona.
+      try {
+        const _cfgH = await getSupportBotConfig();
+        const _ho = _cfgH.handoffPauseMin > 0 ? await Message.findOne({ receiverId: userId, 'metadata.kind': 'bot_handoff', timestamp: { $gte: new Date(Date.now() - _cfgH.handoffPauseMin * 60000) } }).sort({ timestamp: -1 }).select('timestamp').lean() : null;
+        if (_ho) return;
+      } catch (_) {}
       try { const mu = await mongoose.connection.collection('support_bot_mutes').findOne({ _id: userId }); if (mu && mu.until > new Date()) return; } catch (_) {} // silenciado: ni respuesta fija ni IA
       const topic = _supportTopicFromText(text);
       // #1042-f (owner): "la respuesta normal y básica SIEMPRE es al principio: espero tu comprobante para realizar la carga". Primer mensaje
@@ -15819,10 +15825,13 @@ async function _supportLearnFromAgent(userId, agentText) {
   try {
     const a = String(agentText || '').trim(); if (a.length < 8 || a.length > 600 || a.startsWith('/')) return;
     const cfg = await getSupportBotConfig(); if (!cfg.enabled || cfg.classic) return;
-    const q = await Message.findOne({ senderId: userId, senderRole: 'user', type: 'text', timestamp: { $gte: new Date(Date.now() - 30 * 60000) } }).sort({ timestamp: -1 }).select('content metadata').lean();
+    const q = await Message.findOne({ senderId: userId, senderRole: 'user', type: 'text', timestamp: { $gte: new Date(Date.now() - 30 * 60000) } }).sort({ timestamp: -1 }).select('content metadata timestamp').lean();
     if (!q || (q.metadata && q.metadata.quick)) return;
     const qt = String(q.content || '').trim(); if (qt.length < 6 || qt.length > 300 || supportBot.COMPLAINT_RE.test(qt)) return;
-    await _supportLearnSave(qt, qt, a, cfg, userId);
+    // #1042-z (revisión): sólo la PRIMERA respuesta de una persona a esa pregunta ("de nada" / un 2º mensaje no se guardan como respuesta)
+    const prevAgent = await Message.findOne({ receiverId: userId, senderRole: { $in: SUPPORT_ROLES }, type: 'text', 'metadata.bot': { $ne: true }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, timestamp: { $gt: q.timestamp || new Date(0) } }).sort({ timestamp: 1 }).select('content').lean();
+    if (prevAgent && String(prevAgent.content || '').trim() !== a) return;
+    await _supportLearnSave(qt, qt, a, cfg, userId, { fromAgent: true });
   } catch (e) { logger.warn(`[support-bot] aprender del agente: ${e.message}`); }
 }
 // #1042-t (owner): con el chat NUEVO (sin "Modo normal / chat clásico") lo que antes eran carteles va ESCRITO en el chat: carga acreditada + "¡Buena
@@ -16104,24 +16113,24 @@ async function _supportLearnedApproved() {
   try { const v = await _sbLearnCol().find({ status: 'approved' }).project({ question: 1, answer: 1, variants: 1 }).limit(800).toArray(); _sbLearnCache = { at: Date.now(), v }; } catch (_) {}
   return _sbLearnCache.v;
 }
-async function _supportLearnSave(userText, q, a, cfg, userId) {
+async function _supportLearnSave(userText, q, a, cfg, userId, opt = {}) {
   if (!supportBot.learnIsSafe(q, a)) return; // links / números largos / contactos: nunca se aprenden (no se le pueden pasar a otros clientes)
-  const all = await _sbLearnCol().find({}).project({ question: 1, variants: 1, status: 1, count: 1, users: 1 }).limit(1500).toArray();
+  const all = await _sbLearnCol().find({}).project({ question: 1, variants: 1, status: 1, count: 1, users: 1, fromAgent: 1 }).limit(1500).toArray();
   let hit = null, best = 0;
   for (const e of all) for (const c of [e.question].concat((e.variants || []).map((v) => v.t))) {
     const sc = Math.max(supportBot.qSimilarity(q, c), supportBot.qSimilarity(userText, c)); if (sc > best) { best = sc; hit = e; }
   }
   const now = new Date(); const variant = { t: String(userText).slice(0, 300), at: now };
   if (hit && best >= supportBot.LEARN_MIN_SCORE) {
-    const set = { lastAt: now }; if (hit.status === 'pending') set.answer = a; // pendiente: queda la redacción más nueva
+    const set = { lastAt: now }; if (hit.status === 'pending' && !opt.fromAgent && !hit.fromAgent) set.answer = a; // pendiente: queda la redacción más nueva (#1042-z: nunca pisa ni se pisa con la de un agente)
     // Aprobación automática por CLIENTES DISTINTOS (mínimo 3): una sola persona repitiendo la pregunta no puede hacer aprobar nada.
     const users = new Set((hit.users || []).map(String)); if (userId) users.add(String(userId));
-    if (hit.status === 'pending' && cfg.autoApproveAt > 0 && users.size >= Math.max(3, cfg.autoApproveAt)) { set.status = 'approved'; set.approvedBy = 'auto'; set.approvedAt = now; _sbLearnCache.at = 0; }
+    if (hit.status === 'pending' && !hit.fromAgent && !opt.fromAgent && cfg.autoApproveAt > 0 && users.size >= Math.max(3, cfg.autoApproveAt)) { set.status = 'approved'; set.approvedBy = 'auto'; set.approvedAt = now; _sbLearnCache.at = 0; }
     const upd = { $inc: { count: 1 }, $set: set, $push: { variants: { $each: [variant], $slice: -25 } } };
     if (userId) upd.$addToSet = { users: String(userId) };
     await _sbLearnCol().updateOne({ _id: hit._id }, upd);
   } else {
-    await _sbLearnCol().insertOne({ _id: uuidv4(), question: q, answer: a, variants: [variant], users: userId ? [String(userId)] : [], count: 1, uses: 0, status: 'pending', createdAt: now, lastAt: now });
+    await _sbLearnCol().insertOne(Object.assign({ _id: uuidv4(), question: q, answer: a, variants: [variant], users: userId ? [String(userId)] : [], count: 1, uses: 0, status: 'pending', createdAt: now, lastAt: now }, opt.fromAgent ? { fromAgent: true } : {})); // #1042-z: las de agentes sólo se aprueban a mano
   }
 }
 
