@@ -105,6 +105,9 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/'metadata\.bot': \{ \$ne: true \}/.test(S), 'la pausa cuenta sólo personas, no al bot');
   assert.ok(/support_bot_claims'\)\.insertOne\(\{ _id: lastUser\.id/.test(S), 'una respuesta por mensaje (multi-instancia)');
   assert.ok(/lastUser\.type !== 'text'/.test(S), 'imágenes (comprobantes) no las contesta el bot');
+  assert.ok(/return c\.enabled && !c\.classic;/.test(S) && /cfg\.classic \|\| !supportBot\.isAvailable\(\)/.test(S), 'chat clásico = sin bot');
+  const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
+  assert.ok(!/^#supportPanel|^\.sp-acts|^\.sp-actbar/m.test(blk) && /body\.sp-classic \.sp-actbar \{ display: none/.test(blk), 'chat clásico: nada del diseño nuevo aplica');
   assert.ok(/support_bot_mutes'\)\.findOne\(\{ _id: userId \}\)/.test(S) && /if \(r\.ok && r\.ignore\)/.test(S), 'silencio a quien molesta');
   assert.ok(/status: 'open', closedAt: null/.test(S) && /kind: 'bot_handoff'/.test(S), 'handoff abre el chat con nota');
   assert.ok(/return _supportCannedReply\(userId, username, null, String\(lastUser\.content \|\| ''\), false\)/.test(S), 'si la IA falla, respuesta automática de siempre');

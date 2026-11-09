@@ -8,6 +8,13 @@
 
 ## Sesión 2026-11-09
 
+### 1042-c. Botón "↩️ Chat clásico" — PWA v676, admin SW v250 (2026-11-09)
+- **Owner:** "un botón para que, si quiero, el chat figure como estaba antes de la actualización, sin IA y sin modificaciones".
+- `Config['supportBot'].classic` (panel → Configuración → 🆕 NUEVO → 🤖, primer tilde). Encendido ⇒ `_supportBotActive()` false (ni respuestas ni
+  beneficios post-carga: vuelve la respuesta automática de siempre) y la app pone `body.sp-classic` (lee `GET /api/support/ui-mode`, público, al abrir
+  Soporte): se esconde `#spActBar` y TODO el CSS de #1042 está prefijado con `body:not(.sp-classic)`, así el chat queda con el diseño anterior.
+  Queda igual: el texto del cartel de 1ª carga (fdModal) y el botón "Adjuntar comprobante" de mensajes viejos del bot.
+
 ### 1042-b. Bot: "¿sos un bot?" + silencio a quien molesta · chat de Soporte estilo WhatsApp + REEMBOLSOS — PWA v675, admin SW v249 (2026-11-09)
 - **Owner (captura):** que a "¿sos un bot?" conteste "Soy Tati, del equipo del casino, te atiendo por chat."; que a quien molesta se le deje de
   contestar; DEPOSITAR y RETIRAR siempre arriba, REEMBOLSOS en el mismo recuadro, y que el chat parezca WhatsApp.

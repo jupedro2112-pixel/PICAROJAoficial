@@ -5756,6 +5756,11 @@ app.delete('/api/admin/meta-pixels/:id', authMiddleware, adminMiddleware, async 
     await Config.set('metaPixels', out, req.user.username); await _metaPixelsLoad(); res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
+// #1042-c (owner): CHAT CLÁSICO — "un botón para que figure el chat como estaba antes de la actualización, sin IA y sin modificaciones".
+// La app lo lee al abrir Soporte (público: sólo dice si es clásico) y pone body.sp-classic (sin barra DEPOSITAR/RETIRAR/REEMBOLSOS ni cara de WhatsApp).
+app.get('/api/support/ui-mode', async (req, res) => {
+  try { const c = await getSupportBotConfig(); res.set('Cache-Control', 'no-store'); res.json({ classic: !!c.classic }); } catch (_) { res.json({ classic: false }); }
+});
 // #1042 BOT DE SOPORTE CON IA — config, estadísticas (7 días) y prueba. Sólo el admin general cambia o prueba (la prueba gasta IA).
 app.get('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, res) => {
   try {
@@ -5770,6 +5775,7 @@ app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, 
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general puede cambiar el bot.' });
     const b = req.body || {}; const cur = await getSupportBotConfig(); const next = Object.assign({}, cur);
     if (b.enabled != null) next.enabled = b.enabled === true;
+    if (b.classic != null) next.classic = b.classic === true;
     if (typeof b.model === 'string' && /^claude-[a-z0-9.-]{3,40}$/.test(b.model)) next.model = b.model;
     if (['low', 'medium', 'high'].includes(b.effort)) next.effort = b.effort;
     for (const k of ['delayMinSec', 'delayMaxSec', 'pauseHours', 'handoffPauseMin', 'muteHours']) if (b[k] != null && Number.isFinite(Number(b[k]))) next[k] = Number(b[k]);
@@ -15613,7 +15619,7 @@ async function _supportAutoReply(userId, username) {
 // sale la respuesta automática de siempre. Config['supportBot'] (panel → Configuración → 🤖 Bot de soporte).
 // ════════════════════════════════════════════════════════════════════════════
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
-const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, extraInfo: '' };
+const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, classic: false, extraInfo: '' };
 async function getSupportBotConfig() {
   let raw = null; try { raw = await getConfig('supportBot', null); } catch (_) {}
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -15621,11 +15627,11 @@ async function getSupportBotConfig() {
   const model = /^claude-[a-z0-9.-]{3,40}$/.test(String(r.model || '')) ? String(r.model) : SUPPORT_BOT_DEFAULT.model;
   const effort = ['low', 'medium', 'high'].includes(r.effort) ? r.effort : SUPPORT_BOT_DEFAULT.effort;
   const dmin = num(r.delayMinSec, SUPPORT_BOT_DEFAULT.delayMinSec, 3, 120);
-  return { enabled: r.enabled == null ? SUPPORT_BOT_DEFAULT.enabled : r.enabled === true, model, effort, delayMinSec: dmin,
+  return { enabled: r.enabled == null ? SUPPORT_BOT_DEFAULT.enabled : r.enabled === true, classic: r.classic === true, model, effort, delayMinSec: dmin,
     delayMaxSec: Math.max(dmin, num(r.delayMaxSec, SUPPORT_BOT_DEFAULT.delayMaxSec, 3, 180)), pauseHours: num(r.pauseHours, SUPPORT_BOT_DEFAULT.pauseHours, 0, 72),
     handoffPauseMin: num(r.handoffPauseMin, SUPPORT_BOT_DEFAULT.handoffPauseMin, 0, 1440), muteHours: num(r.muteHours, SUPPORT_BOT_DEFAULT.muteHours, 1, 168), extraInfo: String(r.extraInfo || '').slice(0, 4000) };
 }
-async function _supportBotActive() { if (!supportBot.isAvailable()) return false; try { return (await getSupportBotConfig()).enabled; } catch (_) { return false; } }
+async function _supportBotActive() { if (!supportBot.isAvailable()) return false; try { const c = await getSupportBotConfig(); return c.enabled && !c.classic; } catch (_) { return false; } } // #1042-c: chat CLÁSICO = sin bot
 
 // Datos del servicio para el bot (cacheados 5 min: se leen de la Config, no de 1girox).
 let _sbFactsCache = { at: 0, v: null };
@@ -15712,7 +15718,7 @@ function _supportBotSchedule(userId, username) {
 async function _supportBotRun(userId, username, token, t0) {
   if (_sbTimers.get(userId) !== token) return; // llegó otro mensaje: contesta el último
   const cfg = await getSupportBotConfig();
-  if (!cfg.enabled || !supportBot.isAvailable()) return _supportCannedReply(userId, username, null, '', false);
+  if (!cfg.enabled || cfg.classic || !supportBot.isAvailable()) return _supportCannedReply(userId, username, null, '', false);
   const u = await User.findOne({ id: userId }).select('id username role createdAt isBlocked duplicateOf noWelcomeGifts fcmTokenContext fcmTokens supportSessionSince').lean();
   if (!u || u.role !== 'user') return;
   const lastUser = await Message.findOne({ senderId: userId }).sort({ timestamp: -1 }).select('id type timestamp content').lean();

@@ -453,7 +453,12 @@
     function fdGo() { fdClose(); try { easyLoad(); } catch (_) { setHomeMode('full'); } }
     // #1042: barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo con VER (abre el cartel del bono de 1ª carga).
     let _spPromo = null;
+    // #1042-c: CHAT CLÁSICO desde el panel ⇒ body.sp-classic (sin barra ni cara de WhatsApp; el CSS nuevo no aplica).
+    async function spUiMode() {
+        try { const r = await fetch('/api/support/ui-mode', { cache: 'no-store' }); const j = await r.json(); document.body.classList.toggle('sp-classic', !!(j && j.classic)); } catch (_) {}
+    }
     async function spPromoPaint() {
+        spUiMode();
         const tk = _el('spTicker'), tx = _el('spTickerTxt'); if (!tk || !tx) return;
         try {
             const j = await _fdPromoLoad(); _spPromo = j || null;

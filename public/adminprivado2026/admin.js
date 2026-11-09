@@ -6335,9 +6335,9 @@ async function loadSupportBot() {
     try {
         const r = await authFetch('/api/admin/support-bot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
         const c = j.config || {};
-        st.textContent = !j.available ? '· ⚠️ falta ANTHROPIC_API_KEY en el servidor' : (c.enabled ? '· ✅ encendido' : '· ⏸️ apagado');
+        st.textContent = c.classic ? '· ↩️ chat clásico (sin IA)' : !j.available ? '· ⚠️ falta ANTHROPIC_API_KEY en el servidor' : (c.enabled ? '· ✅ encendido' : '· ⏸️ apagado');
         const set = (id, v) => { const e = document.getElementById(id); if (e) { if (e.type === 'checkbox') e.checked = !!v; else e.value = v == null ? '' : v; e.disabled = !j.canEdit; } };
-        set('sbEnabled', c.enabled); set('sbModel', c.model); set('sbDelayMin', c.delayMinSec); set('sbDelayMax', c.delayMaxSec); set('sbPause', c.pauseHours); set('sbMute', c.muteHours); set('sbExtra', c.extraInfo);
+        set('sbEnabled', c.enabled); set('sbClassic', c.classic); set('sbModel', c.model); set('sbDelayMin', c.delayMinSec); set('sbDelayMax', c.delayMaxSec); set('sbPause', c.pauseHours); set('sbMute', c.muteHours); set('sbExtra', c.extraInfo);
         const sel = document.getElementById('sbModel'); if (sel && c.model && ![...sel.options].some((o) => o.value === c.model)) { const o = document.createElement('option'); o.value = c.model; o.textContent = c.model; sel.appendChild(o); sel.value = c.model; }
         const rows = (j.stats || []).map((d) => '<tr><td>' + d.day + '</td><td>' + d.replies + '</td><td>' + d.handoffs + '</td><td>' + d.afterDeposit + '</td><td>' + d.pausedByAgent + '</td><td>' + (d.muted || 0) + '</td><td>' + d.errors + '</td></tr>').join('');
         const box = document.getElementById('sbStats'); if (box) box.innerHTML = '<table class="data-table" style="font-size:12px;"><tr><th>Día</th><th>Respuestas</th><th>A un agente</th><th>Beneficios post-carga</th><th>Callado por agente</th><th>Silenciados</th><th>Errores IA</th></tr>' + rows + '</table>';
@@ -6345,11 +6345,11 @@ async function loadSupportBot() {
 }
 async function saveSupportBot() {
     const g = (id) => document.getElementById(id);
-    const body = { enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };
+    const body = { classic: !!(g('sbClassic') && g('sbClassic').checked), enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };
     try {
         const r = await authFetch('/api/admin/support-bot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const j = await r.json(); if (!r.ok) { showToast(j.error || 'No se pudo guardar', 'error'); return; }
-        showToast(j.config.enabled ? '🤖 Bot de soporte encendido' : '⏸️ Bot de soporte apagado', 'success'); loadSupportBot();
+        showToast(j.config.classic ? '↩️ Chat clásico activado (sin IA)' : j.config.enabled ? '🤖 Bot de soporte encendido' : '⏸️ Bot de soporte apagado', 'success'); loadSupportBot();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function testSupportBot() {

@@ -3161,41 +3161,43 @@ body.no-ref #referralBtn, body.no-ref .ez-ref, body.no-ref .svc-ref, body.no-ref
 
 /* #1042 (owner, captura de referencia): barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo "CARGÁ Y GANÁ · … VER".
    Colores sólo por tokens (modo nocturno incluido). */
-.sp-actbar { padding: 8px 10px 0; background: var(--p-bg); }
-.sp-acts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
-.sp-acts button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 4px; border-radius: 12px; font: 800 12.5px/1 var(--p-font); letter-spacing: .02em; cursor: pointer; border: 1px solid transparent; }
-.sp-acts .sp-dep { background: var(--p-red); color: var(--p-inv); box-shadow: 0 4px 14px rgba(210, 58, 78, .28); }
-.sp-acts .sp-dep:active { background: var(--p-red-dark); }
-.sp-acts .sp-wd { background: var(--p-card); color: var(--p-text); border-color: var(--p-border-hi); }
-.sp-ticker { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--p-red-soft); color: var(--p-red-dark); font: 800 12.5px/1.2 var(--p-font); text-align: left; cursor: pointer; }
-.sp-ticker[hidden] { display: none; }
-.sp-tk-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--p-red); animation: spTkPulse 1.4s ease-in-out infinite; }
-.sp-tk-win { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
-.sp-tk-txt { display: inline-block; white-space: nowrap; }
-.sp-ticker.sp-tk-run .sp-tk-txt { padding-left: 100%; animation: spTkRun 14s linear infinite; }
-.sp-ticker b { flex: 0 0 auto; color: var(--p-red); font-weight: 900; letter-spacing: .06em; }
+body:not(.sp-classic) .sp-actbar { padding: 8px 10px 0; background: var(--p-bg); }
+body:not(.sp-classic) .sp-acts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+body:not(.sp-classic) .sp-acts button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 4px; border-radius: 12px; font: 800 12.5px/1 var(--p-font); letter-spacing: .02em; cursor: pointer; border: 1px solid transparent; }
+body:not(.sp-classic) .sp-acts .sp-dep { background: var(--p-red); color: var(--p-inv); box-shadow: 0 4px 14px rgba(210, 58, 78, .28); }
+body:not(.sp-classic) .sp-acts .sp-dep:active { background: var(--p-red-dark); }
+body:not(.sp-classic) .sp-acts .sp-wd { background: var(--p-card); color: var(--p-text); border-color: var(--p-border-hi); }
+body:not(.sp-classic) .sp-ticker { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--p-red-soft); color: var(--p-red-dark); font: 800 12.5px/1.2 var(--p-font); text-align: left; cursor: pointer; }
+body:not(.sp-classic) .sp-ticker[hidden] { display: none; }
+body:not(.sp-classic) .sp-tk-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--p-red); animation: spTkPulse 1.4s ease-in-out infinite; }
+body:not(.sp-classic) .sp-tk-win { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
+body:not(.sp-classic) .sp-tk-txt { display: inline-block; white-space: nowrap; }
+body:not(.sp-classic) .sp-ticker.sp-tk-run .sp-tk-txt { padding-left: 100%; animation: spTkRun 14s linear infinite; }
+body:not(.sp-classic) .sp-ticker b { flex: 0 0 auto; color: var(--p-red); font-weight: 900; letter-spacing: .06em; }
 @keyframes spTkRun { from { transform: translateX(0); } to { transform: translateX(-100%); } }
 @keyframes spTkPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .sp-ticker.sp-tk-run .sp-tk-txt { animation: none; padding-left: 0; } .sp-tk-win { text-overflow: ellipsis; } .sp-tk-dot { animation: none; } }
-html[data-theme="dark"] .sp-ticker { background: rgba(210, 58, 78, .16); color: var(--p-text); }
-html[data-theme="dark"] .sp-acts .sp-dep { box-shadow: none; }
+html[data-theme="dark"] body:not(.sp-classic) .sp-ticker { background: rgba(210, 58, 78, .16); color: var(--p-text); }
+html[data-theme="dark"] body:not(.sp-classic) .sp-acts .sp-dep { box-shadow: none; }
 
 /* #1042-b (owner, captura de WhatsApp): chat de Soporte con cara de WhatsApp — fondo crema, burbujas blancas del equipo, verdes del
    cliente con tildes, caja redonda y enviar verde. Sólo dentro de #supportPanel; colores por tokens con su versión nocturna. */
 :root { --p-wa-bg: #efeae2; --p-wa-in: #ffffff; --p-wa-in-text: #111b21; --p-wa-out: #1fa855; --p-wa-out-text: #ffffff; --p-wa-time: #667781; --p-wa-line: #e2ddd5; }
 html[data-theme="dark"] { --p-wa-bg: #0b141a; --p-wa-in: #202c33; --p-wa-in-text: #e9edef; --p-wa-out: #005c4b; --p-wa-out-text: #e9edef; --p-wa-time: #8696a0; --p-wa-line: #222d34; }
-.sp-acts .sp-rf { background: var(--p-green); color: var(--p-inv); }
-.sp-actbar { position: sticky; top: 0; z-index: 6; padding-bottom: 8px; border-bottom: 1px solid var(--p-border); }
-#supportPanel .chat-container, body.wa-dark #supportPanel .chat-container, #supportPanel #chatMessages { background: var(--p-wa-bg) !important; background-image: none !important; }
-#supportPanel .message, body.wa-dark #supportPanel .message { box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; padding: 7px 10px 6px !important; font-size: 15px; line-height: 1.38; }
-#supportPanel .message.usuario, #supportPanel .message.admin, #supportPanel .message.system, body.wa-dark #supportPanel .message.usuario { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border-radius: 0 12px 12px 12px !important; }
-#supportPanel .message.agente, body.wa-dark #supportPanel .message.agente { background: var(--p-wa-out) !important; color: var(--p-wa-out-text) !important; border-radius: 12px 0 12px 12px !important; }
-#supportPanel .message-time, #supportPanel .msg-ticks { color: var(--p-wa-time) !important; font-size: 11px !important; }
-#supportPanel .message.agente .message-time, #supportPanel .message.agente .msg-ticks { color: var(--p-wa-out-text) !important; opacity: .85; }
-#supportPanel .message.agente .msg-ticks.msg-read { color: #a6f3ff !important; opacity: 1; }
-#supportPanel .msg-who { color: var(--p-green) !important; font-weight: 800; }
-#supportPanel .chat-date-separator span { background: var(--p-wa-in) !important; color: var(--p-wa-time) !important; box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; }
-#supportPanel .chat-input-container, body.home-mini #supportPanel .chat-input-container { background: var(--p-wa-bg) !important; border-top: 0 !important; }
-#supportPanel #messageInput { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border: 1px solid var(--p-wa-line) !important; border-radius: 24px !important; }
-#supportPanel .send-btn { background: var(--p-wa-out) !important; color: #fff !important; }
-#supportPanel #typingIndicator { background: var(--p-wa-bg) !important; color: var(--p-green) !important; font-style: normal !important; }
+body:not(.sp-classic) .sp-acts .sp-rf { background: var(--p-green); color: var(--p-inv); }
+body:not(.sp-classic) .sp-actbar { position: sticky; top: 0; z-index: 6; padding-bottom: 8px; border-bottom: 1px solid var(--p-border); }
+body:not(.sp-classic) #supportPanel .chat-container, body.wa-dark:not(.sp-classic) #supportPanel .chat-container, body:not(.sp-classic) #supportPanel #chatMessages { background: var(--p-wa-bg) !important; background-image: none !important; }
+body:not(.sp-classic) #supportPanel .message, body.wa-dark:not(.sp-classic) #supportPanel .message { box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; padding: 7px 10px 6px !important; font-size: 15px; line-height: 1.38; }
+body:not(.sp-classic) #supportPanel .message.usuario, body:not(.sp-classic) #supportPanel .message.admin, body:not(.sp-classic) #supportPanel .message.system, body.wa-dark:not(.sp-classic) #supportPanel .message.usuario { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border-radius: 0 12px 12px 12px !important; }
+body:not(.sp-classic) #supportPanel .message.agente, body.wa-dark:not(.sp-classic) #supportPanel .message.agente { background: var(--p-wa-out) !important; color: var(--p-wa-out-text) !important; border-radius: 12px 0 12px 12px !important; }
+body:not(.sp-classic) #supportPanel .message-time, body:not(.sp-classic) #supportPanel .msg-ticks { color: var(--p-wa-time) !important; font-size: 11px !important; }
+body:not(.sp-classic) #supportPanel .message.agente .message-time, body:not(.sp-classic) #supportPanel .message.agente .msg-ticks { color: var(--p-wa-out-text) !important; opacity: .85; }
+body:not(.sp-classic) #supportPanel .message.agente .msg-ticks.msg-read { color: #a6f3ff !important; opacity: 1; }
+body:not(.sp-classic) #supportPanel .msg-who { color: var(--p-green) !important; font-weight: 800; }
+body:not(.sp-classic) #supportPanel .chat-date-separator span { background: var(--p-wa-in) !important; color: var(--p-wa-time) !important; box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; }
+body:not(.sp-classic) #supportPanel .chat-input-container, body.home-mini:not(.sp-classic) #supportPanel .chat-input-container { background: var(--p-wa-bg) !important; border-top: 0 !important; }
+body:not(.sp-classic) #supportPanel #messageInput { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border: 1px solid var(--p-wa-line) !important; border-radius: 24px !important; }
+body:not(.sp-classic) #supportPanel .send-btn { background: var(--p-wa-out) !important; color: #fff !important; }
+body:not(.sp-classic) #supportPanel #typingIndicator { background: var(--p-wa-bg) !important; color: var(--p-green) !important; font-style: normal !important; }
+
+body.sp-classic .sp-actbar { display: none !important; } /* #1042-c: chat clásico */
