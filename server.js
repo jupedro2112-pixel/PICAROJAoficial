@@ -15755,7 +15755,9 @@ async function _supportBotRun(userId, username, token, t0) {
   const reply = (r.ok && r.reply) ? r.reply : (r.handoff ? 'Ya te paso con alguien del equipo, en breve te responde 🙌' : '');
   if (reply) {
     const message = await Message.create({ id: uuidv4(), senderId: 'support-bot', senderUsername: agentName, senderRole: 'admin', receiverId: userId, receiverRole: 'user',
-      content: reply, type: 'text', channel: 'support', metadata: { channel: 'support', agentName, agent: 'bot', bot: true }, timestamp: new Date(), read: false });
+      content: reply, type: 'text', channel: 'support', timestamp: new Date(), read: false,
+      // Si habla del comprobante, va con el botón "Adjuntar comprobante": abre la GUÍA de 3 pasos (#1030, VIP.autoload.sendReceipt ⇒ pickReceipt), nunca el selector directo.
+      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, (!r.handoff && /comprobante|captura|la foto/i.test(reply)) ? { kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante' } : {}) });
     io.to(`user_${userId}`).emit('new_message', message);
     io.to(`chat_${userId}`).emit('new_message', message);
     notifyAdmins('new_message', { message, userId, username });

@@ -36,6 +36,9 @@
 - **App:** barra `#spActBar` en el chat de Soporte: DEPOSITAR (→ carga automática) / RETIRAR (→ modal de retiro) + cinta `#spTicker` "CARGÁ Y GANÁ ·
   100% en tu primera carga + $5.000 instalando nuestra app · VER" (`_fdPromoLoad`; sin bono para ese cliente ⇒ cinta de reembolso) que abre
   `fdModal` (ahora "CARGÁ Y GANÁ", "Y +$5.000 EXTRA instalando nuestra app", "¡Tomá tu bono!"). Estilos en pin.css con tokens (modo nocturno).
+- **Adjuntar SIEMPRE por la guía (owner: "que no se rompa nada"):** cuando el bot habla del comprobante, su mensaje lleva el botón "📸 Adjuntar
+  comprobante" (`go_section` target `receipt` ⇒ `VIP.autoload.sendReceipt` ⇒ `pickReceipt`, el cartel de 3 pasos de #1030). La cámara del chat, los
+  botones de carga y los avisos de comprobante ilegible no se tocaron. El test verifica esa cadena.
 - Test nuevo `scripts/test-support-bot.js` (10 casos, API falsa). 22/22 tests OK. **No probado contra la API real ni en un celular.**
 
 ### 1041. 🎰 La app SIEMPRE arranca en Girox directo — "Volver" lleva al Inicio — PWA v673 (2026-11-09)

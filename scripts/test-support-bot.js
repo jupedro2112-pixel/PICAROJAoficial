@@ -91,14 +91,20 @@ caso('Sin ANTHROPIC_API_KEY: isAvailable false y no llama', async () => {
   const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, history: [{ role: 'user', text: 'x' }] }); assert.ok(!r.ok); assert.strictEqual(lastReq, null);
   process.env.ANTHROPIC_API_KEY = k;
 });
-caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por mensaje, sólo texto, chips con respuesta fija, sin 502)', async () => {
+caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por mensaje, sólo texto, chips con respuesta fija, sin 502) + adjuntar siempre por la guía', async () => {
   const S = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
   assert.ok(/if \(!explicit && await _supportBotActive\(\)\) \{ _supportBotSchedule\(userId, username\); return; \}/.test(S), 'texto libre ⇒ bot; chips ⇒ respuesta fija');
   assert.ok(/'metadata\.bot': \{ \$ne: true \}/.test(S), 'la pausa cuenta sólo personas, no al bot');
   assert.ok(/support_bot_claims'\)\.insertOne\(\{ _id: lastUser\.id/.test(S), 'una respuesta por mensaje (multi-instancia)');
   assert.ok(/lastUser\.type !== 'text'/.test(S), 'imágenes (comprobantes) no las contesta el bot');
   assert.ok(/status: 'open', closedAt: null/.test(S) && /kind: 'bot_handoff'/.test(S), 'handoff abre el chat con nota');
-  assert.ok(/return _supportCannedReply\(userId, username, null, '', false\)/.test(S), 'si la IA falla, respuesta automática de siempre');
+  assert.ok(/return _supportCannedReply\(userId, username, null, String\(lastUser\.content \|\| ''\), false\)/.test(S), 'si la IA falla, respuesta automática de siempre');
+  // #1030: el botón del bot para adjuntar va por la GUÍA del comprobante (target receipt ⇒ VIP.autoload.sendReceipt ⇒ pickReceipt), nunca al selector directo
+  assert.ok(/kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante'/.test(S), 'el bot ofrece el botón de adjuntar');
+  const C = fs.readFileSync(path.join(ROOT, 'public/js/chat.js'), 'utf8'), A = fs.readFileSync(path.join(ROOT, 'public/js/autoload.js'), 'utf8'), P = fs.readFileSync(path.join(ROOT, 'public/js/app.js'), 'utf8');
+  assert.ok(/t === 'receipt' \? "VIP\.autoload\.sendReceipt\(\)"/.test(C), 'chat: receipt ⇒ sendReceipt');
+  assert.ok(/function sendReceipt\(\) \{[\s\S]{0,300}pickReceipt\('button'\)/.test(A), 'sendReceipt ⇒ guía');
+  assert.ok(/VIP\.autoload\.pickReceipt\('clip'\)/.test(P), 'la cámara del chat ⇒ guía');
   const routes = S.slice(S.indexOf("app.post('/api/admin/support-bot/test'"), S.indexOf("app.get('/api/admin/meta-pixels'"));
   assert.ok(!/status\(502\)/.test(routes), 'nunca 502 (Cloudflare lo tapa)');
 });
