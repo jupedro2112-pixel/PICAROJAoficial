@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1042-q. Modo nocturno desde el botón del chat + la burbuja abre al instante — PWA v684 (2026-11-09)
+- **Owner:** "activá el botón nocturno, no se activa cuando aprieto el sol" + "la rapidez con que abre el chat nuevo en la burbuja: se traba y tarda".
+- Sol/luna del chat (`#themeToggleBtn`, `#waThemeBtn`): sólo cambiaba `body.wa-dark` (chat viejo) y el chat nuevo usa `html[data-theme]` ⇒ ahora
+  llama `vipToggleTheme()` (modo nocturno de toda la app, el de Perfil) y sincroniza wa-dark; los íconos se pintan desde `data-theme`.
+- Burbuja: `casinoChatToggle` esperaba `fetch('/api/support/ui-mode')` en cada toque ⇒ ahora usa `body.sp-classic` al instante y consulta de fondo
+  (+ una consulta al cargar). `_supportIntoCasino` muestra primero y pinta promo / leídos 60 ms después.
+- **PENDIENTE (pedido del owner, no hecho):** selector de menú de la app (Girox / Completo / Básico) en la tarjeta del bot; en Girox sin "Volver" ni
+  "Menú": Telegram · Historias · [logo] · Soporte · Info · Perfil; fila de abajo con Reembolsos y Verificación SMS (todo el servicio resumido).
+
 ### 1042-p. Bot más resumido + botón de INFO + fila de info en la burbuja — PWA v683 (2026-11-09)
 - **Owner:** "resumí un poco más los mensajes, y poné un botón de info sobre lo que pregunta (sorteo, reembolso, misiones…), y abajo del chat:
   sorteos, misiones, ruleta diaria, referidos".

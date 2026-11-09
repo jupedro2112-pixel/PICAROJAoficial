@@ -2518,9 +2518,8 @@
             const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; nm.textContent = (_el('spName') && _el('spName').textContent) || 'Soporte'; } if (stt) { stt.dataset.prev = stt.textContent; stt.textContent = 'En línea'; }
         } catch (_) {}
         _open = true; _unread = 0; _paintBadge();
-        try { spPromoPaint(); } catch (_) {}
-        try { VIP.chat.markReceivedAsRead(); } catch (_) {}
-        setTimeout(() => { try { VIP.chat.scrollToBottom(); } catch (_) {} }, 120);
+        try { VIP.chat.scrollToBottom(); } catch (_) {}
+        setTimeout(() => { try { spPromoPaint(); } catch (_) {} try { VIP.chat.markReceivedAsRead(); } catch (_) {} try { VIP.chat.scrollToBottom(); } catch (_) {} }, 60); // #1042-q: primero se muestra, después se pinta lo demás
         return true;
     }
     function _supportOutOfCasino() {
@@ -2539,10 +2538,14 @@
     // #1042-m (owner): "modificá todo en la burbuja del chat de Girox". La burbuja abre el chat ENCIMA del juego, estilo WhatsApp, con
     // DEPOSITAR / RETIRAR / REEMBOLSOS, titular-alias-CBU, la cinta CARGÁ Y GANÁ y la caja para escribir (es el mismo chat, mudado).
     // Con "Chat clásico" (panel) la burbuja abre la Carga rápida como antes.
+    setTimeout(() => { try { spUiMode(); } catch (_) {} }, 1500); // #1042-q: el modo del chat se sabe antes del primer toque
     async function casinoChatToggle() {
         try { if (VIP.ui._bubbleWasDragged) return; } catch (_) {}
         if (_spCasino) { _supportOutOfCasino(); return; }
-        if (await spUiMode()) { toggleCasinoLoad(); return; }
+        // #1042-q (owner: "se traba y tarda en abrir"): antes esperaba la consulta /api/support/ui-mode en CADA toque. Ahora abre al instante con
+        // lo último que se sabe (body.sp-classic) y la consulta corre de fondo.
+        const classic = document.body.classList.contains('sp-classic'); try { spUiMode(); } catch (_) {}
+        if (classic) { toggleCasinoLoad(); return; }
         if (!(_casinoIsOpen() && _supportIntoCasino())) toggleCasinoLoad();
     }
     function casinoWithdraw() { try { if (VIP.withdraw && VIP.withdraw.openWithdrawModal) VIP.withdraw.openWithdrawModal(); else VIP.ui.showToast('Retiros no disponibles ahora', 'error'); } catch (_) {} }

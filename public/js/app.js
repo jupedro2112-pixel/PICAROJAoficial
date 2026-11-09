@@ -558,11 +558,16 @@ function setupEventListeners() {
         }
         const themeToggleBtn = document.getElementById('themeToggleBtn');
         if (themeToggleBtn) {
-            themeToggleBtn.addEventListener('click', () =>
-                applyWaDark(!document.body.classList.contains('wa-dark')));
+            // #1042-q (owner: "no se activa el modo nocturno cuando apreto el sol"): el botón cambia el MODO NOCTURNO de toda la app
+            // (html[data-theme], el mismo de Perfil, #392) y el chat lo acompaña (wa-dark).
+            themeToggleBtn.addEventListener('click', () => {
+                try { if (typeof window.vipToggleTheme === 'function') window.vipToggleTheme(); } catch (e) {}
+                applyWaDark(document.documentElement.getAttribute('data-theme') === 'dark');
+            });
         }
         // Sincronizar el ícono del botón con el estado que dejó el boot inline.
         applyWaDark(document.body.classList.contains('wa-dark'));
+        try { themeToggleBtn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙'; } catch (e) {}
 
         // Botón "🔓 Verificar teléfono" dentro del modal de settings: abre el modal de verify-phone.
         const openVerifyPhoneBtn = document.getElementById('openVerifyPhoneBtn');
