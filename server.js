@@ -15839,14 +15839,20 @@ async function _supportBotRun(userId, username, token, t0) {
       io.to(`chat_${userId}`).emit('new_message', note);
     } catch (_) {}
     logger.info(`[support-bot] ${username}: silenciado ${cfg.muteHours || 12} h`);
-    if (!r.reply) return;
+    if (!r.reply) r.reply = 'Por acá te ayudo con tus cargas, retiros y la app 🙌 Cuando necesites algo de eso, escribime.'; // #1042-o: nunca un visto sin nada
     _sbTyping(userId, agentName, true); // #1042-d: fuera de tema ⇒ una frase de cierre y después silencio
   }
   if (!r.ok && r.unavailable) { _sbAiDownUntil = Date.now() + 30 * 60000; _sbAiDownWhy = String(r.error || '').slice(0, 200); _supportBotStat('noCredit'); }
   if (!r.ok && !r.handoff) {
     _sbTyping(userId, agentName, false); if (!r.noAi) _supportBotStat('errors');
     logger.warn(`[support-bot] ${username}: sin respuesta de la IA (${r.error}) ⇒ respuesta automática de siempre`);
-    return _supportCannedReply(userId, username, null, String(lastUser.content || ''), false);
+    await _supportCannedReply(userId, username, null, String(lastUser.content || ''), false);
+    // #1042-o (owner: "a la tercera me clavó el visto"): la respuesta fija no sale si ese tema / el acuse ya se mandó en 2 h ⇒ el cliente quedaba
+    // sin NADA. Si no salió ninguna respuesta, avisa y lo pasa a un agente (chat abierto en Soporte).
+    const sentAny = await Message.findOne({ receiverId: userId, adminOnly: { $ne: true }, senderRole: { $ne: 'user' }, timestamp: { $gt: lastUser.timestamp } }).select('_id').lean();
+    if (sentAny) return;
+    r = { ok: true, reply: 'Dame un momentito, ya te responde alguien del equipo 🙌', handoff: true, handoffReason: `la IA no pudo responder (${String(r.error || 'sin IA').slice(0, 80)})` };
+    _sbTyping(userId, agentName, true);
   }
   // Que no parezca instantáneo: espera hasta completar los 10-15 s desde el mensaje del cliente.
   const target = (cfg.delayMinSec + Math.random() * (cfg.delayMaxSec - cfg.delayMinSec)) * 1000;

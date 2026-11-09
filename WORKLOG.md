@@ -8,6 +8,15 @@
 
 ## Sesión 2026-11-09
 
+### 1042-o. Bot nunca deja en visto + ventanas adentro de Girox — PWA v682 (2026-11-09)
+- **Owner:** "probé 2 respuestas, respondió, pero la tercera me clavó el visto" + "el cartel del 100% al apretar VER en el chat de Girox aparece
+  recién cuando voy al menú completo".
+- Visto: si la IA fallaba, `_supportCannedReply` no manda nada cuando el tema / el acuse ya salió en 2 h ⇒ silencio total. Ahora, si después de la
+  respuesta fija no salió NINGÚN mensaje, el bot dice "Dame un momentito, ya te responde alguien del equipo" y hace handoff (chat abierto en
+  Soporte). Un `ignore` sin texto lleva una frase de cierre por defecto. (Causa probable; la exacta se ve en Configuración → bot → columna ERRORES IA.)
+- Ventanas: `VIP.ui.showModal` / `hideModal` envueltos en home.js: con Girox abierto, la `.modal` se muda adentro de `#casinoOverlay`
+  (z 100006, encima del chat de la burbuja) y vuelve al cerrarla o al salir del casino (`_modalsBackAll`). `window.showModal` (onclick viejos) sin cambio.
+
 ### 1042-n. Soporte del panel = sólo lo que necesita un agente; respuesta en la burbuja de Girox — PWA v681 (2026-11-09)
 - **Owner:** "que se responda desde el admin desde el mismo lugar pero la gente la reciba en el chat de la burbuja; usá el chat que ya tenemos en
   admin para recolectar todos los chats de la IA; si tiene que responder un agente, que se abra en Soporte, que él va a estar atento ahí".

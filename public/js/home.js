@@ -2468,6 +2468,20 @@
     // abierto atrás). El mismo #supportPanel se muda adentro de #casinoOverlay (ids, listeners y socket intactos) y vuelve al cerrar.
     function _casinoIsOpen() { try { return document.body.classList.contains('casino-open') && !!_el('casinoOverlay') && _el('casinoOverlay').style.display !== 'none'; } catch (_) { return false; } }
     let _casUnread = 0;
+    const _mHome = new Map();
+    function _modalIntoCasino(id) {
+        if (!_casinoIsOpen()) return;
+        const m = _el(id), ov = _el('casinoOverlay'); if (!m || !ov || m.parentNode === ov) return;
+        _mHome.set(id, { parent: m.parentNode, next: m.nextSibling, pos: m.style.position, inset: m.style.inset, z: m.style.zIndex });
+        ov.appendChild(m); m.style.position = 'fixed'; m.style.inset = '0'; m.style.zIndex = '100006';
+    }
+    function _modalBack(id) {
+        const h = _mHome.get(id); if (!h) return; _mHome.delete(id);
+        const m = _el(id); if (!m) return;
+        try { if (h.next && h.next.parentNode === h.parent) h.parent.insertBefore(m, h.next); else h.parent.appendChild(m); } catch (_) {}
+        m.style.position = h.pos; m.style.inset = h.inset; m.style.zIndex = h.z;
+    }
+    function _modalsBackAll() { Array.from(_mHome.keys()).forEach(_modalBack); }
     function _supportIntoCasino() {
         try { _casUnread = 0; const b = _el('casinoChatBadge'); if (b) b.style.display = 'none'; } catch (_) {}
         const ov = _el('casinoOverlay'), p = _el('supportPanel'); if (!ov || !p) return false;
@@ -2751,11 +2765,22 @@
                 return r;
             };
         }
+        // #1042-o (owner: "el cartel del 100% aparece recién cuando voy al menú completo"): con Girox abierto, toda ventana (.modal) que se abra
+        // (cartel del bono, reembolsos, retirar…) se MUDA adentro del casino, encima del chat de la burbuja; al cerrarla o al salir del casino vuelve.
+        try {
+            const _oShow = VIP.ui.showModal, _oHide = VIP.ui.hideModal;
+            if (typeof _oShow === 'function' && !VIP.ui._modalWrap) {
+                VIP.ui._modalWrap = true;
+                VIP.ui.showModal = function (id) { try { _modalIntoCasino(id); } catch (_) {} return _oShow.apply(this, arguments); };
+                if (typeof _oHide === 'function') VIP.ui.hideModal = function (id) { const r = _oHide.apply(this, arguments); try { const m = _el(id); if (m && m.classList.contains('hidden')) _modalBack(id); } catch (_) {} return r; };
+            }
+        } catch (_) {}
         // #700: al cerrar el casino se saca la clase que sube los modales
         const _origCloseFrame = VIP.ui && VIP.ui.closeCasinoFrame;
         if (typeof _origCloseFrame === 'function') {
             VIP.ui.closeCasinoFrame = function () {
                 try { _supportOutOfCasino(); } catch (_) {} // #1042-e: el chat vuelve a su lugar antes de cerrar el casino
+                try { _modalsBackAll(); } catch (_) {} // #1042-o: las ventanas abiertas adentro de Girox vuelven a su lugar
                 try { document.body.classList.remove('casino-open'); } catch (_) {}
                 try { if (VIP.autoload && VIP.autoload.guideClose) VIP.autoload.guideClose(); } catch (_) {} // #1033: la guía del comprobante vuelve a su lugar (si no, quedaba fantasma adentro del overlay oculto)
                 return _origCloseFrame.apply(this, arguments);
