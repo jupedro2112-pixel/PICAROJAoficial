@@ -18802,6 +18802,25 @@ async function loadInicio() {
         if (d.isToday) _inTimer = setTimeout(() => { if (document.getElementById('inicioSection') && document.getElementById('inicioSection').classList.contains('active')) loadInicio(); }, 60000);
     } catch (e) { _renderInicio(box, _inicioEmpty(day), note('⚠️ No se pudo cargar (' + escHtml(e.message) + '). Tocá 🔄.')); }
 }
+// #1042-w (owner): "cuánto va consumiendo la IA día a día, para ir midiendo" — costo real del bot de Soporte por día (US$ y pesos con la cotización USDT).
+function _inicioAiHtml(ai, n) {
+    if (!ai || !Array.isArray(ai.days)) return '';
+    const usd = (v) => 'US$ ' + (Number(v) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const ars = (v) => ai.rate ? '$' + Math.round((Number(v) || 0) * ai.rate).toLocaleString('es-AR') : '—';
+    const days = ai.days.slice().reverse();
+    const last = days[0] || {}, act = ai.days.filter((x) => x.usd > 0), avg = act.length ? act.reduce((a, x) => a + x.usd, 0) / act.length : 0;
+    const per = (x) => { const c = x.aiCalls || x.replies; return c ? usd(x.usd / c).replace('US$ ', 'US$ ') : '—'; };
+    const box = (t, v, sub, col) => '<div class="in-box" style="border-top:3px solid ' + col + '"><div class="in-l">' + t + '</div><div class="in-v">' + v + '</div><div class="in-s">' + sub + '</div></div>';
+    return '<h3 class="in-h">🤖 Consumo de la IA del chat de Soporte</h3><div class="in-grid">'
+        + box('📅 ' + (last.day === ai.days[ai.days.length - 1].day ? 'Este día' : 'Día'), usd(last.usd), ars(last.usd) + ' · ' + n(last.aiCalls || last.replies) + ' respuestas de la IA', '#6366f1')
+        + box('🗓️ Mes ' + escHtml(ai.month), usd(ai.monthUsd), ars(ai.monthUsd) + ' · ' + n(ai.monthCalls) + ' llamadas', '#a855f7')
+        + box('📊 Promedio por día', usd(avg), ars(avg) + ' · días con uso', '#0ea5e9')
+        + box('🧠 Con lo aprendido (gratis)', n(ai.days.reduce((a, x) => a + (x.learned || 0), 0)), 'respuestas sin usar IA en 30 días', '#22c55e')
+        + '</div><div class="card" style="padding:.4rem .6rem;overflow:auto;margin-top:.4rem"><table class="data-table" style="width:100%;font-size:.85rem"><thead><tr><th>Día</th><th>Respuestas IA</th><th>Con lo aprendido</th><th>A un agente</th><th>Errores</th><th>Costo US$</th><th>Costo $</th><th>Por respuesta</th></tr></thead><tbody>'
+        + days.filter((x) => x.aiCalls || x.replies || x.learned || x.handoffs || x.usd).map((x) => '<tr><td><b>' + escHtml(x.day.slice(5)) + '</b></td><td>' + n(x.aiCalls || x.replies) + '</td><td>' + n(x.learned) + '</td><td>' + n(x.handoffs) + '</td><td>' + n(x.errors) + '</td><td>' + usd(x.usd) + (x.est ? ' <small title="Día anterior a la medición exacta: estimado con los tokens">≈</small>' : '') + '</td><td>' + ars(x.usd) + '</td><td>' + per(x) + '</td></tr>').join('')
+        + '</tbody></table><small style="color:#9ab">Costo real de cada respuesta de la IA (también las pruebas del panel), con el precio oficial del modelo' + (ai.model ? ' (' + escHtml(ai.model) + ')' : '') + '. '
+        + (ai.rate ? 'Pesos con la cotización USDT del panel ($' + Number(ai.rate).toLocaleString('es-AR') + ').' : 'Para verlo en pesos cargá la cotización USDT en Datos IA.') + ' Lo aprendido y aprobado en "Responder para IA" se contesta sin IA: cuanto más se apruebe, menos cuesta. ≈ = estimado.</small></div>';
+}
 // #971: cohortes — de los que se registraron cada mes, cuántos cargaron alguna vez y cuántos cargaron ese mes (M0) y los siguientes.
 function _inicioCohortsHtml(rows, n) {
     if (!Array.isArray(rows) || !rows.length) return '';
@@ -18848,7 +18867,7 @@ function _renderInicio(box, d, notice) {
             grp('📲 Aceptación de la app (clientes que cargaron alguna vez)', // #913: base = cargadores, no registrados
                 box1('💳', 'Cargaron alguna vez', n(d.adoption.depositors), 'de ' + n(d.adoption.totalUsers) + ' registrados', '#6366f1') +
                 box1('📲', 'Instalaron la app', n(d.adoption.withApp), d.adoption.appPct + '% de los que cargaron', '#0ea5e9') +
-                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b')) + _inicioCohortsHtml(d.cohorts, n); // #971
+                box1('🔔', 'Con notificaciones', n(d.adoption.withNotif), d.adoption.notifPct + '% de los que cargaron', '#f59e0b')) + _inicioCohortsHtml(d.cohorts, n) + _inicioAiHtml(d.ai, n); // #971 · #1042-w
     }
 }
 

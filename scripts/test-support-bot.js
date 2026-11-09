@@ -164,6 +164,15 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
     assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');
+    { const A3 = fs.readFileSync(path.join(ROOT, 'public/adminprivado2026/admin.js'), 'utf8');
+      assert.ok((S.match(/_supportBotCost\(r\);/g) || []).length === 2 && /const ai = await _inicioAiUsage\(day\)/.test(S) && /_inicioAiHtml\(d\.ai, n\)/.test(A3), 'INICIO: consumo de la IA día a día (bot + Probar)');
+      // precio: 1M de entrada + 1M de salida en Opus 5.5 = US$ 24
+      const m = S.match(/function _sbCostUsd\(model, u\) \{[\s\S]*?\n\}/)[0]; const P = S.match(/const SB_PRICES = \{[\s\S]*?\n\};/)[0];
+      const f = new Function(P + '\n' + m + '\nreturn _sbCostUsd;')();
+      assert.strictEqual(f('claude-opus-5-5', { input_tokens: 1e6, output_tokens: 1e6 }), 24);
+      assert.strictEqual(f('claude-haiku-5-5', { input_tokens: 1e6, output_tokens: 1e6 }), 0.6);
+      assert.strictEqual(f('otro', { input_tokens: 1e6 }), 4, 'modelo desconocido ⇒ precio de Opus'); }
+    assert.ok(/Ya te paso con una persona del equipo, un segundo/.test(S), 'Tengo otro problema ⇒ "Ya te paso con una persona del equipo, un segundo"');
     assert.ok(/async function _supportSentSince\(/.test(S) && (S.match(/if \(await _supportSentSince\(userId, _t0\)\) return;/g) || []).length === 2, 'palabra clave sin respuesta fija ⇒ contesta la IA (nunca un visto)');
     assert.ok(!/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \},[^\n]*senderId:/.test(S) && (S.match(/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \}/g) || []).length >= 5, 'agente reciente = sólo personas (sin claves repetidas)');
     assert.ok(/if \(quick === 'problema'\) \{[\s\S]{0,400}await _supportHandoffNow\(/.test(S) && I3.includes("VIP.home.supportQuick('problema')"), 'Tengo otro problema ⇒ directo a un agente');

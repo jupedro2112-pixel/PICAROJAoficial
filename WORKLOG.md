@@ -8,6 +8,16 @@
 
 ## Sesión 2026-11-09
 
+### 1042-w. INICIO: consumo de la IA día a día + "Tengo otro problema" ⇒ "Ya te paso con una persona" — panel v258 (2026-11-09)
+- **Owner:** "ahora quedó libre: poné en INICIO cuánto va consumiendo la IA día a día para ir midiendo" + "cuando la gente tiene otro problema que
+  responda automáticamente 'Ya te paso con una persona del equipo, un segundo'".
+- `_supportBotCost(r)` (bot y "Probar"): costo REAL por llamada con el modelo que respondió y el uso de la API (entrada, salida, lectura y escritura de
+  caché) ⇒ `support_bot_stats` del día: `aiCalls`, tokens, `costMicro` (US$×1e6). Precios `SB_PRICES` (lista oficial: Opus 5.5 4/20, caché 0,20 / 5;
+  Sonnet 5.5 2/10; Haiku 5.5 0,10/0,50); modelo desconocido ⇒ precio de Opus. Días anteriores (sin costMicro) ⇒ estimado con los tokens (≈).
+- `/api/admin/inicio/stats` devuelve `ai` (`_inicioAiUsage`: 30 días hasta el día elegido + total del mes + cotización USDT); panel INICIO
+  `_inicioAiHtml`: tarjetas (día, mes, promedio, respuestas con lo aprendido) + tabla por día con US$, $ y costo por respuesta. Con la clave de INICIO.
+- `/sys_support_problem` default "Ya te paso con una persona del equipo, un segundo 🙌" (+ arranque: reemplaza el texto anterior si nadie lo editó).
+
 ### 1042-v. FIX: la 2ª pregunta con palabra clave quedaba sin respuesta + IA hasta 3 respuestas (2026-11-09)
 - **Owner:** "pregunté cómo es el reembolso en una segunda pregunta y no contestaba más, ¿por qué?" + "vamos a poner más chat con la IA".
 - Causa: con palabra clave (reembolso/retiro/carga/bono) el bot va primero a la respuesta fija (`_supportCannedReply`), que se callaba si "un agente

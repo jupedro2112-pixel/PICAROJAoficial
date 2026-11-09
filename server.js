@@ -5832,6 +5832,7 @@ app.post('/api/admin/support-bot/test', authMiddleware, adminMiddleware, async (
     const user = { username: 'cliente_prueba', accountDays: stage === 'cargo' ? 12 : 0, realDeposits: stage === 'cargo' ? 4 : 0, lastDepositDays: stage === 'cargo' ? 1 : null,
       welcomeEligible: stage === 'nuevo', firstDepositPct: stage === 'nuevo' ? await getFirstDepositBonusPct(null) : 0, welcomeWhy: '', appInstalled: false, pendingReceipts: 0, payout: '', blocked: false };
     const r = await supportBot.generateReply({ facts: await _supportBotFacts(cfg), user, agentName: await getSupportAgentName(), history: [{ role: 'user', text }], model: cfg.model, effort: cfg.effort });
+    _supportBotCost(r); // #1042-w: "Probar" también cuesta
     if (!r.ok) return res.status(503).json({ error: r.error || 'La IA no respondió' });
     res.json({ success: true, reply: r.reply, handoff: r.handoff, handoffReason: r.handoffReason, model: r.model, usage: r.usage });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -13609,6 +13610,8 @@ async function initializeData() {
         if (r && r.modifiedCount) console.log('✅ /sys_recover_100 vaciado (#1029): prometía otro % en la próxima carga después de cada carga');
       }
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
+    // #1042-w (owner): "Tengo otro problema" ⇒ "Ya te paso con una persona del equipo, un segundo" (si quedó el texto anterior sin editar).
+    try { await Command.updateOne({ name: '/sys_support_problem', response: 'Contame qué pasó en un mensaje y en breve te responde alguien del equipo 🙌' }, { $set: { response: 'Ya te paso con una persona del equipo, un segundo 🙌' } }); } catch (_) {}
     // #1042-u (owner 2026-11-09): "la IA responde 1 mensaje nomás" ⇒ UNA vez, aiMaxReplies = 1 (campo puntual, nunca leer→mezclar→guardar).
     try {
       // #1042-v (owner: "hacelo a respuestas libres; una vez entrenada usa lo aprendido; que la IA simplifique el trabajo y los agentes se
@@ -14534,7 +14537,7 @@ async function initializeData() {
       name: '/sys_support_problem',
       description: 'CHAT NUEVO (#1042-u): respuesta cuando el cliente toca "🆘 Tengo otro problema" (el chat pasa directo a un agente en Soporte). Sin variables. Vacío = no se manda nada (igual pasa al agente).',
       type: 'message',
-      response: 'Contame qué pasó en un mensaje y en breve te responde alguien del equipo 🙌'
+      response: 'Ya te paso con una persona del equipo, un segundo 🙌'
     },
     {
       name: '/sys_deposit_luck',
@@ -15649,7 +15652,7 @@ async function _supportQuickReply(userId, username, quick, text) {
   try {
     // #1042-u (owner): botón "Tengo otro problema" ⇒ DIRECTO a un agente (chat abierto en Soporte) + aviso corto al cliente; la IA no se mete.
     if (quick === 'problema') {
-      const t = await renderSystemCommand('/sys_support_problem', 'Contame qué pasó en un mensaje y en breve te responde alguien del equipo 🙌', {});
+      const t = await renderSystemCommand('/sys_support_problem', 'Ya te paso con una persona del equipo, un segundo 🙌', {});
       if (t) await _sendUserSystemMessage({ id: userId, username }, t, { metadata: { channel: 'support', topic: 'problema' } });
       await _supportHandoffNow(userId, username, 'tocó "Tengo otro problema"');
       return;
@@ -15880,6 +15883,26 @@ async function _supportBotHistory(u) {
     return { role: 'assistant', text: m.type === 'system' ? '[aviso automático] ' + txt : txt };
   });
 }
+// #1042-w (owner: "cuánto va consumiendo la IA día a día, para ir midiendo"): costo REAL de cada llamada a la IA (también "Probar"), con el modelo que
+// respondió de verdad y el uso que devuelve la API. Precios US$ por millón de tokens (lista oficial 2026-11): entrada / salida / lectura de caché /
+// escritura de caché (5 min = 1,25× la entrada). Modelo desconocido ⇒ precio de Opus (el más caro de los tres: nunca se subestima).
+const SB_PRICES = {
+  'claude-opus-5-5': { in: 4, out: 20, cr: 0.20, cw: 5 },
+  'claude-sonnet-5-5': { in: 2, out: 10, cr: 0.20, cw: 2.5 },
+  'claude-haiku-5-5': { in: 0.10, out: 0.50, cr: 0.01, cw: 0.125 }
+};
+function _sbCostUsd(model, u) {
+  const m = String(model || ''); const p = SB_PRICES[Object.keys(SB_PRICES).find((k) => m.startsWith(k)) || 'claude-opus-5-5'];
+  const n = (x) => Number(x) || 0;
+  return (n(u.input_tokens) * p.in + n(u.output_tokens) * p.out + n(u.cache_read_input_tokens) * p.cr + n(u.cache_creation_input_tokens) * p.cw) / 1e6;
+}
+function _supportBotCost(r) {
+  try {
+    const u = r && r.usage; if (!u) return;
+    const usd = _sbCostUsd(r.model, u);
+    _supportBotStat('aiCalls', 1, { inTok: Number(u.input_tokens) || 0, outTok: Number(u.output_tokens) || 0, cacheTok: Number(u.cache_read_input_tokens) || 0, cwTok: Number(u.cache_creation_input_tokens) || 0, costMicro: Math.round(usd * 1e6) });
+  } catch (_) {}
+}
 async function _supportBotStat(field, n = 1, extra = null) {
   try { await mongoose.connection.collection('support_bot_stats').updateOne({ _id: _schedArtKey(new Date()) }, { $inc: Object.assign({ [field]: n }, extra || {}) }, { upsert: true }); } catch (_) {}
 }
@@ -15942,6 +15965,7 @@ async function _supportBotRun(userId, username, token, t0) {
         const [facts, user, history] = await Promise.all([_supportBotFacts(cfg), _supportBotUserFacts(u), _supportBotHistory(u)]);
         user.aiReplies = aiReplies;
         r = await supportBot.generateReply({ facts, user, agentName, history, model: cfg.model, effort: cfg.effort });
+        _supportBotCost(r); // #1042-w
       }
     }
   } catch (e) { r = { ok: false, error: e.message }; }
@@ -16000,7 +16024,7 @@ async function _supportBotRun(userId, username, token, t0) {
     const us = r.usage || {};
     if (r.learnedId) { _supportBotStat('learnedUsed'); try { await _sbLearnCol().updateOne({ _id: r.learnedId }, { $inc: { uses: 1 }, $set: { lastUsedAt: new Date() } }); } catch (_) {} }
     else if (r.learnQuestion) { try { await _supportLearnSave(String(lastUser.content || ''), r.learnQuestion, r.learnAnswer, cfg, userId); } catch (e) { logger.warn(`[support-bot] aprender: ${e.message}`); } }
-    if (!r.learnedId) _supportBotStat('replies', 1, { inTok: Number(us.input_tokens) || 0, outTok: Number(us.output_tokens) || 0, cacheTok: Number(us.cache_read_input_tokens) || 0 });
+    if (!r.learnedId) _supportBotStat('replies', 1); // #1042-w: los tokens y el costo los suma _supportBotCost (una vez por llamada)
   }
   if (r.handoff) {
     // TRABADO ⇒ a una persona: el chat queda ABIERTO en Soporte del panel con la nota del motivo (y el bot se corre un rato).
@@ -22995,6 +23019,23 @@ async function _diaPromoConfig() {
   try { const bc = await getBonusCapConfig(); out.capArs = bc.capArs; out.restPct = bc.restPct; } catch (_) { out.capArs = 20000; out.restPct = 20; }
   return out;
 }
+// #1042-w (owner): consumo de la IA del bot de Soporte, día a día (últimos 30 días hasta `day`) + total del mes. Lee `support_bot_stats` (un doc por
+// día ART, lo escribe _supportBotCost/_supportBotStat). Costo en US$ con los precios oficiales; en pesos con la cotización USDT del panel (si hay).
+async function _inicioAiUsage(day) {
+  const end = new Date(day + 'T12:00:00Z'); const keys = [];
+  for (let i = 29; i >= 0; i--) keys.push(new Date(end.getTime() - i * 86400000).toISOString().slice(0, 10));
+  const cfgModel = ((await getSupportBotConfig().catch(() => ({}))) || {}).model;
+  const docs = await mongoose.connection.collection('support_bot_stats').find({ _id: { $in: keys } }).toArray();
+  const M = new Map(docs.map((d) => [d._id, d]));
+  const days = keys.map((k) => { const d = M.get(k) || {}; return { day: k, aiCalls: d.aiCalls || 0, replies: d.replies || 0, learned: d.learnedUsed || 0, handoffs: d.handoffs || 0, errors: d.errors || 0, inTok: d.inTok || 0, outTok: d.outTok || 0, cacheTok: d.cacheTok || 0,
+    // días previos a #1042-w: había tokens pero no costo ⇒ se estima con el modelo configurado (marcado `est`)
+    usd: d.costMicro != null ? Math.round(d.costMicro) / 1e6 : Math.round(_sbCostUsd(cfgModel, { input_tokens: d.inTok, output_tokens: d.outTok, cache_read_input_tokens: d.cacheTok }) * 1e6) / 1e6, est: d.costMicro == null && !!(d.inTok || d.outTok) }; });
+  const month = day.slice(0, 7); const mdocs = await mongoose.connection.collection('support_bot_stats').find({ _id: { $gte: month + '-01', $lte: month + '-31' } }).toArray();
+  const monthUsd = mdocs.reduce((a, d) => a + (d.costMicro != null ? d.costMicro : _sbCostUsd(cfgModel, { input_tokens: d.inTok, output_tokens: d.outTok, cache_read_input_tokens: d.cacheTok }) * 1e6), 0) / 1e6, monthCalls = mdocs.reduce((a, d) => a + (d.aiCalls || 0), 0);
+  let rate = null; try { const u = await getConfig('usdtRate', null); rate = Number((u && typeof u === 'object') ? u.rate : u) || null; } catch (_) {}
+  const cfg = await getSupportBotConfig().catch(() => ({}));
+  return { days, month, monthUsd: Math.round(monthUsd * 100) / 100, monthCalls, rate, model: cfg.model || null, since: '2026-11-09' };
+}
 // #477: cotización USDT para ver todo en dólares. Manual (panel) o automática desde criptoya (mediana del "ask" de los exchanges).
 async function _diaUsdt(fetchNow) {
   let cur = null; try { cur = (await getConfig('usdtRate', null)) || null; } catch (_) {}
@@ -23188,8 +23229,9 @@ app.get('/api/admin/inicio/stats', authMiddleware, adminMiddleware, async (req, 
     };
     res.set('Cache-Control', 'no-store');
     const cohorts = await _inicioCohorts(REAL).catch(() => []); // #971
+    const ai = await _inicioAiUsage(day).catch(() => null); // #1042-w
     res.json({
-      cohorts,
+      cohorts, ai,
       day, isToday: day === today, prevDay, generatedAt: new Date().toISOString(),
       app: { activeNow: activeNow ? activeNow.length : null, enteredToday: enteredIds.length, enteredRetention: enteredRet.length, enteredRetentionAds: enteredRet.filter((id) => isAd(P.get(id))).length, enteredNew72: enteredIds.length - enteredRet.length },
       registrations: { total: regs.length, fromAds: regAd, organic: regs.length - regAd, firstDepositSameDay: regs.filter((u) => firstSet.has(u.id)).length },

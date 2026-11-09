@@ -1983,3 +1983,5 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   (`/sys_payout_done_chat`) son mensajes del chat; con Girox abierto la app no muestra los carteles de antes y abre el chat de la burbuja.
 - **Todo con botones (#1042-u):** IA una vez por charla (`aiMaxReplies` 1), botón "Tengo otro problema" ⇒ agente (`_supportHandoffNow`), respuestas
   de los agentes ⇒ "Responder para IA" para aprobar (`_supportLearnFromAgent`).
+- **Consumo de la IA (#1042-w):** `_supportBotCost` suma por día en `support_bot_stats` (`aiCalls`, tokens, `costMicro`) con `SB_PRICES`; INICIO lo muestra
+  (`_inicioAiUsage` en `/api/admin/inicio/stats` ⇒ `_inicioAiHtml`). Si cambian los precios o se agrega un modelo, actualizar `SB_PRICES`.
