@@ -463,7 +463,7 @@
         } catch (_) {}
     }
     function fdClose() { try { VIP.ui.hideModal('fdModal'); } catch (_) { const m = _el('fdModal'); if (m) m.classList.add('hidden'); } }
-    function fdGo() { fdClose(); if (_casinoIsOpen()) { spDeposit(); return; } /* #1042-e: adentro de Girox */ try { easyLoad(); } catch (_) { setHomeMode('full'); } }
+    function fdGo() { fdClose(); if (_casinoIsOpen()) { if (document.body.classList.contains('sp-classic')) spDeposit(); else { try { VIP.autoload.pickReceipt('promo'); } catch (_) { spDeposit(); } } return; } /* #1042-e: adentro de Girox · #1057: como DEPOSITAR, a la guía del comprobante */ try { easyLoad(); } catch (_) { setHomeMode('full'); } }
     // #1042: barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo con VER (abre el cartel del bono de 1ª carga).
     // #1042-c: CHAT CLÁSICO desde el panel ⇒ body.sp-classic (sin barra ni cara de WhatsApp; el CSS nuevo no aplica).
     async function spUiMode() {
@@ -521,7 +521,8 @@
     }
     function spPromoOpen() {
         const j = _spPromo;
-        if (!(j && j.show && Number(j.pct) > 0)) { try { svcRefund(); } catch (_) {} return; }
+        if (!(j && j.show && Number(j.pct) > 0)) { return spInfo('refund'); } // revisión #1060: adentro del casino (si no, el fondo del chat la tapa)
+        try { _modalIntoCasino('fdModal'); } catch (_) {}
         const p = _el('fdPct'), pa = _el('fdPctApp'), ap = _el('fdApp'), t = _el('fdTxt');
         const extra = _fdExtraTxt(j);
         if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (extra || '0%') + ' EXTRA'; if (ap) ap.style.display = extra ? '' : 'none'; if (t) t.textContent = j.text || '';

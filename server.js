@@ -31059,7 +31059,7 @@ function _tgParseSpend(raw) {
   const t = String(raw || '').trim(); const m = t.match(/(\d[\d.,]*)/); if (!m) return null;
   let x = m[1]; if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(x)) x = x.replace(/\./g, '').replace(',', '.'); else if (/,\d{1,2}$/.test(x)) x = x.replace(/\./g, '').replace(',', '.'); else x = x.replace(/,/g, '');
   const n = Number(x); if (!(n > 0)) return null;
-  const ars = /\b(ars|pesos?)\b/i.test(t) || (/\$\s*\d/.test(t) && !/u\$s|us\$|usd|d[oó]lar/i.test(t));
+  const ars = /\b(ars|pesos?)\b/i.test(t) || n > 100000; // revisión: '$1200' = dólares (el owner piensa en US$); pesos sólo si lo dice o si es enorme
   const dm = t.slice(m.index + m[0].length).match(/(\d{1,2})\/(\d{1,2})/);
   return { amount: n, ars, dm: dm ? [Number(dm[1]), Number(dm[2])] : null };
 }
@@ -31085,14 +31085,14 @@ async function _tgSpendAnswer(c, chatId, raw, dmFromQuestion) {
   try { Config._cache && Config._cache.clear(); } catch (_) {}
   const lbl = dayKey.slice(8, 10) + '/' + dayKey.slice(5, 7);
   await _tgAdminSend(c, chatId, `✅ Guardado: <b>US$${Math.round(usdAmt).toLocaleString('es-AR')}</b> (≈ $${arsAmt.toLocaleString('es-AR')}${rate ? ' a $' + rate.toLocaleString('es-AR') : ''}) para el <b>${lbl}</b>. Armo el análisis…`);
-  // Análisis del DÍA cargado + 7 días que terminan ese día + el mes de ese día (una vez por respuesta; sólo desde un grupo aprobado).
-  const D = 86400000; const d0 = new Date(dayKey + 'T00:00:00-03:00'); const d1 = new Date(d0.getTime() + D); const m0 = new Date(dayKey.slice(0, 7) + '-01T00:00:00-03:00');
-  const [mDay, mWeek, mWeekPrev, mMonth, fDay, fWeek, fWeekPrev, fMonth] = await Promise.all([_bizMoney(d0, d1), _bizMoney(new Date(d1.getTime() - 7 * D), d1), _bizMoney(new Date(d1.getTime() - 14 * D), new Date(d1.getTime() - 7 * D)), _bizMoney(m0, d1),
-    _bizFirstDeps(d0, d1), _bizFirstDeps(new Date(d1.getTime() - 7 * D), d1), _bizFirstDeps(new Date(d1.getTime() - 14 * D), new Date(d1.getTime() - 7 * D)), _bizFirstDeps(m0, d1)]);
-  Object.assign(mDay, { firstDeposits: fDay }); Object.assign(mWeek, { firstDeposits: fWeek }); Object.assign(mWeekPrev, { firstDeposits: fWeekPrev }); Object.assign(mMonth, { firstDeposits: fMonth });
-  const sp = { yesterday: await _tgSpendRange(d0, d0, rate), week: await _tgSpendRange(new Date(d1.getTime() - 7 * D), d0, rate), weekPrev: await _tgSpendRange(new Date(d1.getTime() - 14 * D), new Date(d1.getTime() - 7 * D - 1), rate), month: await _tgSpendRange(m0, d0, rate) };
-  const isY = dayKey === _schedArtKey(new Date(now.getTime() - D));
-  await _tgAdminSend(c, chatId, tgAdmin.spendReport({ at: now, yesterday: mDay, week: mWeek, weekPrev: mWeekPrev, month: mMonth, spend: sp }, lbl, isY ? 'AYER' : 'EL DÍA'), tgAdmin.menuMarkup());
+  // Revisión (#1046: "nunca cálculos en el webhook"): el análisis usa los números que ya armó el cron (`tgadminsnap`, cada 15 min) y sólo recalcula
+  // la pauta (lectura de la Config, liviano). Si el día cargado no es ayer, queda guardado y se ve en el botón 💸 Pauta y ganancia / Datos IA.
+  const isY = dayKey === _schedArtKey(new Date(now.getTime() - 86400000));
+  const snap = await getConfig('tgadminsnap', null);
+  if (!isY || !snap || !snap.yesterday) { await _tgAdminSend(c, chatId, 'Lo vas a ver en 💸 <b>Pauta y ganancia</b> (/menu) y en Datos IA.', tgAdmin.menuMarkup()); return; }
+  const sp = await _tgSpendSnap(_tgArtDayStart(now), new Date(_schedArtKey(now).slice(0, 7) + '-01T00:00:00-03:00'));
+  await Config.collection.updateOne({ key: 'tgadminsnap' }, { $set: { 'value.spend': sp } }); try { Config._cache && Config._cache.clear(); } catch (_) {}
+  await _tgAdminSend(c, chatId, tgAdmin.spendReport(Object.assign({}, snap, { spend: sp }), lbl, 'AYER'), tgAdmin.menuMarkup());
 }
 async function _tgAdminSend(c, chatId, text, markup) {
   return tgChannel.call(c.token, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: markup || undefined });

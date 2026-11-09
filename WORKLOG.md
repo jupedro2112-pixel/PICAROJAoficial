@@ -8,6 +8,13 @@
 
 ## Sesión 2026-11-09
 
+### 1061. Revisión antes de subir (2026-11-09)
+- Sintaxis de todo el repo OK, 26/26 pruebas, zip = último commit sin claves.
+- Arreglos: (1) `/gasto` / respuesta: "$1200" se toma en DÓLARES (pesos sólo si dice "pesos" o > 100.000). (2) El análisis tras cargar el gasto ya no
+  calcula en el webhook (#1046): usa `tgadminsnap` del cron y sólo recalcula la pauta; si el día no es ayer, queda en 💸 Pauta y ganancia.
+  (3) Con el chat centrado y el fondo del tema (#1060), RETIRAR / REEMBOLSOS de la cabecera y la cinta VER abren su ventana ADENTRO del casino
+  (`spInfo` / `_modalIntoCasino`), si no, el fondo las tapaba; "Cargar" de la ventana de promo va a la guía del comprobante como DEPOSITAR. App v702.
+
 ### 1060. Chat de Girox centrado con el fondo del tema + "🆘 Otro problema" primero (2026-11-09)
 - **Owner:** "centrada en el medio, arriba y abajo un margen así no se tapa según el teléfono, lo que quede sin llenar en blanco si está claro y negro
   si está nocturno, así parece todo uno; 'Tengo otro problema' ponelo primero y que diga sólo 'Otro problema'".
