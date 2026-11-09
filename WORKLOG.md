@@ -15,6 +15,12 @@
 - Panel → Canal de Telegram → 🔒 Grupo de reportes: 🩺 Revisar conexión del bot (`POST /api/admin/telegram/diag`: getMe + getWebhookInfo, problemas en
   castellano: token, dirección del webhook, errores de entrega, "Allow Groups" en BotFather) y 🔧 Reconectar (vuelve a registrar el webhook). Panel v275.
 
+- **Apartados separados (owner: "armame en apartado el de canal y otro de grupo privado, así no se mezcla"):** en Configuración → 🆕 NUEVO el grupo
+  tiene su tarjeta propia "📊 Grupo privado de Telegram" (pasos, aprobar, diagnóstico, reportes, 💾 Guardar reportes); el canal queda en "📣 Canal de Telegram".
+- **Botones nuevos del grupo (owner: "clientes nuevos hoy, cuántos depósitos, retención, cuántos cargaron más de 2 veces, más de 5, todo lo de inicio"):**
+  🏠 Inicio: hoy en vivo · 👥 Clientes y cargas (hoy / mes / 30 días) · 🔢 Cuántas veces cargan (1, 2+, 5+, 10+). Datos en `snap.clients` (`_tgClientsSnap`,
+  agregaciones en el cron de 15 min, nunca en el webhook). 19 botones.
+
 ### 1068. Textos del canal de Telegram con el estilo de la captura + info del partido abajo de la foto (2026-11-09)
 - **Owner (captura de referencia, "sin copiar"):** "el formato de sólo texto en el canal que sea este estilo, con la negrita y demás; siempre con nuestro
   servicio; en las fotos poner abajo la info del partido".

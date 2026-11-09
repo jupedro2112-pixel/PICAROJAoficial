@@ -21,7 +21,8 @@ function chg(cur, prev) {
 
 const MENU_LBL = { full: '🏠 Completo', basic: '🧩 Básico', easy: '👆 Fácil', girox: '🎰 Girox directo', soporte: '💬 Soporte' };
 const MENU = [
-  ['today', '📊 Hoy'], ['yesterday', '📆 Ayer'],
+  ['inicio', '🏠 Inicio: hoy en vivo'], ['clients', '👥 Clientes y cargas'],
+  ['loyal', '🔢 Cuántas veces cargan'], ['today', '📊 Hoy'], ['yesterday', '📆 Ayer'],
   ['week', '🗓️ Últimos 7 días'], ['month', '📅 Mes'],
   ['retention', '🔁 Retención'], ['funnel', '🪜 Embudo'],
   ['gifts', '🎁 Regalos'], ['campaigns', '📣 Campañas'],
@@ -97,17 +98,45 @@ function spendReport(s, dayLabel, dayTitle) {
 function askSpendText(dayLabel) {
   return `💸 <b>¿Cuánto gastaste en publicidad el ${esc(dayLabel)}?</b>\nRespondé a ESTE mensaje con el número en dólares (ej: <code>1200</code>).\n<i>También podés escribir /gasto 1200 cuando quieras (o /gasto 1200 08/11 para otro día).</i>`;
 }
+// #1069: INICIO del día, clientes y frecuencia de carga (snap.clients, lo arma el cron).
+function inicioReport(s) {
+  const c = s.clients || {}; const t = c.today || {}; const m = s.today || {};
+  if (!s.clients) return '<i>Sin datos todavía (se calculan cada 15 minutos).</i>';
+  return [`🟢 En la app ahora: <b>${c.activeNow == null ? '—' : num(c.activeNow)}</b> · entraron hoy: <b>${c.inApp == null ? '—' : num(c.inApp)}</b>`,
+    `🆕 Registros hoy: <b>${num(c.regToday)}</b> (publicidad ${num(c.regTodayAd)} · orgánicos ${num(c.regTodayOrg)})${chg(c.regToday, c.regYest)}`,
+    `🥇 Primera carga hoy: <b>${num(c.firstToday)}</b>` + (c.regToday ? ` (${pc(c.firstToday / c.regToday)} de los registros)` : ''),
+    `💰 Cargas hoy: <b>${num(t.deposits)}</b> por <b>${money(t.amount)}</b> · ${num(t.users)} clientes`,
+    `🔁 Volvieron (cargaron ayer y hoy): <b>${num(c.backFromYesterday)}</b>`,
+    `💸 Retiros pagados hoy: ${money(m.withdrawals)} (${num(m.withdrawalCount)})`,
+    `📈 Resultado hoy (cargas − retiros): <b>${money(m.result)}</b>`,
+    `🎁 Regalado hoy: ${money(m.gifts)} · ${pc(m.giftRatio)} de lo cargado`,
+    `👥 Clientes totales: ${num(c.totalUsers)}`].join('\n');
+}
+function clientsReport(s) {
+  const c = s.clients || {}; if (!s.clients) return '<i>Sin datos todavía.</i>';
+  const blk = (b, lbl) => [`<b>${lbl}</b>`, `💰 Cargas: <b>${num(b.deposits)}</b> por ${money(b.amount)}`, `👥 Clientes que cargaron: <b>${num(b.users)}</b> · ticket promedio ${money(b.deposits ? b.amount / b.deposits : 0)}`].join('\n');
+  return [`🆕 Nuevos hoy: <b>${num(c.regToday)}</b> (ayer ${num(c.regYest)}) · 1ª carga hoy: <b>${num(c.firstToday)}</b>`, '', blk(c.today || {}, 'HOY'), '', blk(c.month || {}, 'MES EN CURSO'), '', blk(c.d30 || {}, 'ÚLTIMOS 30 DÍAS')].join('\n');
+}
+function loyalReport(s) {
+  const c = s.clients || {}; if (!s.clients) return '<i>Sin datos todavía.</i>';
+  const blk = (b, lbl) => { const u = b.users || 0; const p = (x) => (u ? ` (${pc(x / u)})` : '');
+    return [`<b>${lbl}</b> · ${num(u)} clientes cargaron`, `1️⃣ Una sola vez: <b>${num(b.n1)}</b>${p(b.n1)}`, `2️⃣ 2 veces o más: <b>${num(b.n2)}</b>${p(b.n2)}`, `5️⃣ 5 veces o más: <b>${num(b.n5)}</b>${p(b.n5)}`, `🔟 10 veces o más: <b>${num(b.n10)}</b>${p(b.n10)}`].join('\n'); };
+  return [blk(c.month || {}, 'MES EN CURSO'), '', blk(c.d30 || {}, 'ÚLTIMOS 30 DÍAS'), '', '<i>Cuantos más carguen 2+ y 5+ veces, mejor la retención: los de una sola vez son los que hay que recuperar.</i>'].join('\n');
+}
 function render(key, snap) {
   const s = snap || {}; const at = s.at;
   if (key === 'menu') return { text: `${header('PANEL DE CONTROL', at)}\nElegí qué querés ver 👇\n<i>Los números se recalculan cada 15 min (retención, embudo, regalos y campañas cada hora).</i>`, markup: menuMarkup() };
   let text;
   if (key === 'spend') text = spendReport(s).replace(/^.*\n.*\n━+\n/, header('PAUTA Y GANANCIA', at) + '\n');
+  else if (key === 'inicio') text = [header('INICIO · HOY EN VIVO', at), inicioReport(s)].join('\n');
+  else if (key === 'clients') text = [header('CLIENTES Y CARGAS', at), clientsReport(s)].join('\n');
+  else if (key === 'loyal') text = [header('CUÁNTAS VECES CARGAN', at), loyalReport(s)].join('\n');
   else if (key === 'info') text = [header('CÓMO USAR ESTE GRUPO', at), // #1055 (owner): botonera, info y reportes del negocio en el grupo privado
     '📊 <b>Hoy / 📆 Ayer / 🗓️ 7 días / 📅 Mes</b>: depósitos, retiros, regalos, resultado (plata que queda), clientes que cargaron y registros, comparado con el período anterior.',
     '🔁 <b>Retención</b>: cuántos de los que cargaron vuelven a cargar.', '🪜 <b>Embudo</b>: registro → 1ª carga → 2ª carga, y dónde se pierde más gente.',
     '🎁 <b>Regalos</b>: cuánto cuesta cada regalo y si conviene.', '📣 <b>Campañas</b>: clientes y plata que trae cada publicista.',
     '🚨 <b>Alertas</b>: lo que hay que mirar ya.', '📋 <b>Análisis semanal</b>: el resumen de la semana con lo que conviene cambiar.',
-    '🛡️ <b>Retiros frenados</b>: los que esperan revisión.', '💸 <b>Pauta y ganancia</b>: lo gastado en publicidad contra lo que entró (costo por cliente, resultado − pauta). Todos los días a las 10 h te pregunto cuánto gastaste ayer.', '🎟️ <b>Sorteo</b> · 🤖 <b>IA de soporte</b> · 📱 <b>Uso de la app</b>.', LINE,
+    '🛡️ <b>Retiros frenados</b>: los que esperan revisión.', '🏠 <b>Inicio</b>: hoy en vivo (en la app ahora, registros, 1ª carga, cargas, volvieron, resultado). 👥 <b>Clientes y cargas</b>: cuántos cargaron y cuánto, hoy / mes / 30 días. 🔢 <b>Cuántas veces cargan</b>: clientes con 1, 2+, 5+ y 10+ cargas.', '💸 <b>Pauta y ganancia</b>: lo gastado en publicidad contra lo que entró (costo por cliente, resultado − pauta). Todos los días a las 10 h te pregunto cuánto gastaste ayer.', '🎟️ <b>Sorteo</b> · 🤖 <b>IA de soporte</b> · 📱 <b>Uso de la app</b>.', LINE,
     '📬 <b>REPORTES AUTOMÁTICOS</b>', '▸ Todos los días a las 9 h: cómo cerró ayer', '▸ Los lunes: la semana completa', '▸ El día 1: el mes completo', LINE,
     '<i>Escribí /menu para volver a ver la botonera. Este grupo es PRIVADO: no agregues a nadie que no deba ver los números.</i>'].join('\n');
   else if (key === 'today') text = `${header('HOY', at)}\n${moneyBlock(s.today, s.todayPrev, 'Comparado con ayer a la misma hora')}`;

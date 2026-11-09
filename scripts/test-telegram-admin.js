@@ -20,10 +20,10 @@ const SNAP = { at: new Date('2026-11-09T21:00:00Z'), today: M, todayPrev: Object
   menus: { at: new Date(), byMenu: { girox: { users: 100, back7: 60, depositors: 40, repeat: 20 } }, weeks: [{ regs: 50, firstDep: 20, depositors: 90, chatNewPct: 80 }] },
   weeklyText: 'ANÁLISIS SEMANAL\n• todo bien' };
 
-caso('Menú: 16 botones (con Pauta e Info), todos responden con texto < 4096 y botones Actualizar / Menú', () => {
-  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 16);
+caso('Menú: 19 botones (Inicio, Clientes, Veces, Pauta, Info), todos responden con texto < 4096 y botones Actualizar / Menú', () => {
+  const k = ta.menuMarkup().inline_keyboard.flat(); assert.strictEqual(k.length, 19);
   for (const b of k) { assert.ok(/^ad:[a-z]+$/.test(b.callback_data) && b.callback_data.length <= 64); const r = ta.render(b.callback_data.slice(3), SNAP); assert.ok(r && r.text.length < 4096, b.callback_data); assert.ok(r.markup.inline_keyboard[0].some((x) => x.callback_data === 'ad:menu')); }
-  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 16);
+  assert.ok(ta.render('menu', SNAP).markup.inline_keyboard.flat().length === 19);
   assert.strictEqual(ta.render('nada', SNAP), null);
 });
 caso('Sin datos (snap vacío) no rompe', () => { for (const [k] of ta.MENU) assert.ok(ta.render(k, {}).text.length > 10, k); assert.ok(ta.dailyReport(null).length > 10 && ta.monthlyReport({}).length > 10); });
@@ -113,6 +113,16 @@ caso('#1069 Diagnóstico del bot: webhook fijo en picaroja.com (no PUBLIC_URL), 
   const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/const TG_WEBHOOK_BASE = String\(process\.env\.TG_WEBHOOK_BASE \|\| 'https:\/\/picaroja\.com'\)/.test(S2) && !/TG_WEBHOOK_BASE = String\(process\.env\.PUBLIC_URL/.test(S2));
   assert.ok(/app\.post\('\/api\/admin\/telegram\/diag', authMiddleware, adminMiddleware, async \(req, res\) => \{\n  if \(req\.user\.role !== 'admin'\)/.test(S2) && /getWebhookInfo/.test(S2));
+});
+caso('#1069 Inicio / Clientes / Cuántas veces cargan: números del cron (snap.clients), sin datos no rompe', () => {
+  const b = { users: 300, n1: 150, n2: 150, n5: 40, n10: 10, deposits: 900, amount: 9000000 };
+  const S = { at: new Date(), today: { withdrawals: 1e6, withdrawalCount: 10, result: 2e6, gifts: 1e5, giftRatio: 0.05 }, clients: { regToday: 120, regTodayAd: 100, regTodayOrg: 20, regYest: 90, firstToday: 35, today: { users: 80, deposits: 140, amount: 3e6 }, backFromYesterday: 40, month: b, d30: b, inApp: 500, activeNow: 30, totalUsers: 20000 } };
+  assert.ok(/Registros hoy: <b>120<\/b>/.test(ta.render('inicio', S).text) && /Volvieron/.test(ta.render('inicio', S).text));
+  assert.ok(/5 veces o más: <b>40<\/b> \(13%\)/.test(ta.render('loyal', S).text) && /2 veces o más: <b>150<\/b>/.test(ta.render('loyal', S).text));
+  assert.ok(/MES EN CURSO/.test(ta.render('clients', S).text));
+  for (const k of ['inicio', 'clients', 'loyal']) assert.ok(/Sin datos/.test(ta.render(k, {}).text), k);
+  const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/snap\.clients = await _tgClientsSnap\(now, t0, m0\)/.test(S2), 'lo calcula el cron');
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

@@ -30996,6 +30996,9 @@ async function _tgAdminSnapTick(force, moneyOnly) {
       if (snap.yesterday) snap.yesterday.firstDeposits = fy; if (snap.week) snap.week.firstDeposits = fw; if (snap.weekPrev) snap.weekPrev.firstDeposits = fwp; if (snap.month) snap.month.firstDeposits = fm;
       snap.spend = await _tgSpendSnap(t0, m0);
     } catch (e) { logger.warn('[telegram reportes] pauta ' + e.message); }
+    // #1069 (owner: "botones para preguntarle de todo: clientes nuevos hoy, cuántos depósitos, retención, cuántos cargaron más de 2 veces, más de 5,
+    // todo lo de INICIO"): resumen de CLIENTES liviano (agregaciones; corre en este cron, nunca en el webhook).
+    try { snap.clients = await _tgClientsSnap(now, t0, m0); } catch (e) { logger.warn('[telegram reportes] clientes ' + e.message); }
     // Mes anterior completo (para el reporte del día 1): una vez por mes.
     if (prevSnap.lastMonthKey === pmk && prevSnap.lastMonth) Object.assign(snap, { lastMonthKey: pmk, lastMonth: prevSnap.lastMonth, lastMonthPrev: prevSnap.lastMonthPrev });
     else { const ppm0 = new Date(_schedArtKey(new Date(pm0.getTime() - 15 * D)).slice(0, 7) + '-01T00:00:00-03:00'); const [lm, lmp] = await Promise.all([_bizMoney(pm0, m0), _bizMoney(ppm0, pm0)]); Object.assign(snap, { lastMonthKey: pmk, lastMonth: strip(lm), lastMonthPrev: strip(lmp) }); }
@@ -31044,6 +31047,22 @@ async function _bizFirstDeps(from, to) { // clientes cuya PRIMERA carga real cae
   if (!ids.length) return 0;
   const before = await Transaction.distinct('userId', Object.assign({}, _BIZ_REAL, { userId: { $in: ids }, timestamp: { $lt: from } }));
   return Math.max(0, ids.length - before.length);
+}
+async function _tgClientsSnap(now, t0, m0) {
+  const D = 86400000; const y0 = new Date(t0.getTime() - D); const d30 = new Date(t0.getTime() - 29 * D);
+  const isAd = { $or: [{ acquisitionSource: 'landing' }, { acquisitionCampaign: { $nin: [null, '', 'INGRESO'] } }] };
+  const per = (from) => Transaction.aggregate([{ $match: Object.assign({ timestamp: { $gte: from, $lt: now } }, _BIZ_REAL) }, { $group: { _id: '$userId', n: { $sum: 1 }, total: { $sum: '$amount' } } }]);
+  const bucket = (rows) => { const b = { users: rows.length, n1: 0, n2: 0, n5: 0, n10: 0, deposits: 0, amount: 0 }; for (const r of rows) { b.deposits += r.n; b.amount += r.total; if (r.n === 1) b.n1++; if (r.n >= 2) b.n2++; if (r.n >= 5) b.n5++; if (r.n >= 10) b.n10++; } return b; };
+  const [regToday, regTodayAd, regYest, todayRows, yestIds, monthRows, d30Rows, firstToday, inApp, activeNow, totalUsers] = await Promise.all([
+    User.countDocuments({ role: 'user', createdAt: { $gte: t0, $lt: now } }), User.countDocuments(Object.assign({ role: 'user', createdAt: { $gte: t0, $lt: now } }, isAd)),
+    User.countDocuments({ role: 'user', createdAt: { $gte: y0, $lt: t0 } }), per(t0),
+    Transaction.distinct('userId', Object.assign({ timestamp: { $gte: y0, $lt: t0 } }, _BIZ_REAL)), per(m0), per(d30), _bizFirstDeps(t0, now),
+    AppSession.distinct('userId', { dateKey: _schedArtKey(now) }).then((a) => a.length).catch(() => null),
+    AppSession.distinct('userId', { lastPingAt: { $gte: new Date(now.getTime() - 3 * 60000) } }).then((a) => a.length).catch(() => null),
+    User.countDocuments({ role: 'user' })
+  ]);
+  const yset = new Set(yestIds.map(String)); const back = todayRows.filter((r) => yset.has(String(r._id))).length;
+  return { regToday, regTodayAd, regTodayOrg: regToday - regTodayAd, regYest, firstToday, today: bucket(todayRows), backFromYesterday: back, month: bucket(monthRows), d30: bucket(d30Rows), inApp, activeNow, totalUsers };
 }
 async function _tgUsdRate() { try { const u = await getConfig('usdtRate', null); const r = Number(u && typeof u === 'object' ? u.rate : u); if (r > 0) return r; } catch (_) {} try { const d = await _diaUsdt(true); return Number(d && d.rate) || null; } catch (_) { return null; } }
 async function _tgSpendRange(from, to, rate) { // from/to: días ART (inclusive)
