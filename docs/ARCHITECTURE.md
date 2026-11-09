@@ -1990,6 +1990,8 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Telegram #1047/#1048 (revisión):** webhook = `TG_WEBHOOK_BASE` (env `PUBLIC_URL` o https://picaroja.com) + `/api/telegram/webhook`, excluido de `generalLimiter`;
   `drop_pending_updates` sólo al guardar un token nuevo. Canal auto-detectado sólo dentro de 1 h desde `tokenSavedAt`; si no, `channelCandidate` + `/use-channel`.
   `adminChats`/`adminPending` SOLO con `_tgArrPull`/`_tgArrPush` (atómicos). `telegramPanelStats` lo escribe `_tgPanelTick` aunque el panel esté apagado.
+- **Telegram seguridad (#1050):** webhook valida el secreto con `_tgSecretNow()` (memoria 60 s) antes de `_tgCfg()`; `/start` reusa `panelFileId` (nunca
+  renderiza en el webhook); `channelCandidates` (lista, `_tgArrPush(..., noEvict)`), rutas `use-channel {id}` y `channel-dismiss`; en Render `_tgCfg` deja `token=null`.
 - **Bono de 1ª carga por landing (#1048):** el formulario de campaña del panel lee/guarda `Config['publisherWelcome'][CODE]` (misma regla que #1024).
 - **Grupo privado de reportes (#1046):** `telegramAdmin.js` (render puro) + `_tgAdminSnapTick` (lock `tgadminsnap`, 15 min ⇒ `Config['tgadminsnap']`),
   `_tgAdminReportsTick` (lock `tgadminrep`; marca `adminLastDaily/Weekly/Monthly` ANTES de mandar), `_tgAdminOnMessage` (`/vincular@bot CÓDIGO`, `/menu`,

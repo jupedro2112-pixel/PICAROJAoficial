@@ -71,5 +71,17 @@ caso('#1048 Landing: el formulario lee/guarda el bono de 1ª carga (50% por defe
   const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/const fp0 = await getFirstDepositBonusPct\(user\);/.test(S), 'la carga (manual y automática) usa el % del publicista del cliente');
 });
+caso('Revisión de seguridad: /start sin armar fotos, tope global por privado, canales candidatos en lista con confirmación, extra re-chequeado al reclamar, Render sin Telegram', () => {
+  const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const wh = S.slice(S.indexOf("app.post('/api/telegram/webhook'"), S.indexOf("app.post('/api/telegram/webhook'") + 9000);
+  assert.ok(!/svgBufferToPng/.test(wh.slice(0, wh.indexOf('\n});'))), 'el webhook nunca arma imágenes');
+  assert.ok(/if \(\+\+_tgPrivRate\.n > 120\) return;/.test(S));
+  assert.ok(/_tgArrPush\('channelCandidates'/.test(S) && !/channelCandidate: \{/.test(S), 'candidatos sólo en la lista');
+  assert.ok(/_tgArrPush\('adminPending', \{[^\n]*, 10, true\)/.test(S), 'los pendientes no se pueden empujar afuera');
+  assert.ok(/code: 'UNDER_REVIEW'/.test(S));
+  assert.ok(/process\.env\.RENDER === 'true' && process\.env\.TG_ON_RENDER !== '1'\) \{ c\.token = null;/.test(S));
+  const A = fs.readFileSync(path.join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
+  assert.ok(A.includes('onclick="tgUseChannel(') && A.includes('async function tgUseChannel(id)') && /confirm\('¿Ese grupo es TUYO\?/.test(A));
+});
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

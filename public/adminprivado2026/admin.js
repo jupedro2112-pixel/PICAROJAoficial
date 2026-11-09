@@ -6395,7 +6395,9 @@ async function loadTgChannel() {
         L.push('📤 Historias esperando para el canal: <b>' + (j.queue || 0) + '</b> · último posteo: ' + f(c.lastPostAt) + (c.panelMsgId ? ' · 📌 panel fijado' : ''));
         if ((j.posted || []).length) L.push('Últimas publicadas: ' + j.posted.map((p) => escapeHtml(p.title || p.id) + ' (' + f(p.tgPostedAt) + ')').join(' · '));
         const ld = j.lastDrop; L.push('🎁 Código de Telegram: ' + (ld ? '<b>' + escapeHtml(ld.code) + '</b> ' + ld.claims + '/' + ld.maxClaims + ' (' + (ld.status === 'active' ? 'activo' : ld.status === 'completed' ? 'agotado' : 'vencido') + ', ' + f(ld.startsAt) + ')' : 'todavía no salió') + ' · próximo: ' + f(c.dropNextAt));
-        if (c.channelCandidate) L.push((c.channel ? '🔁 El bot también es admin de <b>' : '📣 El bot fue agregado como admin de <b>') + escapeHtml(c.channelCandidate.title || c.channelCandidate.id) + '</b>' + (c.channelCandidate.by ? ' (por ' + escapeHtml(c.channelCandidate.by) + ')' : '') + '. <button class="btn-primary btn-small" onclick="tgUseChannel()">✅ Usar ese canal</button>');
+        // revisión de seguridad: canales candidatos en lista, con el id del canal, quién agregó al bot (y su id) y cuántos miembros tiene.
+        (c.channelCandidates || []).forEach((x) => L.push((c.channel ? '🔁 El bot también es admin de <b>' : '📣 El bot fue agregado como admin de <b>') + escapeHtml(x.title || x.id) + '</b> <span style="color:#888;">(id ' + escapeHtml(x.id) + (x.by ? ' · agregado por ' + escapeHtml(x.by) : '') + (x.byId ? ' [' + escapeHtml(x.byId) + ']' : '') + (x.members != null ? ' · ' + escapeHtml(String(x.members)) + ' miembros' : '') + ' · ' + f(x.at) + ')</span> <button class="btn-primary btn-small" onclick="tgUseChannel(\'' + escapeHtml(x.id) + '\')">✅ Usar ese canal</button> <button class="btn-secondary btn-small" onclick="tgDismissChannel(\'' + escapeHtml(x.id) + '\')">✖</button><br><small style="color:#c62828;">Usalo SÓLO si es tu canal y lo agregaste vos: ahí se publican las historias y los códigos de $5.000.</small>'));
+        if (c.onRender) L.push('<span style="color:#c62828;">⚠️ Entorno de prueba (Render): Telegram está apagado acá porque comparte la base con producción.</span>');
         if (c.hasToken && !c.channel) L.push('👉 Falta un paso: agregá a <b>@' + escapeHtml(c.botUsername || 'tu bot') + '</b> como administrador de tu canal y se conecta solo (tocá 🔄 en unos segundos).');
         if (c.lastError) L.push('<span style="color:#c62828;">⚠️ Último error (' + f(c.lastErrorAt) + '): ' + escapeHtml(c.lastError) + '</span>');
         if (info) info.innerHTML = L.join('<br>');
@@ -6436,14 +6438,19 @@ async function tgAdminPair() {
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function tgAdminApprove(id, approve) { // #1047: grupo agregado ⇒ aprobar / descartar con un toque
+    if (approve && !confirm('¿Ese grupo es TUYO? Todos sus miembros van a ver ventas, retiros y usuarios. (id ' + id + ')')) return; // revisión de seguridad
     try {
         const r = await authFetch('/api/admin/telegram/admin-approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, approve }) });
         const j = await r.json().catch(() => ({})); if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
         showToast(approve ? '✅ Grupo aprobado: ya ve los reportes' : 'Grupo descartado (el bot sale del grupo)', 'success'); loadTgChannel();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
-async function tgUseChannel() {
-    try { const r = await authFetch('/api/admin/telegram/use-channel', { method: 'POST' }); if (!r.ok) { showToast('No se pudo', 'error'); return; } showToast('📣 Canal cambiado', 'success'); loadTgChannel(); } catch (_) { showToast('Error de conexión', 'error'); }
+async function tgUseChannel(id) {
+    if (!confirm('¿Ese canal es TUYO y agregaste vos al bot? Ahí se publican las historias y los códigos de $5.000. (id ' + id + ')')) return;
+    try { const r = await authFetch('/api/admin/telegram/use-channel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); if (!r.ok) { showToast('No se pudo', 'error'); return; } showToast('📣 Canal cambiado', 'success'); loadTgChannel(); } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function tgDismissChannel(id) {
+    try { const r = await authFetch('/api/admin/telegram/channel-dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); if (!r.ok) { showToast('No se pudo', 'error'); return; } loadTgChannel(); } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function tgAdminUnlink(id) {
     try {
@@ -6452,7 +6459,7 @@ async function tgAdminUnlink(id) {
         showToast('🔒 Grupo desvinculado', 'success'); loadTgChannel();
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
-window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow; window.tgAdminPair = tgAdminPair; window.tgAdminApprove = tgAdminApprove; window.tgUseChannel = tgUseChannel; window.tgAdminUnlink = tgAdminUnlink;
+window.loadTgChannel = loadTgChannel; window.saveTgChannel = saveTgChannel; window.tgNow = tgNow; window.tgAdminPair = tgAdminPair; window.tgAdminApprove = tgAdminApprove; window.tgUseChannel = tgUseChannel; window.tgDismissChannel = tgDismissChannel; window.tgAdminUnlink = tgAdminUnlink;
 async function saveSupportBot() {
     const g = (id) => document.getElementById(id);
     const body = { classic: !!(g('sbClassic') && g('sbClassic').checked), enabled: !!(g('sbEnabled') && g('sbEnabled').checked), model: g('sbModel') && g('sbModel').value, delayMinSec: Number(g('sbDelayMin') && g('sbDelayMin').value), delayMaxSec: Number(g('sbDelayMax') && g('sbDelayMax').value), pauseHours: Number(g('sbPause') && g('sbPause').value), muteHours: Number(g('sbMute') && g('sbMute').value), aiMaxReplies: Number(g('sbAiMax') && g('sbAiMax').value), learnedOnly: !!(g('sbLearnedOnly') && g('sbLearnedOnly').checked), autoApproveAt: Number(g('sbAutoApprove') && g('sbAutoApprove').value) || 0, extraInfo: (g('sbExtra') && g('sbExtra').value) || '' };

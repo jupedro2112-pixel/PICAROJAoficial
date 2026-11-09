@@ -8,6 +8,17 @@
 
 ## Sesión 2026-11-09
 
+### 1050. Revisión de SEGURIDAD de todo lo de hoy (9749567..HEAD) — panel v270 (2026-11-09)
+- Resultado: nada crítico (sin secretos en el repo, rutas nuevas sólo admin, nadie ve datos de otro cliente, la IA no mueve plata). Arreglado:
+  - `/start` del bot ya NO arma la foto (frenaba el servidor con pedidos repetidos): reenvía la del panel por `panelFileId`; tope global de 120 respuestas/min por privado.
+  - Webhook: el secreto se compara contra una copia en memoria (60 s) ANTES de leer la config / descifrar el token.
+  - Canal: candidatos en LISTA (`channelCandidates`, hasta 5, no se pisan), con id del canal, quién agregó al bot (+ su id de Telegram) y miembros;
+    "✅ Usar ese canal" por id y con confirmación; ✖ descarta. La conexión sola de la 1ª hora se cierra al conectar uno.
+  - Grupos pendientes: no se pueden empujar afuera (llena = se rechazan los nuevos); aprobar pide confirmación con el id. `/vincular` sin código activo no contesta.
+  - Extra por instalar: al RECLAMAR se re-chequean bloqueo / secundaria / marcas / observación (`UNDER_REVIEW`).
+  - La IA ya no le dice al cliente que su cuenta fue detectada como secundaria. Bono de 1ª carga por campaña: tope 200%.
+  - Render: Telegram APAGADO (no mueve el webhook, no publica, no deja guardar el token) salvo `TG_ON_RENDER=1`.
+
 ### 1049. IA: quejas de un JUEGO ⇒ soporte de la plataforma; sin el botón Soporte arriba del casino — app v695 (2026-11-09)
 - **Owner:** "siempre que se quejan de algún juego, decirles que hablen al soporte de la página, que nosotros brindamos el servicio de cargas/descargas; y sacá
   el soporte de arriba porque se van a equivocar". Prompt (`supportBot.js`, sección QUEJAS DE UN JUEGO): juego colgado, jugada no pagada, error de partida,

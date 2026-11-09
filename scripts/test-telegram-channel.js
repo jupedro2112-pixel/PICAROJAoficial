@@ -47,7 +47,7 @@ caso('Server: qué se publica (sin personales ni códigos sorpresa, sólo desde 
   assert.ok(/publishedAt: \{ \$gte: new Date\(c\.since \|\| now\)/.test(S2));
   assert.ok(/Story\.findOneAndUpdate\(\{ id: st\.id, tgPostedAt: null \}/.test(S2), 'una sola instancia publica cada historia');
   assert.ok(/tokenEnc: _credEncrypt\(token\)/.test(S2) && /\/\^\\\/api\\\/admin\\\/telegram\(\\\/\|\$\)\/i/.test(S2));
-  assert.ok(/crypto\.timingSafeEqual\(Buffer\.from\(got\), Buffer\.from\(c\.webhookSecret\)\)/.test(S2), 'webhook con secreto');
+  assert.ok(/if \(!sec \|\| got\.length !== sec\.length \|\| !crypto\.timingSafeEqual\(Buffer\.from\(got\), Buffer\.from\(sec\)\)\) return res\.status\(401\)\.end\(\);\n    const c = await _tgCfg\(\);/.test(S2), 'webhook con secreto ANTES de leer la config');
   assert.ok(/_cronClaim\('tgpanel'/.test(S2) && /_cronClaim\('tgmirror'/.test(S2), 'crons con lock (multi-instancia)');
 });
 caso('#1044-c Botones editables: textos, apagar info, links https (máx. 3), texto propio de Servicio; logo centrado en las fotos', () => {
