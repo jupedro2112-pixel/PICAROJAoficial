@@ -1593,6 +1593,15 @@
             } catch (_) {}
         }
         if (!_open) { _unread++; _paintBadge(); }
+        // #1042-n (owner: "que la gente reciba la respuesta en el chat de la burbuja"): jugando con el chat de la burbuja cerrado ⇒ número en la
+        // burbuja + aviso corto; tocándola se abre el chat con la respuesta.
+        try {
+            if (_casinoIsOpen() && !_spCasino && !message.adminOnly && message.type !== 'image' && (message.channel === 'support' || (message.metadata && message.metadata.channel === 'support'))) {
+                _casUnread++;
+                const b = _el('casinoChatBadge'); if (b) { b.textContent = _casUnread > 9 ? '9+' : String(_casUnread); b.style.display = 'block'; }
+                if (VIP.ui && VIP.ui.showToast) VIP.ui.showToast('💬 Te respondió Soporte · tocá la burbuja', 'info');
+            }
+        } catch (_) {}
     }
 
     // ---------------- #275: CARTEL "JUGAR AHORA" ----------------
@@ -2458,7 +2467,9 @@
     // #1042-e (owner: "todo esto adentro de Girox, que no se abran cosas por afuera"): Soporte se abre ENCIMA del juego (el casino sigue
     // abierto atrás). El mismo #supportPanel se muda adentro de #casinoOverlay (ids, listeners y socket intactos) y vuelve al cerrar.
     function _casinoIsOpen() { try { return document.body.classList.contains('casino-open') && !!_el('casinoOverlay') && _el('casinoOverlay').style.display !== 'none'; } catch (_) { return false; } }
+    let _casUnread = 0;
     function _supportIntoCasino() {
+        try { _casUnread = 0; const b = _el('casinoChatBadge'); if (b) b.style.display = 'none'; } catch (_) {}
         const ov = _el('casinoOverlay'), p = _el('supportPanel'); if (!ov || !p) return false;
         if (p.parentNode !== ov) { _spCasino = { parent: p.parentNode, next: p.nextSibling, wasHidden: p.classList.contains('hidden') }; ov.appendChild(p); }
         try { toggleCasinoLoad(false); } catch (_) {}

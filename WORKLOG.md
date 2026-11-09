@@ -8,6 +8,17 @@
 
 ## Sesión 2026-11-09
 
+### 1042-n. Soporte del panel = sólo lo que necesita un agente; respuesta en la burbuja de Girox — PWA v681 (2026-11-09)
+- **Owner:** "que se responda desde el admin desde el mismo lugar pero la gente la reciba en el chat de la burbuja; usá el chat que ya tenemos en
+  admin para recolectar todos los chats de la IA; si tiene que responder un agente, que se abra en Soporte, que él va a estar atento ahí".
+- Es el MISMO chat (canal support): lo que el agente escribe desde Chat completo o Soporte le llega al cliente en la burbuja. Los chats que atiende
+  la IA se ven en **Chat completo**.
+- `_supportConversationsBuild` (con bot encendido y sin Chat clásico): Soporte muestra sólo chats con nota `bot_handoff`, chats donde ya escribió una
+  persona del equipo, o reclamos (`_supportNeedsHuman`) que el bot no contestó hace 3+ min (IA caída / primera respuesta fija) y sin silenciar.
+  Bot apagado / clásico ⇒ igual que antes.
+- PWA: jugando con el chat de la burbuja cerrado, una respuesta de Soporte pone el número en la burbuja (`casinoChatBadge`) + aviso "Te respondió
+  Soporte"; al abrirla se limpia.
+
 ### 1042-m. Lo nuevo va en la BURBUJA de Girox (chico, flotante); Soporte vuelve a como estaba; scroll de los menús — PWA v680 (2026-11-09)
 - **Owner:** "hiciste todo en Soporte y no en el chat burbuja… el chat de Soporte dejalo como estaba, modificá todo lo que te pasé en la burbuja del
   chat de Girox" + (captura de la Carga rápida) "que se vea así pero en la burbuja, que no tape toda la página, más chico" + "en el completo y el

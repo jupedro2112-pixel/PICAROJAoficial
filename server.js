@@ -24281,7 +24281,37 @@ async function _supportConversationsBuild() {
     ]);
     // #900 (owner): "si quieren retirar y no pueden, no hace falta respuesta": si TODO lo que escribió es la consulta de no poder retirar /
     // cuánto falta apostar (ya contestada sola y explicada en Retirar premio) no ocupa Soporte; un retiro que NO LLEGÓ o un descuento sí.
-    const _rows = rows.filter((r) => (r.userTextList || []).some(_supportNeedsHuman)).map((r) => { delete r.userTextList; return r; });
+    rows.forEach((r) => { r._needs = (r.userTextList || []).some(_supportNeedsHuman); });
+    let _rows = rows.filter((r) => r._needs);
+    // #1042-n (owner): "lo que atiende la IA que figure en el Chat completo; si tiene que responder un agente, que se abra en Soporte". Con el bot
+    // encendido, Soporte muestra SÓLO: chats que el bot pasó a un agente (nota bot_handoff), chats donde ya escribe una persona del equipo, o
+    // reclamos que el BOT no contestó (sólo la respuesta fija o nada) hace 3+ min y el cliente no está silenciado. El resto lo ve el
+    // Chat completo (es el mismo chat: lo que escriba el agente le llega al cliente igual, también en la burbuja de Girox).
+    try {
+      const bc = await getSupportBotConfig();
+      if (bc.enabled && !bc.classic && rows.length) {
+        const ids = rows.map((r) => r.userId);
+        const since = new Date(Date.now() - 72 * 3600 * 1000);
+        const [ho, human, answered, mutes, lastU] = await Promise.all([
+          Message.aggregate([{ $match: { receiverId: { $in: ids }, 'metadata.kind': 'bot_handoff', timestamp: { $gte: since } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
+          Message.aggregate([{ $match: { receiverId: { $in: ids }, senderRole: { $in: SUPPORT_ROLES }, type: { $in: ['text', 'image', 'video'] }, 'metadata.bot': { $ne: true }, adminOnly: { $ne: true }, senderId: { $ne: 'support-bot' }, timestamp: { $gte: since } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
+          Message.aggregate([{ $match: { receiverId: { $in: ids }, senderId: 'support-bot', timestamp: { $gte: since } } }, { $group: { _id: '$receiverId', at: { $max: '$timestamp' } } }]),
+          mongoose.connection.collection('support_bot_mutes').find({ _id: { $in: ids }, until: { $gt: new Date() } }).project({ _id: 1 }).toArray(),
+          Message.aggregate([{ $match: { senderId: { $in: ids }, senderRole: 'user', timestamp: { $gte: since } } }, { $group: { _id: '$senderId', at: { $max: '$timestamp' } } }])
+        ]);
+        const mp = (arr) => new Map(arr.map((x) => [x._id, x.at]));
+        const H = mp(ho), A = mp(human), B = mp(answered), L = mp(lastU), M = new Set(mutes.map((x) => x._id));
+        const grace = Date.now() - 3 * 60000;
+        _rows = rows.filter((r) => {
+          if (H.has(r.userId) || A.has(r.userId)) return true; // pasado a un agente / ya lo atiende una persona (aunque sea una consulta simple)
+          if (!r._needs) return false;
+          const lu = L.get(r.userId); if (!lu || M.has(r.userId)) return false;
+          const ans = B.get(r.userId);
+          return new Date(lu).getTime() < grace && !(ans && new Date(ans) >= new Date(lu));
+        });
+      }
+    } catch (e) { logger.warn(`[support] filtro del bot: ${e.message}`); }
+    _rows = _rows.map((r) => { delete r.userTextList; delete r._needs; return r; });
     return { conversations: _rows, unreadTotal: _rows.filter((r) => !r.closed).reduce((s, r) => s + (r.unread || 0), 0), pending: _rows.filter((r) => !r.closed).length, closed: _rows.filter((r) => r.closed).length };
   }
 }
