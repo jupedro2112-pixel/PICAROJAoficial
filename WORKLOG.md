@@ -8,6 +8,10 @@
 
 ## Sesión 2026-11-09
 
+### 1065. Burbuja de Girox más chica (2026-11-09)
+- **Owner (captura):** "así está bien, que se vea más chiquito el chat". Misma burbuja: 340 px de ancho (antes 380) y hasta 480 px de alto (antes 560),
+  cabecera / botones / filas del CBU un poco más compactos. Sólo CSS al final de pin.css. App v705.
+
 ### 1064. Burbuja de Girox exactamente como antes: servicios en UNA línea (revierte #1058) (2026-11-09)
 - **Owner:** "los problemas, reembolsos, etc. que queden en línea recta, que se vea la página de Girox". pin.css vuelve a ser igual al de antes de #1058
   (fila de servicios en una línea que se desliza, cinta con carrusel, tarjeta de 560 px). Queda "🆘 Otro problema" primero (#1060) y DEPOSITAR → guía (#1057). App v704.
