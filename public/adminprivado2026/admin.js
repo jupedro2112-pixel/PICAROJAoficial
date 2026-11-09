@@ -6429,6 +6429,23 @@ async function tgNow(what) {
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 // #1046: grupo privado de reportes — código de un solo uso para vincularlo y desvincular.
+// #1069: 🩺 diagnóstico del bot (por qué no responde en el grupo) + 🔧 reconectar
+async function tgDiag(fix) {
+    const out = document.getElementById('tgDiagOut'); if (out) out.innerHTML = '⏳ Revisando…';
+    try {
+        const r = await authFetch('/api/admin/telegram/diag', { method: 'POST', body: JSON.stringify({ fix: !!fix }) }); const j = await r.json();
+        if (!r.ok) { if (out) out.innerHTML = '❌ ' + escapeHtml(j.error || 'Error'); return; }
+        const L = [];
+        if (j.fixed) L.push(j.fixed === 'ok' ? '🔧 Reconectado.' : '🔧 No se pudo reconectar: ' + escapeHtml(j.fixed));
+        if (j.bot) L.push('🤖 Bot: <b>' + escapeHtml(j.bot) + '</b>' + (j.canJoinGroups ? '' : ' (no puede entrar a grupos)'));
+        if (j.webhook !== undefined) L.push('📡 Recibe en: ' + escapeHtml(j.webhook || '—') + (j.webhook === j.expected ? ' ✅' : ' ❌'));
+        if (j.groupsPending && j.groupsPending.length) L.push('🕒 Grupos esperando aprobación: ' + j.groupsPending.map(escapeHtml).join(', '));
+        if (j.groupsApproved && j.groupsApproved.length) L.push('✅ Grupos aprobados: ' + j.groupsApproved.map(escapeHtml).join(', '));
+        L.push((j.problems || []).length ? '<b style="color:#e60023;">Problemas:</b><br>• ' + j.problems.map(escapeHtml).join('<br>• ') : '<b style="color:#16a34a;">Todo OK.</b> Si agregaste el bot al grupo, escribí /menu ahí: si no está aprobado te lo dice.');
+        if (out) out.innerHTML = L.join('<br>');
+        if (fix || (j.groupsPending || []).length) { try { loadTgChannel(); } catch (_) {} }
+    } catch (_) { if (out) out.innerHTML = '❌ Error de conexión'; }
+}
 async function tgAdminPair() {
     try {
         const r = await authFetch('/api/admin/telegram/admin-pair', { method: 'POST' }); const j = await r.json();

@@ -856,8 +856,11 @@ document.addEventListener('change', function (ev) {
                             <p style="margin:4px 0;font-size:12px;color:var(--p-muted,#777);">Un grupo de Telegram tuyo con botones para ver ventas del día y del mes, retención, embudo, regalos, campañas, alertas, retiros frenados, sorteo e IA. <b>Agregá el bot a tu grupo y aparece acá para aprobarlo</b> (un toque). Si no aparece, usá el código. Todo el que esté en el grupo ve los números.</p>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                                 <button class="btn-secondary btn-small" onclick="tgAdminPair()">🔑 Vincular con código (alternativa)</button>
+                                <button class="btn-secondary btn-small" onclick="tgDiag(false)">🩺 Revisar conexión del bot</button>
+                                <button class="btn-secondary btn-small" onclick="tgDiag(true)">🔧 Reconectar</button>
                                 <code id="tgAdminCmd" style="font-size:13px;user-select:all;"></code>
                             </div>
+                            <div id="tgDiagOut" style="margin-top:6px;font-size:12.5px;"></div>
                             <div id="tgAdminPending" style="margin-top:6px;font-size:12.5px;"></div>
                             <div id="tgAdminChats" style="margin-top:6px;font-size:12.5px;"></div>
                             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;font-size:12.5px;">

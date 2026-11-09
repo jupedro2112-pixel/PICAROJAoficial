@@ -38,7 +38,7 @@ caso('Código para vincular: 8 caracteres sin confundibles', () => { const c = t
 caso('Server: sólo grupos vinculados, código de un solo uso con hash y vencimiento, crons con lock, rutas sólo admin', () => {
   const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/if \(!chatId \|\| !_tgAdminLinked\(c, chatId\)\)/.test(S), 'botones sólo en chats vinculados');
-  assert.ok(/if \(!_tgAdminLinked\(c, chat\.id\)\) return true; \/\/ grupo no vinculado/.test(S));
+  assert.ok(/if \(!_tgAdminLinked\(c, chat\.id\)\) \{ \/\/ #1069/.test(S) && /Este grupo todavía no está aprobado/.test(S) && /Date\.now\(\) - last < 10 \* 60000\) return true/.test(S), 'grupo no aprobado: avisa (con freno), sin datos');
   assert.ok(/adminPairHash: null, adminPairUntil: null \}\); \/\/ el código se usa UNA vez/.test(S) && /crypto\.timingSafeEqual\(Buffer\.from\(crypto\.createHash\('sha256'\)/.test(S));
   assert.ok(/_cronClaim\('tgadminsnap'/.test(S) && /_cronClaim\('tgadminrep'/.test(S));
   for (const r of ['admin-pair', 'admin-unlink']) assert.ok(new RegExp("app\\.post\\('/api/admin/telegram/" + r + "', authMiddleware, adminMiddleware, async \\(req, res\\) => \\{\\n  if \\(req\\.user\\.role !== 'admin'\\)").test(S), r);
@@ -108,6 +108,11 @@ caso('#1056 Server: pregunta diaria, /gasto atómico sin duplicar el panel, sól
   assert.ok(/gastaste en publicidad el \(\\d\{1,2\}\)\\\/\(\\d\{1,2\}\)/.test(S2), 'regex de la respuesta = texto de la pregunta');
   assert.ok(/if \(_tgAdminLinked\(c, chat\.id\)\) \{ \/\/ #1056/.test(S2) && /\$pull: \{ value: \{ source: 'telegram', from: dayKey \} \}/.test(S2) && /ya tiene gasto cargado desde el panel/.test(S2));
   assert.ok(/c\.adminLastSpendAsk !== dk/.test(S2) && /force_reply: true/.test(S2));
+});
+caso('#1069 Diagnóstico del bot: webhook fijo en picaroja.com (no PUBLIC_URL), ruta sólo admin', () => {
+  const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/const TG_WEBHOOK_BASE = String\(process\.env\.TG_WEBHOOK_BASE \|\| 'https:\/\/picaroja\.com'\)/.test(S2) && !/TG_WEBHOOK_BASE = String\(process\.env\.PUBLIC_URL/.test(S2));
+  assert.ok(/app\.post\('\/api\/admin\/telegram\/diag', authMiddleware, adminMiddleware, async \(req, res\) => \{\n  if \(req\.user\.role !== 'admin'\)/.test(S2) && /getWebhookInfo/.test(S2));
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

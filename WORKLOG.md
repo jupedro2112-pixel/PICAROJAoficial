@@ -8,6 +8,13 @@
 
 ## Sesión 2026-11-09
 
+### 1069. Grupo privado de Telegram: el bot no respondía — diagnóstico y arreglos (2026-11-09)
+- **Owner:** "no activa el bot ni los botones". Causas posibles: (1) el webhook se registraba en `PUBLIC_URL` (si en AWS apunta a otra página, el bot
+  PUBLICA en el canal pero no RECIBE nada del grupo) ⇒ ahora `TG_WEBHOOK_BASE` env o https://picaroja.com fijo; se re-registra 5 min después del arranque.
+  (2) En un grupo no aprobado el bot quedaba en silencio ⇒ ahora contesta qué falta (1 vez cada 10 min) y deja el grupo PENDIENTE en el panel.
+- Panel → Canal de Telegram → 🔒 Grupo de reportes: 🩺 Revisar conexión del bot (`POST /api/admin/telegram/diag`: getMe + getWebhookInfo, problemas en
+  castellano: token, dirección del webhook, errores de entrega, "Allow Groups" en BotFather) y 🔧 Reconectar (vuelve a registrar el webhook). Panel v275.
+
 ### 1068. Textos del canal de Telegram con el estilo de la captura + info del partido abajo de la foto (2026-11-09)
 - **Owner (captura de referencia, "sin copiar"):** "el formato de sólo texto en el canal que sea este estilo, con la negrita y demás; siempre con nuestro
   servicio; en las fotos poner abajo la info del partido".

@@ -31159,7 +31159,13 @@ async function _tgAdminOnMessage(c, msg) {
     _tgAdminSnapTick(true).catch(() => {}).then(async () => { const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c, chat.id, r.text, r.markup); });
     return true;
   }
-  if (!_tgAdminLinked(c, chat.id)) return true; // grupo no vinculado: silencio
+  if (!_tgAdminLinked(c, chat.id)) { // #1069 (owner: "no activa el bot ni los botones"): antes silencio total ⇒ ahora avisa qué falta (1 vez cada 10 min) y queda PENDIENTE en el panel
+    const k = String(chat.id); const last = _tgUnlinkedSeen.get(k) || 0; if (Date.now() - last < 10 * 60000) return true; _tgUnlinkedSeen.set(k, Date.now());
+    if (!(c.adminPending || []).some((x) => String(x.id) === k)) { let members = null; try { const mc = await tgChannel.call(c.token, 'getChatMemberCount', { chat_id: chat.id }); if (mc.ok) members = mc.result; } catch (_) {}
+      await _tgArrPush('adminPending', { id: chat.id, title: String(chat.title || '').slice(0, 80), at: new Date(), by: String((msg.from && (msg.from.username || msg.from.first_name)) || '').slice(0, 40), byId: msg.from && msg.from.id, members }, 10, true); }
+    await _tgAdminSend(c, chat.id, '🔒 <b>Este grupo todavía no está aprobado.</b>\nEn el panel de PICA ROJA: Configuración → 🆕 NUEVO → 📣 Canal de Telegram → 🔒 Grupo de reportes → <b>✅ Aprobar</b> (recargá la página si no lo ves). Después escribí /menu acá.');
+    return true;
+  }
   const s2 = await getConfig('tgadminsnap', null); const r = tgAdmin.render('menu', s2); await _tgAdminSend(c, chat.id, r.text, r.markup);
   return true;
 }
@@ -31170,6 +31176,7 @@ async function _tgCandidate(c, chat, by, byId) { // revisión de seguridad: list
   let members = null; try { const mc = await tgChannel.call(c.token, 'getChatMemberCount', { chat_id: chat.id }); if (mc.ok) members = mc.result; } catch (_) {}
   await _tgArrPush('channelCandidates', { id: String(chat.id), title: String(chat.title || '').slice(0, 80), at: new Date(), by, byId, members }, 5, true);
 }
+const _tgUnlinkedSeen = new Map();
 async function _tgOnMyChatMember(c, upd) {
   const chat = upd.chat || {}; const st = (upd.new_chat_member && upd.new_chat_member.status) || ''; const by = String((upd.from && (upd.from.username || upd.from.first_name)) || '').slice(0, 40); const byId = upd.from && upd.from.id ? String(upd.from.id) : null;
   const inside = st === 'administrator' || st === 'member' || st === 'creator'; const out = st === 'left' || st === 'kicked';
@@ -31264,7 +31271,25 @@ app.post('/api/admin/telegram/admin-unlink', authMiddleware, adminMiddleware, as
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 // Webhook: botones del panel (ventanitas) y /start por privado (le manda el panel). Sólo con el secreto que le dimos a Telegram.
-const TG_WEBHOOK_BASE = String(process.env.PUBLIC_URL || 'https://picaroja.com').replace(/\/+$/, ''); // revisión: la URL del webhook NO sale del link de los botones
+const TG_WEBHOOK_BASE = String(process.env.TG_WEBHOOK_BASE || 'https://picaroja.com').replace(/\/+$/, ''); // #1069: antes salía de PUBLIC_URL (si apunta a otra página, el bot publica pero NUNCA recibe los mensajes del grupo) // revisión: la URL del webhook NO sale del link de los botones
+// #1069: 🩺 diagnóstico de la conexión del bot (panel): getMe + getWebhookInfo; con fix=1 vuelve a registrar el webhook en picaroja.com.
+app.post('/api/admin/telegram/diag', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
+  try {
+    const c = await _tgCfg(); if (!c.token) return res.json({ success: true, problems: ['No hay token del bot cargado (o estás en el entorno de prueba, donde Telegram está apagado).'] });
+    const want = TG_WEBHOOK_BASE + '/api/telegram/webhook'; let fixed = null;
+    if ((req.body || {}).fix) { const r = await _tgSetWebhook(c, false); fixed = r.ok ? 'ok' : String(r.error || '').slice(0, 160); _tgSecretMem.at = 0; }
+    const [me, wh] = await Promise.all([tgChannel.call(c.token, 'getMe', {}), tgChannel.call(c.token, 'getWebhookInfo', {})]);
+    const w = (wh && wh.ok && wh.result) || {}; const b = (me && me.ok && me.result) || {}; const problems = [];
+    if (!me || !me.ok) problems.push('El token no funciona: Telegram dice "' + String((me && me.error) || '').slice(0, 100) + '". Cargá el token de nuevo.');
+    if (w.url !== want) problems.push('Telegram entrega los mensajes en "' + (w.url || 'ninguna dirección') + '" y tiene que ser "' + want + '". Tocá 🔧 Reconectar.');
+    if (w.url === want && Array.isArray(w.allowed_updates) && !w.allowed_updates.includes('my_chat_member')) problems.push('La conexión no recibe los avisos de "me agregaron a un grupo". Tocá 🔧 Reconectar.');
+    if (w.last_error_message && w.last_error_date && Date.now() / 1000 - w.last_error_date < 3600) problems.push('Último error de Telegram al entregar (hace ' + Math.round((Date.now() / 1000 - w.last_error_date) / 60) + ' min): ' + String(w.last_error_message).slice(0, 140));
+    if (b.can_join_groups === false) problems.push('El bot tiene BLOQUEADO entrar a grupos: en @BotFather → /mybots → tu bot → Bot Settings → Allow Groups → Turn on.');
+    res.json({ success: true, fixed, bot: b.username ? '@' + b.username : null, canJoinGroups: b.can_join_groups !== false, webhook: w.url || null, expected: want, pending: w.pending_update_count || 0,
+      lastError: w.last_error_message || null, groupsPending: (c.adminPending || []).map((x) => x.title || x.id), groupsApproved: (c.adminChats || []).map((x) => x.title || x.id), problems });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
 async function _tgSetWebhook(c, dropPending) {
   if (!c.token) return { ok: false, error: 'sin token' };
   let secret = c.webhookSecret;
