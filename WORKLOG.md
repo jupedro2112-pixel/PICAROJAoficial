@@ -8,6 +8,11 @@
 
 ## Sesión 2026-11-09
 
+### 1057. DEPOSITAR del chat ⇒ directo a "Cómo mandar el comprobante" (2026-11-09)
+- **Owner (capturas):** el botón DEPOSITAR de la cabecera del chat (DEPOSITAR / RETIRAR / REEMBOLSOS) abría la Carga rápida del casino; tiene que ir directo
+  a la guía del comprobante. Ahora llama `VIP.autoload.pickReceipt('depositar')` (la guía ya se muda adentro del casino; con "no volver a mostrar", abre el
+  selector de la foto). Los datos para transferir siguen en la misma cabecera (titular / alias / CBU). Los otros "Ir a cargar" siguen con `spDeposit()`. App v698.
+
 ### 1056. Canal de Telegram automático y sin molestar + 💸 Pauta y ganancia en el grupo privado (2026-11-09)
 - **Owner (canal):** "novedades de la app, no te olvides de tu autoreembolso, historias de partidos y servicio; el semanal y el mensual cuando están
   disponibles; 1 bono semanal de 10 personas × $5.000 con un código y al llenarse 'bono completado'; premio de más de $1.000.000 se publica y se felicita
