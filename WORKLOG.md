@@ -8,6 +8,14 @@
 
 ## Sesión 2026-11-09
 
+### 1042-e. Todo adentro de Girox — PWA v677 (2026-11-09)
+- **Owner:** "todo esto adentro de Girox, que no se abran cosas por afuera". Antes, Soporte desde el casino CERRABA el casino y llevaba al chat.
+- `home.js`: `casinoSupport` / `openSupport` con el casino abierto ⇒ `_supportIntoCasino` muda `#supportPanel` adentro de `#casinoOverlay`
+  (mismo chat: ids, listeners y socket; el juego sigue atrás) con `.sp-in-casino` (pin.css: pantalla completa, cabecera "‹ Volver", barra de temas);
+  `closeSupport` ⇒ `_supportOutOfCasino` (vuelve al juego); cerrar el casino también lo devuelve. DEPOSITAR (y el "Ir a Carga automática" de las
+  respuestas fijas, y "¡Tomá tu bono!") adentro del casino ⇒ Carga rápida del casino (`toggleCasinoLoad(true)`); RETIRAR / REEMBOLSOS / cartel /
+  guía del comprobante ya se ven encima del casino (`body.casino-open .modal`, `_rgMoveIn`). Con Chat clásico: como antes (sale del casino).
+
 ### 1042-d. Bot en TRES ESCALONES + cortar charla fuera de tema (2026-11-09)
 - **Owner:** "respuestas sencillas, que la gente no se pierda, lo más importante es a lo que va: a jugar. Si no entiende, primero el bot, si no
   puede entra la IA y después de la IA lo derivás a soporte" + "si preguntan cosas que no tienen nada que ver con el servicio, cortamos la charla".

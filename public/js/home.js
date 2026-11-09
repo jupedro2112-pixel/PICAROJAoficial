@@ -450,12 +450,13 @@
         } catch (_) {}
     }
     function fdClose() { try { VIP.ui.hideModal('fdModal'); } catch (_) { const m = _el('fdModal'); if (m) m.classList.add('hidden'); } }
-    function fdGo() { fdClose(); try { easyLoad(); } catch (_) { setHomeMode('full'); } }
+    function fdGo() { fdClose(); if (_casinoIsOpen()) { spDeposit(); return; } /* #1042-e: adentro de Girox */ try { easyLoad(); } catch (_) { setHomeMode('full'); } }
     // #1042: barra del chat de Soporte — DEPOSITAR / RETIRAR + cinta de promo con VER (abre el cartel del bono de 1ª carga).
     let _spPromo = null;
     // #1042-c: CHAT CLÁSICO desde el panel ⇒ body.sp-classic (sin barra ni cara de WhatsApp; el CSS nuevo no aplica).
     async function spUiMode() {
         try { const r = await fetch('/api/support/ui-mode', { cache: 'no-store' }); const j = await r.json(); document.body.classList.toggle('sp-classic', !!(j && j.classic)); } catch (_) {}
+        return document.body.classList.contains('sp-classic');
     }
     async function spPromoPaint() {
         spUiMode();
@@ -478,7 +479,11 @@
         if (p) p.textContent = j.pct + '%'; if (pa) pa.textContent = '+' + (extra || '0%') + ' EXTRA'; if (ap) ap.style.display = extra ? '' : 'none'; if (t) t.textContent = j.text || '';
         try { VIP.ui.showModal('fdModal'); } catch (_) { const m = _el('fdModal'); if (m) m.classList.remove('hidden'); }
     }
-    function spDeposit() { try { setHomeMode('full'); } catch (_) {} }
+    function spDeposit() {
+        // #1042-e: adentro de Girox ⇒ la Carga rápida del casino (no sale del juego)
+        if (_casinoIsOpen()) { _supportOutOfCasino(); try { toggleCasinoLoad(true); } catch (_) {} return; }
+        try { setHomeMode('full'); } catch (_) {}
+    }
     function spWithdraw() { try { VIP.withdraw.openWithdrawModal(); } catch (_) {} }
     function openMenuChooser() {
         const m = _el('menuChooser'); if (!m) return;
@@ -1479,6 +1484,7 @@
     // ---------------- SOPORTE (chat) ----------------
     function openSupport() {
         // #267: desde la pantalla de entrada, el chat se abre como pantalla principal (modo mini).
+        if (_casinoIsOpen() && !document.body.classList.contains('sp-classic') && _supportIntoCasino()) return; // #1042-e: con Girox abierto, Soporte encima del juego
         if (_homeMode === 'play') { setHomeMode('mini'); return; }
         const p = _el('supportPanel');
         if (!p) return;
@@ -1494,6 +1500,7 @@
         setTimeout(() => { try { VIP.chat.scrollToBottom(); } catch (_) {} }, 120);
     }
     function closeSupport() {
+        if (_supportOutOfCasino()) return; // #1042-e: Soporte encima del juego ⇒ "Volver" vuelve al juego
         // #266: con el home plegado el chat ES la pantalla → "cerrar" = desplegar la app completa.
         if (_homeMode === 'mini') { setHomeMode('full'); return; }
         const p = _el('supportPanel');
@@ -2424,7 +2431,36 @@
     }
     // #670: Retirar desde la Carga rápida del casino. El modal de retiro vive en la página; CSS lo pone por encima del casino.
     // #687: salir del casino y abrir el chat de Soporte (modo mini)
-    function casinoSupport() { try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80); }
+    // #1042-e (owner: "todo esto adentro de Girox, que no se abran cosas por afuera"): Soporte se abre ENCIMA del juego (el casino sigue
+    // abierto atrás). El mismo #supportPanel se muda adentro de #casinoOverlay (ids, listeners y socket intactos) y vuelve al cerrar.
+    let _spCasino = null;
+    function _casinoIsOpen() { try { return document.body.classList.contains('casino-open') && !!_el('casinoOverlay') && _el('casinoOverlay').style.display !== 'none'; } catch (_) { return false; } }
+    function _supportIntoCasino() {
+        const ov = _el('casinoOverlay'), p = _el('supportPanel'); if (!ov || !p) return false;
+        if (p.parentNode !== ov) { _spCasino = { parent: p.parentNode, next: p.nextSibling, wasHidden: p.classList.contains('hidden') }; ov.appendChild(p); }
+        try { toggleCasinoLoad(false); } catch (_) {}
+        p.classList.remove('hidden'); p.classList.add('sp-in-casino'); document.body.classList.add('sp-casino');
+        _open = true; _unread = 0; _paintBadge();
+        try { spPromoPaint(); } catch (_) {}
+        try { VIP.chat.markReceivedAsRead(); } catch (_) {}
+        setTimeout(() => { try { VIP.chat.scrollToBottom(); } catch (_) {} }, 120);
+        return true;
+    }
+    function _supportOutOfCasino() {
+        const p = _el('supportPanel'); if (!p || !_spCasino) return false;
+        const s = _spCasino; _spCasino = null;
+        try { if (s.next && s.next.parentNode === s.parent) s.parent.insertBefore(p, s.next); else s.parent.appendChild(p); } catch (_) {}
+        p.classList.remove('sp-in-casino'); document.body.classList.remove('sp-casino');
+        if (s.wasHidden) p.classList.add('hidden');
+        _open = !s.wasHidden;
+        try { const i = _el('messageInput'); if (i) i.blur(); } catch (_) {}
+        return true;
+    }
+    async function casinoSupport() {
+        // Chat clásico (panel) ⇒ como antes: cierra el casino y abre Soporte afuera.
+        if (_casinoIsOpen() && !(await spUiMode()) && _supportIntoCasino()) return;
+        try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80);
+    }
     function casinoWithdraw() { try { if (VIP.withdraw && VIP.withdraw.openWithdrawModal) VIP.withdraw.openWithdrawModal(); else VIP.ui.showToast('Retiros no disponibles ahora', 'error'); } catch (_) {} }
 
     // ---- Carga rápida DENTRO del casino (#261): formato CARGA (no chat), descartable como el soporte ----
@@ -2673,6 +2709,7 @@
         const _origCloseFrame = VIP.ui && VIP.ui.closeCasinoFrame;
         if (typeof _origCloseFrame === 'function') {
             VIP.ui.closeCasinoFrame = function () {
+                try { _supportOutOfCasino(); } catch (_) {} // #1042-e: el chat vuelve a su lugar antes de cerrar el casino
                 try { document.body.classList.remove('casino-open'); } catch (_) {}
                 try { if (VIP.autoload && VIP.autoload.guideClose) VIP.autoload.guideClose(); } catch (_) {} // #1033: la guía del comprobante vuelve a su lugar (si no, quedaba fantasma adentro del overlay oculto)
                 return _origCloseFrame.apply(this, arguments);

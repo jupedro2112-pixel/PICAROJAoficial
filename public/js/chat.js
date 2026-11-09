@@ -110,7 +110,7 @@ VIP.chat = (function () {
                 : t === 'refund' ? "VIP.home.svcRefund()"
                 : t === 'terms' ? "VIP.home.openTerms()"
                 : t === 'sorteo' ? "VIP.sorteos.open('mensual')" /* #944: explicación del sorteo ⇒ abre la ventana del sorteo */
-                : "VIP.home.setHomeMode('full')";
+                : "VIP.home.spDeposit()"; /* #1042-e: con Girox abierto ⇒ Carga rápida del casino; si no, la carga automática de siempre */
             const label = escapeHtml(String(md.label || (t === 'withdraw' ? '💸 Ir a Retirar premio' : '⚡ Ir a Carga automática')));
             if (t === 'terms') return `<button type="button" class="chat-terms-mini" onclick="${act}">📄 Bases y condiciones</button>`; // #878: chico, no molesta
             return `<div class="plat-choice"><button type="button" class="plat-btn plat-play-now${t === 'terms' ? ' plat-terms' : ''}" onclick="${act}">${label}</button></div>`;

@@ -3201,3 +3201,15 @@ body:not(.sp-classic) #supportPanel .send-btn { background: var(--p-wa-out) !imp
 body:not(.sp-classic) #supportPanel #typingIndicator { background: var(--p-wa-bg) !important; color: var(--p-green) !important; font-style: normal !important; }
 
 body.sp-classic .sp-actbar { display: none !important; } /* #1042-c: chat clásico */
+
+/* #1042-e (owner: "todo adentro de Girox"): Soporte ENCIMA del juego — #supportPanel mudado a #casinoOverlay (el casino sigue atrás). Las ventanas
+   (.modal, guía del comprobante) quedan por encima (body.casino-open .modal / _rgMoveIn). */
+#casinoOverlay > #supportPanel.sp-in-casino { position: fixed !important; inset: 0 !important; z-index: 100004 !important; display: flex !important; flex-direction: column !important;
+  margin: 0 !important; max-height: none !important; height: 100% !important; width: 100% !important; transform: none !important; border-radius: 0 !important; background: var(--p-bg) !important;
+  padding: 0 !important; box-sizing: border-box; } /* la cabecera y la caja ya respetan --sat / --sab */
+#casinoOverlay > #supportPanel.sp-in-casino .chat-topbar, #casinoOverlay > #supportPanel.sp-in-casino #supportIntro, #casinoOverlay > #supportPanel.sp-in-casino .support-tests { display: none !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .support-head { display: flex !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-container { flex: 1 1 auto !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; }
+#casinoOverlay > #supportPanel.sp-in-casino #chatMessages { display: flex !important; flex: 1 1 auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-quickbar { display: flex !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-input-container { display: block !important; flex: 0 0 auto; }

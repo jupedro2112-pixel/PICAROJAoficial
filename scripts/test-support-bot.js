@@ -110,6 +110,11 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   const qr = S.slice(S.indexOf('async function _supportQuickReply'), S.indexOf('async function _supportCannedReply'));
   assert.ok(qr.indexOf('const topic = _supportTopicFromText(text)') > -1 && qr.indexOf("return _supportCannedReply(userId, username, quick, text, false); // escalón 1") < qr.indexOf('_supportBotSchedule(userId, username); return; // escalón 2'), 'escalón 1 antes que la IA');
   assert.ok(/if \(aiReplies >= cfg\.aiMaxReplies\) \{\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'escalón 3: tope ⇒ agente');
+  // #1042-e: todo adentro de Girox — Soporte se muda al casino, Volver vuelve al juego, DEPOSITAR usa la Carga rápida, el casino al cerrarse lo devuelve
+  const H = fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8');
+  assert.ok(/async function casinoSupport\(\) \{[\s\S]{0,200}if \(_casinoIsOpen\(\) && !\(await spUiMode\(\)\) && _supportIntoCasino\(\)\) return;/.test(H), 'Soporte desde el casino se abre adentro');
+  assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
+  assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
   assert.ok(/return c\.enabled && !c\.classic;/.test(S) && /cfg\.classic \|\| !supportBot\.isAvailable\(\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
   assert.ok(!/^#supportPanel|^\.sp-acts|^\.sp-actbar/m.test(blk) && /body\.sp-classic \.sp-actbar \{ display: none/.test(blk), 'chat clásico: nada del diseño nuevo aplica');
