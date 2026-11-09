@@ -154,7 +154,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/if \(aiReplies >= cfg\.aiMaxReplies\) \{\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'escalón 3: tope ⇒ agente');
   // #1042-e: todo adentro de Girox — Soporte se muda al casino, Volver vuelve al juego, DEPOSITAR usa la Carga rápida, el casino al cerrarse lo devuelve
   const H = fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8');
-  assert.ok(/VIP\.ui\.toggleCasinoChat = function \(\) \{ casinoChatToggle\(\); \}/.test(H) && /async function casinoChatToggle\(\) \{[\s\S]{0,300}if \(await spUiMode\(\)\) \{ toggleCasinoLoad\(\); return; \}[\s\S]{0,120}_supportIntoCasino\(\)/.test(H), 'la BURBUJA de Girox abre el chat nuevo (clásico ⇒ Carga rápida)');
+  assert.ok(/VIP\.ui\.toggleCasinoChat = function \(\) \{ casinoChatToggle\(\); \}/.test(H) && /async function casinoChatToggle\(\) \{[\s\S]{0,800}if \(classic\) \{ toggleCasinoLoad\(\); return; \}[\s\S]{0,120}_supportIntoCasino\(\)/.test(H), 'la BURBUJA de Girox abre el chat nuevo (clásico ⇒ Carga rápida)');
   assert.ok(/function casinoSupport\(\) \{ try \{ VIP\.ui\.closeCasinoFrame\(\); \}/.test(H), 'el botón Soporte del casino, como antes');
   assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
