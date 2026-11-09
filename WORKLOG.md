@@ -8,6 +8,11 @@
 
 ## Sesión 2026-11-09
 
+### 1063. Chat de Girox vuelve a BURBUJA flotante (revierte #1060) (2026-11-09)
+- **Owner:** "no queda el chat tipo burbuja como estaba, corregí eso urgente, eso estaba bien". Se quitó el CSS de #1060 (centrado + `box-shadow` con el
+  color del tema que tapaba el juego); vuelven las medidas de #1058 (tarjeta abajo a la derecha, hasta 600 px). Se mantienen "🆘 Otro problema" primero
+  y que RETIRAR / REEMBOLSOS / VER abran su ventana adentro del casino (#1061). App v703.
+
 ### 1062. Bono de la landing por publicista en la landing de Vercel + Editar campaña con errores a la vista (2026-11-09)
 - **Owner:** "en el publicista configuro 50% en vez de 100% y la landing sigue con 100%"; "aparece Editar pero no se edita".
 - La landing de `picaroja.com/l/CÓDIGO` ya mostraba el % del publicista. La de Vercel (`landing/index.html`, grupospicaroja.com) tenía el 100% FIJO (#581)
