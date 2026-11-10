@@ -140,7 +140,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   });
   await caso('ya reenviado al grupo equivocado ⇒ "cambiar grupo" lo saca de una suma y lo pone en la otra', async () => {
     cfgDocs[0].value.structs[0].routes[0].otherTo = '-3'; await ctx._rbCfg(true);
-    aiAmount = 900.99; await hook(photo(22)); const r = last(-1); const btn = r.p.reply_markup.inline_keyboard[0][0]; assert.ok(/cambiar grupo/.test(btn.text));
+    aiAmount = 900.99; await hook(photo(22)); const r = last(-1); const btn = r.p.reply_markup.inline_keyboard[0][0]; assert.ok(/Cambiar grupo/.test(btn.text), btn.text);
     const rec = RcptFwd.rows.find((x) => x.srcMsgId === 22); assert.strictEqual(rec.toChat, '-2');
     await cb(btn.callback_data, 7777); const ed = sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0]; assert.ok(/fichasnuevobot/.test(ed.p.reply_markup.inline_keyboard[0][0].text), JSON.stringify(ed.p));
     await cb(ed.p.reply_markup.inline_keyboard[0][0].callback_data, 7777);
@@ -203,6 +203,14 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status !== 'pending'));
     await cbIn(-3, 'rbm:sentok'); assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status === 'sent'));
     await cbIn(-3, 'rbm:total'); assert.ok(/Sin cierres pendientes/.test(last(-3).p.text), last(-3).p.text);
+  });
+  await caso('cada suma trae el botón 📋 Ver comandos y abre el menú; terminación mal avisa con TERMINACIÓN MAL', async () => {
+    cfgDocs[0].value.structs[0].routes[0].rules = [{ cents: '99', to: '-2' }]; cfgDocs[0].value.structs[0].routes[0].otherTo = null; await ctx._rbCfg(true);
+    aiAmount = 300.99; await hook(photo(60)); const r = last(-1); const kb = r.p.reply_markup.inline_keyboard; assert.ok(kb[kb.length - 1][0].callback_data === 'rbm:help', JSON.stringify(kb));
+    const cp = sent.filter((x) => x.method === 'copyMessage').slice(-1)[0]; assert.ok(cp.p.reply_markup && cp.p.reply_markup.inline_keyboard.some((x) => x[0].callback_data === 'rbm:help'));
+    await cbIn(-1, 'rbm:help'); assert.ok(/COMANDOS/.test(last(-1).p.text) && /\/cierre 500\.000/.test(last(-1).p.text));
+    await cbIn(-2, 'rbm:help'); assert.ok(/GRUPO DE DESTINO/.test(last(-2).p.text));
+    aiAmount = 300.43; await hook(photo(61)); assert.ok(/TERMINACIÓN MAL<\/b>: \$300,43 termina en <b>,43/.test(last(-1).p.text) && /elegí a qué grupo va/.test(last(-1).p.text), last(-1).p.text);
   });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
