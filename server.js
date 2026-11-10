@@ -31735,13 +31735,14 @@ function _rbSrcCmdsTxt() {
 }
 const _RB_CMDS_BTN = [{ text: '📋 Ver comandos', callback_data: 'rbm:help' }]; // #1079-k: en cada suma
 const _rbKb = (...rows) => ({ inline_keyboard: rows.filter(Boolean).concat([_RB_CMDS_BTN]) });
-const _RB_SRC_KB = { inline_keyboard: [[{ text: '📊 Ver suma actualizada', callback_data: 'rbm:total' }], [{ text: '🔒 Dar cierre ahora', callback_data: 'rbm:close' }], [{ text: '📥 Sumar lo anterior', callback_data: 'rbm:ant' }], [{ text: '🏦 Ver CBU vigente', callback_data: 'rbm:cbu' }]] };
-const _RB_DST_KB = { inline_keyboard: [[{ text: '📊 Ver suma y pendientes', callback_data: 'rbm:total' }], [{ text: '💱 Marcar COTIZADO', callback_data: 'rbm:quote' }], [{ text: '✅ Marcar ENVIADO', callback_data: 'rbm:sent' }], [{ text: '🏦 Ver CBU', callback_data: 'rbm:cbu' }, { text: '🔄 Nuevo CBU', callback_data: 'rbm:ncbu' }], [{ text: '⛔ Parar (no hay CBU)', callback_data: 'rbm:stop' }]] };
+const _RB_SRC_KB = { inline_keyboard: [[{ text: '📊 Ver suma actualizada', callback_data: 'rbm:total' }], [{ text: '🔒 Dar cierre ahora', callback_data: 'rbm:close' }], [{ text: '📥 Sumar lo anterior', callback_data: 'rbm:ant' }], [{ text: '🏦 Ver CBU vigente', callback_data: 'rbm:cbu' }, { text: '📋 Comandos', callback_data: 'rbm:help' }]] };
+// #1085 (owner): Cotizar pide precio del USDT + comisión % y hace la cuenta; Enviado pide la FOTO del envío de USDT ("verificado enviado").
+const _RB_DST_KB = { inline_keyboard: [[{ text: '📊 Ver suma y pendientes', callback_data: 'rbm:total' }], [{ text: '💱 Cotizar (precio USDT y comisión)', callback_data: 'rbm:quote' }], [{ text: '✅ Enviado (mandar foto de los USDT)', callback_data: 'rbm:sent' }], [{ text: '📋 Comandos', callback_data: 'rbm:help' }], [{ text: '🏦 Ver CBU', callback_data: 'rbm:cbu' }, { text: '🔄 Nuevo CBU', callback_data: 'rbm:ncbu' }], [{ text: '⛔ Parar (no hay CBU)', callback_data: 'rbm:stop' }]] };
 // rutas encendidas de un bot que mandan a este grupo
 function _rbDstRoutes(c, toChat, botId) { return (c.routes || []).filter((r) => (!botId || r.botId === botId) && _rbDests(c, r).some((d) => d.to === String(toChat))); }
 function _rbDstHelpTxt(c, toChat, routes) {
   const srcs = routes.map((r) => { const cs = (r.rules || []).filter((x) => String(x.to) === String(toChat)).map((x) => ',' + x.cents); return `• de ${_rbH(_rbTitle(c, r.from))}${cs.length ? ' (los que terminan en ' + _rbH(cs.join(' / ')) + ')' : ' (todo lo demás)'}`; }).join('\n');
-  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n💱 /cotizado 1150 — marcar COTIZADO lo pendiente a cotizar (la cotización es opcional) ⇒ queda PENDIENTE A ENVIAR\n✅ /enviado — marcar ENVIADO ⇒ el pendiente se va\n📥 /anterior 13.686.199 — sumar lo que venían acumulando antes del bot${routes.length > 1 ? ' (con varios grupos que mandan, hacelo en el grupo que manda)' : ''}\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n🔄 /nuevocbu — cambiar el CBU de bajada (te pide Titular, CBU, Alias y Terminación; con Desde/Hasta queda programado y cambia solo). Se avisa al grupo que manda.\n⛔ /parar — no hay CBU: avisa al grupo que manda que no transfiera hasta nuevo aviso\n🏦 /cbu — ver el CBU vigente y los programados\n❓ /ayuda — ver este menú de nuevo · 📗 /guia — la guía completa en archivo\n\n${_RB_CIRCUITO}`;
+  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n💱 Cotizar (botón) o /cotizado 1150 2 — precio del USDT y comisión %: hace la cuenta (pesos ÷ precio − comisión = USDT a enviar) ⇒ PENDIENTE A ENVIAR\n✅ Enviado (botón) — respondés con la FOTO del envío de los USDT ⇒ VERIFICADO ENVIADO, sale de pendientes (sin foto: /enviado)\n📥 /anterior 13.686.199 — sumar lo que venían acumulando antes del bot${routes.length > 1 ? ' (con varios grupos que mandan, hacelo en el grupo que manda)' : ''}\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n🔄 /nuevocbu — cambiar el CBU de bajada (te pide Titular, CBU, Alias y Terminación; con Desde/Hasta queda programado y cambia solo). Se avisa al grupo que manda.\n⛔ /parar — no hay CBU: avisa al grupo que manda que no transfiera hasta nuevo aviso\n🏦 /cbu — ver el CBU vigente y los programados\n❓ /ayuda — ver este menú de nuevo · 📗 /guia — la guía completa en archivo\n\n${_RB_CIRCUITO}`;
 }
 async function _rbPin(c, chat, botId, r) { if (!(r && r.ok && r.result)) return; const b = _rbTokFor(c, chat, botId); if (b) await tgChannel.call(b.token, 'pinChatMessage', { chat_id: chat, message_id: r.result.message_id, disable_notification: true }); }
 async function _rbSendDstHelp(c, toChat, botId, pin) {
@@ -31918,17 +31919,50 @@ async function _rbCloseTick() {
   for (const r of c.routes) { try { await _rbClose(c, r, 'automático 13 h'); } catch (e) { logger.warn('[rcptbot] cierre ' + e.message); } }
 }
 setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('[rcptbot] cierre ' + e.message)); }, 60000); }, 75000);
-async function _rbDestCmd(c, toChat, cmd, by, arg, structIds, botId) {
+// #1085: cotizar con precio del USDT y comisión ⇒ USDT a enviar = pesos ÷ precio − comisión %. Enviar = foto del envío ⇒ VERIFICADO ENVIADO.
+const _rbUsdt = (n) => (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const _RB_Q_MARK = '💱 COTIZAR'; const _RB_S_MARK = '📸 ENVIADO';
+function _rbQuoteParse(txt) {
+  const tk = String(txt || '').replace(/%/g, ' ').match(/\d[\d.,]*/g) || []; if (!tk.length) return null;
+  const price = _rbParseAmount(tk[0], 1e7); const pct = tk[1] != null ? Number(String(tk[1]).replace(/[.,]$/, '').replace(',', '.')) : 0;
+  if (!(price > 0) || !Number.isFinite(pct) || pct < 0 || pct >= 50) return null; return { price, pct };
+}
+async function _rbQuote(c, toChat, price, pct, by, structIds, botId, replyTo) {
+  const q = { toChat: String(toChat), status: 'pending' }; if (structIds && structIds.length) q.structId = { $in: structIds };
+  const list = await _rbM().RcptClose.find(q).sort({ createdAt: 1 }).lean();
+  if (!list.length) { await _rbSend(c, toChat, 'No hay cierres pendientes a cotizar.', botId, replyTo ? { reply_to_message_id: replyTo, allow_sending_without_reply: true } : {}); return; }
+  const now = new Date(); let tot = 0, bruto = 0, neto = 0;
+  for (const x of list) {
+    const b = (Number(x.total) || 0) / price; const n = b * (1 - pct / 100); tot += Number(x.total) || 0; bruto += b; neto += n;
+    await _rbM().RcptClose.updateOne({ id: x.id, status: 'pending' }, { $set: { status: 'quoted', quotedBy: String(by || '').slice(0, 60), quotedAt: now, quoteRate: price, quoteFeePct: pct, quoteUsdt: Math.round(n * 100) / 100, quoteNote: 'USDT ' + _rbMoney2(price) + (pct ? ' · comisión ' + pct + '%' : '') } });
+  }
+  const det = list.map((x) => `• De ${_rbH(x.fromTitle)}: ${_rbMoney(x.total)} · ${x.count} comp.`).join('\n');
+  const routes = _rbDstRoutes(c, toChat, botId).filter((r) => !structIds || !structIds.length || structIds.includes(r.structId));
+  await _rbSend(c, toChat, `💱 <b>COTIZADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(tot)}</b>\n÷ USDT ${_rbMoney2(price)} = ${_rbUsdt(bruto)} USDT` + (pct ? `\n− comisión ${pct}% = ${_rbUsdt(bruto - neto)} USDT` : '') + `\n➡️ <b>A ENVIAR: ${_rbUsdt(neto)} USDT</b>\n📤 Queda PENDIENTE A ENVIAR: cuando envíes tocá ✅ Enviado y mandá la foto.\n\n` + (routes.length ? await _rbDstTotalTxt(c, toChat, routes) : ''), botId, Object.assign({ reply_markup: _rbKb() }, replyTo ? { reply_to_message_id: replyTo, allow_sending_without_reply: true } : {}));
+}
+async function _rbSentPhoto(c, toChat, m, by, structIds, botId) {
+  const q = { toChat: String(toChat), status: 'quoted' }; if (structIds && structIds.length) q.structId = { $in: structIds };
+  const list = await _rbM().RcptClose.find(q).sort({ createdAt: 1 }).lean(); const rt = { reply_to_message_id: m.message_id, allow_sending_without_reply: true };
+  if (!list.length) { await _rbSend(c, toChat, 'No hay nada COTIZADO pendiente a enviar. Primero 💱 Cotizar.', botId, rt); return; }
+  const f = _rbFileOf(m); const now = new Date();
+  await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) }, status: 'quoted' }, { $set: { status: 'sent', sentBy: String(by || '').slice(0, 60), sentAt: now, sentPhoto: (f && f.fileId) || '' } });
+  const usdt = list.reduce((a, x) => a + (Number(x.quoteUsdt) || 0), 0); const tot = list.reduce((a, x) => a + (Number(x.total) || 0), 0);
+  const det = list.map((x) => `• De ${_rbH(x.fromTitle)}: ${_rbMoney(x.total)}${x.quoteUsdt ? ' → ' + _rbUsdt(x.quoteUsdt) + ' USDT' : ''}`).join('\n');
+  const routes = _rbDstRoutes(c, toChat, botId).filter((r) => !structIds || !structIds.length || structIds.includes(r.structId));
+  await _rbSend(c, toChat, `✅ <b>VERIFICADO ENVIADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(tot)}</b>${usdt ? ' · <b>' + _rbUsdt(usdt) + ' USDT</b>' : ''}\nYa no queda pendiente.\n\n` + (routes.length ? await _rbDstTotalTxt(c, toChat, routes) : ''), botId, Object.assign({ reply_markup: _rbKb() }, rt));
+}
+async function _rbDestCmd(c, toChat, cmd, by, arg, structIds, botId, opts = {}) {
   const q = cmd === 'cotizado' ? { toChat, status: 'pending' } : { toChat, status: { $in: ['pending', 'quoted'] } }; if (structIds && structIds.length) q.structId = { $in: structIds };
   const list = await _rbM().RcptClose.find(q).sort({ createdAt: 1 }).lean();
-  if (!list.length) { await _rbSend(c, toChat, cmd === 'cotizado' ? 'No hay cierres pendientes a cotizar.' : 'No hay cierres pendientes de envío.', botId); return; }
+  if (!list.length) { const t0 = cmd === 'cotizado' ? 'No hay cierres pendientes a cotizar.' : 'No hay cierres pendientes de envío.'; if (opts.silent) return t0; await _rbSend(c, toChat, t0, botId); return; }
   const now = new Date(); const rate = Number(String(arg || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || null;
   const set = cmd === 'cotizado' ? { status: 'quoted', quotedBy: String(by).slice(0, 60), quotedAt: now, quoteRate: rate, quoteNote: String(arg || '').slice(0, 200) } : { status: 'sent', sentBy: String(by).slice(0, 60), sentAt: now };
   await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) } }, { $set: set });
   const total = list.reduce((a, x) => a + (Number(x.total) || 0), 0);
   const det = list.map((x) => `• ${_rbH(x.fromTitle)}: ${_rbMoney(x.total)} · ${x.count} comp. · ${x.periodFrom ? 'del ' + _rbDT(x.periodFrom) + ' al ' : 'cierre '}${_rbDT(x.createdAt)}`).join('\n');
+  // #1084 (owner): el grupo 2 es el de cierres: COTIZADO / ENVIADO quedan ahí (ya no se avisa al grupo que manda). Desde el botón ⇒ sólo cartel.
+  if (opts.silent) return (cmd === 'cotizado' ? '💱 COTIZADO' : '✅ ENVIADO') + ' · ' + list.length + ' cierre' + (list.length === 1 ? '' : 's') + ' · Total ' + _rbMoney(total) + (cmd === 'cotizado' ? '\n📤 Queda PENDIENTE A ENVIAR.' : '\nYa no queda pendiente.');
   await _rbSend(c, toChat, cmd === 'cotizado' ? `💱 <b>COTIZADO</b>${rate ? ' · cotización ' + _rbH(arg) : ''}${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(total)}</b>\n📤 <b>PENDIENTE A ENVIAR</b>. Cuando se envíe: /enviado` : `✅ <b>ENVIADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(total)}</b>\nYa no queda pendiente.`, botId);
-  for (const f of [...new Set(list.map((x) => x.fromChat))]) { const sub = list.filter((x) => x.fromChat === f); await _rbSend(c, f, (cmd === 'cotizado' ? '💱 <b>COTIZADO</b> en ' : '✅ <b>ENVIADO</b> desde ') + _rbH(_rbTitle(c, toChat)) + ': ' + _rbMoney(sub.reduce((a, x) => a + (Number(x.total) || 0), 0)) + (cmd === 'enviado' ? '\nYa no queda pendiente.' : '\n📤 Pendiente a enviar.'), botId); }
 }
 async function _rbCloseCmd(c, route, by, arg, botId) {
   const fromChat = String(route.from); const amt = arg ? _rbParseAmount(arg, 1e11) : null;
@@ -31941,34 +31975,84 @@ async function _rbCloseCmd(c, route, by, arg, botId) {
   kb.push([{ text: 'Cancelar', callback_data: 'rbm:no' }]);
   await _rbSend(c, fromChat, `🔒 ¿De qué suma se cierran <b>${_rbMoney2(amt)}</b>? El resto queda sumando.`, botId, { reply_markup: { inline_keyboard: kb } });
 }
+// #1084 (owner, captura del menú): "todos esos botones no los escribas como mensaje: que abra un cartel con el detalle nada más".
+// Telegram: cartel = answerCallbackQuery show_alert (máx. 200 caracteres). Las confirmaciones cambian los botones del MISMO menú (no mandan mensajes).
+function _rbAlertTxt(t) {
+  let x = String(t || '').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
+  return x.length > 200 ? x.slice(0, 199) + '…' : x;
+}
+const _rbShort = (t, n = 16) => { const x = String(t || ''); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
+async function _rbPendSum(q) { const a = await _rbM().RcptClose.aggregate([{ $match: q }, { $group: { _id: '$status', total: { $sum: { $ifNull: ['$total', 0] } }, n: { $sum: 1 } } }]); const o = { pending: { total: 0, n: 0 }, quoted: { total: 0, n: 0 } }; for (const x of a) if (o[x._id]) o[x._id] = x; return o; }
+async function _rbSrcTotalShort(c, route) {
+  const ds = _rbDests(c, route); const out = [];
+  for (const d of ds) {
+    const s = await _rbOpenSum(route.from, d.to, route.structId); const q = { fromChat: String(route.from), toChat: String(d.to), status: { $in: ['pending', 'quoted'] } }; if (route.structId) q.structId = route.structId; const p = await _rbPendSum(q);
+    out.push((ds.length > 1 ? '→ ' + _rbShort(_rbTitle(c, d.to)) + ': ' : 'Suma: ') + _rbMoney(s.total) + ' (' + s.count + ')' + (p.pending.n ? '\n⏳ A cotizar: ' + _rbMoney(p.pending.total) : '') + (p.quoted.n ? '\n📤 A enviar: ' + _rbMoney(p.quoted.total) : ''));
+  }
+  const ms = await _rbMonthSum(route.from, route.structId);
+  return '📊 SUMA ACTUALIZADA\n' + (out.join('\n') || 'sin grupos') + '\n📅 Mes: ' + _rbMoney(ms.total) + ' (' + ms.count + ')';
+}
+async function _rbDstTotalShort(c, toChat, routes) {
+  const out = [];
+  for (const r of routes) { const s = await _rbOpenSum(r.from, toChat, r.structId); out.push((routes.length > 1 ? 'De ' + _rbShort(_rbTitle(c, r.from)) + ': ' : 'Suma: ') + _rbMoney(s.total) + ' (' + s.count + ')'); }
+  const p = await _rbPendSum({ toChat: String(toChat), status: { $in: ['pending', 'quoted'] }, structId: { $in: routes.map((r) => r.structId) } });
+  return '📊 SUMA ACTUALIZADA\n' + out.join('\n') + (p.pending.n ? '\n⏳ A cotizar: ' + _rbMoney(p.pending.total) + ' (' + p.pending.n + ')' : '') + (p.quoted.n ? '\n📤 A enviar: ' + _rbMoney(p.quoted.total) + ' (' + p.quoted.n + ')' : '') + (!p.pending.n && !p.quoted.n ? '\n✅ Sin pendientes' : '') + '\nDetalle: /total';
+}
+function _rbCbuShort(c, routes) {
+  const items = Object.values((c.cbu && c.cbu.items) || {}).filter(Boolean); const out = [];
+  for (const r of routes) for (const d of _rbDests(c, r)) {
+    const k = _rbCbuKey(r.structId, r.from, d.to); const mine = items.filter((x) => _rbCbuKey(x.sid, x.from, x.to) === k);
+    const act = mine.filter((x) => x.status === 'active').sort((a, b) => new Date(b.since) - new Date(a.since))[0]; const sch = mine.filter((x) => x.status === 'scheduled').length;
+    const stop = c.cbu && c.cbu.stops && c.cbu.stops[k];
+    out.push(stop ? '⛔ SIN CBU DE BAJADA' : act ? (act.holder || '') + '\nCBU ' + (act.cbu || '') + (act.alias ? '\nAlias ' + act.alias : '') + '\nTerminación ,' + (act.cents || '') : 'Sin CBU cargado');
+    if (sch) out.push('🗓️ ' + sch + ' programado' + (sch === 1 ? '' : 's'));
+  }
+  return '🏦 CBU DE BAJADA\n' + (out.join('\n') || 'Sin datos') + (out.length > 2 ? '\nDetalle: /cbu' : '');
+}
+const _RB_HELP_SRC = '📋 COMANDOS\n/total suma · /cierre todo · /cierre 500.000 parcial · /anterior 13.686.199 · /restar 50.000 · /anular (respondiendo) · /cbu · /guia guía completa';
+const _RB_HELP_DST = '📋 COMANDOS\n/total detalle · /cotizado 1150 · /enviado · /nuevocbu · /parar · /cbu · /anular (respondiendo) · /restar 50.000 · /anterior · /guia guía completa';
 async function _rbMenuCb(c, bot, cq) {
-  const act = String(cq.data || '').slice(4); const chat = cq.message && cq.message.chat && String(cq.message.chat.id); const ans = (t) => tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: t || '', show_alert: !!t });
+  const act = String(cq.data || '').slice(4); const chat = cq.message && cq.message.chat && String(cq.message.chat.id); const ans = (t) => tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: t ? _rbAlertTxt(t) : '', show_alert: !!t });
   if (!chat) return ans();
   const by = [cq.from && cq.from.first_name, cq.from && cq.from.last_name].filter(Boolean).join(' ');
   const route = (c.routes || []).find((x) => x.botId === bot.id && String(x.from) === chat); const dstR = route ? [] : _rbDstRoutes(c, chat, bot.id);
   if (!route && !dstR.length) return ans('Este grupo no está en ninguna estructura encendida.');
   if (!(await _rbOnce(chat, 'cb' + cq.id))) return ans();
-  const ask = async (q, ok) => { await ans(); await _rbSend(c, chat, q, bot.id, { reply_markup: { inline_keyboard: [[{ text: '✅ Sí', callback_data: 'rbm:' + ok }, { text: 'Cancelar', callback_data: 'rbm:no' }]] } }); };
-  const done = () => tgChannel.call(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
+  const mid = cq.message.message_id; const kb = (m) => tgChannel.call(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: mid, reply_markup: m }).catch(() => {});
+  const isMenu = () => { try { return (cq.message.reply_markup.inline_keyboard || []).some((row) => row.some((b) => /^rbm:(total|quote|close)$/.test(b.callback_data || ''))); } catch (_) { return false; } };
+  const menuKb = route ? _RB_SRC_KB : _RB_DST_KB;
+  // confirmación EN el mismo menú: cambia los botones a "✅ Sí / Cancelar" y avisa con un cartel corto
+  const ask = async (q, ok) => { if (isMenu()) { await kb({ inline_keyboard: [[{ text: '✅ Sí, confirmar', callback_data: 'rbm:' + ok }], [{ text: '✖️ Cancelar', callback_data: 'rbm:no' }]] }); return ans(q + '\n\nTocá "✅ Sí, confirmar" en el menú.'); } await ans(); await _rbSend(c, chat, q, bot.id, { reply_markup: { inline_keyboard: [[{ text: '✅ Sí', callback_data: 'rbm:' + ok }, { text: 'Cancelar', callback_data: 'rbm:no' }]] } }); };
+  // al confirmar/cancelar: si el mensaje era un menú (o la confirmación hecha sobre el menú) vuelve el menú; si era un mensaje aparte, se le sacan los botones
+  const done = async () => { const confirmOnMenu = (() => { try { const rows = cq.message.reply_markup.inline_keyboard || []; return rows.length === 2 && rows[0].length === 1 && rows[1].length === 1; } catch (_) { return false; } })(); await kb(confirmOnMenu ? menuKb : { inline_keyboard: [] }); };
   if (act === 'no') { await done(); return ans('Cancelado'); }
-  if (act === 'total') { await ans(); await _rbSend(c, chat, route ? await _rbSrcTotalTxt(c, route) : await _rbDstTotalTxt(c, chat, dstR), bot.id, { reply_markup: _rbKb() }); return; }
-  if (act === 'cbu') { await ans(); await _rbSend(c, chat, _rbCbuShowTxt(c, route ? [route] : dstR, !!route), bot.id, { reply_markup: _rbKb() }); return; }
-  if (act === 'ncbu' && !route) { await ans(); await _rbSend(c, chat, _RB_CBU_TPL, bot.id); return; }
+  if (act === 'total') return ans(route ? await _rbSrcTotalShort(c, route) : await _rbDstTotalShort(c, chat, dstR));
+  if (act === 'cbu') return ans(_rbCbuShort(c, route ? [route] : dstR));
+  if (act === 'help') { if (!isMenu()) { await kb(menuKb); return ans(); } return ans(route ? _RB_HELP_SRC : _RB_HELP_DST); } // #1085: "Ver comandos" en cada suma abre los botones ahí mismo
+  if (act === 'ant') return ans('📥 SUMAR LO ANTERIOR\nEscribí /anterior y el monto, ej.:\n/anterior 13.686.199\nSe suma a lo nuevo y sigue sumando hasta el próximo cierre.');
+  if (act === 'ncbu' && !route) return ans('🔄 NUEVO CBU\nEscribí /nuevocbu y el bot te pasa el modelo para completar (Titular, CBU, Alias, Terminación). Revisás y confirmás.');
   if (act === 'stop' && !route) return ask('⛔ ¿Avisar que NO HAY CBU de bajada hasta nuevo aviso?', 'stopok');
-  if (act === 'stopok' && !route) { await done(); await ans(); await _rbCbuStop(c, dstR, chat, by, bot.id); return; }
-  if (act === 'help') { await ans(); if (route) await _rbSendHelp(c, route, false); else await _rbSendDstHelp(c, chat, bot.id, false); return; }
-  if (act === 'ant') { await ans(); await _rbSend(c, chat, '📥 Para sumar lo que venían acumulando antes del bot escribí <b>/anterior</b> y el monto, ej.:\n<b>/anterior 13.686.199</b>\nSe suma a lo nuevo y la suma sigue normal hasta el próximo cierre.', bot.id); return; }
+  if (act === 'stopok' && !route) { await done(); await _rbCbuStop(c, dstR, chat, by, bot.id); return ans('⛔ Listo: se avisó que no hay CBU de bajada.'); }
   if (route) {
-    if (act === 'close') return ask(`🔒 ¿Dar el CIERRE del TOTAL ahora en ${_rbH(_rbTitle(c, chat))}? Lo sumado pasa a ⏳ PENDIENTE A COTIZAR y la suma arranca de $0.\n(Para cerrar sólo una parte escribí <b>/cierre 500.000</b>: el resto queda sumando.)`, 'closeok');
+    if (act === 'close') return ask('🔒 ¿Dar el CIERRE del TOTAL ahora? Lo sumado pasa a PENDIENTE A COTIZAR y la suma arranca de $0.\n(Parcial: /cierre 500.000)', 'closeok');
     const pc = act.match(/^pc:(\d{1,2}):([\d.]+)$/);
-    if (pc) { await done(); await ans(); const d = _rbDests(c, route)[Number(pc[1])]; if (!d) return; const r = await _rbClose(c, route, by || 'botón', { to: d.to, amount: Number(pc[2]) }); if (!r.ok) await _rbSend(c, chat, '❌ No se cerró: ' + _rbH(r.why) + '.', bot.id); return; }
-    if (act === 'closeok') { await done(); await ans(); const r = await _rbClose(c, route, by || 'botón'); if (!r.ok) await _rbSend(c, chat, 'No hay comprobantes abiertos para cerrar.', bot.id); return; }
+    if (pc) { await kb({ inline_keyboard: [] }); await ans(); const d = _rbDests(c, route)[Number(pc[1])]; if (!d) return; const r = await _rbClose(c, route, by || 'botón', { to: d.to, amount: Number(pc[2]) }); if (!r.ok) await _rbSend(c, chat, '❌ No se cerró: ' + _rbH(r.why) + '.', bot.id); return; }
+    if (act === 'closeok') { await done(); const r = await _rbClose(c, route, by || 'botón'); return ans(r.ok ? '🔒 Cierre hecho.' : 'No hay comprobantes abiertos para cerrar.'); }
     return ans('Ese botón es del grupo de destino.');
   }
   const sids = [...new Set(dstR.map((r) => r.structId))];
-  if (act === 'quote') return ask('💱 ¿Marcar COTIZADO lo pendiente a cotizar? (para dejar la cotización escribí /cotizado 1150)', 'quoteok');
-  if (act === 'sent') return ask('✅ ¿Marcar ENVIADO? El pendiente se va.', 'sentok');
-  if (act === 'quoteok' || act === 'sentok') { await done(); await ans(); await _rbDestCmd(c, chat, act === 'quoteok' ? 'cotizado' : 'enviado', by, '', sids, bot.id); return; }
+  // #1085: piden el dato con un mensaje para responder (es lo único que escribe: hace falta el precio / la foto)
+  if (act === 'quote' || act === 'sent') {
+    const p = await _rbPendSum({ toChat: chat, status: { $in: ['pending', 'quoted'] }, structId: { $in: sids } });
+    if (act === 'quote') {
+      if (!p.pending.n) return ans('No hay nada PENDIENTE A COTIZAR.' + (p.quoted.n ? '\n📤 Ya cotizado, a enviar: ' + _rbMoney(p.quoted.total) : ''));
+      await ans(); await _rbSend(c, chat, `${_RB_Q_MARK}\nPendiente a cotizar: <b>${_rbMoney(p.pending.total)}</b> (${p.pending.n} cierre${p.pending.n === 1 ? '' : 's'})\n<b>Respondé este mensaje</b> con el precio del USDT y la comisión %, ej.:\n<b>1150 2</b>  (USDT a $1.150 y 2% de comisión)`, bot.id, { reply_markup: { force_reply: true, input_field_placeholder: '1150 2' } }); return;
+    }
+    if (!p.quoted.n) return ans(p.pending.n ? 'Primero 💱 Cotizar: hay ' + _rbMoney(p.pending.total) + ' pendiente a cotizar.' : 'No hay nada pendiente a enviar.');
+    const ql = await _rbM().RcptClose.find({ toChat: chat, status: 'quoted', structId: { $in: sids } }).lean(); const u = ql.reduce((a, x) => a + (Number(x.quoteUsdt) || 0), 0);
+    await ans(); await _rbSend(c, chat, `${_RB_S_MARK}\nA enviar: <b>${_rbMoney(p.quoted.total)}</b>${u ? ' = <b>' + _rbUsdt(u) + ' USDT</b>' : ''}\n<b>Respondé este mensaje con la FOTO</b> del envío de los USDT: queda ✅ VERIFICADO ENVIADO y sale de pendientes.`, bot.id, { reply_markup: { force_reply: true } }); return;
+  }
+  if (act === 'quoteok' || act === 'sentok') { await done(); const t = await _rbDestCmd(c, chat, act === 'quoteok' ? 'cotizado' : 'enviado', by, '', sids, bot.id, { silent: true }); return ans(t || 'Listo.'); }
   return ans('Ese botón es del grupo que manda.');
 }
 async function _rbOnCallback(c, bot, cq) {
@@ -32019,7 +32103,8 @@ async function _rbCarryCmd(c, bot, m, fromChat, text, by, sign = 1) {
   await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: String(r.from), fromTitle: _rbTitle(c, r.from), toChat: pair.to, toTitle: _rbTitle(c, pair.to), srcMsgId: base, structId: r.structId, amount: sign * amt, amountFrom: sign < 0 ? 'ajuste' : 'arrastre', sender: 'telegram · ' + (by || ''), status: 'open' });
   const s2 = await _rbOpenSum(r.from, pair.to, r.structId);
   const msg = (sign < 0 ? `➖ <b>RESTADO</b>: −${_rbMoney2(amt)}` : `📥 <b>SUMADO LO ANTERIOR</b>: +${_rbMoney2(amt)}`) + `${by ? ' · ' + _rbH(by) : ''}\n${_rbH(_rbTitle(c, r.from))} → ${_rbH(_rbTitle(c, pair.to))}\n${_rbSumTxt(s2)}`;
-  await _rbSend(c, String(r.from), msg + '\n' + _rbMonthTxt(await _rbMonthSum(r.from, r.structId)), r.botId, { reply_markup: _rbKb() });
+  // #1084 (owner): lo del grupo 1 se avisa con detalle al 2; lo que hace el grupo 2 (el de cierres) queda SÓLO en el 2.
+  if (asSrc.length) await _rbSend(c, String(r.from), msg + '\n' + _rbMonthTxt(await _rbMonthSum(r.from, r.structId)), r.botId, { reply_markup: _rbKb() });
   if (pair.to !== String(r.from)) await _rbSend(c, pair.to, msg, r.botId, { reply_markup: _rbKb() });
 }
 // #1079-m: /anular respondiendo un comprobante (la foto o la respuesta del bot en el grupo que manda, o el reenviado en el destino) ⇒ sale de la suma
@@ -32147,7 +32232,7 @@ async function _rbAnular(c, bot, m, fromChat, route, dstR, by) {
   if (rec.status === 'hold') { await _rbSend(c, rec.fromChat, '🗑️ Anulado (no estaba sumado).', bot.id); return; }
   const s2 = await _rbOpenSum(rec.fromChat, rec.toChat, rec.structId);
   const msg = `🗑️ <b>ANULADO</b>: −${_rbMoney2(rec.amount)}${by ? ' · ' + _rbH(by) : ''}\n${_rbH(rec.fromTitle)} → ${_rbH(rec.toTitle || '')}\n${_rbSumTxt(s2)}`;
-  await _rbSend(c, rec.fromChat, msg + '\n' + _rbMonthTxt(await _rbMonthSum(rec.fromChat, rec.structId)), bot.id, { reply_markup: _rbKb(), reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true });
+  if (route) await _rbSend(c, rec.fromChat, msg + '\n' + _rbMonthTxt(await _rbMonthSum(rec.fromChat, rec.structId)), bot.id, { reply_markup: _rbKb(), reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true }); // #1084: desde el grupo 2 no se avisa al 1
   if (rec.toChat) await _rbSend(c, rec.toChat, msg, bot.id, Object.assign({ reply_markup: _rbKb() }, rec.fwdMsgId ? { reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true } : {}));
 }
 async function _rbOnMessage(c, bot, m) {
@@ -32165,7 +32250,21 @@ async function _rbOnMessage(c, bot, m) {
   if (/^\/nuevocbu(@\w+)?/i.test(text) && dstR.length) { if (await _rbOnce(fromChat, m.message_id)) await _rbCbuCmd(c, bot, fromChat, dstR, text, by); return; }
   if (/^\/parar(@\w+)?$/i.test(text) && dstR.length) { if (await _rbOnce(fromChat, m.message_id)) await _rbCbuStop(c, dstR, fromChat, by, bot.id); return; }
   if (/^\/anular(@\w+)?$/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbAnular(c, bot, m, fromChat, route, dstR, by); return; }
+  // #1085: respuesta al pedido del bot en el grupo 2: precio del USDT + comisión (COTIZAR) o la FOTO del envío (ENVIADO)
+  if (!route && dstR.length && m.reply_to_message && m.reply_to_message.from && m.reply_to_message.from.is_bot) {
+    const rtx = String(m.reply_to_message.text || ''); const sids = [...new Set(dstR.map((r) => r.structId))];
+    if (rtx.startsWith(_RB_Q_MARK) && text) {
+      if (!(await _rbOnce(fromChat, m.message_id))) return; const qp = _rbQuoteParse(text);
+      if (!qp) { await _rbSend(c, fromChat, 'No entendí. Respondé con el precio del USDT y la comisión %, ej.: <b>1150 2</b>', bot.id, { reply_to_message_id: m.message_id, reply_markup: { force_reply: true, input_field_placeholder: '1150 2' } }); return; }
+      await _rbQuote(c, fromChat, qp.price, qp.pct, by, sids, bot.id, m.message_id); return;
+    }
+    if (rtx.startsWith(_RB_S_MARK)) {
+      if (!_rbFileOf(m)) { if (text && (await _rbOnce(fromChat, m.message_id))) await _rbSend(c, fromChat, 'Mandá la <b>FOTO</b> del envío de los USDT respondiendo el mensaje 📸 ENVIADO.', bot.id, { reply_to_message_id: m.message_id }); return; }
+      if (await _rbOnce(fromChat, m.message_id)) await _rbSentPhoto(c, fromChat, m, by, sids, bot.id); return;
+    }
+  }
   const cmd = (text.match(/^\/(cotizado|enviado)(@\w+)?(\s+.*)?$/i) || [])[1];
+  if (cmd && cmd.toLowerCase() === 'cotizado' && !route && dstR.length) { const qp = _rbQuoteParse((text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || ''); if (qp) { if (await _rbOnce(fromChat, m.message_id)) await _rbQuote(c, fromChat, qp.price, qp.pct, by, [...new Set(dstR.map((r) => r.structId))], bot.id, m.message_id); return; } }
   if (cmd) {
     const dr = mine.filter((r) => (r.rules || []).some((x) => String(x.to) === fromChat) || String(r.otherTo || '') === fromChat);
     if (dr.length && (await _rbOnce(fromChat, m.message_id))) await _rbDestCmd(c, fromChat, cmd.toLowerCase(), by, (text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || '', [...new Set(dr.map((r) => r.structId))], bot.id);

@@ -54,7 +54,11 @@ const rcptCloseSchema = new mongoose.Schema({
   quoteRate: { type: Number, default: null },
   quoteNote: { type: String, default: '' },
   quotedBy: { type: String, default: '' },
-  quotedAt: { type: Date, default: null }
+  quotedAt: { type: Date, default: null },
+  // #1085: cotización con precio del USDT y comisión % ⇒ USDT a enviar; al enviar, la FOTO del envío
+  quoteFeePct: { type: Number, default: null },
+  quoteUsdt: { type: Number, default: null },
+  sentPhoto: { type: String, default: '' }
 }, { timestamps: true });
 const RcptClose = mongoose.models.RcptClose || mongoose.model('RcptClose', rcptCloseSchema);
 module.exports = { RcptFwd, RcptClose };

@@ -44,7 +44,8 @@ function model() {
     countDocuments: async (f) => rows.filter((x) => match(x, f)).length,
     aggregate: async (pipe) => { const m = rows.filter((x) => match(x, pipe[0].$match)); const g = pipe[1].$group; const by = {};
       for (const x of m) { const k = g._id === null ? 'null' : x[g._id.slice(1)]; const o = by[k] = by[k] || { _id: g._id === null ? null : k, total: 0, count: 0, first: null, toTitle: null };
-        o.total += x.amount || 0; o.count++; if (!o.first || x.createdAt < o.first) o.first = x.createdAt; if (!o.toTitle) o.toTitle = x.toTitle; }
+        o.total += x.amount || 0; o.count++; if (!o.first || x.createdAt < o.first) o.first = x.createdAt; if (!o.toTitle) o.toTitle = x.toTitle;
+        for (const [k2, e] of Object.entries(g)) { if (k2 === '_id' || k2 === 'count' || !e || !e.$sum) continue; if (k2 === 'total' && e.$sum && e.$sum.$ifNull && e.$sum.$ifNull[0] === '$amount') continue; if (!o['_' + k2]) { o['_' + k2] = 1; o[k2] = 0; } o[k2] += e.$sum === 1 ? 1 : (x[String((e.$sum.$ifNull || [e.$sum])[0]).slice(1)] || 0); } }
       return Object.values(by); },
   };
   return M;
@@ -69,7 +70,7 @@ const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : 
   _tgArtHour: (d = new FakeDate()) => Number(new RealDate(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24,
   _sha: (v) => crypto.createHash('sha256').update(String(v)).digest('hex'), _pinLocked: () => false, _pinCheck: () => {},
   process: { env: {} }, setTimeout: () => 0, setInterval: () => 0, Date: FakeDate, Math, JSON, Object, Array, String, Number, Buffer, Set, Map, Promise, RegExp, Error, console };
-vm.createContext(ctx); vm.runInContext(blk + '; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg;', ctx);
+vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg;', ctx);
 // --- armado: 1 estructura, bot 111, grupo 1 (-1) manda; ,99 → -2 ; todo lo demás → -3 ---
 cfgDocs.push({ key: 'rcptbot', value: { bots: [{ id: '111', username: 'b111', tokenEnc: '111:TOKEN', secret: 'S' }], groups: [{ id: '-1', title: 'buffalobot', bots: ['111'] }, { id: '-2', title: 'asuncionbot', bots: ['111'] }, { id: '-3', title: 'fichasnuevobot', bots: ['111'] }],
   structs: [{ id: 'E1', name: 'Buffalo', on: true, botId: '111', routes: [{ from: '-1', rules: [{ cents: '99', to: '-2' }], otherTo: '-3' }] }] } });
@@ -109,7 +110,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   await caso('/cotizado en el destino ⇒ cotizado, pendiente a enviar', async () => {
     await hook(text(7, -2, '/cotizado 1150')); assert.ok(/COTIZADO/.test(last(-2).p.text) && /PENDIENTE A ENVIAR/.test(last(-2).p.text));
     assert.strictEqual(RcptClose.rows.find((x) => x.toChat === '-2').status, 'quoted');
-    aiAmount = 2000.99; await hook(photo(8)); assert.ok(/COTIZADO \(1150\) · <b>PENDIENTE A ENVIAR<\/b>: <b>\$30\.002/.test(last(-1).p.text), last(-1).p.text);
+    aiAmount = 2000.99; await hook(photo(8)); assert.ok(/COTIZADO \(USDT \$1\.150\) · <b>PENDIENTE A ENVIAR<\/b>: <b>\$30\.002/.test(last(-1).p.text), last(-1).p.text);
   });
   await caso('/enviado ⇒ el pendiente se va', async () => {
     await hook(text(9, -2, '/enviado')); assert.strictEqual(RcptClose.rows.find((x) => x.toChat === '-2').status, 'sent');
@@ -165,13 +166,13 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await hook(text(40, -3, '/anterior 13.686.199'));
     const post = RcptFwd.rows.filter((x) => x.toChat === '-3' && x.status === 'open').reduce((a, x) => a + x.amount, 0);
     assert.ok(Math.abs(post - pre - 13686199) < 0.001, pre + ' ' + post);
-    assert.ok(/SUMADO LO ANTERIOR<\/b>: \+\$13\.686\.199/.test(last(-3).p.text) && /SUMADO LO ANTERIOR/.test(last(-1).p.text), last(-3).p.text);
+    assert.ok(/SUMADO LO ANTERIOR<\/b>: \+\$13\.686\.199/.test(last(-3).p.text) && !/SUMADO LO ANTERIOR/.test(last(-1).p.text), 'queda sólo en el grupo 2 (#1084)');
     await hook(text(41, -1, '/anterior 5000')); assert.ok(/manda a 2 grupos/.test(last(-1).p.text), last(-1).p.text);
     await hook(text(42, -3, '/anterior')); assert.ok(/Escribí el monto/.test(last(-3).p.text));
   });
   await caso('menú: /ayuda en el DESTINO explica los comandos con botones; /total del destino con pendientes', async () => {
     await hook(text(50, -2, '/ayuda')); const h = last(-2); assert.ok(/GRUPO DE DESTINO/.test(h.p.text) && /\/cotizado/.test(h.p.text) && /\/enviado/.test(h.p.text) && /CÓMO SIGUE/.test(h.p.text), h.p.text);
-    assert.strictEqual(JSON.stringify(h.p.reply_markup.inline_keyboard.map((r) => r[0].callback_data)), JSON.stringify(['rbm:total', 'rbm:quote', 'rbm:sent', 'rbm:cbu', 'rbm:stop']));
+    assert.strictEqual(JSON.stringify(h.p.reply_markup.inline_keyboard.map((r) => r[0].callback_data)), JSON.stringify(['rbm:total', 'rbm:quote', 'rbm:sent', 'rbm:help', 'rbm:cbu', 'rbm:stop']));
     await hook(text(51, -2, '/total')); assert.ok(/SUMA ACTUALIZADA/.test(last(-2).p.text) && /De buffalobot: <b>/.test(last(-2).p.text), last(-2).p.text);
     await hook(text(52, -1, '/ayuda')); const g = last(-1); assert.ok(/\/cierre 500\.000/.test(g.p.text) && /\/anterior/.test(g.p.text) && g.p.reply_markup.inline_keyboard.length === 4, g.p.text);
   });
@@ -198,18 +199,47 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await cbIn(-1, 'rbm:closeok'); assert.ok(RcptClose.rows.length > n && /Suma nueva: <b>\$0/.test(last(-1).p.text), last(-1).p.text);
     assert.strictEqual(RcptFwd.rows.filter((x) => x.toChat === '-3' && x.status === 'open').length, 0);
   });
-  await caso('botones del destino: COTIZADO y ENVIADO con confirmación', async () => {
-    await cbIn(-3, 'rbm:quote'); assert.ok(/Marcar COTIZADO/.test(last(-3).p.text)); await cbIn(-3, 'rbm:quoteok');
+  const cbMenu = (chat, data, kb, mid = 6100) => hook({ callback_query: { id: 'q' + Math.random(), data, from: { first_name: 'Ana' }, message: { message_id: mid, chat: { id: chat, type: 'supergroup', title: 'x' }, reply_markup: kb } } });
+  const alertOf = () => sent.filter((x) => x.method === 'answerCallbackQuery').slice(-1)[0].p;
+  await caso('#1085 Cotizar: pide precio USDT + comisión, hace la cuenta; Enviado: foto ⇒ VERIFICADO ENVIADO; nada va al grupo 1', async () => {
+    const n1 = sent.filter((x) => String(x.p.chat_id) === '-1').length; const pend = RcptClose.rows.filter((x) => x.toChat === '-3' && x.status === 'pending'); assert.ok(pend.length, 'hay pendiente');
+    const pesos = pend.reduce((a, x) => a + x.total, 0);
+    await cbMenu(-3, 'rbm:quote', ctx._RB_DST_KB); const pq = last(-3); assert.ok(/^💱 COTIZAR/.test(pq.p.text) && pq.p.reply_markup.force_reply, pq.p.text);
+    await hook({ message: { message_id: 900, chat: { id: -3, type: 'supergroup', title: 'fichasnuevobot' }, from: { first_name: 'Ana' }, text: 'hola', reply_to_message: { message_id: 1, from: { is_bot: true }, text: pq.p.text.replace(/<[^>]+>/g, '') } } });
+    assert.ok(/No entendí/.test(last(-3).p.text)); assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').some((x) => x.status === 'pending'));
+    await hook({ message: { message_id: 901, chat: { id: -3, type: 'supergroup', title: 'fichasnuevobot' }, from: { first_name: 'Ana' }, text: '1.150 2%', reply_to_message: { message_id: 1, from: { is_bot: true }, text: pq.p.text.replace(/<[^>]+>/g, '') } } });
+    const q = last(-3).p.text; const neto = pesos / 1150 * 0.98; const fmt = (n) => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    assert.ok(/COTIZADO/.test(q) && q.includes('A ENVIAR: ' + fmt(neto) + ' USDT') && /comisión 2%/.test(q) && /SUMA ACTUALIZADA/.test(q), q);
     assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status !== 'pending'));
-    await cbIn(-3, 'rbm:sentok'); assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status === 'sent'));
-    await cbIn(-3, 'rbm:total'); assert.ok(/Sin cierres pendientes/.test(last(-3).p.text), last(-3).p.text);
+    await cbMenu(-3, 'rbm:quote', ctx._RB_DST_KB); assert.ok(alertOf().show_alert && /No hay nada PENDIENTE A COTIZAR/.test(alertOf().text), JSON.stringify(alertOf()));
+    await cbMenu(-3, 'rbm:sent', ctx._RB_DST_KB); const ps = last(-3); assert.ok(/^📸 ENVIADO/.test(ps.p.text) && ps.p.text.includes(fmt(neto) + ' USDT'), ps.p.text);
+    const rt = { message_id: 2, from: { is_bot: true }, text: ps.p.text.replace(/<[^>]+>/g, '') };
+    await hook({ message: { message_id: 902, chat: { id: -3, type: 'supergroup', title: 'fichasnuevobot' }, from: { first_name: 'Ana' }, text: 'listo', reply_to_message: rt } }); assert.ok(/Mandá la <b>FOTO/.test(last(-3).p.text));
+    await hook({ message: { message_id: 903, chat: { id: -3, type: 'supergroup', title: 'fichasnuevobot' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'usdt1' }], reply_to_message: rt } });
+    const v = last(-3).p.text; assert.ok(/VERIFICADO ENVIADO/.test(v) && /Sin cierres pendientes/.test(v), v);
+    assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status === 'sent' || x.status === 'pending') && RcptClose.rows.some((x) => x.sentPhoto === 'usdt1'));
+    assert.strictEqual(RcptFwd.rows.filter((x) => x.toChat === '-3' && x.status === 'open').length, 0, 'el foto no se tomó como comprobante');
+    assert.strictEqual(sent.filter((x) => String(x.p.chat_id) === '-1').length, n1, 'nada al grupo 1');
+  });
+  await caso('#1084 botones del menú ⇒ cartel (sin mensaje); confirmar cambia los botones del mismo menú', async () => {
+    const n = sent.filter((x) => x.method === 'sendMessage').length;
+    await cbMenu(-3, 'rbm:total', ctx._RB_DST_KB); assert.ok(alertOf().show_alert && /SUMA ACTUALIZADA/.test(alertOf().text) && alertOf().text.length <= 200, alertOf().text);
+    await cbMenu(-3, 'rbm:cbu', ctx._RB_DST_KB); assert.ok(/CBU DE BAJADA/.test(alertOf().text));
+    await cbMenu(-3, 'rbm:help', ctx._RB_DST_KB); assert.ok(/\/cotizado/.test(alertOf().text));
+    await cbMenu(-1, 'rbm:total', ctx._RB_SRC_KB); assert.ok(/SUMA ACTUALIZADA/.test(alertOf().text) && /Mes:/.test(alertOf().text), alertOf().text);
+    assert.strictEqual(sent.filter((x) => x.method === 'sendMessage').length, n, 'ningún mensaje');
+    await cbMenu(-1, 'rbm:close', ctx._RB_SRC_KB); const ed = sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0];
+    assert.ok(/Sí, confirmar/.test(ed.p.reply_markup.inline_keyboard[0][0].text) && /CIERRE del TOTAL/.test(alertOf().text));
+    await cbMenu(-1, 'rbm:no', ed.p.reply_markup); const ed2 = sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0]; assert.strictEqual(ed2.p.reply_markup, ctx._RB_SRC_KB, 'vuelve el menú');
+    await cbIn(-1, 'rbm:help', 6200); const ed3 = sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0]; assert.ok(ed3.p.message_id === 6200 && ed3.p.reply_markup === ctx._RB_SRC_KB, 'Ver comandos abre los botones');
+    assert.strictEqual(sent.filter((x) => x.method === 'sendMessage').length, n, 'ningún mensaje');
   });
   await caso('cada suma trae el botón 📋 Ver comandos y abre el menú; terminación mal avisa con TERMINACIÓN MAL', async () => {
     cfgDocs[0].value.structs[0].routes[0].rules = [{ cents: '99', to: '-2' }]; cfgDocs[0].value.structs[0].routes[0].otherTo = null; await ctx._rbCfg(true);
     aiAmount = 300.99; await hook(photo(60)); const r = last(-1); const kb = r.p.reply_markup.inline_keyboard; assert.ok(kb[kb.length - 1][0].callback_data === 'rbm:help', JSON.stringify(kb));
     const cp = sent.filter((x) => x.method === 'copyMessage').slice(-1)[0]; assert.ok(cp.p.reply_markup && cp.p.reply_markup.inline_keyboard.some((x) => x[0].callback_data === 'rbm:help'));
-    await cbIn(-1, 'rbm:help'); assert.ok(/COMANDOS/.test(last(-1).p.text) && /\/cierre 500\.000/.test(last(-1).p.text));
-    await cbIn(-2, 'rbm:help'); assert.ok(/GRUPO DE DESTINO/.test(last(-2).p.text));
+    await cbIn(-1, 'rbm:help', 6300); assert.ok(sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0].p.reply_markup === ctx._RB_SRC_KB);
+    await cbIn(-2, 'rbm:help', 6301); assert.ok(sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0].p.reply_markup === ctx._RB_DST_KB);
     aiAmount = 300.43; await hook(photo(61)); assert.ok(/TERMINACIÓN MAL<\/b>: \$300,43 termina en <b>,43/.test(last(-1).p.text) && /elegí a qué grupo va/.test(last(-1).p.text), last(-1).p.text);
   });
   await caso('cada grupo con su decimal: ,43 en el grupo del ,99 avisa que es del otro grupo', async () => {
@@ -238,9 +268,9 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   });
   await caso('/restar en los dos grupos y /anular respondiendo un comprobante', async () => {
     aiAmount = 2000.99; await hook(photoU(90, 'U4')); const s0 = openSum('-2');
-    await hook(text(91, -2, '/restar 500'));  assert.ok(/RESTADO<\/b>: −\$500/.test(last(-2).p.text) && /RESTADO/.test(last(-1).p.text), last(-2).p.text); assert.ok(Math.abs(openSum('-2') - (s0 - 500)) < 0.01);
+    await hook(text(91, -2, '/restar 500'));  assert.ok(/RESTADO<\/b>: −\$500/.test(last(-2).p.text) && !/RESTADO/.test(last(-1).p.text), 'desde el grupo 2 no avisa al 1 (#1084)'); assert.ok(Math.abs(openSum('-2') - (s0 - 500)) < 0.01);
     const rec = RcptFwd.rows.find((x) => x.srcMsgId === 90);
-    await hook(text(92, -2, '/anular', rec.fwdMsgId)); assert.strictEqual(rec.status, 'anulado'); assert.ok(/ANULADO<\/b>: −\$2\.000,99/.test(last(-1).p.text) && /ANULADO/.test(last(-2).p.text));
+    await hook(text(92, -2, '/anular', rec.fwdMsgId)); assert.strictEqual(rec.status, 'anulado'); assert.ok(/ANULADO<\/b>: −\$2\.000,99/.test(last(-2).p.text) && !/ANULADO/.test(last(-1).p.text), 'desde el grupo 2 queda en el 2 (#1084)');
     assert.ok(Math.abs(openSum('-2') - (s0 - 500 - 2000.99)) < 0.01);
     aiAmount = 100.99; await hook(photoU(93, 'U5')); await hook(text(94, -1, '/anular', 93)); assert.strictEqual(RcptFwd.rows.find((x) => x.srcMsgId === 93).status, 'anulado');
     await hook(text(95, -1, '/anular')); assert.ok(/respondé ese comprobante/.test(last(-1).p.text));

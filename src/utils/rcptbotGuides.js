@@ -56,7 +56,7 @@ Ejemplo: $50.000,82 termina en ,82.
    - Automático a las 13 h de lunes a viernes (el lunes junta todo el fin de semana).
    - También con /cierre o el botón 🔒.
    - Lo cerrado queda ⏳ PENDIENTE A COTIZAR → el que recibe marca 💱 COTIZADO
-     → 📤 PENDIENTE A ENVIAR → marca ✅ ENVIADO → listo. Todo se avisa acá.
+     → 📤 PENDIENTE A ENVIAR → marca ✅ ENVIADO → listo (eso queda en el grupo que recibe).
    - Después del cierre la suma arranca de $0. El TOTAL DEL MES sigue sin corte hasta fin de mes.
 
 8) CBU DE BAJADA
@@ -83,11 +83,14 @@ Cada uno trae el monto y la suma acumulada. Además pueden llegar:
 Llega 🔒 CIERRE con ⏳ PENDIENTE A COTIZAR: monto, del día/hora al día/hora y cantidad de comprobantes.
 Si fue un cierre parcial lo dice ("cierre PARCIAL de $X") y el resto sigue sumando.
 
-3) COTIZAR Y ENVIAR (o los botones del menú)
-   /cotizado 1150 ....... marca COTIZADO lo pendiente a cotizar (la cotización es opcional)
-                          → queda 📤 PENDIENTE A ENVIAR
-   /enviado ............. marca ENVIADO → el pendiente se va
-Cada paso se avisa al grupo que envía. Los botones piden confirmar.
+3) COTIZAR Y ENVIAR (botones del menú o "📋 Ver comandos" en cada suma)
+   💱 Cotizar ........... el bot pide el precio del USDT y la comisión %: respondé su mensaje con
+                          "1150 2" (USDT a $1.150, 2% de comisión). Hace la cuenta sola:
+                          pesos ÷ precio − comisión = USDT A ENVIAR → queda 📤 PENDIENTE A ENVIAR
+                          (también: /cotizado 1150 2)
+   ✅ Enviado ............ el bot pide la FOTO del envío de los USDT: respondé su mensaje con la foto
+                          → ✅ VERIFICADO ENVIADO y sale de pendientes, con la suma actualizada.
+Esto queda en este grupo (el grupo que envía no recibe estos avisos).
 
 4) VER LA SUMA
    /total ............... suma de cada grupo que envía + pendientes con todo el detalle
@@ -109,7 +112,7 @@ Cada paso se avisa al grupo que envía. Los botones piden confirmar.
    /cbu ................. ver el CBU vigente y los programados
 
 6) CORRECCIONES
-   /anular .............. RESPONDIENDO un comprobante reenviado: lo saca de la suma (avisa a los dos grupos)
+   /anular .............. RESPONDIENDO un comprobante reenviado: lo saca de la suma (queda en este grupo)
    /restar 50.000 ....... resta un monto · /anterior 13.686.199 ... suma lo que venía de antes del bot
 
 7) OTROS

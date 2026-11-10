@@ -3392,3 +3392,17 @@ body.sp-classic #spBankMsg { display: none !important; }
   font: 800 13px var(--p-font); cursor: pointer; }
 #spBankMsg .sbm-attach:active { transform: scale(.98); }
 html[data-theme="dark"] #spBankMsg .sbm-foot .sbm-min { color: #f6c453; }
+
+/* ── #1086 (owner): en el chat nuevo de la burbuja la tarjeta de datos tomaba el verde de los mensajes y se perdía ⇒ fondo BLANCO y letras NEGRAS;
+   el bono vigente remarcado en VERDE con letras negras. (Mismo color en modo nocturno, pedido del owner.) */
+:root { --p-sbm-bg: #ffffff; --p-sbm-text: #111111; --p-sbm-muted: #555555; --p-sbm-line: #e3e3e3; --p-sbm-bonus: #86efac; --p-sbm-bonus-text: #0a0a0a; }
+html[data-theme="dark"] { --p-sbm-bg: #ffffff; --p-sbm-text: #111111; --p-sbm-muted: #555555; --p-sbm-line: #e3e3e3; --p-sbm-bonus: #86efac; --p-sbm-bonus-text: #0a0a0a; }
+body #supportPanel #spBankMsg .message.sp-bankmsg, body.wa-dark #supportPanel #spBankMsg .message.sp-bankmsg,
+body:not(.sp-classic) #supportPanel.sp-in-casino #spBankMsg .message.sp-bankmsg, body.wa-dark:not(.sp-classic) #supportPanel.sp-in-casino #spBankMsg .message.sp-bankmsg {
+  background: var(--p-sbm-bg) !important; color: var(--p-sbm-text) !important; border: 1px solid var(--p-sbm-line) !important; }
+body #supportPanel #spBankMsg .sbm-head, body #supportPanel #spBankMsg .sbm-foot { border-color: var(--p-sbm-line) !important; }
+body #supportPanel #spBankMsg .sbm-head b, body #supportPanel #spBankMsg .sbm-kv code, body #supportPanel #spBankMsg .sbm-foot b { color: var(--p-sbm-text) !important; }
+body #supportPanel #spBankMsg .sbm-head small, body #supportPanel #spBankMsg .sbm-kv small, body #supportPanel #spBankMsg .sbm-foot { color: var(--p-sbm-muted) !important; }
+body #supportPanel #spBankMsg .sbm-foot .sbm-min { color: #b7791f !important; }
+body #supportPanel #spBankMsg .sbm-bonus { background: var(--p-sbm-bonus) !important; color: var(--p-sbm-bonus-text) !important; font-weight: 600; }
+body #supportPanel #spBankMsg .sbm-bonus b { color: var(--p-sbm-bonus-text) !important; }

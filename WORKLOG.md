@@ -18,6 +18,22 @@
   Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
   (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
 
+### 1086. Tarjeta de datos del chat en BLANCO con letras negras y bono en verde (2026-11-10) — app v715
+- **Owner:** "el fondo verde del chat nuevo en la burbuja donde están los datos se pierde: fondo blanco y letras negras; el bono remarcado con verde y letras negras".
+- La regla del chat nuevo (`#supportPanel.sp-in-casino .message.agente`, `--p-wa-out`) pisaba la tarjeta `#spBankMsg`: selector más específico + tokens `--p-sbm-*`.
+
+### 1084–1085. Bot de comprobantes: el grupo 2 no avisa al 1, botones con cartel, Cotizar con USDT + comisión y Enviado con foto (2026-11-10)
+- **Owner:** "lo que se suma o resta del grupo 1 al 2 está bien que pases detalle; del 2 al 1 no: el grupo 2 es el de cierres, queda ahí" ·
+  "todos esos botones no los escribas como mensaje: que abra un cartel con el detalle" · "en cada suma que se puedan abrir los comandos como botón;
+  en el segundo, Cotizar: completa precio del USDT y comisión % y hace la cotización; Enviado: manda la foto de los USDT y dice verificado enviado".
+- **#1084:** `/anterior`, `/restar`, `/anular`, `/cotizado`, `/enviado` hechos en el grupo 2 quedan SÓLO en el 2 (`_rbCarryCmd`, `_rbAnular`, `_rbDestCmd`).
+  Lo del grupo 1 sigue avisando con detalle al 2. El CBU (`/nuevocbu`, `/parar`) SÍ sigue avisando al 1 (necesita saber a dónde transferir).
+  Botones del menú ⇒ `answerCallbackQuery show_alert` (máx. 200 caracteres: `_rbAlertTxt`, `_rbSrcTotalShort`, `_rbDstTotalShort`, `_rbCbuShort`); confirmar
+  (cierre, parar) cambia los botones DEL MISMO menú a "✅ Sí, confirmar / ✖️ Cancelar" y vuelve el menú. "📋 Ver comandos" en una suma abre ahí los botones.
+- **#1085:** 💱 Cotizar ⇒ mensaje `💱 COTIZAR` con force_reply; la respuesta "1150 2" (o `/cotizado 1150 2`) ⇒ `_rbQuote`: pesos ÷ precio − comisión % =
+  USDT A ENVIAR (`RcptClose.quoteRate/quoteFeePct/quoteUsdt`) + suma actualizada. ✅ Enviado ⇒ `📸 ENVIADO` con force_reply; la FOTO respondida ⇒
+  `_rbSentPhoto`: ✅ VERIFICADO ENVIADO (`sentPhoto`), sale de pendientes. `/enviado` escrito sigue marcando sin foto. Prueba: `test-rcptbot-flow.js` (35 casos).
+
 ### 1083. Subidas sin caída: despliegue INMUTABLE en Elastic Beanstalk (2026-11-10)
 - **Owner:** "no quiero que se reinicie en cada subida, el servidor cae unos segundos por la subida" (los clientes jugando quedaban sin servicio).
 - `.ebextensions/01-sin-caidas.config`: `DeploymentPolicy: Immutable` (instancias nuevas aparte, chequeo de salud y recién ahí reemplazo; si falla, queda la
