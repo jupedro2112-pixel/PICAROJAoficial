@@ -27,7 +27,7 @@ ${term}
 Ejemplo: $50.000,82 termina en ,82.
 
 4) QUÉ CONTESTA EL BOT
-   ✅ REENVIADO ........ se reenvió y se sumó. Muestra el acumulado, lo pendiente y el total del mes.
+   ✅ REENVIADO ........ se reenvió y se sumó. Muestra la suma acumulada y el total del mes.
    ❌ TERMINACIÓN MAL .. los centavos no corresponden a este grupo. NO se sumó.
                           Si el cliente se equivocó, tocá el botón "Va a ..." y elegí el grupo:
                           llega con el aviso "el cliente se equivocó con el decimal, pero va a este grupo".
@@ -37,7 +37,7 @@ Ejemplo: $50.000,82 termina en ,82.
    ⛔ SIN CBU DE BAJADA .. el grupo que recibe no tiene cuenta: NO transferir hasta el aviso de CBU nuevo.
 
 5) COMANDOS (o el botón 📋 Ver comandos)
-   /total ............... suma actualizada, pendientes y total del mes
+   /total ............... suma actualizada y total del mes
    /cierre .............. cierra TODO lo sumado (la suma vuelve a $0)
    /cierre 500.000 ...... cierra SÓLO ese monto; el resto sigue sumando
    /anterior 13.686.199 . suma lo que venían acumulando antes del bot
@@ -54,9 +54,8 @@ Ejemplo: $50.000,82 termina en ,82.
 
 7) CIERRE
    - Automático a las 13 h de lunes a viernes (el lunes junta todo el fin de semana).
-   - También con /cierre o el botón 🔒.
-   - Lo cerrado queda ⏳ PENDIENTE A COTIZAR → el que recibe marca 💱 COTIZADO
-     → 📤 PENDIENTE A ENVIAR → marca ✅ ENVIADO → listo (eso queda en el grupo que recibe).
+   - Cuando completen el monto: /cierre (todo) o /cierre 500.000 (sólo ese monto; el resto sigue sumando).
+   - Acá se ve sólo el monto cerrado y la suma nueva. La cotización y el envío los maneja el grupo que recibe.
    - Después del cierre la suma arranca de $0. El TOTAL DEL MES sigue sin corte hasta fin de mes.
 
 8) CBU DE BAJADA

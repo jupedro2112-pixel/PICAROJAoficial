@@ -29,6 +29,14 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1089. Bot de comprobantes: el grupo 1 (el que manda) ve SÓLO la suma; el detalle va al grupo 2 (2026-11-10)
+- **Owner:** "grupo 1 sólo tienen que recibir mensaje de la suma de las transferencias, hacer cierre cuando completen un monto, y el detalle sería en el segundo grupo".
+- En el grupo que MANDA se sacó todo lo de cotización/envío: ✅ REENVIADO (sólo monto + acumulado + total del mes), /total y el botón 📊 (suma por destino + mes),
+  🔒 CIERRE ("→ destino: cerrado $X (N comp.)" + suma nueva / resto + mes, sin "PENDIENTE A COTIZAR" ni fechas). Textos de /ayuda y guía `src` actualizados
+  ("cuando completen el monto: /cierre o /cierre 500.000"). El grupo 2 sigue igual (reenviado con pendientes, cierre detallado, cotizar, enviado).
+- Test `test-rcptbot-flow.js` (36 casos): asserts del grupo 1 sin PENDIENTE y el detalle verificado en el grupo 2; la base falsa ahora tiene `collection.updateMany`
+  con pipeline (la usa `_rbGroupMigrate` desde la revisión nocturna: el caso #1087 fallaba sólo en el test).
+
 ### 1088. Revisión nocturna: 29 arreglos de plata, regalos, seguridad, app y bots (2026-11-10) — app v716 · panel v291
 - **Owner:** "hacé todo completo, corregime todo lo raro; mirá que también estoy regalando mucho bono sin estar tan liberado". Se revisaron uno por uno los
   hallazgos de los revisores; ningún %, tope ni rollover configurado cambió: sólo se hicieron cumplir las reglas que ya existían.

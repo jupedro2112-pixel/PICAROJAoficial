@@ -48,6 +48,17 @@ function model() {
         for (const [k2, e] of Object.entries(g)) { if (k2 === '_id' || k2 === 'count' || !e || !e.$sum) continue; if (k2 === 'total' && e.$sum && e.$sum.$ifNull && e.$sum.$ifNull[0] === '$amount') continue; if (!o['_' + k2]) { o['_' + k2] = 1; o[k2] = 0; } o[k2] += e.$sum === 1 ? 1 : (x[String((e.$sum.$ifNull || [e.$sum])[0]).slice(1)] || 0); } }
       return Object.values(by); },
   };
+  // colección cruda: update con PIPELINE ([{ $set }]) como lo usa _rbGroupMigrate (sólo $cond/$gt/$subtract y '$campo', lo que hace falta acá)
+  const ev = (x, e) => {
+    if (typeof e === 'string' && e[0] === '$') return x[e.slice(1)];
+    if (e && typeof e === 'object' && !Array.isArray(e)) {
+      if (e.$cond) return ev(x, e.$cond[0]) ? ev(x, e.$cond[1]) : ev(x, e.$cond[2]);
+      if (e.$gt) return ev(x, e.$gt[0]) > ev(x, e.$gt[1]);
+      if (e.$subtract) return ev(x, e.$subtract[0]) - ev(x, e.$subtract[1]);
+    }
+    return e;
+  };
+  M.collection = { updateMany: async (f, u) => { for (const x of rows.filter((y) => match(y, f))) { if (Array.isArray(u)) for (const st of u) { const vals = {}; for (const [k, e] of Object.entries(st.$set || {})) vals[k] = ev(x, e); Object.assign(x, vals); } else Object.assign(x, u.$set); } return {}; } };
   return M;
 }
 const RcptFwd = model(), RcptClose = model();
@@ -100,17 +111,18 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     NOW = new Date('2026-11-10T16:05:00Z'); // 13:05 ART
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 2);
     const d2 = last(-2).p.text; assert.ok(/CIERRE/.test(d2) && /PENDIENTE A COTIZAR: \$30\.001,98/.test(d2) && /Suma nueva: <b>\$0<\/b>/.test(d2) && (d2.match(/PENDIENTE A COTIZAR/g) || []).length === 1, d2);
-    const s1 = last(-1).p.text; assert.ok(/asuncionbot: ⏳ PENDIENTE A COTIZAR <b>\$30\.001,98/.test(s1) && /Suma nueva/.test(s1) && /Total de noviembre \(sin corte\): <b>\$40\.002/.test(s1), s1);
+    const s1 = last(-1).p.text; assert.ok(/asuncionbot: cerrado <b>\$30\.001,98<\/b> \(2 comp\.\)/.test(s1) && !/PENDIENTE/.test(s1) && /Suma nueva/.test(s1) && /Total de noviembre \(sin corte\): <b>\$40\.002/.test(s1), s1);
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 2, 'no cierra dos veces el mismo día');
   });
   await caso('comprobante nuevo después del cierre: suma desde $0 y muestra el pendiente anterior', async () => {
     aiAmount = 1000.99; await hook(photo(6)); const t = last(-1).p.text;
-    assert.ok(/Acumulado: <b>\$1\.001<\/b> \(1 comprobante\)/.test(t) && /PENDIENTE A COTIZAR<\/b>: <b>\$30\.002<\/b> · 2 comp\./.test(t) && /Total de noviembre \(sin corte\): <b>\$41\.003/.test(t), t);
+    assert.ok(/Acumulado: <b>\$1\.001<\/b> \(1 comprobante\)/.test(t) && !/PENDIENTE/.test(t) && /Total de noviembre \(sin corte\): <b>\$41\.003/.test(t), t); // #1089: el grupo 1 ve sólo la suma
+    const d = last(-2).p; const dc = d.caption || d.text || ''; assert.ok(/PENDIENTE A COTIZAR<\/b>: <b>\$30\.002<\/b> · 2 comp\./.test(dc), dc); // el detalle va al grupo 2
   });
   await caso('/cotizado en el destino ⇒ cotizado, pendiente a enviar', async () => {
     await hook(text(7, -2, '/cotizado 1150')); assert.ok(/COTIZADO/.test(last(-2).p.text) && /PENDIENTE A ENVIAR/.test(last(-2).p.text));
     assert.strictEqual(RcptClose.rows.find((x) => x.toChat === '-2').status, 'quoted');
-    aiAmount = 2000.99; await hook(photo(8)); assert.ok(/COTIZADO \(USDT \$1\.150\) · <b>PENDIENTE A ENVIAR<\/b>: <b>\$30\.002/.test(last(-1).p.text), last(-1).p.text);
+    aiAmount = 2000.99; await hook(photo(8)); assert.ok(!/PENDIENTE/.test(last(-1).p.text), last(-1).p.text); const d8 = last(-2).p; const dc8 = d8.caption || d8.text || ''; assert.ok(/COTIZADO \(USDT \$1\.150\) · <b>PENDIENTE A ENVIAR<\/b>: <b>\$30\.002/.test(dc8), dc8);
   });
   await caso('/enviado ⇒ el pendiente se va', async () => {
     await hook(text(9, -2, '/enviado')); assert.strictEqual(RcptClose.rows.find((x) => x.toChat === '-2').status, 'sent');
