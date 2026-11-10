@@ -145,5 +145,19 @@ caso('#1076 Link del webhook editable desde el panel (panel > env > picaroja.com
   const re = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d{2,5})?$/i;
   assert.ok(re.test('https://picaroja.com') && re.test('https://otra-pagina.com.ar') && !re.test('http://picaroja.com') && !re.test('https://picaroja.com/api') && !re.test('javascript:alert(1)'));
 });
+caso('#1078 Cronograma del canal: predeterminado fijado, normaliza lo que manda el panel y reemplaza los posteos sueltos', () => {
+  const S3 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  const grab = (re) => { const m = S3.match(re); assert.ok(m, 'falta ' + re); return m[0]; };
+  const src = grab(/const TG_SCHED_KINDS = \{[\s\S]*?\n\};\nconst TG_SCHED_DEFAULT = [\s\S]*?\n\} \};\nfunction _tgSchedNorm\(v\) \{[\s\S]*?\n\}\n/);
+  const f = new Function(src + '; return { TG_SCHED_KINDS, TG_SCHED_DEFAULT, _tgSchedNorm };')();
+  const d = f._tgSchedNorm(null); assert.ok(d.on && !d.custom);
+  for (let i = 0; i < 7; i++) assert.ok(d.days[i].length >= 1 && d.days[i].length <= 4, 'día ' + i);
+  const kinds = new Set([].concat(...Object.values(d.days)).map((x) => x.kind));
+  for (const k of ['partidos', 'masjugado', 'sorteo', 'bono']) assert.ok(kinds.has(k), 'falta ' + k);
+  const n = f._tgSchedNorm({ on: false, days: { 1: [{ t: '25:00', kind: 'sorteo' }, { t: '09:00', kind: 'nada' }, { t: '20:00', kind: 'texto', text: '' }, { t: '08:00', kind: 'texto', text: 'hola' }, { t: '07:00', kind: 'bono' }] } });
+  assert.ok(n.on === false && n.custom && n.days[1].length === 2 && n.days[1][0].t === '07:00' && n.days[1][1].text === 'hola' && n.days[0].length === 0);
+  assert.ok(/async function _tgSorteoTick\(\) \{\n.*\n  if \(\(await _tgSchedCfg\(\)\)\.on\) return;/.test(S3) && /async function _tgRefundPostTick\(\) \{\n.*\n  if \(\(await _tgSchedCfg\(\)\)\.on\) return;/.test(S3));
+  assert.ok(/if \(\(await _tgSchedCfg\(\)\)\.on\) q\.\$and = /.test(S3) && /_tgSchedClaim\(k\)/.test(S3));
+});
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);

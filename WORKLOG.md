@@ -8,6 +8,17 @@
 
 ## Sesión 2026-11-09
 
+### 1078. 🤖 Chatbot: cronograma semanal del canal de Telegram, editable desde el panel (2026-11-10) — panel v279
+- **Owner:** "historias de lo principal, partidos, el más jugado de la semana, info de los sorteos, un bono semanal, todo con el bot automático; una sección
+  de chatbot en el panel para ver qué se publica toda la semana, el cronograma, editar, elegir entre todas las opciones, y dejar algo predeterminado fijado".
+- `Config['tgSchedule']` {on, days{0..6: [{t,kind,text}]}} (`TG_SCHED_DEFAULT`: lun sorteo + más jugado · mar/jue partidos + reembolso · mié bono 12:35 +
+  partidos · vie partidos + servicio · sáb partidos + código · dom partidos + sorteo). `_tgSchedTick` (2 min, lock) publica lo de la hora (no más de 3 h tarde),
+  una vez por día/horario (`Config['tgschedlog']`.done, atómico) y deja el resultado (`.log`). Tipos: partidos / servicio / más jugado / bono = historias
+  automáticas DEL DÍA (`sa-<día>-*`); más jugado sin historia ⇒ texto con `storyGamesSnapshot`; sorteo `_tgSorteoPost`; reembolso `refundCaption`;
+  código `_tgDropLaunch`; texto propio. Encendido ⇒ se callan `_tgSorteoTick`, `_tgRefundPostTick`, el lanzamiento automático del código y el espejo de
+  historias AUTOMÁTICAS (las del admin y el premio grande siguen). Panel → ⚡ Automático → 🤖 Chatbot (sólo admin): próximos 7 días, editar hora/tipo,
+  agregar/sacar (hasta 4 por día), ▶️ Publicar ahora, ↩️ predeterminado. Rutas `/api/admin/telegram/schedule[/test]`. Test en `test-telegram-admin.js`.
+
 ### 1077. Chat de la burbuja de Girox más grande, con datos bancarios fijos, adjuntar y bono vigente (2026-11-10) — app v710
 - **Owner:** "agrandarlo un poco más y que apenas entren se vea fijado los datos bancarios, para adjuntar en el mismo chat y avisar el bono vigente" +
   "cuando aparece de primera carga que se vea ahí en el chat el bono que tiene activo siempre".

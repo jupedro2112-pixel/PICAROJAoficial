@@ -202,6 +202,10 @@ document.addEventListener('change', function (ev) {
 <span>📖</span>
 <span>Cronograma historias</span>
 </a>
+<a href="#" class="nav-item" data-section="chatbot" title="Lo que el bot publica solo en el canal de Telegram toda la semana (editable)">
+<span>🤖</span>
+<span>Chatbot (canal Telegram)</span>
+</a>
 
 
 
@@ -3118,6 +3122,22 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
             <section id="sorteosSection" class="section">
                 <div class="panel-header"><h2>🏆 Sorteos <small style="font-size:.6em;color:#888;font-weight:700">ranking en vivo · mensual y Gran Sorteo</small></h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary" onclick="sorteosRecalc()">↻ Recalcular puntos ahora</button><button class="btn btn-secondary" onclick="loadSorteos()">🔄</button></div></div>
                 <div id="srtAdmin">Cargando…</div>
+            </section>
+            <!-- #1078 (owner): qué publica el bot en el canal de Telegram toda la semana; editable, con lo predeterminado fijado -->
+            <section id="chatbotSection" class="section">
+                <div class="panel-header"><h2>🤖 Chatbot · canal de Telegram</h2></div>
+                <div class="card" style="margin-bottom:1rem">
+                    <p style="margin:0 0 .6rem;font-size:13px;color:var(--p-muted,#777)">El bot publica SOLO en el canal lo que dice este cronograma, todas las semanas. Ya viene armado; cambiá lo que quieras y tocá <b>💾 Guardar</b>. Las historias que subís vos y el premio grande siguen saliendo como siempre.</p>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                        <label style="display:flex;gap:6px;align-items:center;font-weight:800"><input type="checkbox" id="cbOn"> Cronograma encendido</label>
+                        <span id="cbStatus" style="font-size:12.5px"></span>
+                        <span style="flex:1"></span>
+                        <button class="btn btn-secondary btn-sm" onclick="loadChatbot()">🔄</button>
+                        <button class="btn btn-secondary btn-sm" onclick="cbReset()">↩️ Volver a lo predeterminado</button>
+                        <button class="btn btn-primary btn-sm" onclick="cbSave()">💾 Guardar</button>
+                    </div>
+                </div>
+                <div id="cbWeek"></div>
             </section>
             <section id="cronohistSection" class="section">
                 <div class="panel-header"><h2>📖 Cronograma historias <small style="font-size:.6em;color:#f59e0b;font-weight:800">· AUTOMÁTICO (NO TOCAR)</small></h2></div>

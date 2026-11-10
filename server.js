@@ -30751,6 +30751,7 @@ async function _tgMirrorTick(force) {
   if (!force && !(await _cronClaim('tgmirror', 100000))) return { ok: false, why: 'otra instancia' };
   const now = new Date();
   const q = _tgStoryQuery(c, now);
+  if ((await _tgSchedCfg()).on) q.$and = [{ $or: [{ autoKey: null }, { autoKey: { $exists: false } }] }]; // #1078: las AUTOMÁTICAS (sa-) las publica el cronograma; acá sólo las que sube el admin
   const bonusQ = Object.assign({}, q, { bonusPct: { $gt: 0 }, bonusUntil: { $gt: now } });
   let st = await Story.findOne(bonusQ).sort({ publishedAt: 1 }).lean(); // con bono: sale enseguida (es por pocas horas) — #1056: va como TEXTO
   let slot = st ? 'text' : 'photo';
@@ -30912,6 +30913,7 @@ async function _tgDropTick() {
   if (!dc.on || !c.token || !c.channel) return;
   if (!(await _cronClaim('tgdrop', 90000))) return;
   for (const d of await CodeDrop.find({ createdBy: 'telegram', status: 'active', endsAt: { $lte: new Date() } }).select('id').lean()) await _codeDropFinish(d.id).catch(() => {}); // revisión: aunque CODE_DROP_DISABLED=1
+  if ((await _tgSchedCfg()).on) return; // #1078: el código sale el día que dice el cronograma (los vencidos se cierran igual, arriba)
   if (!c.dropNextAt) { await _tgSet({ dropNextAt: _tgDropNextAt(2) }); return; } // revisión: el primero a los 2 días de conectar (no el mismo día)
   if (new Date() < new Date(c.dropNextAt)) return;
   if (await CodeDrop.exists({ createdBy: 'telegram', status: 'active' })) return; // el anterior sigue vivo
@@ -30938,6 +30940,7 @@ async function _tgSorteoPost(c, force) {
 // día entre las 11 y las 21 h: mensual el 7 (y el 15, último día) > semanal el lunes (y el martes, último día) > diario. Mismas ventanas que el reclamo.
 async function _tgRefundPostTick() {
   const c = await _tgCfg(); if (c.refundPosts === false || !c.token || !c.channel) return;
+  if ((await _tgSchedCfg()).on) return; // #1078: lo publica el cronograma
   const now = new Date(); const h = _tgArtHour(now); const dk = _schedArtKey(now); if (h < 11 || h >= 21 || c.refundPostDay === dk) return;
   if (!(await _cronClaim('tgrefund', 5 * 60000))) return;
   const tiers = await getRefundTiersByPeriod(); const mx = (t) => (t || []).reduce((m, x) => Math.max(m, Number(x.pct) || 0), 0);
@@ -30975,8 +30978,161 @@ async function _tgBigWinTick() {
 setTimeout(async () => { // #1056: el código de Telegram pasa a ser SEMANAL (estaba cada 15 días)
   try { if (!(await getConfig('mig1056tgdrop', false))) { await Config.collection.updateOne({ key: 'telegrambot', 'value.drop.everyDays': 15 }, { $set: { 'value.drop.everyDays': 7 } }); await Config.set('mig1056tgdrop', true, 'startup-migration'); } } catch (_) {}
 }, 70 * 1000);
+// ── #1078 CRONOGRAMA SEMANAL DEL CANAL (owner: "historias de lo principal, partidos, el más jugado de la semana, info de los sorteos, un bono semanal,
+// todo con el bot automático, y una sección Chatbot en el panel para ver qué se publica toda la semana, editar y elegir entre todas las opciones, con
+// algo predeterminado fijado"). Config['tgSchedule'] = { on, days: { '0'..'6' (0 = domingo): [{ t:'HH:MM', kind, text? }] } } (lo guarda el panel entero).
+// Encendido, reemplaza a los posteos sueltos (sorteo de los lunes, reembolsos, código, historias automáticas del espejo); el premio grande y las historias
+// que sube el admin siguen igual. Cada publicación se reclama UNA vez por día/horario en Config['tgschedlog'] (multi-instancia) y queda el resultado.
+// Un horario que pasó hace más de 3 h (servidor caído) no se publica tarde. Contenido: las historias automáticas DEL DÍA (storyAutopilot) o textos propios.
+const TG_SCHED_KINDS = {
+  partidos: '⚽ Partidos del día (historia con foto)',
+  masjugado: '🎰 El más jugado de la semana',
+  sorteo: '🎟️ Sorteo de la semana (premios y cómo anotarse)',
+  bono: '🎁 Bono semanal (la historia con bono del día)',
+  reembolso: '💸 Recordatorio de reembolso (diario / semanal / mensual)',
+  codigo: '🔑 Código sorpresa del canal',
+  servicio: 'ℹ️ Servicio / cómo funciona (historia del día)',
+  texto: '✍️ Texto propio (lo escribís vos)',
+};
+const TG_SCHED_DEFAULT = { on: true, days: {
+  1: [{ t: '12:00', kind: 'sorteo' }, { t: '18:30', kind: 'masjugado' }],
+  2: [{ t: '13:00', kind: 'partidos' }, { t: '19:00', kind: 'reembolso' }],
+  3: [{ t: '12:35', kind: 'bono' }, { t: '18:30', kind: 'partidos' }],
+  4: [{ t: '13:00', kind: 'partidos' }, { t: '19:00', kind: 'reembolso' }],
+  5: [{ t: '13:00', kind: 'partidos' }, { t: '19:00', kind: 'servicio' }],
+  6: [{ t: '13:00', kind: 'partidos' }, { t: '18:00', kind: 'codigo' }],
+  0: [{ t: '13:00', kind: 'partidos' }, { t: '19:00', kind: 'sorteo' }],
+} };
+function _tgSchedNorm(v) {
+  const src = v && typeof v === 'object' && v.days && typeof v.days === 'object' ? v : TG_SCHED_DEFAULT; const days = {};
+  for (let d = 0; d < 7; d++) {
+    const arr = Array.isArray(src.days[d]) ? src.days[d] : (Array.isArray(src.days[String(d)]) ? src.days[String(d)] : []);
+    days[d] = arr.filter((x) => x && TG_SCHED_KINDS[x.kind] && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(x.t || ''))).slice(0, 4)
+      .map((x) => ({ t: String(x.t), kind: x.kind, text: x.kind === 'texto' ? String(x.text || '').trim().slice(0, 900) : undefined }))
+      .filter((x) => x.kind !== 'texto' || x.text).sort((a, b) => a.t.localeCompare(b.t));
+  }
+  return { on: v && typeof v === 'object' && 'on' in v ? v.on !== false : TG_SCHED_DEFAULT.on, days, custom: !!(v && v.days) };
+}
+async function _tgSchedCfg() { let v = null; try { v = await getConfig('tgSchedule', null); } catch (_) {} return _tgSchedNorm(v); }
+function _tgArtHM(d = new Date()) { return new Date(d).toLocaleTimeString('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', hour12: false }); }
+async function _tgSchedLog(k, ok, why) {
+  try { await Config.collection.updateOne({ key: 'tgschedlog' }, { $push: { 'value.log': { $each: [{ k, ok: !!ok, why: String(why || '').slice(0, 160), at: new Date() }], $slice: -120 } } }); try { Config._cache && Config._cache.clear(); } catch (_) {} } catch (_) {}
+}
+async function _tgSchedClaim(k) {
+  try { await Config.collection.updateOne({ key: 'tgschedlog' }, { $setOnInsert: { key: 'tgschedlog', value: { done: [], log: [] } } }, { upsert: true }); } catch (_) {}
+  const r = await Config.collection.updateOne({ key: 'tgschedlog', 'value.done': { $ne: k } }, { $push: { 'value.done': { $each: [k], $slice: -300 } } });
+  try { Config._cache && Config._cache.clear(); } catch (_) {}
+  return r.modifiedCount === 1;
+}
+async function _tgSchedStory(kinds, now) {
+  const dk = _schedArtKey(now);
+  return Story.findOne({ autoKey: new RegExp('^sa-' + dk + '-'), autoKind: { $in: kinds }, isActive: true, audienceUserId: null, codeDropId: null, tgPostedAt: null, expiresAt: { $gt: now } }).sort({ publishedAt: 1 }).lean();
+}
+async function _tgSchedPostStory(c, st, textOnly) {
+  const now = new Date();
+  const claimed = await Story.findOneAndUpdate({ id: st.id, tgPostedAt: null }, { $set: { tgPostedAt: now } }); if (!claimed) return { ok: false, why: 'esa historia ya estaba en el canal' };
+  const r = await _tgPostStory(c, st, textOnly);
+  if (r.ok) { await Story.updateOne({ id: st.id }, { $set: { tgMsgId: (r.result && r.result.message_id) || null, tgError: null } }); await _tgSet({ lastPostAt: now, lastError: null }); return { ok: true, what: st.title }; }
+  await Story.updateOne({ id: st.id }, { $set: { tgPostedAt: null, tgError: String(r.error || '').slice(0, 200) }, $inc: { tgTries: 1 } });
+  return { ok: false, why: r.error };
+}
+async function _tgSchedText(c, text) {
+  const r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text, parse_mode: 'HTML', disable_web_page_preview: true, disable_notification: _tgQuiet(c) });
+  if (r.ok) await _tgSet({ lastPostAt: new Date(), lastError: null });
+  return r.ok ? { ok: true } : { ok: false, why: r.error };
+}
+const _tgEsc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+async function _tgSchedPost(c, slot) {
+  const now = new Date(); const kind = slot.kind;
+  if (kind === 'partidos' || kind === 'servicio' || kind === 'masjugado' || kind === 'bono') {
+    const st = await _tgSchedStory(kind === 'partidos' ? ['deporte'] : kind === 'masjugado' ? ['slot'] : [kind], now);
+    if (st) { const r = await _tgSchedPostStory(c, st, kind === 'bono'); _tgBudget(kind === 'bono' ? 'text' : 'photo').catch(() => {}); return r; }
+    if (kind === 'masjugado') { // sin historia del slot hoy ⇒ texto con el más jugado de la semana (lunes) o el primero del catálogo
+      let g = null; try { const snap = await getConfig('storyGamesSnapshot', null); g = snap && snap.favorite; } catch (_) {}
+      if (!g) { try { const act = await getConfig('storyActiveCtx', null); g = act && Array.isArray(act.games) && act.games[0]; } catch (_) {} }
+      if (!g || !g.name) return { ok: false, why: 'todavía no hay datos del más jugado' };
+      _tgBudget('text').catch(() => {});
+      return _tgSchedText(c, `🎰 <b>El más jugado de la semana: ${_tgEsc(g.name)}</b>${g.provider ? '\n' + _tgEsc(g.provider) : ''}\n\nEs el favorito de la comunidad. Entrá desde tu app PICA ROJA y probalo 🍀`);
+    }
+    return { ok: false, why: kind === 'partidos' ? 'hoy no hay partidos importantes' : kind === 'bono' ? 'hoy no hay historia con bono (sale los miércoles 12:30)' : 'hoy no hay historia de servicio' };
+  }
+  if (kind === 'sorteo') { const r = await _tgSorteoPost(c, true); if (r.ok) _tgBudget('text').catch(() => {}); return r; }
+  if (kind === 'reembolso') {
+    const tiers = await getRefundTiersByPeriod(); const mx = (t) => (t || []).reduce((m, x) => Math.max(m, Number(x.pct) || 0), 0);
+    const dk = _schedArtKey(now); const dom = Number(dk.slice(8, 10)), dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+    let k = 'daily', last = false;
+    if ((dom === 7 || dom === 15) && mx(tiers.monthly) > 0) { k = 'monthly'; last = dom === 15; } else if ((dow === 1 || dow === 2) && mx(tiers.weekly) > 0) { k = 'weekly'; last = dow === 2; }
+    if (!(mx(tiers[k]) > 0)) return { ok: false, why: 'el reembolso está en 0%' };
+    _tgBudget('text').catch(() => {});
+    return _tgSchedText(c, tgChannel.refundCaption(k, mx(tiers[k]), last));
+  }
+  if (kind === 'codigo') {
+    if (!_tgDropCfg(c).on) return { ok: false, why: 'el código del canal está apagado (📣 Canal de Telegram)' };
+    if (await CodeDrop.exists({ createdBy: 'telegram', status: 'active' })) return { ok: false, why: 'todavía hay un código vigente' };
+    _tgBudget('text').catch(() => {});
+    return _tgDropLaunch(c, 'cronograma');
+  }
+  if (kind === 'texto') { _tgBudget('text').catch(() => {}); return _tgSchedText(c, _tgEsc(slot.text || '')); }
+  return { ok: false, why: 'tipo desconocido' };
+}
+async function _tgSchedTick() {
+  const sc = await _tgSchedCfg(); if (!sc.on) return;
+  const c = await _tgCfg(); if (!c.token || !c.channel) return;
+  if (!(await _cronClaim('tgsched', 90000))) return;
+  const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay(); const hm = _tgArtHM(now);
+  const toMin = (x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3, 5)); const nowMin = toMin(hm);
+  for (const slot of sc.days[dow] || []) {
+    const m = toMin(slot.t); if (m > nowMin || nowMin - m > 180) continue;
+    const k = `${dk}|${slot.t}|${slot.kind}`;
+    if (!(await _tgSchedClaim(k))) continue;
+    let r; try { r = await _tgSchedPost(c, slot); } catch (e) { r = { ok: false, why: e.message }; }
+    await _tgSchedLog(k, r && r.ok, r && (r.ok ? (r.what || 'publicado') : r.why));
+    if (r && !r.ok && /chat not found|bot was kicked|Unauthorized|Forbidden/i.test(String(r.why))) await _tgSet({ lastError: 'cronograma: ' + String(r.why).slice(0, 150), lastErrorAt: new Date() });
+    logger.info(`[telegram cronograma] ${k}: ${r && r.ok ? 'OK' : 'no — ' + (r && r.why)}`);
+    break; // uno por pasada (2 min)
+  }
+}
+setTimeout(() => { setInterval(() => { _tgSchedTick().catch((e) => logger.warn('[telegram cronograma] ' + e.message)); }, 2 * 60000); }, 100000);
+// Panel → 🤖 Chatbot (sólo admin): ver la semana, editarla, volver a la predeterminada y probar una publicación.
+app.get('/api/admin/telegram/schedule', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo admin' });
+  try {
+    const sc = await _tgSchedCfg(); const c = await _tgCfg();
+    const lg = (await Config.collection.findOne({ key: 'tgschedlog' })) || {}; const log = ((lg.value && lg.value.log) || []).slice(-120);
+    const now = new Date(); const week = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getTime() + i * 86400000); const dk = _schedArtKey(d); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+      week.push({ dk, dow, slots: (sc.days[dow] || []).map((x) => { const k = `${dk}|${x.t}|${x.kind}`; const l = log.slice().reverse().find((y) => y.k === k); return Object.assign({}, x, { label: TG_SCHED_KINDS[x.kind], result: l ? { ok: l.ok, why: l.why, at: l.at } : null }); }) });
+    }
+    res.json({ success: true, sched: sc, kinds: TG_SCHED_KINDS, def: _tgSchedNorm(TG_SCHED_DEFAULT), week, connected: !!(c.token && c.channel), nowHM: _tgArtHM(now) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/telegram/schedule', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo admin' });
+  try {
+    const b = req.body || {};
+    if (b.reset === true) { await Config.set('tgSchedule', { on: true, days: TG_SCHED_DEFAULT.days }, req.user.username); return res.json({ success: true, sched: await _tgSchedCfg() }); }
+    const cur = await _tgSchedCfg();
+    const v = { on: typeof b.on === 'boolean' ? b.on : cur.on, days: b.days && typeof b.days === 'object' ? b.days : cur.days };
+    const n = _tgSchedNorm(v);
+    await Config.set('tgSchedule', { on: n.on, days: n.days }, req.user.username);
+    res.json({ success: true, sched: n });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/telegram/schedule/test', authMiddleware, adminMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo admin' });
+  try {
+    const b = req.body || {}; if (!TG_SCHED_KINDS[b.kind]) return res.status(400).json({ error: 'Tipo inválido' });
+    if (b.kind === 'texto' && !String(b.text || '').trim()) return res.status(400).json({ error: 'Escribí el texto' });
+    const c = await _tgCfg(); if (!c.token || !c.channel) return res.status(400).json({ error: 'El canal de Telegram no está conectado' });
+    const r = await _tgSchedPost(c, { kind: b.kind, text: String(b.text || '').slice(0, 900) });
+    await _tgSchedLog(`${_schedArtKey(new Date())}|ahora|${b.kind}`, r && r.ok, (r && (r.ok ? (r.what || 'publicado a mano') : r.why)));
+    res.json(r && r.ok ? { success: true } : { success: false, error: (r && r.why) || 'no se pudo' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 async function _tgSorteoTick() {
   const c = await _tgCfg(); if (c.sorteoPost === false || !c.token || !c.channel) return;
+  if ((await _tgSchedCfg()).on) return; // #1078: lo publica el cronograma
   const now = new Date(); const dow = new Date(_schedArtKey(now) + 'T12:00:00Z').getUTCDay();
   if (dow !== 1 || _tgArtHour(now) < 12 || _tgArtHour(now) >= 20) return;
   if (!(await _cronClaim('tgsorteo', 5 * 60000))) return;

@@ -5072,6 +5072,7 @@ function switchSection(section) {
     if (section === 'datos2') { datosIaGate('Datos 2.0').then(function (ok) { if (ok) loadDatos2(); }); } // #743 clave
     if (section === 'notifications') loadNotificationsPanel();
     if (section === 'cronograma') loadCronograma(); // #190
+    if (section === 'chatbot') loadChatbot(); // #1078
     if (section === 'cronohist') { loadStoriesAuto(); loadNewbieOffers(); loadCodeDrops(); loadStoryGifts(); } // #871 · #886 · #1003
     if (section === 'fraud') loadFraud(); // #873
     if (section === 'inicio') loadInicio(); // #876
@@ -6439,6 +6440,68 @@ async function tgAdminAddId() {
         showToast('✅ Grupo vinculado: ' + escapeHtml(j.title || String(j.id)), 'success'); if (inp) inp.value = ''; try { loadTgChannel(); } catch (_) {}
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
+// #1078: 🤖 Chatbot — cronograma semanal del canal de Telegram (plantilla por día de la semana; la vista muestra los próximos 7 días con fecha)
+let _cb = null;
+const CB_DOW = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+async function loadChatbot() {
+    const box = document.getElementById('cbWeek'); if (!box) return;
+    box.innerHTML = '<div class="card">Cargando…</div>';
+    try {
+        const r = await authFetch('/api/admin/telegram/schedule'); const j = await r.json();
+        if (!r.ok) { box.innerHTML = '<div class="card">' + escapeHtml(j.error || 'Error') + '</div>'; return; }
+        _cb = { kinds: j.kinds, days: JSON.parse(JSON.stringify(j.sched.days)), week: j.week, on: j.sched.on };
+        document.getElementById('cbOn').checked = !!j.sched.on;
+        document.getElementById('cbStatus').innerHTML = (j.connected ? '✅ Canal conectado' : '⚠️ El canal no está conectado (Configuración → 📣 Canal de Telegram)') + (j.sched.custom ? '' : ' · <b>predeterminado</b>') + ' · ahora: ' + escapeHtml(j.nowHM);
+        cbRender();
+    } catch (_) { box.innerHTML = '<div class="card">Error de conexión</div>'; }
+}
+function cbRender() {
+    const box = document.getElementById('cbWeek'); if (!box || !_cb) return;
+    const opts = (sel) => Object.keys(_cb.kinds).map((k) => '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + escapeHtml(_cb.kinds[k]) + '</option>').join('');
+    box.innerHTML = _cb.week.map((w, wi) => {
+        const slots = _cb.days[w.dow] || []; const d = new Date(w.dk + 'T12:00:00Z');
+        const fecha = d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+        const rows = slots.map((x, i) => {
+            const res = (w.slots.find((y) => y.t === x.t && y.kind === x.kind) || {}).result;
+            const badge = res ? (res.ok ? '<span style="color:var(--p-green,#15803d);font-weight:800">✅ salió' + (res.why && res.why !== 'publicado' ? ': ' + escapeHtml(res.why) : '') + '</span>' : '<span style="color:var(--p-red,#d9001f);font-weight:800">⚠️ no salió: ' + escapeHtml(res.why || '') + '</span>') : '<span style="color:var(--p-muted,#777)">pendiente</span>';
+            return '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:6px 0;border-top:1px solid var(--p-border,#e5e5e5)">' +
+                '<input type="time" value="' + escapeHtml(x.t) + '" onchange="cbSet(' + w.dow + ',' + i + ',\'t\',this.value)" style="width:110px">' +
+                '<select onchange="cbSet(' + w.dow + ',' + i + ',\'kind\',this.value)" style="min-width:230px">' + opts(x.kind) + '</select>' +
+                '<button class="btn btn-secondary btn-sm" title="Publicarlo AHORA en el canal" onclick="cbTest(' + w.dow + ',' + i + ')">▶️ Publicar ahora</button>' +
+                '<button class="btn btn-secondary btn-sm" title="Sacar" onclick="cbDel(' + w.dow + ',' + i + ')">✕</button>' +
+                '<small>' + badge + '</small>' +
+                (x.kind === 'texto' ? '<textarea rows="3" maxlength="900" placeholder="Texto que va a salir en el canal (sin links: terminá con Entrá desde tu app PICA ROJA)" style="width:100%" oninput="cbSet(' + w.dow + ',' + i + ',\'text\',this.value)">' + escapeHtml(x.text || '') + '</textarea>' : '') +
+                '</div>';
+        }).join('');
+        return '<div class="card" style="margin-bottom:.7rem"><div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem"><h3 style="margin:0;font-size:1rem">' + (wi === 0 ? 'HOY · ' : '') + CB_DOW[w.dow] + ' ' + fecha + '</h3>' +
+            (slots.length < 4 ? '<button class="btn btn-secondary btn-sm" onclick="cbAdd(' + w.dow + ')">+ Agregar</button>' : '') + '</div>' +
+            (rows || '<p style="margin:.4rem 0 0;color:var(--p-muted,#777);font-size:13px">Este día no se publica nada.</p>') + '</div>';
+    }).join('') + '<p style="font-size:12px;color:var(--p-muted,#777)">Cada día de la semana se repite todas las semanas. Hasta 4 publicaciones por día. Si a esa hora no hay contenido (por ejemplo, no hay partidos importantes), no sale nada y queda anotado el motivo.</p>';
+}
+function cbSet(dow, i, f, v) { if (!_cb || !_cb.days[dow] || !_cb.days[dow][i]) return; _cb.days[dow][i][f] = v; if (f === 'kind') cbRender(); }
+function cbAdd(dow) { if (!_cb) return; (_cb.days[dow] = _cb.days[dow] || []).push({ t: '13:00', kind: 'partidos' }); cbRender(); }
+function cbDel(dow, i) { if (!_cb || !_cb.days[dow]) return; _cb.days[dow].splice(i, 1); cbRender(); }
+async function cbSave() {
+    if (!_cb) return;
+    try {
+        const r = await authFetch('/api/admin/telegram/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on: !!document.getElementById('cbOn').checked, days: _cb.days }) }); const j = await r.json();
+        if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
+        showToast('✅ Cronograma guardado', 'success'); loadChatbot();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function cbReset() {
+    if (!confirm('¿Volver al cronograma predeterminado? Se pierden los cambios que hiciste.')) return;
+    try { const r = await authFetch('/api/admin/telegram/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset: true }) }); if (!r.ok) { showToast('Error', 'error'); return; } showToast('✅ Volvió a lo predeterminado', 'success'); loadChatbot(); } catch (_) { showToast('Error de conexión', 'error'); }
+}
+async function cbTest(dow, i) {
+    const x = _cb && _cb.days[dow] && _cb.days[dow][i]; if (!x) return;
+    if (!confirm('¿Publicar AHORA en el canal: ' + (_cb.kinds[x.kind] || x.kind) + '? Lo ve toda la gente del canal.')) return;
+    try {
+        const r = await authFetch('/api/admin/telegram/schedule/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: x.kind, text: x.text || '' }) }); const j = await r.json();
+        if (j && j.success) showToast('✅ Publicado en el canal', 'success'); else showToast('No salió: ' + escapeHtml((j && j.error) || 'error'), 'error');
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.loadChatbot = loadChatbot; window.cbSet = cbSet; window.cbAdd = cbAdd; window.cbDel = cbDel; window.cbSave = cbSave; window.cbReset = cbReset; window.cbTest = cbTest;
 // #1076: guardar el link de ESTA página para el webhook de Telegram y reconectar al toque
 async function tgSaveWebhookBase() {
     const inp = document.getElementById('tgWebhookBase'); const v = String((inp && inp.value) || '').trim();
