@@ -18,6 +18,13 @@
   Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
   (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
 
+### 1082. Datos para transferir + bono vigente como ÚLTIMO mensaje del chat (2026-11-10) — app v713
+- **Owner:** "el bono vigente que figura arriba ahí no lo quiero; dejalo en el chat siempre, que el último mensaje sea el de los datos y que se pueda
+  copiar desde el chat; si hay bono vigente que aparezca ahí con los datos; sacando lo rojo se gana chat".
+- `#spBonusNow` y `#spBank` (arriba, #1077) quedan ocultos por CSS; `spBankMsgPaint` arma `#spBankMsg` (mensaje LOCAL, no se guarda) con bono vigente
+  (`/api/bonus/vigente`), titular, alias y CBU con Copiar y "Adjuntar comprobante"; un MutationObserver lo mantiene siempre ÚLTIMO en `#chatMessages`
+  (también después de `renderMessages`). Modo normal (`sp-classic`) no lo muestra. Se repinta al abrir el chat y tras cada carga.
+
 ### 1081. Información del servicio premium por sectores + Info y Perfil centrados (2026-11-10) — app v712
 - **Owner:** "lo de Información del servicio más prolijo, premium y sectorizado, sin bajar tanto, todo en una pantalla y que se pueda expandir; más centrado
   porque con la parte superior se tapa; el Perfil igual, centrado y no tanto arriba ni abajo para que no se tape el texto".

@@ -518,10 +518,38 @@
             b.hidden = false;
         } catch (_) { b.hidden = true; }
     }
+    // #1082 (owner: "el bono vigente de arriba no lo quiero ahí; dejalo en el chat siempre: que el ÚLTIMO mensaje sea el de los datos, que se pueda
+    // copiar desde el chat y, si hay bono vigente, que aparezca ahí con los datos; sacando lo rojo de arriba se gana chat"). Mensaje LOCAL (no se guarda)
+    // que un observador mantiene siempre al final de #chatMessages. Datos: GET /api/config/cbu (ensureCbu) + bono: GET /api/bonus/vigente.
+    let _sbmEl = null, _sbmObs = null;
+    function _sbmKeepLast() {
+        const list = _el('chatMessages'); if (!list || !_sbmEl) return;
+        if (document.body.classList.contains('sp-classic')) { if (_sbmEl.parentNode) _sbmEl.remove(); return; }
+        if (list.lastElementChild !== _sbmEl) list.appendChild(_sbmEl);
+        if (!_sbmObs) { try { _sbmObs = new MutationObserver(() => { if (_sbmEl && !document.body.classList.contains('sp-classic') && list.lastElementChild !== _sbmEl) list.appendChild(_sbmEl); }); _sbmObs.observe(list, { childList: true }); } catch (_) {} }
+    }
+    async function spBankMsgPaint() {
+        try {
+            const tok = VIP.state && VIP.state.currentToken; if (!tok) return;
+            const [c, j] = await Promise.all([
+                VIP.autoload.ensureCbu().catch(() => null),
+                fetch(VIP.config.API_URL + '/api/bonus/vigente', { headers: { Authorization: 'Bearer ' + tok }, cache: 'no-store' }).then((r) => r.json()).catch(() => null)]);
+            if (!c || !(c.number || c.alias)) { if (_sbmEl) _sbmEl.remove(); return; }
+            _spBk = c; const e = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, '');
+            const bono = j && Number(j.pct) > 0 ? '<div class="sbm-bonus">🎁 <b>BONO VIGENTE: +' + Math.round(Number(j.pct)) + '%</b> ' + e(j.label) + (Number(j.capArs) > 0 ? ' (hasta $' + Math.round(j.capArs).toLocaleString('es-AR') + ' de carga)' : '') + (j.until ? ' · hasta las ' + e(j.until) : '') + '</div>' : '';
+            if (!_sbmEl) { _sbmEl = document.createElement('div'); _sbmEl.className = 'message-wrapper sp-bankmsg-w'; _sbmEl.id = 'spBankMsg'; }
+            _sbmEl.innerHTML = '<div class="message agente sp-bankmsg">' + bono + '<div class="sbm-h">🏦 Para cargar, transferí a esta cuenta</div>' +
+                (c.titular ? '<div class="sbm-row"><span>Titular</span><b>' + e(c.titular) + '</b></div>' : '') +
+                (c.alias ? '<button type="button" class="sbm-row sbm-copy" onclick="VIP.home.spCopy(\'alias\')"><span>Alias</span><b>' + e(c.alias) + '</b><i>Copiar</i></button>' : '') +
+                (c.number ? '<button type="button" class="sbm-row sbm-copy" onclick="VIP.home.spCopy(\'cbu\')"><span>CBU</span><b>' + e(c.number) + '</b><i>Copiar</i></button>' : '') +
+                '<button type="button" class="sbm-attach" onclick="VIP.autoload.pickReceipt(\'chat\')">📎 Ya transferí · ADJUNTAR COMPROBANTE</button></div>';
+            _sbmKeepLast();
+            try { VIP.chat.scrollToBottom(); } catch (_) {}
+        } catch (_) {}
+    }
     async function spPromoPaint() {
         spUiMode();
-        spBankPaint();
-        try { spBonusNowPaint(); } catch (_) {}
+        try { spBankMsgPaint(); } catch (_) {} // #1082: datos + bono vigente como último mensaje del chat (ya no arriba)
         const tk = _el('spTicker'), tx = _el('spTickerTxt'); if (!tk || !tx) return;
         try {
             const j = await _fdPromoLoad(); _spPromo = j || null;
@@ -2692,7 +2720,7 @@
         try { if (!spNewCasino()) setTimeout(_notifCtaAfterDeposit, 4500); } catch (_) {} /* #1042-t: con el chat nuevo, sin cartel */ // #892        try { setTimeout(function () { if (VIP.reviews && VIP.reviews.maybeOffer) VIP.reviews.maybeOffer('deposit'); }, 7000); } catch (_) {} // #875: después de la carga, si ya es la 5ª+
         try { _fdPromoP = null; _fdNotesPaint(); } catch (_) {} // refresca contador de cargas / guía
         try { setTimeout(storyBonusRefresh, 1500); } catch (_) {} // #742: el bono de la historia se consumió con esta carga
-        try { setTimeout(spBonusNowPaint, 2500); } catch (_) {} // #1077: el cartel del bono vigente del chat cambia con la carga
+        try { setTimeout(spBankMsgPaint, 2500); } catch (_) {} // #1077/#1082: el bono vigente del mensaje de datos cambia con la carga
         try { if (!(VIP.ui && VIP.ui._casinoOpen)) return; } catch (_) { return; }
         // #1042-t (owner): con el chat NUEVO, lo de la carga va escrito en el chat de la burbuja ("¡Buena suerte!"), sin carteles.
         if (spNewCasino()) { try { toggleCasinoLoad(false); } catch (_) {} spShowChat(); return; }
