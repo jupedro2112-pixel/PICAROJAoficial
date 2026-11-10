@@ -29,6 +29,18 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1092. Chat de la burbuja de Girox: sin modo nocturno, bordes negros, Telegram al lado del nombre, "Verificar SMS" arriba y avisos visibles (2026-11-10) — app v718
+- **Owner:** "el logo de Telegram ponelo al lado del nombre (logo + unite para recibir los beneficios de PICA ROJA), sacá el modo nocturno, dejá los bordes
+  en negro inferior y superior y el chat en blanco así como está; lo del Telegram prolijo; cuando copiás o tira una notificación queda arriba tapado,
+  dejalo a la altura del Perfil; el SMS verificado ponelo donde estaba el Telegram, poné Verificar SMS".
+- **Chat (`#supportPanel.sp-in-casino`):** sin el sol/luna (`#waThemeBtn` oculto); cabecera `#waHead` y barra de escribir en negro (tokens `--p-chat-edge*`),
+  el resto con los colores claros SIEMPRE (con la app en nocturno se redefinen los tokens `--p-*`/`--p-wa-*` claros sólo dentro del chat). Al lado del nombre,
+  píldora `#waHeadTg` (logo de Telegram + "Unite a Telegram · Beneficios de PICA ROJA", `openTelegramInvite`). Fuera del casino no se ve.
+- **Barra del casino (todo en uno):** `#ctTelegram` ⇒ `#ctSms` "Verificar SMS" (`VIP.home.casinoSms` ⇒ `spInfo('sms')`; verificado ⇒ "SMS ✓" y sólo avisa).
+  El "📲 Verificar celular" de la fila de servicios del chat se oculta (ya está arriba).
+- **Avisos (`.toast`):** arriba al centro, debajo del borde del teléfono (`--sat` + 8 px), z-index por encima del casino; antes iban a 20 px fijos y el
+  notch / la barra de estado los tapaban.
+
 ### 1091. Sorteo: "Anotate, es gratis" desde Girox no abría nada (2026-11-10) — app v717
 - **Owner:** "cuando entra la gente al sorteo semanal a inscribirse ponen anotarse y queda ahí, ninguno de los 2 abre; que abra en ese mismo menú de Girox".
 - **Causa:** la hoja chica del sorteo (píldora del casino → `openMini`) abre la ventana completa con `goMenu` → `VIP.sorteos.open`, pero `#srtModal` vive

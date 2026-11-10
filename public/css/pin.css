@@ -3253,11 +3253,11 @@ body.no-ref #spInfoBar .ref-only { display: none !important; }
 .casino-topbar .ct-one { display: none !important; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar .ct-multi { display: none !important; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar .ct-one { display: flex !important; }
-body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctTelegram { order: 1; }
+body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctSms { order: 1; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctStories { order: 2; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .casino-brand { order: 3; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctSupport { order: 4; }
-body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .tn-btn:not(#ctTelegram):not(#ctStories):not(#ctSupport) { order: 5; }
+body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .tn-btn:not(#ctSms):not(#ctStories):not(#ctSupport) { order: 5; }
 /* #1042-t: en el chat de la burbuja (ya está adentro del juego) no hace falta el botón "Jugar ahora" del mensaje de carga. */
 #casinoOverlay > #supportPanel.sp-in-casino .plat-play-now[onclick^="VIP.home.playNow"] { display: none !important; }
 /* #1042-u: "Tengo otro problema" (va directo a un agente) se distingue del resto */
@@ -3408,3 +3408,38 @@ body #supportPanel #spBankMsg .sbm-head small, body #supportPanel #spBankMsg .sb
 body #supportPanel #spBankMsg .sbm-foot .sbm-min { color: #b7791f !important; }
 body #supportPanel #spBankMsg .sbm-bonus { background: var(--p-sbm-bonus) !important; color: var(--p-sbm-bonus-text) !important; font-weight: 600; }
 body #supportPanel #spBankMsg .sbm-bonus b { color: var(--p-sbm-bonus-text) !important; }
+
+/* #1092 (owner): chat de la burbuja de Girox SIN modo nocturno — cabecera y barra de escribir en NEGRO, el chat en blanco/claro como estaba
+   (aunque la app esté en nocturno), Telegram al lado del nombre en lugar del sol/luna, "Verificar SMS" arriba en la barra del casino
+   (donde estaba Telegram) y los avisos (copiado, errores…) a la altura de la barra, debajo del borde del teléfono. */
+:root { --p-chat-edge: #111111; --p-chat-edge-text: #ffffff; --p-chat-edge-muted: rgba(255, 255, 255, .62); --p-chat-edge-btn: rgba(255, 255, 255, .12); --p-tg: #229ed9; }
+html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino {
+  --p-bg: #ffffff; --p-surface: #f1f1f1; --p-surface-2: #e9e9e9; --p-text: #111111; --p-muted: #767676; --p-border: #e2e2e2; --p-red-soft: #fbecee;
+  --p-green-soft: #ebf4ef; --p-card: #fff; --p-hover: #fafafa; --p-border-hi: #cfcfcf; --p-placeholder: #9a9a9a; --p-text-2: #333; --p-inv: #fff;
+  --p-wa-bg: #efeae2; --p-wa-in: #ffffff; --p-wa-in-text: #111b21; --p-wa-out: #1fa855; --p-wa-out-text: #ffffff; --p-wa-time: #667781; --p-wa-line: #e2ddd5;
+  color-scheme: light;
+}
+html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino .sp-ticker { background: var(--p-red-soft); color: var(--p-red-dark); }
+#casinoOverlay > #supportPanel.sp-in-casino #waThemeBtn { display: none !important; }
+#casinoOverlay > #supportPanel.sp-in-casino #spInfoSms { display: none !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head { background: var(--p-chat-edge) !important; color: var(--p-chat-edge-text) !important; border-bottom: 0 !important; gap: 8px !important; align-items: center !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-name { color: var(--p-chat-edge-text) !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-status { color: var(--p-chat-edge-muted) !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-info { flex: 0 1 auto !important; min-width: 0; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head .wa-head-btn { background: var(--p-chat-edge-btn) !important; color: var(--p-chat-edge-text) !important; margin-left: auto; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-input-container, body.home-mini:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .chat-input-container { background: var(--p-chat-edge) !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-input-container .wa-icon-btn { color: var(--p-chat-edge-text) !important; background: transparent !important; }
+.wa-head-tg { display: none; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; margin-left: 4px; padding: 4px 9px 4px 4px; border: 0; border-radius: 999px;
+  background: var(--p-chat-edge-btn); color: var(--p-chat-edge-text); font-family: var(--p-font); text-align: left; cursor: pointer; }
+#casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg:active { transform: scale(.97); }
+#casinoOverlay > #supportPanel.sp-in-casino .wht-ico { flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; background: var(--p-tg); display: inline-flex; align-items: center; justify-content: center; }
+#casinoOverlay > #supportPanel.sp-in-casino .wht-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
+#casinoOverlay > #supportPanel.sp-in-casino .wht-txt b { font-size: 11px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#casinoOverlay > #supportPanel.sp-in-casino .wht-txt small { font-size: 9.5px; font-weight: 600; color: var(--p-chat-edge-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 340px) { #casinoOverlay > #supportPanel.sp-in-casino .wht-txt small { display: none; } }
+.casino-topbar #ctSms.ct-sms-ok .tn-ico { color: var(--p-green); }
+/* Avisos: debajo del borde del teléfono (notch / barra de estado), a la altura de la barra con el Perfil; centrados para no tapar un costado. */
+.toast { top: calc(var(--sat, env(safe-area-inset-top, 0px)) + 8px) !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important;
+  max-width: calc(100vw - 32px); width: max-content; text-align: center; z-index: 100010 !important; animation: vipToastIn .25s ease !important; }
+@keyframes vipToastIn { from { opacity: 0; } to { opacity: 1; } }

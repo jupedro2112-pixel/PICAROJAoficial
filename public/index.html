@@ -1894,6 +1894,8 @@
                         <span class="chat-topbar-name" id="waHeadName">Carga aquí</span>
                         <span class="chat-topbar-status"><i class="chat-topbar-dot"></i> <span id="waHeadStatus">en línea · responde en minutos</span></span>
                     </div>
+                    <!-- #1092 (owner): en el chat de la burbuja de Girox, el Telegram al lado del nombre (en lugar del modo nocturno) -->
+                    <button type="button" class="wa-head-tg" id="waHeadTg" onclick="VIP.home.openTelegramInvite()" aria-label="Unite a Telegram para recibir los beneficios de PICA ROJA"><span class="wht-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="#fff"><path d="M21.4 4.6 2.9 11.8c-1 .4-1 1.5 0 1.8l4.6 1.4 1.8 5.4c.2.7 1.1.9 1.6.4l2.6-2.4 4.8 3.5c.6.5 1.5.1 1.7-.6l3-14.9c.2-.9-.7-1.7-1.6-1.4ZM9.6 14.6l-.4 3.6-1.3-4.2 9.5-6-7.8 6.6Z"/></svg></span><span class="wht-txt"><b>Unite a Telegram</b><small>Beneficios de PICA ROJA</small></span></button>
                     <button type="button" class="wa-head-btn" id="waThemeBtn" onclick="var b=document.getElementById('themeToggleBtn'); if(b) b.click(); VIP.home.syncWaHead();" title="Cambiar modo claro / oscuro" aria-label="Cambiar modo claro u oscuro">☀️</button>
                     <button type="button" class="wa-head-btn wa-head-fire" onclick="var b=document.getElementById('fireBtn'); if(b) b.click();" title="Fueguito — racha diaria" aria-label="Fueguito">🔥<span id="waFireStreak" class="fire-streak-badge">0</span></button>
                 </div>
@@ -2777,7 +2779,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v717</div>
+                    <div class="pf-build" id="appBuildTag">app v718</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2806,7 +2808,7 @@
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v717</div> <!-- #790: espejo de #appBuildTag -->
+                <div class="pf-build pf-build-min" id="pfBuildMini">app v718</div> <!-- #790: espejo de #appBuildTag -->
                 <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
                 <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>

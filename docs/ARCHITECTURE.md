@@ -1982,6 +1982,9 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   y la devuelven al cerrarse o al salir del casino. Fila de servicio `#spInfoBar` y botón de info del bot (`info_topic` ⇒ `go_section`) usan `VIP.home.spInfo`.
   **#1091:** una ventana que se abra con `hidden` (no `showModal`) desde adentro del casino llama `VIP.home.modalIntoCasino(id)` al abrir (lo hace
   `VIP.sorteos.open`); si no, queda DEBAJO de `#casinoOverlay` y parece que el botón no hace nada.
+  **#1092:** el chat de la burbuja NO tiene modo nocturno: cabecera y barra de escribir negras (`--p-chat-edge*`), resto claro aunque la app esté en
+  nocturno (tokens claros redefinidos dentro de `#supportPanel.sp-in-casino`). Telegram = `#waHeadTg` en la cabecera; la barra todo en uno lleva
+  `#ctSms` (Verificar SMS) donde estaba `#ctTelegram`. Los `.toast` van centrados debajo de `--sat` (no a 20 px fijos).
 - **Modo normal / chat clásico (#1042-s):** con `Config['supportBot'].classic` la app vuelve a TODO lo anterior: sin IA, chat/burbuja como antes, Soporte del
   panel sin filtro y `/api/public/menu-layout` con el menú de antes (`menusEnabledBefore1042r`). Fila de servicio `#spInfoBar` adentro de `#spActBar` (arriba).
 - **Avisos escritos en el chat (#1042-t):** sin Modo normal, carga acreditada (+ `/sys_deposit_luck`), retiro pedido (`/sys_withdraw_chat`) y pagado

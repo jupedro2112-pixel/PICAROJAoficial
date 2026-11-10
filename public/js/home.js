@@ -1493,6 +1493,14 @@
         const has = !!(_tg && (_tg.channelUrl || _tg.inviteUrl)); const inv = !!(_tg && _tg.inviteUrl);
         document.querySelectorAll('.tg-card').forEach((card) => { card.hidden = !has; card.querySelectorAll('.tg-inv').forEach((b) => { b.hidden = !inv; }); }); // #751: completo y básico
     }
+    // #1092 (owner): "Verificar SMS" arriba en la barra de Girox (donde estaba Telegram). Verificado ⇒ queda con el tilde y sólo avisa.
+    function _smsVerified() { try { const u = (VIP.state && VIP.state.currentUser) || {}; return u.phoneVerified === true; } catch (_) { return false; } }
+    function _paintCtSms() { const b = _el('ctSms'), l = _el('ctSmsLbl'); if (!b || !l) return; const ok = _smsVerified(); l.textContent = ok ? 'SMS ✓' : 'Verificar SMS'; b.classList.toggle('ct-sms-ok', ok); }
+    function casinoSms() {
+        _paintCtSms();
+        if (_smsVerified()) { try { VIP.ui.showToast('✅ Tu celular ya está verificado por SMS', 'success'); } catch (_) {} return; }
+        try { spInfo('sms'); } catch (_) { try { openVerifyPhone(); } catch (__) {} }
+    }
     function openTelegramInvite() { const u = _tg && _tg.inviteUrl; if (u) window.open(u, '_blank', 'noopener'); else openTelegram(); }
     async function openTelegram() {
         let url = '';
@@ -2609,6 +2617,7 @@
             const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; nm.textContent = (_el('spName') && _el('spName').textContent) || 'Soporte'; } if (stt) { stt.dataset.prev = stt.textContent; stt.textContent = 'En línea'; }
         } catch (_) {}
         try { const u = (VIP.state && VIP.state.currentUser) || {}; const b = _el('spInfoSms'); if (b) b.style.display = u.phoneVerified === true ? 'none' : ''; } catch (_) {} // #1042-r
+        try { _paintCtSms(); } catch (_) {} // #1092
         _open = true; _unread = 0; _paintBadge();
         try { VIP.chat.scrollToBottom(); } catch (_) {}
         setTimeout(() => { try { spPromoPaint(); } catch (_) {} try { VIP.chat.markReceivedAsRead(); } catch (_) {} try { VIP.chat.scrollToBottom(); } catch (_) {} }, 60); // #1042-q: primero se muestra, después se pinta lo demás
@@ -2858,7 +2867,7 @@
                     '<button type="button" class="casino-back ct-multi" onclick="VIP.ui.closeCasinoFrame()">‹ Volver</button>' +
                     // #1042-r (owner): con SÓLO Girox activo (todo en uno, body.menus-one) no hay Volver ni Menú: Telegram · Historias · [logo] ·
                     // Soporte · Info · Perfil (el orden lo pone pin.css con `order`).
-                    '<button type="button" class="tn-btn ct-one" id="ctTelegram" onclick="VIP.home.openTelegramInvite()" title="Telegram"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 4.5 2.8 11.7c-.9.4-.9 1.6.1 1.9l4.6 1.4 1.8 5.6c.3.8 1.3 1 1.9.4l2.6-2.5 4.9 3.6c.7.5 1.7.1 1.9-.7l3-15.3c.2-1-.8-1.9-1.8-1.5Z"/><path d="m8 15 10-7.5"/></svg></span><span class="tn-lbl">Telegram</span></button>' +
+                    '<button type="button" class="tn-btn ct-one" id="ctSms" onclick="VIP.home.casinoSms()" title="Verificar tu celular por SMS"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/><path d="m9.5 10.5 1.8 1.8 3.4-3.6"/></svg></span><span class="tn-lbl" id="ctSmsLbl">Verificar SMS</span></button>' + // #1092 (owner): en el lugar del Telegram (que pasó al chat, al lado del nombre)
                     // #700/#701 (owner): accesos en UNA sola línea con el mismo formato de la barra principal (ícono + etiqueta chica):
                     // Historias · Menú · Info · Perfil. Sin el texto "Estás en Girox · para cambiar, salí" (#701: le sacaba lugar al juego).
                     // #703/#707 (owner): orden Volver · Menú · [PICA ROJA OFICIAL con el logo, bien centrado] · Historias · Info · Perfil
@@ -2878,6 +2887,7 @@
                   '<div id="casinoSrtBar" class="casino-srt-bar" hidden></div>' + // #935: banner del sorteo debajo de la barra
                 '</div>');
             bar = _el('casinoTopBar');
+            try { _paintCtSms(); } catch (_) {}
         }
         try { if (VIP.sorteos && VIP.sorteos.paintCasino) VIP.sorteos.paintCasino(); } catch (_) {} // #935
         // #937 (owner): "en Girox directo, al iniciar, la Carga rápida abierta para cargar, siempre"
@@ -3203,6 +3213,7 @@
         notifCtaGo: notifCtaGo, notifCtaClose: notifCtaClose, // #892
         get platformsData() { return _platforms; } };
     VIP.home.installManifestSync = installManifestSync; // #826
+    VIP.home.casinoSms = casinoSms; VIP.home.paintCtSms = _paintCtSms; // #1092
     VIP.home.modalIntoCasino = _modalIntoCasino; // #1091: el sorteo (Anotate desde la hoja chica de Girox) se abre ADENTRO del casino
     Object.assign(VIP.home, { favOpenPicker, favClosePicker, favSearch, favMore, favToggle, favToggleTop, favPlay }); // #840
     Object.assign(VIP.home, { openFitPhone, closeFitPhone, fitFilter, fitPick, fitNudge, fitNudgeBottom, fitBottomAuto, fitStretch }); // #865/#867/#868
