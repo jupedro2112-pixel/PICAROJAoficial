@@ -160,6 +160,15 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const cl = RcptClose.rows.slice(n).find((x) => x.toChat === '-2'); assert.ok(cl && cl.total >= 350000.5 + 100.99 - 0.01, JSON.stringify(cl));
     assert.ok(!RcptClose.rows.slice(n).some((x) => x.toChat == null), 'lo del mes no entra en un cierre');
   });
+  await caso('/anterior en el grupo DESTINO suma lo de antes al acumulado', async () => {
+    const pre = RcptFwd.rows.filter((x) => x.toChat === '-3' && x.status === 'open').reduce((a, x) => a + x.amount, 0);
+    await hook(text(40, -3, '/anterior 13.686.199'));
+    const post = RcptFwd.rows.filter((x) => x.toChat === '-3' && x.status === 'open').reduce((a, x) => a + x.amount, 0);
+    assert.ok(Math.abs(post - pre - 13686199) < 0.001, pre + ' ' + post);
+    assert.ok(/SUMADO LO ANTERIOR<\/b>: \+\$13\.686\.199/.test(last(-3).p.text) && /SUMADO LO ANTERIOR/.test(last(-1).p.text), last(-3).p.text);
+    await hook(text(41, -1, '/anterior 5000')); assert.ok(/manda a 2 grupos/.test(last(-1).p.text), last(-1).p.text);
+    await hook(text(42, -3, '/anterior')); assert.ok(/Escribí el monto/.test(last(-3).p.text));
+  });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
   console.log(`\n${ok} casos OK`);

@@ -31701,7 +31701,7 @@ function _rbRulesList(c, route) {
 function _rbHelpTxt(c, route) {
   const r0 = (route.rules || [])[0];
   if (!r0) return `📌 <b>CÓMO MANDAR LOS COMPROBANTES</b>\nMandá acá la foto del comprobante ENTERO (que se vea el monto). El bot lo reenvía a ${_rbH(_rbTitle(c, route.otherTo))}, lo marca ✅ REENVIADO y lo suma.\nSi no lee el monto: respondé la foto con el monto (ej. 25000,50).\n/total = cuánto va sumado. Cierre todos los días hábiles a las 13 h.`;
-  return `📌 <b>CÓMO MANDAR LOS COMPROBANTES</b>\n⚠️ <b>PRESTÁ ATENCIÓN A LOS CENTAVOS</b> de la transferencia: según cómo termina el monto, el comprobante va a un grupo o a otro.\n${_rbRulesList(c, route)}\nEjemplo: <b>$25.000,${_rbH(r0.cents)}</b> va a ${_rbH(_rbTitle(c, r0.to))}.\n\nMandá la foto del comprobante ENTERO (que se vean bien los centavos). Si el bot no lee el monto o lo lee mal, respondé la foto con el monto con centavos (ej. 25000,${_rbH(r0.cents)}). Si el cliente se equivocó con el decimal, tocá el botón y elegí a qué grupo va.\n/total = cuánto va sumado. Cierre todos los días hábiles a las 13 h.`;
+  return `📌 <b>CÓMO MANDAR LOS COMPROBANTES</b>\n⚠️ <b>PRESTÁ ATENCIÓN A LOS CENTAVOS</b> de la transferencia: según cómo termina el monto, el comprobante va a un grupo o a otro.\n${_rbRulesList(c, route)}\nEjemplo: <b>$25.000,${_rbH(r0.cents)}</b> va a ${_rbH(_rbTitle(c, r0.to))}.\n\nMandá la foto del comprobante ENTERO (que se vean bien los centavos). Si el bot no lee el monto o lo lee mal, respondé la foto con el monto con centavos (ej. 25000,${_rbH(r0.cents)}). Si el cliente se equivocó con el decimal, tocá el botón y elegí a qué grupo va.\n/total = cuánto va sumado. /anterior 13.686.199 = sumar lo que ya venían acumulando antes del bot. Cierre todos los días hábiles a las 13 h.`;
 }
 // #1079-f (owner: "si envían mal, que aclaren el error: elegir la terminación para dónde va si hay 2 (,99 o ,43); si se equivocaron que puedan ajustar; cuando
 // llegue, que avise que el cliente se equivocó con el decimal pero va a este grupo, y que la suma siga normal"). Botones 'rb:<id>:<n>' (elegir destino) y
@@ -31861,12 +31861,31 @@ async function _rbOnCallback(c, bot, cq) {
   }
   await ans(); await _rbRoute(c, rec, rec.amount, rec.amountFrom, { forceTo: d.to });
 }
+// #1079-h (owner: escribió "13.686.199 · unir al restante" en el grupo): /anterior <monto> (o /sumar) suma lo que ya venían acumulando ANTES del bot,
+// igual que 📥 del panel (RcptFwd amountFrom 'arrastre', 'open' ⇒ acumulado + próximo cierre). En el grupo que MANDA si tiene un solo destino; en el
+// DESTINO si le manda un solo grupo. Si hay más de uno, pide hacerlo del otro lado o desde el panel. Un número suelto NO se suma (sería cualquier mensaje).
+async function _rbCarryCmd(c, bot, m, fromChat, text, by) {
+  const amt = _rbParseAmount((text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || '');
+  const mine = (c.routes || []).filter((x) => x.botId === bot.id);
+  if (!(amt > 0)) { await _rbSend(c, fromChat, 'Escribí el monto: <b>/anterior 13.686.199</b> (con centavos si tiene, ej. 13.686.199,82).', bot.id); return; }
+  let pair = null; const asSrc = mine.filter((r) => String(r.from) === fromChat);
+  if (asSrc.length) { const ds = _rbDests(c, asSrc[0]); if (ds.length === 1) pair = { route: asSrc[0], to: ds[0].to }; else { await _rbSend(c, fromChat, `Este grupo manda a ${ds.length} grupos: escribí <b>/anterior ${_rbH(text.split(/\s+/).slice(1).join(' '))}</b> en el grupo de DESTINO que corresponda (o cargalo en el panel → 📥).`, bot.id); return; } }
+  else { const asDst = mine.filter((r) => _rbDests(c, r).some((d) => d.to === fromChat)); if (asDst.length === 1) pair = { route: asDst[0], to: fromChat }; else if (asDst.length > 1) { await _rbSend(c, fromChat, 'A este grupo le mandan varios grupos: escribí /anterior en el grupo que MANDA (o cargalo en el panel → 📥).', bot.id); return; } }
+  if (!pair) return;
+  const r = pair.route; const base = -(Date.now() % 1000000000) * 10 - 5;
+  await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: String(r.from), fromTitle: _rbTitle(c, r.from), toChat: pair.to, toTitle: _rbTitle(c, pair.to), srcMsgId: base, structId: r.structId, amount: amt, amountFrom: 'arrastre', sender: 'telegram · ' + (by || ''), status: 'open' });
+  const s2 = await _rbOpenSum(r.from, pair.to, r.structId);
+  const msg = `📥 <b>SUMADO LO ANTERIOR</b>: +${_rbMoney2(amt)}${by ? ' · ' + _rbH(by) : ''}\n${_rbH(_rbTitle(c, r.from))} → ${_rbH(_rbTitle(c, pair.to))}\n${_rbSumTxt(s2)}`;
+  await _rbSend(c, String(r.from), msg + '\n' + _rbMonthTxt(await _rbMonthSum(r.from, r.structId)), r.botId);
+  if (pair.to !== String(r.from)) await _rbSend(c, pair.to, msg, r.botId);
+}
 async function _rbOnMessage(c, bot, m) {
   await _rbGroupSeen(m.chat, bot.id).catch(() => {});
   const fromChat = String(m.chat.id); const mine = (c.routes || []).filter((x) => x.botId === bot.id); const route = mine.find((x) => String(x.from) === fromChat);
   const text = String(m.text || '').trim(); const by = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ');
   if (/^\/(start|ayuda)(@\w+)?$/i.test(text)) { if (!(await _rbOnce(fromChat, m.message_id))) return; if (route) await _rbSendHelp(c, route, false); else await tgChannel.call(bot.token, 'sendMessage', { chat_id: fromChat, text: '✅ Grupo detectado: ya aparece en el panel (Bot de comprobantes).' }); return; }
   // Grupo de DESTINO: /cotizado ⇒ los cierres pendientes a cotizar pasan a cotizados; /enviado ⇒ dejan de estar pendientes (owner).
+  if (/^\/(anterior|sumar)(@\w+)?(\s|$)/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbCarryCmd(c, bot, m, fromChat, text, by); return; }
   const cmd = (text.match(/^\/(cotizado|enviado)(@\w+)?(\s+.*)?$/i) || [])[1];
   if (cmd) {
     const dr = mine.filter((r) => (r.rules || []).some((x) => String(x.to) === fromChat) || String(r.otherTo || '') === fromChat);
