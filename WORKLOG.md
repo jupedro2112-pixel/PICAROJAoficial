@@ -73,6 +73,23 @@
   guarda por campo (trampa #1012).
 - Tests corridos OK: payout-auto, gift-rollovers, bonus-cap, security-1053, caja-movimientos, rcptbot(-flow), telegram-admin, telegram-channel (regex
   actualizada), support-bot, cashback-spec, dup-account, retention-journey, weekly-review, vip-exports.
+- **#1088-b fuga de bonos (2026-11-10, panel v292):** owner: "estoy regalando mucho bono sin estar tan liberado". Mapa de TODOS los caminos de regalo;
+  se corrigió SÓLO lo que regalaba más de lo que dicen sus propias reglas (ningún %, tope ni regalo cambiado):
+  - Bienvenida con teléfono/celular/notificaciones repetidos (`_welcomeAbuseOf`, #974): se miraba sólo en la 1ª carga ⇒ la 2ª carga 50 % (y el código
+    de la Comunidad / bono por instalar pendientes) se cobraban en la carga siguiente. Ahora `resolveAutoBonus` lo mira si hay uno pendiente
+    (`_hasPendingWelcomeBonus`), `_secondDepositTick` no le ofrece la 2ª carga (queda 'expired') y las ofertas personales de bienvenida (día 5/15/30)
+    ni se crean ni se pueden reclamar.
+  - `/api/auth/register` con la campaña `INGRESO` (orgánica, #306) nacía CON regalos de bienvenida: ahora `noWelcomeGifts` como la landing (#975).
+  - Rollover nunca menos que el global ×5 (#659): código de bienvenida cash (default ×2 si nunca se guardó el global), fueguito y premios en $ de la ruleta
+    (los defaults traían ×0).
+  - Código sorpresa / de Telegram con el tope único por regalo (#1010).
+  - Bonificación manual: doble clic / reenvío pagaba dos veces (reference nueva por pedido) ⇒ mismo freno de 90 s que la carga manual (409 `DUP_BONUS`,
+    el panel pregunta "¿dar OTRA VEZ?").
+  - Revisión semanal: "Medir ahora" la misma semana subía un escalón por toque ⇒ ahora parte del nivel con que arrancó la semana.
+  - Quedan como PROPUESTA (decisión del owner): Bonificación manual sin tope ni freno de secundarias para agentes, historia +100 % / códigos / giro gratis /
+    misiones para no fieles (permitido por #975), bono de 1ª carga a cuentas creadas por agente, lotes de fichas con rollover elegido a mano (puede ser ×0).
+  - Tests OK: gift-rollovers, bonus-cap, dup-account, cashback-spec, weekly-review, retention-journey, roulette-free, story-segments, security-1053,
+    business-board, bonus-fraud, payout-auto.
 
 ### 1086. Tarjeta de datos del chat en BLANCO con letras negras y bono en verde (2026-11-10) — app v715
 - **Owner:** "el fondo verde del chat nuevo en la burbuja donde están los datos se pierde: fondo blanco y letras negras; el bono remarcado con verde y letras negras".

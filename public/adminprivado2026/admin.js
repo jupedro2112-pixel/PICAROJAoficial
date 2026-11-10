@@ -3514,7 +3514,7 @@ async function handleWithdraw() {
     }
 }
 
-async function handleDirectBonus() {
+async function handleDirectBonus(allowRepeat) {
     const amount = parseFloat(document.getElementById('bonusAmount').value);
     const description = document.getElementById('bonusDesc').value;
     const confirmBtn = document.getElementById('confirmBonus');
@@ -3541,12 +3541,20 @@ async function handleDirectBonus() {
             body: JSON.stringify({
                 userId: selectedUserId,
                 amount,
-                description
+                description,
+                allowRepeat: allowRepeat === true || undefined // #1088-b
             })
         });
 
         const data = await response.json();
 
+        // #1088-b: el server frena la MISMA bonificación repetida en 90 s (doble clic / reenvío); si es otra de verdad, se confirma y va.
+        if (response.status === 409 && data && data.code === 'DUP_BONUS') {
+            setButtonLoading(confirmBtn, false, 'Confirmar Bonus');
+            if (window.confirm('⚠️ ' + data.error + '\n\n¿Dar OTRA VEZ ' + formatMoney(amount) + '?')) return await handleDirectBonus(true);
+            showToast('Bonificación repetida cancelada (no se dio dos veces).', 'info');
+            return;
+        }
         if (!response.ok) {
             throw new Error(data.error || 'Error al aplicar bonus');
         }

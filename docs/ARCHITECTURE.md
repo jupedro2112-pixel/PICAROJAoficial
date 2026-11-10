@@ -2045,3 +2045,10 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **App:** la clave del alta se guarda con `VIP.autoload.rememberPassword` (sin "asd123" en la captura); el CBU vale 5 min (`ensureCbu`) y se relee al volver
   a primer plano; `#wdHoldBar` va encima del casino (`body.casino-open`, z 100001); `sendMessage` usa socket sólo con `socketAuthed`; reclamos de
   reembolso/fueguito/rakeback ya no escriben en el chat como el cliente.
+- **#1088-b fuga de bonos:** `resolveAutoBonus` mira `_welcomeAbuseOf` en la 1ª carga Y en cualquier carga con un bono de BIENVENIDA pendiente
+  (`_hasPendingWelcomeBonus`: 2ª carga, código de la Comunidad next_charge, bono por instalar). `_secondDepositTick` no ofrece la 2ª carga a quien
+  `_welcomeAbuseOf` niega (queda 'expired' sin `offeredAt`); `_newbieOffersTick` y `claim-bonus` de una historia `autoKind:'bienvenida'` tampoco.
+  `/api/auth/register` trata `INGRESO` como orgánico (`noWelcomeGifts`). Rollover nunca menos que el global (#659): código de bienvenida cash
+  (`getWelcomeCodeRolloverX`), fueguito (`_fireMult`) y premios en $ de la ruleta (`spinDoc.rolloverX`). Código sorpresa/Telegram pasa por `_capGift`.
+  Bonificación manual: `_agentDepositDupGuard(body, 'agent-bonus')` ⇒ 409 `DUP_BONUS` (panel confirma y reenvía `allowRepeat`). Revisión semanal:
+  re-medir la MISMA semana parte de `cur.decision.prevLevel` y se guarda si difiere del nivel vigente (un ajuste por semana).

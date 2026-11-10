@@ -5198,7 +5198,7 @@ app.post('/api/auth/register', authLimiter, registerIpLimiter, async (req, res) 
       referralStatus: isValidReferral ? 'referred' : 'none',
       // Atribución de campaña (si vino por link de pauta y eligió flujo OTP)
       acquisitionCampaign: attributedCampaign,
-      noWelcomeGifts: !attributedCampaign && !isValidReferral && !(await _organicGiftsAllowed()), // #975
+      noWelcomeGifts: (!attributedCampaign || attributedCampaign === 'INGRESO') && !isValidReferral && !(await _organicGiftsAllowed()), // #975 · #1088-b: INGRESO es la campaña ORGÁNICA (#306), igual que en la landing/entrada rápida
       acquisitionUtm: attributedCampaign ? {
         source: utm && utm.source ? String(utm.source).slice(0, 100) : null,
         medium: utm && utm.medium ? String(utm.medium).slice(0, 100) : null,
@@ -11445,10 +11445,10 @@ async function getGiroxBonusMultiplier() {
 // #995 (seguridad): la referencia de la carga manual se arma en cada pedido ⇒ un doble clic o un reenvío del navegador acreditaba DOS veces.
 // Freno: misma persona + mismo monto en 90 s ⇒ 409 DUP_DEPOSIT; el panel pregunta y reenvía con allowRepeat:true si es una carga nueva de verdad.
 // (Sólo esta ruta: "Confirmar" de la cola de comprobantes llama al handler directo y ya es idempotente por comprobante.)
-async function _agentDepositDupGuard(body) {
+async function _agentDepositDupGuard(body, kind) {
   const who = String((body && (body.userId || body.username)) || '').slice(0, 80); const amt = Math.round(Number(body && body.amount) * 100) || 0;
   if (!who || !amt || (body && body.allowRepeat === true)) return true;
-  const key = `agent-dep:${who}:${amt}`; const redis = getRedisClient();
+  const key = `${kind || 'agent-dep'}:${who}:${amt}`; const redis = getRedisClient(); // #1088-b: kind 'agent-bonus' = Bonificación manual (misma llave de 90 s)
   if (redis) { try { return (await redis.set(key, '1', { NX: true, EX: 90 })) === 'OK'; } catch (_) {} }
   const now = Date.now(); const t = _agentDepDupMem.get(key); if (t && now - t < 90000) return false;
   _agentDepDupMem.set(key, now); if (_agentDepDupMem.size > 5000) for (const [k, v] of _agentDepDupMem) if (now - v > 90000) _agentDepDupMem.delete(k);
@@ -12159,6 +12159,9 @@ app.post('/api/admin/withdrawal', authMiddleware, withdrawerMiddleware, async (r
 });
 
 app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, res) => {
+  // #1088-b (fuga de bonos): la reference de la Bonificación se arma en cada pedido ⇒ un doble clic / reenvío del navegador la pagaba DOS veces.
+  // Mismo freno que la carga manual (#995): misma persona + mismo monto en 90 s ⇒ 409 DUP_BONUS; el panel pregunta y reenvía con allowRepeat.
+  if (!(await _agentDepositDupGuard(req.body, 'agent-bonus'))) return res.status(409).json({ code: 'DUP_BONUS', error: 'Ya se dio esta misma bonificación a este cliente hace menos de 90 segundos. Si es OTRA bonificación, confirmala de nuevo.' });
   try {
     const { username: rawUsername, userId: rawUserId, amount } = req.body;
 
@@ -16561,6 +16564,14 @@ async function _cbuReuseCheck(user, movement) {
   } catch (e) { logger.warn('[anti-estafa] cbu check: ' + e.message); return null; }
 }
 const _isFlagged = (user) => Array.isArray(user && user.fraudFlags) && user.fraudFlags.length > 0;
+// #1088-b: ¿tiene pendiente algún bono de BIENVENIDA de los que consume resolveAutoBonus (2ª carga, código de la Comunidad, bono por instalar)?
+async function _hasPendingWelcomeBonus(user) {
+  try {
+    const u = await User.findOne({ id: user.id }).select('secondDepositOffer firstChargeBonusStatus welcomeCodeBonusStatus welcomeCodeBonusType').lean(); if (!u) return false;
+    const so = u.secondDepositOffer || {};
+    return (so.status === 'offered' && so.expiresAt && new Date(so.expiresAt) > new Date()) || u.firstChargeBonusStatus === 'pending' || (u.welcomeCodeBonusStatus === 'pending' && u.welcomeCodeBonusType === 'next_charge');
+  } catch (_) { return false; }
+}
 async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   const none = { pct: 0, bonus: 0, source: null, label: null, claimed: false, rule: '', revert: async () => {} };
   if (!user || !(Number(amount) > 0)) return none;
@@ -16572,7 +16583,10 @@ async function resolveAutoBonus(user, amount, usedBy, opts = {}) {
   // #509: cuenta marcada por multicuenta → sin bonos de bienvenida ni 2ª carga (sí ruleta/lotes, que ya ganó)
   // #974: teléfono / celular / notificaciones compartidas con otra cuenta ⇒ sin bonos de bienvenida (se chequea sólo en la primera carga real).
   let _abuse = null;
-  if (!opts.noWelcome && !_isFlagged(user)) { try { if (await _isFirstRealDeposit(user)) _abuse = await _welcomeAbuseOf(user); } catch (_) {} }
+  // #1088-b (fuga de bonos): antes sólo se miraba en la PRIMERA carga ⇒ una cuenta con el mismo teléfono / celular / notificaciones (o del registro
+  // abierto todavía no fiel) cobraba igual en la 2ª carga los bonos de BIENVENIDA que tuviera pendientes (2ª carga 50 %, código de la Comunidad,
+  // bono por instalar). Regla #974/#975: `_welcomeAbuseOf` niega TODA la bienvenida. Se mira también si hay alguno de esos pendiente (barato).
+  if (!opts.noWelcome && !_isFlagged(user)) { try { if ((await _isFirstRealDeposit(user)) || (await _hasPendingWelcomeBonus(user))) _abuse = await _welcomeAbuseOf(user); } catch (_) {} }
   const blockWelcome = opts.noWelcome || _isFlagged(user) || !!_abuse;
   // #832 (owner 2026-10-22): "en la primera carga el 100% automático, libre y con rollover ×5" ⇒ la PRIMERA carga real lleva SIEMPRE el
   // bono de primera carga (antes un bono pendiente de ruleta/historia/lote lo reemplazaba). Esos otros quedan pendientes para la próxima carga.
@@ -17159,12 +17173,12 @@ app.get('/api/community-code/status', authMiddleware, async (req, res) => {
 // Rollover del bono cash del código de bienvenida — EDITABLE desde el panel
 // (Config['communityWelcomeRolloverX'], default x2 pedido por el owner
 // 2026-08-05; 0 = sin rollover). Sin cache (multi-instancia, ver #91).
+// #1088-b (fuga de bonos): regla #659 = TODOS los regalos con el rollover GLOBAL (×5). El default ×2 de acá quedaba por debajo si nunca se guardó
+// el global desde el panel ⇒ nunca menos que el global (se puede poner MÁS desde el panel).
 async function getWelcomeCodeRolloverX() {
-  try {
-    const v = Number(await getConfig('communityWelcomeRolloverX', 2));
-    if (Number.isFinite(v) && v >= 0 && v <= 50) return v;
-  } catch (_) {}
-  return 2;
+  let v = 2;
+  try { const c = Number(await getConfig('communityWelcomeRolloverX', 2)); if (Number.isFinite(c) && c >= 0 && c <= 50) v = c; } catch (_) {}
+  return Math.max(v, await _giftRolloverX());
 }
 
 app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, res) => {
@@ -18120,7 +18134,7 @@ app.post('/api/fire/claim-reward', authMiddleware, async (req, res) => {
     // directo (bono 0). Si el jugador YA tiene un bono activo, el bono suelto lo
     // PISARÍA → cae al depósito con multiplier de antes (mismo candado, figura
     // como Carga). La reference es la MISMA en todas las ramas → idempotencia.
-    const _fireMult = await getFireRolloverMultiplier();
+    const _fireMult = Math.max(await getFireRolloverMultiplier(), await _giftRolloverX()); // #1088-b: nunca menos que el global (#659)
     const bonusResult = await _creditFireReward(username, rewardAmount, rewardDesc, _fireRef, _fireMult);
 
     if (!bonusResult.success) {
@@ -24392,6 +24406,9 @@ async function _secondDepositTick() {
     let n = 0;
     for (const c of cands) {
       if (!c._id) continue;
+      // #1088-b: la 2ª carga es bono de BIENVENIDA ⇒ teléfono / celular / notificaciones repetidos (`_welcomeAbuseOf`, #974) no la reciben. Se marca
+      // 'expired' (sin offeredAt: no cuenta como ofrecida en los números) para no volver a mirarla en cada pasada.
+      { const _ab = await _welcomeAbuseOf({ id: c._id }).catch(() => null); if (_ab) { await User.updateOne({ id: c._id, $or: [{ 'secondDepositOffer.status': { $exists: false } }, { 'secondDepositOffer.status': 'none' }] }, { $set: { 'secondDepositOffer.status': 'expired' } }).catch(() => {}); logger.info(`[segunda-carga] ${c._id}: sin oferta — ${_ab}`); continue; } }
       const user = await User.findOneAndUpdate({ id: c._id, role: 'user', fraudFlags: { $size: 0 }, noWelcomeGifts: { $ne: true } /* #976 */, $or: [{ 'secondDepositOffer.status': { $exists: false } }, { 'secondDepositOffer.status': 'none' }] }, { $set: { secondDepositOffer: { status: 'offered', pct: sd.pct, offeredAt: now, expiresAt: new Date(now.getTime() + sd.validHours * 3600000), usedAt: null } } }, { new: true });
       if (!user) continue;
       const vars = { username: user.username, pct: sd.pct, hours: sd.validHours };
@@ -27510,7 +27527,7 @@ app.post('/api/roulette/spin', authMiddleware, async (req, res) => {
         prizeLabel: pick.label,
         prizeType: pick.type,
         prizePct: pick.type === 'percent' ? (Number(pick.value) || 0) : 0,
-        rolloverX: pick.type === 'cash' ? (Number(pick.rolloverX) || 0) : 0,
+        rolloverX: pick.type === 'cash' ? Math.max(Number(pick.rolloverX) || 0, await _giftRolloverX()) : 0, // #1088-b: nunca menos que el global (#659)
         mode: spinMode, // #1010
         ipAddress: (req.ip || '').slice(0, 60),
         userAgent: String(req.headers['user-agent'] || '').slice(0, 200),
@@ -27570,7 +27587,7 @@ app.post('/api/roulette/spin', authMiddleware, async (req, res) => {
     // premio ya se había acreditado y sólo se perdió la respuesta, el reintento NO
     // vuelve a pagarlo.
     // Premio en PLATA: bono con el rollover del premio (0 = regalo directo).
-    const _roll = Number(pick.rolloverX) || 0;
+    const _roll = Number(spinDoc.rolloverX) || 0; // #1088-b: el grabado (nunca menos que el global)
     let credit;
     try {
       credit = await girox.creditGift(username, prizeARS, { description: `Ruleta diaria — ${pick.label}`, reference: `vip-roulette-${spinDoc.id}`, rolloverX: _roll });
@@ -28816,6 +28833,8 @@ app.post('/api/stories/:id/claim-bonus', authMiddleware, async (req, res) => {
     const user = await User.findOne({ id: req.user.userId }).select('id username storyBonus storyBonusUsed fraudFlags').lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (_isFlagged(user)) return res.status(403).json({ error: 'Tu cuenta no puede usar este bono. Escribinos a Soporte.' });
+    // #1088-b: la oferta personal de BIENVENIDA (día 5/15/30) respeta la misma regla que el resto de la bienvenida (#974/#975/#1039).
+    if (s.autoKind === 'bienvenida') { const _ab = await _welcomeAbuseOf(user).catch(() => null); if (_ab) return res.status(403).json({ error: 'Tu cuenta no tiene regalos de bienvenida.', code: 'NO_WELCOME' }); }
     const cur = user.storyBonus || {};
     if (cur.storyId === s.id && Number(cur.pct) > 0 && cur.expiresAt && new Date(cur.expiresAt).getTime() > Date.now()) {
       return res.json({ success: true, already: true, pct: cur.pct, expiresAt: cur.expiresAt });
@@ -29428,6 +29447,7 @@ async function _codeDropClaimHandler(req, res) { // #1055: también desde Perfil
     const code = String((req.body && req.body.code) || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
     if (!code) return res.status(400).json({ error: 'Escribí el código' });
     const now = new Date(); const d = await CodeDrop.findOne({ code }).sort({ startsAt: -1 }).lean();
+    if (d) { await _refreshGiftMax(); d.amount = _capGift(d.amount); } // #1088-b: tope único por regalo (#1010) también en los códigos (sorpresa y Telegram)
     if (!d || d.startsAt > now) return res.status(404).json({ error: 'Ese código no existe. Revisá que esté bien escrito.', code: 'NOT_FOUND' });
     const _mine = await CodeDropClaim.findOne({ dropId: d.id, userId: String(req.user.userId) }).select('status').lean();
     if (_mine && _mine.status === 'credited') return res.status(409).json({ error: 'Ya canjeaste este código ✅', code: 'ALREADY' });
@@ -29726,6 +29746,7 @@ async function _sorteoNudgeTick(force) {
 }
 setTimeout(() => { _sorteoNudgeTick().catch(() => {}); setInterval(() => { _sorteoNudgeTick().catch(() => {}); }, 10 * 60 * 1000); }, 9 * 60 * 1000);
 let _newbieRunning = false;
+const _newbieAbuseMemo = new Set(); // #1088-b
 async function _newbieOffersTick() {
   if (_newbieRunning || process.env.NEWBIE_OFFERS_DISABLED === '1') return;
   _newbieRunning = true;
@@ -29744,6 +29765,9 @@ async function _newbieOffersTick() {
         if ((dayCounts.get(u.id) || 0) > 0 || (u.notifPrefs && u.notifPrefs.level === 'none')) continue;
         const autoKey = `nb-${n}-${u.id}`;
         if (await Story.exists({ autoKey })) continue;
+        // #1088-b: es una oferta de BIENVENIDA ⇒ teléfono / celular / notificaciones repetidos no la reciben (#974). Memoria por día: no re-mirar cada 10 min.
+        const _nbMemoKey = today + '|' + u.id; if (_newbieAbuseMemo.has(_nbMemoKey)) continue;
+        { const _ab = await _welcomeAbuseOf(u).catch(() => null); if (_ab) { _newbieAbuseMemo.add(_nbMemoKey); if (_newbieAbuseMemo.size > 20000) _newbieAbuseMemo.clear(); logger.info(`[bienvenida] ${u.username}: sin oferta del día ${n} — ${_ab}`); continue; } }
         const id = uuidv4(); const img = await _storyAutoImgSpec({ img: _newbieImg(n, cfg.pct, cfg.hours, rx, dx) }).catch(() => null);
         const until = new Date(now.getTime() + cfg.hours * 3600000);
         let doc;
@@ -29976,9 +30000,13 @@ async function _weeklyReviewTick(force) {
     if (!force && (dow !== 1 || hourArt < 10 || hourArt >= 14)) return null;
     const cur = await getConfig('weeklyReview', null); if (!force && cur && cur.weekKey === weekKey) return null;
     if (!(await _cronClaim('weeklyreview', 15 * 60000))) return null;
-    const metrics = await _weeklyMetrics(now); const tuning0 = await getJourneyTuning();
+    // #1088-b (fuga de bonos): "Medir ahora" la MISMA semana partía del nivel ya ajustado ⇒ cada toque subía (o bajaba) otro escalón los regalos
+    // del recorrido y de la campaña masiva. La regla es UN ajuste por semana: re-medir parte del nivel con que arrancó la semana.
+    const tuningNow = await getJourneyTuning(); let tuning0 = tuningNow;
+    if (cur && cur.weekKey === weekKey && cur.decision && Number.isFinite(Number(cur.decision.prevLevel))) tuning0 = weeklyReview.tuningFor(Number(cur.decision.prevLevel));
+    const metrics = await _weeklyMetrics(now);
     const decision = weeklyReview.decide(metrics, tuning0);
-    if (decision.changed) {
+    if (decision.level !== tuningNow.level) { // vs el nivel VIGENTE (si un toque anterior lo había movido de más, vuelve)
       await Config.set('journeyTuning', Object.assign({}, decision.tuning, { updatedAt: now.toISOString(), by: 'revisión semanal ' + weekKey }), 'system'); _tuningCache = decision.tuning;
       await _autopilotClearFuture().catch(() => 0); // el autopiloto se rearma con los puntos nuevos
     }
