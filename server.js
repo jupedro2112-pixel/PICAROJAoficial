@@ -213,7 +213,7 @@ const generalLimiter = rateLimit({
   // Desactiva la validación de IPv6-fallback de la lib: usamos cookie para admins
   // e IP para clientes a propósito (no necesitamos el helper de IPv6 acá).
   validate: { keyGeneratorIpFallback: false },
-  skip: (req) => req.originalUrl === '/api/telegram/webhook' || req.originalUrl === '/api/rcptbot/webhook', // #1079: + bot de comprobantes · revisión #1047: Telegram manda todo desde pocas IPs (la ruta tiene secreto propio)
+  skip: (req) => req.originalUrl === '/api/telegram/webhook' || req.originalUrl.startsWith('/api/rcptbot/webhook/'), // #1079: + bot de comprobantes · revisión #1047: Telegram manda todo desde pocas IPs (la ruta tiene secreto propio)
   message: { error: 'Demasiadas solicitudes. Intenta más tarde.' }
 });
 
@@ -31596,34 +31596,59 @@ async function _tgSecretNow() {
 }
 const _tgPrivRate = { min: 0, n: 0 }; // tope GLOBAL de respuestas por privado (por instancia)
 // ── #1079 BOT DE COMPROBANTES (owner: "un bot que reenvíe comprobantes de un grupo a otro, los marque como reenviados y vaya sumando; unos 5 grupos;
-// yo configuro dónde reenviar; la suma sigue hasta que pongan /cierrededia; el monto lo lee la IA; un bot nuevo aparte"). BOT PROPIO (no el del canal):
-// Config['rcptbot'] = { tokenEnc, webhookSecret, groups:[{id,title,at}], routes:[{from,to}], lastError } — escrito campo a campo por la colección cruda.
-// Webhook /api/rcptbot/webhook (secreto propio). Origen: foto o documento (imagen/PDF) ⇒ lee el monto (IA de comprobantes; si no, el número del texto),
-// lo copia al destino con "De: <grupo> · $monto" y contesta la foto en el origen con ✅ REENVIADO + acumulado. Responder la foto con un número corrige
-// el monto. /total = acumulado; /cierrededia o "cierre de día" ⇒ cierra la suma (RcptClose) y avisa en los dos grupos. El bot tiene que ser ADMIN en los
-// grupos de origen (si no, Telegram no le pasa las fotos) y miembro en los de destino. ──
+// según cómo terminan los centavos es el grupo; cierre 13 h lun–vie (el lunes junta el finde), pendiente a cotizar ⇒ /cotizado ⇒ /enviado; el monto lo lee
+// la IA") · #1079-b ("ponelo último con clave; que pueda agregar los tokens de cada bot y configurar todo; meto los bots en todos los grupos").
+// VARIOS BOTS PROPIOS (ninguno es el del canal): Config['rcptbot'] = { bots:[{id, username, tokenEnc, secret}], groups:[{id, title, bots:[botId]}],
+// routes:[{from, rules:[{cents,to}], otherTo}], lastAutoClose, lastError } — escrito campo a campo por la colección cruda (key en minúsculas).
+// Webhook POR BOT /api/rcptbot/webhook/<botId> (secreto propio de cada bot). Un grupo aparece solo cuando un bot entra o alguien escribe ahí (o se agrega
+// por ID desde el panel). Reenvío: si el destino tiene el MISMO bot ⇒ copyMessage; si no, se baja el archivo con el bot que lo recibió y lo sube el bot del
+// destino (los file_id son de cada bot). Con 2 bots en el mismo grupo los mensajes llegan dos veces ⇒ comprobante único por (grupo, mensaje) y comandos con
+// `_rbOnce`. En los grupos que MANDAN el bot tiene que ser ADMIN (si no, Telegram no le pasa las fotos). Sección del panel con CLAVE PROPIA
+// (Config['rcptBotPinHash'], sha256, la crea el admin la primera vez: nunca en código ni docs). ──
 const _rbM = () => require('./src/models/RcptFwd'); // carga perezosa (los tests cargan este tramo sin mongoose)
 const _rbMem = { v: null, at: 0 };
 async function _rbCfg(fresh) {
   if (!fresh && _rbMem.v && Date.now() - _rbMem.at < 30000) return _rbMem.v;
-  const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const v = Object.assign({ groups: [], routes: [] }, d.value || {});
-  let token = null; try { token = v.tokenEnc ? _credDecrypt(v.tokenEnc) : null; } catch (_) { v.decryptError = true; }
-  v.token = token; if (process.env.RENDER === 'true' && process.env.TG_ON_RENDER !== '1') { v.token = null; v.onRender = true; } // Render comparte la base: no mueve el webhook
+  const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const v = Object.assign({ bots: [], groups: [], routes: [] }, d.value || {});
+  const onRender = process.env.RENDER === 'true' && process.env.TG_ON_RENDER !== '1'; v.onRender = onRender; // Render comparte la base: no mueve webhooks ni manda
+  // #1079-c (owner: "estructuras de bot que se puedan cerrar por estructura; van a ser 4 y si quiero agrego 1; ahí configuro todo, token, id, y que empiece"):
+  // structs:[{id, name, on, botId, routes:[{from, rules, otherTo}]}]. Las rutas EFECTIVAS son las de las estructuras encendidas, cada una con su bot.
+  v.structs = Array.isArray(v.structs) ? v.structs : [];
+  v.routes = v.structs.filter((st) => st && st.on && st.botId).flatMap((st) => (st.routes || []).map((r) => Object.assign({}, r, { structId: st.id, structName: st.name || '', botId: String(st.botId) })));
+  v.botsDec = (v.bots || []).map((b) => { let token = null; try { token = b.tokenEnc ? _credDecrypt(b.tokenEnc) : null; } catch (_) {} return { id: String(b.id), username: b.username || '', secret: b.secret || '', token: onRender ? null : token, bad: !token }; });
   _rbMem.v = v; _rbMem.at = Date.now(); return v;
 }
 async function _rbSet(fields) {
   const $set = { updatedAt: new Date() }; for (const [k, v] of Object.entries(fields || {})) $set['value.' + k] = v;
   await Config.collection.updateOne({ key: 'rcptbot' }, { $set }, { upsert: true }); _rbMem.at = 0; try { Config._cache && Config._cache.clear(); } catch (_) {}
 }
-async function _rbGroupSeen(chat) {
+function _rbGroup(c, id) { return (c.groups || []).find((x) => String(x.id) === String(id)) || null; }
+function _rbTitle(c, id) { const g = _rbGroup(c, id); return g ? g.title : String(id); }
+// Token de un bot que esté en ese grupo (prefiere `prefer`, el que recibió el mensaje).
+function _rbTokFor(c, chatId, prefer) {
+  const g = _rbGroup(c, chatId); const ids = (g && g.bots) || [];
+  const pick = (id) => (c.botsDec || []).find((b) => b.id === String(id) && b.token);
+  return (prefer && ids.includes(String(prefer)) && pick(prefer)) || ids.map(pick).find(Boolean) || null;
+}
+async function _rbGroupSeen(chat, botId, gone) {
   if (!chat || !/^(group|supergroup)$/.test(chat.type)) return;
-  const id = String(chat.id); const title = String(chat.title || '').slice(0, 80);
-  const c = await _rbCfg(); const g = (c.groups || []).find((x) => String(x.id) === id); if (g && g.title === title) return;
+  const id = String(chat.id); const title = String(chat.title || '').slice(0, 80); const c = await _rbCfg(); const g = _rbGroup(c, id);
+  const bots = new Set(((g && g.bots) || []).map(String)); if (gone) bots.delete(String(botId)); else bots.add(String(botId));
+  if (g && g.title === title && bots.size === (g.bots || []).length && [...bots].every((x) => (g.bots || []).includes(x))) return;
   await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id } } }, { upsert: true });
-  await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.groups': { $each: [{ id, title, at: new Date() }], $slice: -40 } } });
+  if (bots.size) await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.groups': { $each: [{ id, title: title || (g && g.title) || id, bots: [...bots], at: new Date() }], $slice: -60 } } });
   _rbMem.at = 0;
 }
+// Una sola vez por mensaje aunque lo reciban 2 bots o 2 instancias (comandos, correcciones).
+async function _rbOnce(chatId, msgId) {
+  const k = String(chatId) + ':' + String(msgId);
+  try { await Config.collection.updateOne({ key: 'rcptbotseen' }, { $setOnInsert: { key: 'rcptbotseen', value: { ids: [] } } }, { upsert: true }); } catch (_) {}
+  const r = await Config.collection.updateOne({ key: 'rcptbotseen', 'value.ids': { $ne: k } }, { $push: { 'value.ids': { $each: [k], $slice: -500 } } });
+  return r.modifiedCount === 1;
+}
+const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const _rbMoney = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+const _rbMoney2 = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 function _rbParseAmount(txt) {
   const ms = String(txt || '').match(/\d[\d.,]*/g); if (!ms) return null; let best = null;
   for (const raw of ms) {
@@ -31639,51 +31664,110 @@ function _rbPickTo(route, amount) {
   if (!route || !(Number(amount) > 0)) return null; const ct = _rbCents(amount);
   const r = (route.rules || []).find((x) => String(x.cents) === ct); return r ? String(r.to) : (route.otherTo ? String(route.otherTo) : null);
 }
-function _rbTitle(c, id) { const g = (c.groups || []).find((x) => String(x.id) === String(id)); return g ? g.title : String(id); }
-async function _rbOpenSum(fromChat, toChat) {
-  const a = await _rbM().RcptFwd.aggregate([{ $match: { fromChat: String(fromChat), toChat: String(toChat), status: 'open' } }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+async function _rbOpenSum(fromChat, toChat, structId) {
+  const mq = { fromChat: String(fromChat), toChat: String(toChat), status: 'open' }; if (structId) mq.structId = structId;
+  const a = await _rbM().RcptFwd.aggregate([{ $match: mq }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
   return a[0] || { total: 0, count: 0 };
 }
+// #1079-d (owner: "en el grupo 1 ir sumando, aparte de lo que se envía, una suma actualizada sin corte; se corta cuando termina el mes y empieza de 0"):
+// todo lo REENVIADO desde ese grupo en el mes calendario (hora AR), abierto o ya cerrado; no lo tocan los cierres de las 13 h.
+async function _rbMonthSum(fromChat, structId) {
+  const m0 = new Date(_schedArtKey(new Date()).slice(0, 7) + '-01T00:00:00-03:00');
+  const q = { fromChat: String(fromChat), status: { $in: ['open', 'closed'] }, createdAt: { $gte: m0 } }; if (structId) q.structId = structId;
+  const a = await _rbM().RcptFwd.aggregate([{ $match: q }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+  return a[0] || { total: 0, count: 0 };
+}
+const _RB_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function _rbMonthTxt(ms) { const mi = Number(_schedArtKey(new Date()).slice(5, 7)) - 1; return `📅 Total de ${_RB_MES[mi]} (sin corte): <b>${_rbMoney(ms.total)}</b> (${ms.count} comp.)`; }
 function _rbSumTxt(s) { return `Acumulado: <b>${_rbMoney(s.total)}</b> (${s.count} comprobante${s.count === 1 ? '' : 's'})`; }
 // Cierres anteriores de ese origen→destino que todavía no se ENVIARON (owner: "si no cotiza, en la suma de cada comprobante dejar plasmado el pendiente a cotizar anterior y el monto").
-async function _rbPendTxt(fromChat, toChat) {
-  const cl = await _rbM().RcptClose.find({ fromChat: String(fromChat), toChat: String(toChat), status: { $in: ['pending', 'quoted'] } }).sort({ createdAt: 1 }).limit(10).lean();
+const _rbDT = (d) => new Date(d).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+async function _rbPendTxt(fromChat, toChat, structId, exceptId) {
+  const q = { fromChat: String(fromChat), toChat: String(toChat), status: { $in: ['pending', 'quoted'] } }; if (structId) q.structId = structId; if (exceptId) q.id = { $ne: exceptId };
+  const cl = await _rbM().RcptClose.find(q).sort({ createdAt: 1 }).limit(10).lean();
   if (!cl.length) return '';
-  const d = (x) => new Date(x.createdAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  return '\n' + cl.map((x) => x.status === 'quoted' ? `💱 Anterior (cierre ${d(x)}): <b>${_rbMoney(x.total)}</b> · cotizado, falta /enviado` : `⏳ Anterior PENDIENTE A COTIZAR (cierre ${d(x)}): <b>${_rbMoney(x.total)}</b>`).join('\n');
+  const per = (x) => (x.periodFrom ? 'del ' + _rbDT(x.periodFrom) + ' al ' : 'cierre ') + _rbDT(x.createdAt);
+  return '\n' + cl.map((x) => x.status === 'quoted'
+    ? `💱 COTIZADO${x.quoteNote ? ' (' + _rbH(x.quoteNote) + ')' : ''} · <b>PENDIENTE A ENVIAR</b>: <b>${_rbMoney(x.total)}</b> · ${x.count} comp. · ${per(x)}`
+    : `⏳ <b>PENDIENTE A COTIZAR</b>: <b>${_rbMoney(x.total)}</b> · ${x.count} comp. · ${per(x)}`).join('\n');
 }
-async function _rbReadAmount(c, m) {
-  // Foto (la más grande) o documento imagen ⇒ IA de comprobantes con la imagen en base64 (nunca la URL de Telegram: lleva el token).
-  let fileId = null, mime = 'image/jpeg';
-  if (Array.isArray(m.photo) && m.photo.length) fileId = m.photo[m.photo.length - 1].file_id;
-  else if (m.document && /^image\//.test(String(m.document.mime_type || ''))) { fileId = m.document.file_id; mime = m.document.mime_type; }
-  if (fileId && comprobanteAi.isEnabled && comprobanteAi.isEnabled()) {
+// #1079-e (owner: "agregar una explicación al bot: que presten atención en enviar bien los centavos, ,99 o ,43"). Va con /start y /ayuda, al encender
+// la estructura (fijado arriba del grupo si el bot puede) y desde el panel (📌 Mandar explicación); el aviso de "centavos sin grupo" repite la lista.
+function _rbRulesList(c, route) {
+  const l = (route.rules || []).map((x) => `• termina en <b>,${_rbH(x.cents)}</b> → ${_rbH(_rbTitle(c, x.to))}`);
+  l.push(route.otherTo ? `• cualquier otra terminación → ${_rbH(_rbTitle(c, route.otherTo))}` : '• cualquier otra terminación → <b>NO se reenvía</b>');
+  return l.join('\n');
+}
+function _rbHelpTxt(c, route) {
+  const r0 = (route.rules || [])[0];
+  if (!r0) return `📌 <b>CÓMO MANDAR LOS COMPROBANTES</b>\nMandá acá la foto del comprobante ENTERO (que se vea el monto). El bot lo reenvía a ${_rbH(_rbTitle(c, route.otherTo))}, lo marca ✅ REENVIADO y lo suma.\nSi no lee el monto: respondé la foto con el monto (ej. 25000,50).\n/total = cuánto va sumado. Cierre todos los días hábiles a las 13 h.`;
+  return `📌 <b>CÓMO MANDAR LOS COMPROBANTES</b>\n⚠️ <b>PRESTÁ ATENCIÓN A LOS CENTAVOS</b> de la transferencia: según cómo termina el monto, el comprobante va a un grupo o a otro.\n${_rbRulesList(c, route)}\nEjemplo: <b>$25.000,${_rbH(r0.cents)}</b> va a ${_rbH(_rbTitle(c, r0.to))}.\n\nMandá la foto del comprobante ENTERO (que se vean bien los centavos). Si el bot no lee el monto o lo lee mal, respondé la foto con el monto con centavos (ej. 25000,${_rbH(r0.cents)}). Si el cliente se equivocó con el decimal, tocá el botón y elegí a qué grupo va.\n/total = cuánto va sumado. Cierre todos los días hábiles a las 13 h.`;
+}
+// #1079-f (owner: "si envían mal, que aclaren el error: elegir la terminación para dónde va si hay 2 (,99 o ,43); si se equivocaron que puedan ajustar; cuando
+// llegue, que avise que el cliente se equivocó con el decimal pero va a este grupo, y que la suma siga normal"). Botones 'rb:<id>:<n>' (elegir destino) y
+// 'rb:<id>:m' (mostrar opciones para cambiar uno ya reenviado; sólo mientras no se cerró).
+function _rbDests(c, route) {
+  const out = []; const seen = new Set();
+  for (const x of (route && route.rules) || []) if (!seen.has(String(x.to))) { seen.add(String(x.to)); out.push({ to: String(x.to), label: `,${x.cents} → ${_rbTitle(c, x.to)}` }); }
+  if (route && route.otherTo && !seen.has(String(route.otherTo))) out.push({ to: String(route.otherTo), label: `otra → ${_rbTitle(c, route.otherTo)}` });
+  return out;
+}
+function _rbPickKb(c, route, recId, exceptTo) {
+  const rows = _rbDests(c, route).map((d, n) => ({ d, n })).filter((x) => x.d.to !== exceptTo).map((x) => [{ text: '➡️ Va a ' + x.d.label.slice(0, 50), callback_data: `rb:${recId}:${x.n}` }]);
+  return rows.length ? { inline_keyboard: rows } : undefined;
+}
+async function _rbSendHelp(c, route, pin) {
+  const r = await _rbSend(c, route.from, _rbHelpTxt(c, route), route.botId);
+  if (pin && r.ok && r.result) { const b = _rbTokFor(c, route.from, route.botId); if (b) await tgChannel.call(b.token, 'pinChatMessage', { chat_id: route.from, message_id: r.result.message_id, disable_notification: true }); }
+  return r;
+}
+function _rbFileOf(m) {
+  if (Array.isArray(m.photo) && m.photo.length) return { fileId: m.photo[m.photo.length - 1].file_id, fileKind: 'photo', fileMime: 'image/jpeg', fileName: 'comprobante.jpg' };
+  if (m.document && /^(image\/|application\/pdf)/.test(String(m.document.mime_type || ''))) return { fileId: m.document.file_id, fileKind: 'document', fileMime: m.document.mime_type, fileName: String(m.document.file_name || 'comprobante').slice(0, 80) };
+  return null;
+}
+async function _rbDownload(token, fileId) {
+  const f = await tgChannel.call(token, 'getFile', { file_id: fileId });
+  if (!f.ok || !f.result || !f.result.file_path || f.result.file_size > 15 * 1024 * 1024) return null;
+  const r = await require('axios').get('https://api.telegram.org/file/bot' + token + '/' + f.result.file_path, { responseType: 'arraybuffer', timeout: 25000, maxContentLength: 15 * 1024 * 1024 });
+  return Buffer.from(r.data);
+}
+async function _rbReadAmount(token, file, caption) {
+  // Imagen ⇒ IA de comprobantes en base64 (nunca la URL de Telegram: lleva el token). PDF o sin IA ⇒ el número escrito al mandarla.
+  if (file && /^image\//.test(file.fileMime) && comprobanteAi.isEnabled && comprobanteAi.isEnabled()) {
     try {
-      const f = await tgChannel.call(c.token, 'getFile', { file_id: fileId });
-      if (f.ok && f.result && f.result.file_path && !(f.result.file_size > 8 * 1024 * 1024)) {
-        const r = await require('axios').get('https://api.telegram.org/file/bot' + c.token + '/' + f.result.file_path, { responseType: 'arraybuffer', timeout: 20000, maxContentLength: 8 * 1024 * 1024 });
-        const ai = await comprobanteAi.analyzeComprobante('data:' + mime + ';base64,' + Buffer.from(r.data).toString('base64'));
-        if (ai && ai.ok && Number(ai.amount) > 0) return { amount: Math.round(Number(ai.amount) * 100) / 100, from: 'ia' };
-      }
+      const buf = await _rbDownload(token, file.fileId);
+      if (buf && buf.length <= 8 * 1024 * 1024) { const ai = await comprobanteAi.analyzeComprobante('data:' + file.fileMime + ';base64,' + buf.toString('base64')); if (ai && ai.ok && Number(ai.amount) > 0) return { amount: Math.round(Number(ai.amount) * 100) / 100, from: 'ia' }; }
     } catch (e) { logger.warn('[rcptbot] lectura ' + e.message); }
   }
-  const t = _rbParseAmount(m.caption || ''); return t ? { amount: t, from: 'texto' } : { amount: null, from: null };
+  const t = _rbParseAmount(caption || ''); return t ? { amount: t, from: 'texto' } : { amount: null, from: null };
 }
-const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-// Reenvía un comprobante YA anotado (rec) con su monto: elige el grupo por los centavos; sin monto o sin grupo para esos centavos queda 'hold'.
-async function _rbRoute(c, rec, amount, from, caption) {
-  const route = (c.routes || []).find((x) => String(x.from) === rec.fromChat);
-  const reply = (text, extra) => tgChannel.call(c.token, 'sendMessage', Object.assign({ chat_id: rec.fromChat, reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true, parse_mode: 'HTML', text }, extra || {}));
+async function _rbSend(c, chatId, text, prefer, extra) {
+  const b = _rbTokFor(c, chatId, prefer); if (!b) return { ok: false, error: 'ningún bot cargado está en ese grupo' };
+  return tgChannel.call(b.token, 'sendMessage', Object.assign({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }, extra || {}));
+}
+// Reenvía un comprobante YA anotado (rec): elige el grupo por los centavos; sin monto o sin grupo para esos centavos queda 'hold'.
+async function _rbRoute(c, rec, amount, from, opts = {}) {
+  const route = (c.routes || []).find((x) => String(x.from) === rec.fromChat && (!rec.structId || x.structId === rec.structId));
+  const reply = (text, kb) => _rbSend(c, rec.fromChat, text, rec.srcBot, Object.assign({ reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true }, kb ? { reply_markup: kb } : {}));
   if (!(Number(amount) > 0)) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ No pude leer el monto. <b>Respondé esta foto con el monto con centavos</b> (ej. 25000,99) y lo reenvío.'); return; }
-  const to = route && _rbPickTo(route, amount);
-  if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`⚠️ ${_rbMoney(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó. Si el monto está mal, respondé esta foto con el correcto.`); return; }
-  const toTitle = _rbTitle(c, to);
-  const set = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: { $in: ['hold'] } }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });
-  if (!set) return; // ya se reenvió (otra instancia)
-  const s = await _rbOpenSum(rec.fromChat, to);
-  const pend = await _rbPendTxt(rec.fromChat, to);
-  const cap = `🧾 De: <b>${_rbH(rec.fromTitle)}</b> · <b>${_rbMoney(amount)}</b>${rec.sender ? ' · ' + _rbH(rec.sender) : ''}\n${_rbSumTxt(s)}${pend}` + (caption ? '\n' + _rbH(String(caption).slice(0, 500)) : '');
-  const cp = await tgChannel.call(c.token, 'copyMessage', { chat_id: to, from_chat_id: rec.fromChat, message_id: rec.srcMsgId, caption: cap, parse_mode: 'HTML' });
+  const to = opts.forceTo ? (_rbDests(c, route).some((d) => d.to === String(opts.forceTo)) ? String(opts.forceTo) : null) : (route && _rbPickTo(route, amount));
+  if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`⚠️ ${_rbMoney2(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó.\n⚠️ Prestá atención a los centavos:\n${_rbRulesList(c, route || {})}\n👇 Si el cliente se equivocó con el decimal, <b>elegí a qué grupo va</b>. Si el monto está mal, respondé esta foto con el correcto (con centavos).`, route ? _rbPickKb(c, route, rec.id) : undefined); return; }
+  const toTitle = _rbTitle(c, to); const dst = _rbTokFor(c, to, (route && route.botId) || rec.srcBot);
+  if (!dst) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply('⚠️ Ningún bot cargado está en ' + _rbH(toTitle) + ': agregalo a ese grupo. No se reenvió.'); return; }
+  const set = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: 'hold' }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });
+  if (!set) return; // ya se reenvió (otra instancia / otro bot)
+  const s = await _rbOpenSum(rec.fromChat, to, rec.structId); const pend = await _rbPendTxt(rec.fromChat, to, rec.structId);
+  const wrong = opts.forceTo && _rbPickTo(route, amount) !== to; // eligieron el grupo a mano: los centavos no coincidían
+  const warnTxt = wrong ? `\n⚠️ <b>El cliente se equivocó con el decimal</b> (terminó en ,${_rbCents(amount)}), pero va a este grupo.` : '';
+  const cap = `🧾 De: <b>${_rbH(rec.fromTitle)}</b> · <b>${_rbMoney2(amount)}</b>${rec.sender ? ' · ' + _rbH(rec.sender) : ''}${warnTxt}${opts.movedFrom ? '\n↪️ Movido desde ' + _rbH(opts.movedFrom) : ''}\n${_rbSumTxt(s)}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '');
+  let cp;
+  if (dst.id === String(rec.srcBot)) cp = await tgChannel.call(dst.token, 'copyMessage', { chat_id: to, from_chat_id: rec.fromChat, message_id: rec.srcMsgId, caption: cap, parse_mode: 'HTML' });
+  else { // otro bot: se baja con el que lo recibió y lo sube el del destino
+    const src = (c.botsDec || []).find((b) => b.id === String(rec.srcBot) && b.token); let buf = null;
+    try { buf = src && rec.fileId ? await _rbDownload(src.token, rec.fileId) : null; } catch (_) {}
+    cp = buf ? await tgChannel.sendMedia(dst.token, rec.fileKind === 'document' ? 'document' : 'photo', to, { buffer: buf, mime: rec.fileMime || 'image/jpeg', filename: rec.fileName || 'comprobante.jpg' }, { caption: cap, parse_mode: 'HTML' }) : { ok: false, error: 'no se pudo bajar el archivo' };
+  }
   if (!cp.ok) {
     await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'failed', error: String(cp.error).slice(0, 200) } });
     await _rbSet({ lastError: 'reenvío a ' + toTitle + ': ' + String(cp.error).slice(0, 150), lastErrorAt: new Date() });
@@ -31691,178 +31775,297 @@ async function _rbRoute(c, rec, amount, from, caption) {
     return;
   }
   await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { fwdMsgId: cp.result && cp.result.message_id } });
-  const r = await reply(`✅ <b>REENVIADO</b> a ${_rbH(toTitle)} · <b>${_rbMoney(amount)}</b>${from === 'texto' || from === 'corregido' ? ' (monto escrito)' : ''}\n${_rbSumTxt(s)}${pend}`);
+  const ms = await _rbMonthSum(rec.fromChat, rec.structId);
+  const multi = _rbDests(c, route).length > 1;
+  const r = await reply(`✅ <b>REENVIADO</b> a ${_rbH(toTitle)} · <b>${_rbMoney2(amount)}</b>${from === 'texto' || from === 'corregido' ? ' (monto escrito)' : ''}${wrong ? '\n⚠️ Los centavos (,' + _rbCents(amount) + ') no coincidían: elegido a mano.' : ''}\n${_rbSumTxt(s)}${pend}\n${_rbMonthTxt(ms)}`, multi ? { inline_keyboard: [[{ text: '↪️ Me equivoqué: cambiar grupo', callback_data: `rb:${rec.id}:m` }]] } : undefined);
   if (r.ok) await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { replyMsgId: r.result && r.result.message_id } });
 }
-async function _rbOnReceipt(c, m) {
+async function _rbOnReceipt(c, bot, m, file, route) {
   const sender = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ') || (m.from && m.from.username) || '';
-  let rec; try { rec = await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: String(m.chat.id), fromTitle: String(m.chat.title || ''), srcMsgId: m.message_id, sender, status: 'hold' }); } catch (e) { if (e && e.code === 11000) return; throw e; }
-  const rd = await _rbReadAmount(c, m);
-  await _rbRoute(c, rec, rd.amount, rd.from, m.caption || '');
+  let rec;
+  try { rec = await _rbM().RcptFwd.create(Object.assign({ id: uuidv4(), fromChat: String(m.chat.id), fromTitle: String(m.chat.title || ''), srcMsgId: m.message_id, srcBot: bot.id, structId: (route && route.structId) || null, sender, caption: String(m.caption || '').slice(0, 600), status: 'hold' }, file)); }
+  catch (e) { if (e && e.code === 11000) return; throw e; } // el otro bot del grupo ya lo tomó
+  const rd = await _rbReadAmount(bot.token, file, m.caption || '');
+  await _rbRoute(c, rec.toObject ? rec.toObject() : rec, rd.amount, rd.from);
 }
 // CIERRE (owner: "siempre 13 h todos los días; el viernes cierra 13 h y vuelve el lunes 13 h con todo el finde; a las 13 h queda pendiente a cotizar y
 // la cuenta empieza de 0"). Cierra TODO lo abierto de ese origen, un cierre por destino (RcptClose 'pending'), y avisa en el origen y en cada destino.
-async function _rbClose(c, fromChat, by) {
-  const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
-  await _rbM().RcptFwd.updateMany({ fromChat: String(fromChat), status: 'open' }, { $set: { status: 'closed', closeId } });
-  const rows = await _rbM().RcptFwd.aggregate([{ $match: { closeId } }, { $group: { _id: '$toChat', toTitle: { $first: '$toTitle' }, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+async function _rbClose(c, route, by) {
+  const fromChat = String(route.from); const structId = route.structId || null; const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
+  const q = { fromChat, status: 'open' }; if (structId) q.structId = structId;
+  await _rbM().RcptFwd.updateMany(q, { $set: { status: 'closed', closeId } });
+  const rows = await _rbM().RcptFwd.aggregate([{ $match: { closeId } }, { $group: { _id: '$toChat', toTitle: { $first: '$toTitle' }, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 }, first: { $min: '$createdAt' } } }]);
   if (!rows.length) return { ok: false, why: 'no hay comprobantes abiertos' };
-  const when = new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  const lines = [];
+  const now = new Date(); const lines = []; const pre = route.botId || null;
   for (const r of rows) {
-    await _rbM().RcptClose.create({ id: uuidv4(), fromChat: String(fromChat), fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), count: r.count, total: r.total, by: String(by || '').slice(0, 60), status: 'pending' });
-    const t = `🔒 <b>CIERRE ${_rbH(when)}</b>\nDe: ${_rbH(fromTitle)} → ${_rbH(r.toTitle)}\nComprobantes: <b>${r.count}</b> · Total: <b>${_rbMoney(r.total)}</b>\n⏳ PENDIENTE A COTIZAR. La cuenta vuelve a $0.`;
-    await tgChannel.call(c.token, 'sendMessage', { chat_id: r._id, text: t, parse_mode: 'HTML' });
-    lines.push(`→ ${_rbH(r.toTitle)}: <b>${_rbMoney(r.total)}</b> (${r.count})`);
+    const cid = uuidv4();
+    await _rbM().RcptClose.create({ id: cid, fromChat, fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), structId, structName: route.structName || '', periodFrom: r.first, count: r.count, total: r.total, by: String(by || '').slice(0, 60), status: 'pending' });
+    const det = `del ${_rbDT(r.first)} al ${_rbDT(now)} · ${r.count} comprobante${r.count === 1 ? '' : 's'}`;
+    const pend = await _rbPendTxt(fromChat, r._id, structId, cid); // los ANTERIORES todavía sin enviar (el de recién va arriba)
+    await _rbSend(c, r._id, `🔒 <b>CIERRE ${_rbDT(now)}</b>${route.structName ? ' · ' + _rbH(route.structName) : ''}\nDe: ${_rbH(fromTitle)} → ${_rbH(r.toTitle)}\n⏳ <b>PENDIENTE A COTIZAR: ${_rbMoney(r.total)}</b>\n${det}\n🆕 Suma nueva: <b>$0</b>${pend}\n\nCuando esté cotizado: /cotizado · cuando se envíe: /enviado`, pre);
+    lines.push(`→ ${_rbH(r.toTitle)}: ⏳ PENDIENTE A COTIZAR <b>${_rbMoney(r.total)}</b> (${det})`);
   }
-  await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, parse_mode: 'HTML', text: `🔒 <b>CIERRE ${_rbH(when)}</b>\n${lines.join('\n')}\n⏳ Pendiente a cotizar. La cuenta vuelve a $0.` });
-  const holds = await _rbM().RcptFwd.countDocuments({ fromChat: String(fromChat), status: 'hold' });
-  if (holds) await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, text: `⚠️ Quedan ${holds} comprobante(s) sin reenviar (sin monto o sin grupo para esos centavos): respondelos con el monto correcto.` });
+  await _rbSend(c, fromChat, `🔒 <b>CIERRE ${_rbDT(now)}</b>${route.structName ? ' · ' + _rbH(route.structName) : ''}\n${lines.join('\n')}\n🆕 Suma nueva: <b>$0</b>\n${_rbMonthTxt(await _rbMonthSum(fromChat, structId))}`, pre);
+  const hq = { fromChat, status: 'hold' }; if (structId) hq.structId = structId;
+  const holds = await _rbM().RcptFwd.countDocuments(hq);
+  if (holds) await _rbSend(c, fromChat, `⚠️ Quedan ${holds} comprobante(s) sin reenviar (sin monto o sin grupo para esos centavos): respondelos con el monto correcto.`, pre);
   return { ok: true, closes: rows.length, total: rows.reduce((a, r) => a + r.total, 0) };
 }
 // Cron: lunes a viernes desde las 13:00 (ART), una vez por día entre instancias. Sábado y domingo no cierra ⇒ el lunes junta todo desde el viernes 13 h.
 async function _rbCloseTick() {
-  const c = await _rbCfg(); if (!c.token || !(c.routes || []).length) return;
+  const c = await _rbCfg(); if (!(c.botsDec || []).some((b) => b.token) || !(c.routes || []).length) return;
   const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
   if (dow === 0 || dow === 6 || _tgArtHour(now) < 13) return;
   const cl = await Config.collection.updateOne({ key: 'rcptbot', 'value.lastAutoClose': { $ne: dk } }, { $set: { 'value.lastAutoClose': dk } });
   _rbMem.at = 0; if (cl.modifiedCount !== 1) return;
-  for (const r of c.routes) { try { await _rbClose(c, r.from, 'automático 13 h'); } catch (e) { logger.warn('[rcptbot] cierre ' + e.message); } }
+  for (const r of c.routes) { try { await _rbClose(c, r, 'automático 13 h'); } catch (e) { logger.warn('[rcptbot] cierre ' + e.message); } }
 }
 setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('[rcptbot] cierre ' + e.message)); }, 60000); }, 75000);
-async function _rbDestCmd(c, toChat, cmd, by, arg) {
-  const q = cmd === 'cotizado' ? { toChat, status: 'pending' } : { toChat, status: { $in: ['pending', 'quoted'] } };
+async function _rbDestCmd(c, toChat, cmd, by, arg, structIds, botId) {
+  const q = cmd === 'cotizado' ? { toChat, status: 'pending' } : { toChat, status: { $in: ['pending', 'quoted'] } }; if (structIds && structIds.length) q.structId = { $in: structIds };
   const list = await _rbM().RcptClose.find(q).sort({ createdAt: 1 }).lean();
-  if (!list.length) { await tgChannel.call(c.token, 'sendMessage', { chat_id: toChat, text: cmd === 'cotizado' ? 'No hay cierres pendientes a cotizar.' : 'No hay cierres pendientes de envío.' }); return; }
+  if (!list.length) { await _rbSend(c, toChat, cmd === 'cotizado' ? 'No hay cierres pendientes a cotizar.' : 'No hay cierres pendientes de envío.', botId); return; }
   const now = new Date(); const rate = Number(String(arg || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || null;
   const set = cmd === 'cotizado' ? { status: 'quoted', quotedBy: String(by).slice(0, 60), quotedAt: now, quoteRate: rate, quoteNote: String(arg || '').slice(0, 200) } : { status: 'sent', sentBy: String(by).slice(0, 60), sentAt: now };
   await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) } }, { $set: set });
   const total = list.reduce((a, x) => a + (Number(x.total) || 0), 0);
-  const t = cmd === 'cotizado' ? `💱 <b>COTIZADO</b> · ${list.length} cierre(s) · ${_rbMoney(total)}${rate ? ' · cotización ' + _rbH(arg) : ''}${by ? ' · ' + _rbH(by) : ''}\nFalta /enviado.` : `✅ <b>ENVIADO</b> · ${list.length} cierre(s) · ${_rbMoney(total)}${by ? ' · ' + _rbH(by) : ''}\nYa no queda pendiente.`;
-  await tgChannel.call(c.token, 'sendMessage', { chat_id: toChat, parse_mode: 'HTML', text: t });
-  for (const f of [...new Set(list.map((x) => x.fromChat))]) { const sub = list.filter((x) => x.fromChat === f); await tgChannel.call(c.token, 'sendMessage', { chat_id: f, parse_mode: 'HTML', text: (cmd === 'cotizado' ? '💱 <b>COTIZADO</b> en ' : '✅ <b>ENVIADO</b> desde ') + _rbH(_rbTitle(c, toChat)) + ': ' + _rbMoney(sub.reduce((a, x) => a + (Number(x.total) || 0), 0)) + (cmd === 'enviado' ? '\nYa no queda pendiente.' : '') }); }
+  const det = list.map((x) => `• ${_rbH(x.fromTitle)}: ${_rbMoney(x.total)} · ${x.count} comp. · ${x.periodFrom ? 'del ' + _rbDT(x.periodFrom) + ' al ' : 'cierre '}${_rbDT(x.createdAt)}`).join('\n');
+  await _rbSend(c, toChat, cmd === 'cotizado' ? `💱 <b>COTIZADO</b>${rate ? ' · cotización ' + _rbH(arg) : ''}${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(total)}</b>\n📤 <b>PENDIENTE A ENVIAR</b>. Cuando se envíe: /enviado` : `✅ <b>ENVIADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(total)}</b>\nYa no queda pendiente.`, botId);
+  for (const f of [...new Set(list.map((x) => x.fromChat))]) { const sub = list.filter((x) => x.fromChat === f); await _rbSend(c, f, (cmd === 'cotizado' ? '💱 <b>COTIZADO</b> en ' : '✅ <b>ENVIADO</b> desde ') + _rbH(_rbTitle(c, toChat)) + ': ' + _rbMoney(sub.reduce((a, x) => a + (Number(x.total) || 0), 0)) + (cmd === 'enviado' ? '\nYa no queda pendiente.' : '\n📤 Pendiente a enviar.'), botId); }
 }
-async function _rbOnMessage(c, m) {
-  await _rbGroupSeen(m.chat).catch(() => {});
-  const fromChat = String(m.chat.id); const route = (c.routes || []).find((x) => String(x.from) === fromChat);
+async function _rbOnCallback(c, bot, cq) {
+  const mm = String(cq.data || '').match(/^rb:([0-9a-f-]{36}):(m|\d{1,2})$/); const ans = (text) => tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: text || '', show_alert: !!text });
+  if (!mm || !cq.message || !cq.message.chat) return ans();
+  const chat = String(cq.message.chat.id); const by = [cq.from && cq.from.first_name, cq.from && cq.from.last_name].filter(Boolean).join(' ');
+  const rec = await _rbM().RcptFwd.findOne({ id: mm[1], fromChat: chat }).lean(); if (!rec) return ans('No encontré ese comprobante.');
+  const route = (c.routes || []).find((x) => x.from === chat && x.structId === rec.structId); if (!route) return ans('La estructura está apagada.');
+  if (rec.status === 'closed') return ans('Ese comprobante ya entró en un cierre: no se puede mover.');
+  if (rec.status !== 'hold' && rec.status !== 'open') return ans('Ese comprobante no se puede mover.');
+  if (!(Number(rec.amount) > 0)) return ans('Primero respondé la foto con el monto.');
+  const dests = _rbDests(c, route);
+  if (mm[2] === 'm') { // mostrar a qué grupos se puede mover
+    const kb = _rbPickKb(c, route, rec.id, rec.toChat); await ans();
+    if (kb) await tgChannel.call(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: kb });
+    return;
+  }
+  const d = dests[Number(mm[2])]; if (!d) return ans('Opción vencida: el circuito cambió.');
+  if (rec.status === 'open' && rec.toChat === d.to) return ans('Ya está en ese grupo.');
+  await tgChannel.call(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
+  if (rec.status === 'open') { // mover uno ya reenviado: sale de la suma del grupo viejo y va al nuevo
+    const back = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: 'open', toChat: rec.toChat }, { $set: { status: 'hold' } }, { new: true });
+    if (!back) return ans('Ya se movió.');
+    const oldTitle = rec.toTitle || _rbTitle(c, rec.toChat);
+    await _rbSend(c, rec.toChat, `❌ <b>ANULADO</b>: ${_rbMoney2(rec.amount)} iba a otro grupo (→ ${_rbH(d.label)}). Se descontó de esta suma.${by ? ' · ' + _rbH(by) : ''}\n${_rbSumTxt(await _rbOpenSum(rec.fromChat, rec.toChat, rec.structId))}`, route.botId, rec.fwdMsgId ? { reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true } : undefined);
+    await ans(); await _rbRoute(c, Object.assign({}, rec, { status: 'hold' }), rec.amount, rec.amountFrom, { forceTo: d.to, movedFrom: oldTitle });
+    return;
+  }
+  await ans(); await _rbRoute(c, rec, rec.amount, rec.amountFrom, { forceTo: d.to });
+}
+async function _rbOnMessage(c, bot, m) {
+  await _rbGroupSeen(m.chat, bot.id).catch(() => {});
+  const fromChat = String(m.chat.id); const mine = (c.routes || []).filter((x) => x.botId === bot.id); const route = mine.find((x) => String(x.from) === fromChat);
   const text = String(m.text || '').trim(); const by = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ');
+  if (/^\/(start|ayuda)(@\w+)?$/i.test(text)) { if (!(await _rbOnce(fromChat, m.message_id))) return; if (route) await _rbSendHelp(c, route, false); else await tgChannel.call(bot.token, 'sendMessage', { chat_id: fromChat, text: '✅ Grupo detectado: ya aparece en el panel (Bot de comprobantes).' }); return; }
   // Grupo de DESTINO: /cotizado ⇒ los cierres pendientes a cotizar pasan a cotizados; /enviado ⇒ dejan de estar pendientes (owner).
   const cmd = (text.match(/^\/(cotizado|enviado)(@\w+)?(\s+.*)?$/i) || [])[1];
   if (cmd) {
-    const isDest = (c.routes || []).some((r) => (r.rules || []).some((x) => String(x.to) === fromChat) || String(r.otherTo || '') === fromChat);
-    if (isDest) { await _rbDestCmd(c, fromChat, cmd.toLowerCase(), by, (text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || ''); return; }
+    const dr = mine.filter((r) => (r.rules || []).some((x) => String(x.to) === fromChat) || String(r.otherTo || '') === fromChat);
+    if (dr.length && (await _rbOnce(fromChat, m.message_id))) await _rbDestCmd(c, fromChat, cmd.toLowerCase(), by, (text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || '', [...new Set(dr.map((r) => r.structId))], bot.id);
+    return;
   }
   if (!route) return;
-  if (/^\/cierrededia(@\w+)?$|^cierre de d[ií]a$/i.test(text)) { const r = await _rbClose(c, fromChat, by); if (!r.ok) await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, text: 'No hay comprobantes abiertos para cerrar.' }); return; }
+  if (/^\/cierrededia(@\w+)?$|^cierre de d[ií]a$/i.test(text)) { if (!(await _rbOnce(fromChat, m.message_id))) return; const r = await _rbClose(c, route, by); if (!r.ok) await _rbSend(c, fromChat, 'No hay comprobantes abiertos para cerrar.', bot.id); return; }
   if (/^\/total(@\w+)?$/i.test(text)) {
+    if (!(await _rbOnce(fromChat, m.message_id))) return;
     const dests = [...new Set([...(route.rules || []).map((x) => String(x.to)), route.otherTo ? String(route.otherTo) : null].filter(Boolean))]; const out = [];
-    for (const d of dests) { const s = await _rbOpenSum(fromChat, d); out.push(`→ ${_rbH(_rbTitle(c, d))}: <b>${_rbMoney(s.total)}</b> (${s.count})`); }
-    await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, parse_mode: 'HTML', text: '📊 Acumulado desde el último cierre (13 h):\n' + (out.join('\n') || 'sin grupos configurados') }); return;
+    for (const d of dests) { const s = await _rbOpenSum(fromChat, d, route.structId); out.push(`→ ${_rbH(_rbTitle(c, d))}: <b>${_rbMoney(s.total)}</b> (${s.count})${await _rbPendTxt(fromChat, d, route.structId)}`); }
+    await _rbSend(c, fromChat, '📊 Acumulado desde el último cierre (13 h):\n' + (out.join('\n') || 'sin grupos configurados') + '\n' + _rbMonthTxt(await _rbMonthSum(fromChat, route.structId)), bot.id); return;
   }
   if (text && m.reply_to_message) { // corrige el monto respondiendo la foto (o la respuesta del bot)
     if (!/^[\s$\d.,]+$/.test(text)) return; const n = _rbParseAmount(text); if (!n) return; const rid = m.reply_to_message.message_id;
-    const rec = await _rbM().RcptFwd.findOne({ fromChat, status: { $in: ['hold', 'open'] }, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] }).lean(); if (!rec) return;
-    if (rec.status === 'hold') { await _rbRoute(c, rec, n, 'corregido', ''); return; }
-    if (_rbPickTo(route, n) !== rec.toChat) { await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, reply_to_message_id: m.message_id, text: 'Ese monto va a OTRO grupo (por los centavos). Mandá el comprobante de nuevo; éste queda como está.' }); return; }
+    const rec = await _rbM().RcptFwd.findOne({ fromChat, structId: route.structId, status: { $in: ['hold', 'open'] }, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] }).lean(); if (!rec) return;
+    if (!(await _rbOnce(fromChat, m.message_id))) return;
+    if (rec.status === 'hold') { await _rbRoute(c, rec, n, 'corregido'); return; }
+    if (_rbPickTo(route, n) !== rec.toChat) { await _rbSend(c, fromChat, 'Ese monto va a OTRO grupo (por los centavos). Mandá el comprobante de nuevo; éste queda como está.', bot.id, { reply_to_message_id: m.message_id }); return; }
     await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'open' }, { $set: { amount: n, amountFrom: 'corregido' } });
-    if (rec.toChat && rec.fwdMsgId) await tgChannel.call(c.token, 'sendMessage', { chat_id: rec.toChat, reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true, text: '✏️ Monto corregido: ' + _rbMoney(n) });
-    const s = await _rbOpenSum(fromChat, rec.toChat);
-    await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, reply_to_message_id: m.message_id, parse_mode: 'HTML', text: `✏️ Monto: <b>${_rbMoney(n)}</b>\n${_rbSumTxt(s)}` });
+    if (rec.toChat && rec.fwdMsgId) await _rbSend(c, rec.toChat, '✏️ Monto corregido: ' + _rbMoney2(n), rec.srcBot, { reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true });
+    const s = await _rbOpenSum(fromChat, rec.toChat, route.structId);
+    await _rbSend(c, fromChat, `✏️ Monto: <b>${_rbMoney2(n)}</b>\n${_rbSumTxt(s)}\n${_rbMonthTxt(await _rbMonthSum(fromChat, route.structId))}`, bot.id, { reply_to_message_id: m.message_id });
     return;
   }
-  const isReceipt = (Array.isArray(m.photo) && m.photo.length) || (m.document && /^(image\/|application\/pdf)/.test(String(m.document.mime_type || '')));
-  if (isReceipt) await _rbOnReceipt(c, m);
+  const file = _rbFileOf(m); if (file) await _rbOnReceipt(c, bot, m, file, route);
 }
-async function _rbSetWebhook(c) {
-  let secret = c.webhookSecret; if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _rbSet({ webhookSecret: secret }); }
-  return tgChannel.call(c.token, 'setWebhook', { url: _tgWebhookBase(await _tgCfg()) + '/api/rcptbot/webhook', secret_token: secret, allowed_updates: ['message', 'my_chat_member'] });
+async function _rbSetWebhook(b) {
+  return tgChannel.call(b.token, 'setWebhook', { url: _tgWebhookBase(await _tgCfg()) + '/api/rcptbot/webhook/' + b.id, secret_token: b.secret, allowed_updates: ['message', 'my_chat_member', 'callback_query'] }); // #1079-f: + botones
 }
-app.post('/api/rcptbot/webhook', async (req, res) => {
+app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
   try {
-    const c = await _rbCfg(); const got = String(req.get('x-telegram-bot-api-secret-token') || ''); const sec = String(c.webhookSecret || '');
-    if (!sec || got.length !== sec.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec))) { _rbMem.at = 0; return res.status(401).end(); }
+    const c = await _rbCfg(); const bot = (c.botsDec || []).find((b) => b.id === String(req.params.bot || ''));
+    const got = String(req.get('x-telegram-bot-api-secret-token') || ''); const sec = String((bot && bot.secret) || '');
+    if (!bot || !sec || got.length !== sec.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec))) { _rbMem.at = 0; return res.status(401).end(); }
     res.json({ ok: true });
-    if (!c.token) return;
+    if (!bot.token) return;
     const u = req.body || {};
     if (u.my_chat_member && u.my_chat_member.chat) {
-      const ch = u.my_chat_member.chat; const st = u.my_chat_member.new_chat_member && u.my_chat_member.new_chat_member.status;
-      if (/^(member|administrator)$/.test(String(st))) await _rbGroupSeen(ch);
-      else if (/^(left|kicked)$/.test(String(st))) { await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id: String(ch.id) } } }); _rbMem.at = 0; }
+      const st = u.my_chat_member.new_chat_member && u.my_chat_member.new_chat_member.status;
+      if (/^(member|administrator)$/.test(String(st))) await _rbGroupSeen(u.my_chat_member.chat, bot.id);
+      else if (/^(left|kicked)$/.test(String(st))) await _rbGroupSeen(u.my_chat_member.chat, bot.id, true);
       return;
     }
+    if (u.callback_query) { await _rbOnCallback(await _rbCfg(), bot, u.callback_query); return; } // #1079-f
     const m = u.message; if (!m || !m.chat) return;
-    if (m.chat.type === 'private') { await tgChannel.call(c.token, 'sendMessage', { chat_id: m.chat.id, text: 'Este bot trabaja sólo en grupos: reenvía los comprobantes y lleva la suma.' }); return; }
-    await _rbOnMessage(c, m);
+    if (m.chat.type === 'private') { await tgChannel.call(bot.token, 'sendMessage', { chat_id: m.chat.id, text: 'Este bot trabaja sólo en grupos: reenvía los comprobantes y lleva la suma.' }); return; }
+    await _rbOnMessage(await _rbCfg(), bot, m);
   } catch (e) { logger.warn('[rcptbot] ' + e.message); if (!res.headersSent) res.json({ ok: true }); }
 });
-// Panel → 🧾 Bot de comprobantes (sólo admin)
-const _rbAdmin = (req, res) => { if (req.user.role !== 'admin') { res.status(403).json({ error: 'Sólo admin' }); return false; } return true; };
-app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, async (req, res) => {
-  if (!_rbAdmin(req, res)) return;
+// Panel → 🔐 Privado → 🧾 Bot de comprobantes (sólo admin + CLAVE PROPIA, como el Historial de números).
+let _rbPinCache = { at: 0, hash: undefined };
+async function _rbPinHash() { if (_rbPinCache.hash !== undefined && Date.now() - _rbPinCache.at < 60000) return _rbPinCache.hash; let h = null; try { h = await getConfig('rcptBotPinHash', null); } catch (_) {} _rbPinCache = { at: Date.now(), hash: h || null }; return _rbPinCache.hash; }
+app.post('/api/admin/rcptbot-pin', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const c = await _rbCfg(true);
-    let bot = null, hook = null;
-    if (c.token) { const me = await tgChannel.call(c.token, 'getMe', {}); bot = me.ok ? me.result.username : null; const wi = await tgChannel.call(c.token, 'getWebhookInfo', {}); if (wi.ok) hook = { url: wi.result.url, pending: wi.result.pending_update_count, lastError: wi.result.last_error_message || null, lastErrorAt: wi.result.last_error_date ? new Date(wi.result.last_error_date * 1000) : null }; }
-    const routes = [];
-    for (const r of c.routes || []) {
-      const dests = [...new Set([...(r.rules || []).map((x) => String(x.to)), r.otherTo ? String(r.otherTo) : null].filter(Boolean))]; const sums = [];
-      for (const d of dests) sums.push(Object.assign({ to: d, title: _rbTitle(c, d) }, await _rbOpenSum(r.from, d)));
-      routes.push(Object.assign({}, r, { sums, hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), status: 'hold' }) }));
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const pin = String((req.body && req.body.pin) || '').trim(), cur = String((req.body && req.body.current) || '').trim();
+    if (!/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
+    const h = await _rbPinHash(); if (h && _sha(cur) !== h) return res.status(403).json({ error: 'La clave actual no coincide.' });
+    await Config.set('rcptBotPinHash', _sha(pin), req.user.username); _rbPinCache = { at: 0, hash: undefined };
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+async function _rbPinGate(req, res, next) { // va en CADA ruta /api/admin/rcptbot* (después de authMiddleware + adminMiddleware)
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
+    const h = await _rbPinHash(); if (!h) return res.status(428).json({ error: 'Creá la clave del bot de comprobantes.', code: 'PIN_SETUP' });
+    const pin = String(req.get('x-rcptbot-pin') || '');
+    if (pin && _pinLocked(req)) return res.status(429).json({ error: 'Demasiados intentos con la clave. Esperá 15 minutos.', code: 'PIN_LOCKED' });
+    if (pin && _sha(pin) === h) { _pinCheck(req, true); return next(); }
+    if (pin) _pinCheck(req, false);
+    return res.status(423).json({ error: 'El bot de comprobantes está protegido con clave.', code: 'PIN_REQUIRED' });
+  } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+}
+app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    const c = await _rbCfg(true); const bots = [];
+    for (const b of c.botsDec || []) {
+      let hook = null; if (b.token) { const wi = await tgChannel.call(b.token, 'getWebhookInfo', {}); if (wi.ok) hook = { ok: /\/api\/rcptbot\/webhook\//.test(wi.result.url || ''), pending: wi.result.pending_update_count, lastError: wi.result.last_error_message || null }; }
+      bots.push({ id: b.id, username: b.username, bad: b.bad, hook, groups: (c.groups || []).filter((g) => (g.bots || []).includes(b.id)).length });
+    }
+    const structs = [];
+    for (const st of c.structs || []) {
+      const routes = [];
+      for (const r of st.routes || []) {
+        const dests = [...new Set([...(r.rules || []).map((x) => String(x.to)), r.otherTo ? String(r.otherTo) : null].filter(Boolean))]; const sums = [];
+        for (const d of dests) sums.push(Object.assign({ to: d, title: _rbTitle(c, d) }, await _rbOpenSum(r.from, d, st.id)));
+        routes.push(Object.assign({}, r, { sums, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
+      }
+      const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
+      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes });
     }
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
-    res.json({ success: true, hasToken: !!c.token, tokenLast4: c.token ? c.token.slice(-4) : '', decryptError: !!c.decryptError, onRender: !!c.onRender, bot, hook, groups: c.groups || [], routes, closes, recent, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
+    const groups = (c.groups || []).map((g) => ({ id: g.id, title: g.title, bots: (g.bots || []).map((id) => ((c.botsDec || []).find((b) => b.id === id) || {}).username || id) }));
+    res.json({ success: true, onRender: !!c.onRender, bots, groups, structs, closes, recent, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.post('/api/admin/rcptbot/token', authMiddleware, adminMiddleware, async (req, res) => {
-  if (!_rbAdmin(req, res)) return;
+app.post('/api/admin/rcptbot/bot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar o reemplazar un bot (por su token)
   try {
     const t = String((req.body || {}).token || '').trim(); if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(t)) return res.status(400).json({ error: 'Eso no parece un token de bot (números:letras, de @BotFather)' });
-    const tg = await _tgCfg(); if (tg.token && tg.token === t) return res.status(400).json({ error: 'Ese es el bot del CANAL. Creá uno nuevo en @BotFather sólo para comprobantes.' });
+    const tg = await _tgCfg(); if (tg.token && tg.token === t) return res.status(400).json({ error: 'Ese es el bot del CANAL. Usá otro bot para comprobantes.' });
     const me = await tgChannel.call(t, 'getMe', {}); if (!me.ok) return res.status(400).json({ error: 'Telegram no acepta ese token: ' + me.error });
-    await _rbSet({ tokenEnc: _credEncrypt(t), webhookSecret: crypto.randomBytes(24).toString('hex'), lastError: null });
-    const c = await _rbCfg(true); const w = await _rbSetWebhook(c);
-    res.json({ success: true, bot: me.result.username, webhook: w.ok ? 'ok' : w.error });
+    const id = String(me.result.id); const c = await _rbCfg(true);
+    if (!(c.bots || []).some((b) => String(b.id) === id) && (c.bots || []).length >= 12) return res.status(400).json({ error: 'Máximo 12 bots' });
+    const entry = { id, username: me.result.username || '', tokenEnc: _credEncrypt(t), secret: crypto.randomBytes(24).toString('hex'), at: new Date() };
+    await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.bots': { id } } }, { upsert: true });
+    await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.bots': entry } }); _rbMem.at = 0;
+    const w = await _rbSetWebhook({ id, token: t, secret: entry.secret });
+    const sid = String((req.body || {}).structId || ''); if (sid) { const c2 = await _rbCfg(true); const st = (c2.structs || []).find((x) => x.id === sid); if (st) await _rbStructPut(Object.assign({}, st, { botId: id })); }
+    res.json({ success: true, bot: entry.username, webhook: w.ok ? 'ok' : w.error });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.post('/api/admin/rcptbot/reconnect', authMiddleware, adminMiddleware, async (req, res) => {
-  if (!_rbAdmin(req, res)) return;
-  try { const c = await _rbCfg(true); if (!c.token) return res.status(400).json({ error: 'Falta el token del bot' }); const w = await _rbSetWebhook(c); res.json(w.ok ? { success: true } : { success: false, error: w.error }); } catch (e) { res.status(500).json({ error: e.message }); }
-});
-app.post('/api/admin/rcptbot/routes', authMiddleware, adminMiddleware, async (req, res) => {
-  if (!_rbAdmin(req, res)) return;
+app.post('/api/admin/rcptbot/bot-remove', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try {
-    const c = await _rbCfg(true); const ids = new Set((c.groups || []).map((g) => String(g.id))); const seen = new Set(); const out = [];
-    const known = (x) => { if (!ids.has(x)) throw Object.assign(new Error('Hay un grupo que el bot no conoce (agregá el bot al grupo y escribí algo ahí)'), { http: 400 }); };
-    for (const r of Array.isArray((req.body || {}).routes) ? req.body.routes : []) {
-      const from = String((r && r.from) || ''); if (!from) continue; known(from);
-      if (seen.has(from)) return res.status(400).json({ error: 'Cada grupo de origen va una sola vez (con todas sus reglas adentro)' }); seen.add(from);
-      const rules = []; const cs = new Set();
-      for (const x of Array.isArray(r.rules) ? r.rules : []) {
-        const cents = String((x && x.cents) || '').replace(/\D/g, ''); const to = String((x && x.to) || ''); if (!cents && !to) continue;
-        if (!/^\d{2}$/.test(cents)) return res.status(400).json({ error: 'Los centavos van con 2 números (ej. 99, 43, 05)' });
-        if (!to) return res.status(400).json({ error: 'Falta elegir el grupo para ,' + cents }); known(to);
-        if (to === from) return res.status(400).json({ error: 'Un grupo no puede reenviarse a sí mismo' });
-        if (cs.has(cents)) return res.status(400).json({ error: 'Los centavos ,' + cents + ' están repetidos' }); cs.add(cents); rules.push({ cents, to });
-      }
-      const otherTo = String(r.otherTo || '') || null; if (otherTo) { known(otherTo); if (otherTo === from) return res.status(400).json({ error: 'Un grupo no puede reenviarse a sí mismo' }); }
-      if (!rules.length && !otherTo) continue;
-      out.push({ from, rules: rules.slice(0, 30), otherTo });
+    const id = String((req.body || {}).id || ''); const c = await _rbCfg(true); const b = (c.botsDec || []).find((x) => x.id === id);
+    if (b && b.token) await tgChannel.call(b.token, 'deleteWebhook', {});
+    await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.bots': { id } } });
+    for (const g of c.groups || []) if ((g.bots || []).includes(id)) await _rbGroupSeen({ id: g.id, title: g.title, type: 'group' }, id, true);
+    _rbMem.at = 0; res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/reconnect', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try { const c = await _rbCfg(true); const out = []; for (const b of c.botsDec || []) { if (!b.token) { out.push('@' + b.username + ': token ilegible, cargalo de nuevo'); continue; } const w = await _rbSetWebhook(b); out.push('@' + b.username + ': ' + (w.ok ? 'ok' : w.error)); } res.json({ success: true, result: out.join(' · ') || 'no hay bots' }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/group-add', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar un grupo a mano por su ID (si no apareció solo)
+  try {
+    let id = String((req.body || {}).id || '').trim(); if (!/^-?\d{5,16}$/.test(id)) return res.status(400).json({ error: 'El ID del grupo son números (ej. -1001234567890)' });
+    if (!id.startsWith('-')) id = '-' + id;
+    const c = await _rbCfg(true); const tries = [...new Set([id, id.startsWith('-100') ? id : '-100' + id.slice(1)])]; let found = 0;
+    for (const b of c.botsDec || []) { if (!b.token) continue; for (const x of tries) { const r = await tgChannel.call(b.token, 'getChat', { chat_id: x }); if (r.ok && /^(group|supergroup)$/.test(r.result.type)) { await _rbGroupSeen(r.result, b.id); found++; break; } } }
+    res.json(found ? { success: true, bots: found } : { success: false, error: 'Ningún bot cargado está en ese grupo (o el ID está mal). Agregá el bot al grupo primero.' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+function _rbCleanRoutes(c, raw) {
+  const ids = new Set((c.groups || []).map((g) => String(g.id))); const seen = new Set(); const out = [];
+  const bad = (m) => { throw Object.assign(new Error(m), { http: 400 }); };
+  const known = (x) => { if (!ids.has(x)) bad('Hay un grupo que ningún bot ve (agregá el bot al grupo o escribí /start ahí)'); };
+  for (const r of Array.isArray(raw) ? raw : []) {
+    const from = String((r && r.from) || ''); if (!from) continue; known(from);
+    if (seen.has(from)) bad('Cada grupo que manda va una sola vez (con todas sus terminaciones adentro)'); seen.add(from);
+    const rules = []; const cs = new Set();
+    for (const x of Array.isArray(r.rules) ? r.rules : []) {
+      const cents = String((x && x.cents) || '').replace(/\D/g, ''); const to = String((x && x.to) || ''); if (!cents && !to) continue;
+      if (!/^\d{2}$/.test(cents)) bad('Los centavos van con 2 números (ej. 99, 43, 05)');
+      if (!to) bad('Falta elegir el grupo para ,' + cents); known(to);
+      if (to === from) bad('Un grupo no puede reenviarse a sí mismo');
+      if (cs.has(cents)) bad('Los centavos ,' + cents + ' están repetidos'); cs.add(cents); rules.push({ cents, to });
     }
-    if (out.length > 15) return res.status(400).json({ error: 'Máximo 15 grupos de origen' });
-    await _rbSet({ routes: out }); res.json({ success: true, routes: out });
+    const otherTo = String(r.otherTo || '') || null; if (otherTo) { known(otherTo); if (otherTo === from) bad('Un grupo no puede reenviarse a sí mismo'); }
+    if (!rules.length && !otherTo) continue;
+    out.push({ from, rules: rules.slice(0, 30), otherTo });
+  }
+  if (out.length > 20) bad('Máximo 20 grupos que mandan por estructura');
+  return out;
+}
+async function _rbStructPut(st) {
+  await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.structs': { id: st.id } } }, { upsert: true });
+  await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.structs': st } }); _rbMem.at = 0; try { Config._cache && Config._cache.clear(); } catch (_) {}
+}
+app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // crear / guardar una estructura (nombre, encendida, circuito)
+  try {
+    const b = req.body || {}; const c = await _rbCfg(true);
+    const cur = b.id ? (c.structs || []).find((x) => x.id === String(b.id)) : null;
+    if (b.id && !cur) return res.status(404).json({ error: 'Estructura no encontrada' });
+    if (!cur && (c.structs || []).length >= 15) return res.status(400).json({ error: 'Máximo 15 estructuras' });
+    const st = Object.assign({ id: uuidv4(), name: '', on: false, botId: null, routes: [] }, cur || {});
+    if (typeof b.name === 'string') st.name = b.name.trim().slice(0, 40) || st.name || 'Estructura';
+    if (!st.name) st.name = 'Estructura ' + (((c.structs || []).length) + 1);
+    if (Array.isArray(b.routes)) st.routes = _rbCleanRoutes(c, b.routes);
+    if (typeof b.on === 'boolean') { if (b.on && !st.botId) return res.status(400).json({ error: 'Cargá el token del bot de esta estructura antes de encenderla' }); if (b.on && !(st.routes || []).length) return res.status(400).json({ error: 'Armá el circuito (quién manda a quién) antes de encenderla' }); st.on = b.on; }
+    if (st.on) { // un grupo que MANDA va encendido en UNA sola estructura (si no, la segunda perdería comprobantes: cada mensaje se toma una vez)
+      for (const o of (c.structs || []).filter((x) => x.on && x.id !== st.id)) for (const r of o.routes || []) if ((st.routes || []).some((y) => y.from === r.from)) return res.status(400).json({ error: `"${_rbTitle(c, r.from)}" ya manda en la estructura "${o.name}" (encendida). Un grupo que manda va en una sola estructura.` });
+    }
+    const turnedOn = st.on && !(cur && cur.on);
+    await _rbStructPut(st);
+    if (turnedOn) { const c2 = await _rbCfg(true); for (const r of (c2.routes || []).filter((x) => x.structId === st.id)) await _rbSendHelp(c2, r, true).catch(() => {}); }
+    res.json({ success: true, id: st.id });
   } catch (e) { res.status(e.http || 500).json({ error: e.message }); }
 });
-app.post('/api/admin/rcptbot/close', authMiddleware, adminMiddleware, async (req, res) => {
-  if (!_rbAdmin(req, res)) return;
+app.post('/api/admin/rcptbot/help', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try {
-    const c = await _rbCfg(true); const from = String((req.body || {}).from || ''); const g = (c.groups || []).find((x) => String(x.id) === from);
-    if (!g || !c.token) return res.status(400).json({ error: 'Grupo desconocido o bot sin token' });
-    const r = await _rbClose(c, from, 'panel · ' + req.user.username); res.json(r.ok ? Object.assign({ success: true }, r) : { success: false, error: r.why });
+    const c = await _rbCfg(true); const b = req.body || {}; const route = (c.routes || []).find((x) => x.from === String(b.from || '') && x.structId === String(b.structId || ''));
+    if (!route) return res.status(400).json({ error: 'Encendé la estructura primero (y guardá el circuito)' });
+    const r = await _rbSendHelp(c, route, true); res.json(r.ok ? { success: true } : { success: false, error: r.error });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.post('/api/admin/rcptbot/quote', authMiddleware, adminMiddleware, async (req, res) => { // cierre ⇒ cotizado / enviado / volver a pendiente (lo mismo que /cotizado y /enviado)
-  if (!_rbAdmin(req, res)) return;
+app.post('/api/admin/rcptbot/struct-remove', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try { const id = String((req.body || {}).id || ''); await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.structs': { id } } }); _rbMem.at = 0; res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/close', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    const c = await _rbCfg(true); const from = String((req.body || {}).from || ''); const sid = String((req.body || {}).structId || '');
+    const route = (c.routes || []).find((x) => x.from === from && x.structId === sid); if (!route) return res.status(400).json({ error: 'Esa estructura no está encendida o el grupo no manda en ella' });
+    const r = await _rbClose(c, route, 'panel · ' + req.user.username); res.json(r.ok ? Object.assign({ success: true }, r) : { success: false, error: r.why });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/quote', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // cierre ⇒ cotizado / enviado / volver a pendiente (lo mismo que /cotizado y /enviado)
   try {
     const b = req.body || {}; const st = String(b.status || ''); if (!['pending', 'quoted', 'sent'].includes(st)) return res.status(400).json({ error: 'Estado inválido' });
     const now = new Date(); const who = 'panel · ' + req.user.username;
@@ -31870,9 +32073,8 @@ app.post('/api/admin/rcptbot/quote', authMiddleware, adminMiddleware, async (req
     const r = await _rbM().RcptClose.updateOne({ id: String(b.id || '') }, { $set: set }); res.json(r.matchedCount ? { success: true } : { success: false, error: 'Cierre no encontrado' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-app.post('/api/admin/rcptbot/forget-group', authMiddleware, adminMiddleware, async (req, res) => {
-  if (!_rbAdmin(req, res)) return;
-  try { const id = String((req.body || {}).id || ''); await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id }, 'value.routes': { from: id } } }); _rbMem.at = 0; res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+app.post('/api/admin/rcptbot/forget-group', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try { const id = String((req.body || {}).id || ''); await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id } } }); _rbMem.at = 0; res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/telegram/webhook', async (req, res) => {
   try {

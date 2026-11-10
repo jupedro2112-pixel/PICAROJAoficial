@@ -6441,56 +6441,91 @@ async function tgAdminAddId() {
         showToast('✅ Grupo vinculado: ' + escapeHtml(j.title || String(j.id)), 'success'); if (inp) inp.value = ''; try { loadTgChannel(); } catch (_) {}
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
-// #1079: 🧾 Bot de comprobantes
-let _rb = null;
+// #1079: 🧾 Bot de comprobantes — ESTRUCTURAS (cada una: nombre, bot, circuito, encendida), plegables (#1079-c)
+let _rb = null; const _rbOpen = {};
 const _rbM = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+async function _rbFetch(path, opts) { const o = Object.assign({}, opts || {}); o.headers = Object.assign({ 'x-rcptbot-pin': sessionStorage.getItem('rcptbot_pin') || '' }, o.headers || {}); return authFetch(path, o); }
+async function _rbPinFlow(r) { // 428 = crear clave · 423 = pedirla · true si hay que reintentar
+    if (r.status === 428) {
+        const p1 = window.prompt('🔑 Esta sección no tiene clave todavía. Creá la clave del bot de comprobantes (4 a 32 caracteres):', ''); if (!p1) return false;
+        const p2 = window.prompt('Repetí la clave:', ''); if (p2 !== p1) { showToast('Las claves no coinciden', 'error'); return false; }
+        const x = await authFetch('/api/admin/rcptbot-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: p1 }) }); const j = await x.json();
+        if (!x.ok) { showToast(j.error || 'No se pudo crear la clave', 'error'); return false; } sessionStorage.setItem('rcptbot_pin', p1); showToast('🔑 Clave creada', 'success'); return true;
+    }
+    if (r.status === 423) { const pin = window.prompt('🔒 Clave del bot de comprobantes:', ''); if (!pin) return false; sessionStorage.setItem('rcptbot_pin', pin); return true; }
+    if (r.status === 429) { showToast('Demasiados intentos con la clave. Esperá 15 minutos.', 'error'); return false; }
+    return false;
+}
+async function rbChangePin() {
+    const cur = window.prompt('Clave actual:', ''); if (cur == null) return;
+    const p1 = window.prompt('Clave nueva (4 a 32 caracteres):', ''); if (!p1) return;
+    const r = await authFetch('/api/admin/rcptbot-pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: p1, current: cur }) }); const j = await r.json();
+    if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } sessionStorage.setItem('rcptbot_pin', p1); showToast('🔑 Clave cambiada', 'success');
+}
 const _rbD = (d) => d ? new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
 async function loadRcptBot() {
     const st = document.getElementById('rbStatus'); if (!st) return;
     try {
-        const r = await authFetch('/api/admin/rcptbot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || 'Error'; return; }
-        _rb = { groups: j.groups || [], routes: JSON.parse(JSON.stringify(j.routes || [])).map((x) => ({ from: x.from, rules: x.rules || [], otherTo: x.otherTo || '', sums: x.sums || [], hold: x.hold || 0 })) };
-        const h = j.hook || {};
-        st.innerHTML = (j.onRender ? '⚠️ En Render el bot no se conecta (comparte la base). ' : '') + (j.hasToken ? ('🤖 Bot: <b>@' + escapeHtml(j.bot || '?') + '</b> (…' + escapeHtml(j.tokenLast4) + ')') : '⚠️ Falta el token del bot') +
-            (j.hasToken ? (' · Conexión: ' + (h.url && /\/api\/rcptbot\/webhook$/.test(h.url) ? '✅' : '❌ (tocá 🔧 Reconectar)')) : '') + (h.lastError ? ' · <span style="color:var(--p-red,#d9001f)">Último error de Telegram: ' + escapeHtml(h.lastError) + '</span>' : '') +
-            ' · Lectura IA: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? '<br><span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '');
-        rbRenderRoutes();
-        document.getElementById('rbGroups').innerHTML = (j.groups || []).length ? '<b>Grupos:</b> ' + j.groups.map((g) => escapeHtml(g.title || g.id) + ' <small style="color:var(--p-muted,#777)">' + escapeHtml(g.id) + '</small> <button class="btn btn-secondary btn-sm" onclick="rbForget(\'' + escapeHtml(g.id) + '\')">✕</button>').join(' · ') : 'Todavía no ve ningún grupo: agregá el bot y escribí algo en cada grupo.';
-        const cl = j.closes || [];
-        const stl = { pending: '⏳ pendiente a cotizar', quoted: '💱 cotizado (falta enviar)', sent: '✅ enviado' };
-        document.getElementById('rbCloses').innerHTML = cl.length ? '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><tr><th align="left">Cierre</th><th align="left">De → A</th><th align="right">Comp.</th><th align="right">Total</th><th align="left">Estado</th><th></th></tr>' + cl.map((x) =>
-            '<tr style="border-top:1px solid var(--p-border,#e5e5e5)"><td>' + _rbD(x.createdAt) + '</td><td>' + escapeHtml(x.fromTitle) + ' → ' + escapeHtml(x.toTitle) + '</td><td align="right">' + x.count + '</td><td align="right"><b>' + _rbM(x.total) + '</b></td><td>' + (stl[x.status] || x.status) +
+        let r = await _rbFetch('/api/admin/rcptbot');
+        if (r.status === 428 || r.status === 423 || r.status === 429) { if (!(await _rbPinFlow(r))) { st.textContent = '🔒 Protegido con clave: tocá 🔄 para ingresarla.'; return; } r = await _rbFetch('/api/admin/rcptbot'); if (r.status === 423) { sessionStorage.removeItem('rcptbot_pin'); st.textContent = '🔒 Clave incorrecta: tocá 🔄.'; return; } }
+        const j = await r.json(); if (!r.ok) { st.textContent = j.error || 'Error'; return; }
+        _rb = { groups: j.groups || [], bots: j.bots || [], structs: (j.structs || []).map((x) => Object.assign({}, x, { routes: JSON.parse(JSON.stringify(x.routes || [])) })) };
+        st.innerHTML = (j.onRender ? '⚠️ En Render los bots no se conectan (comparte la base). ' : '') + 'Lectura IA de montos: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? ' · <span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '');
+        rbRenderStructs();
+        document.getElementById('rbGroups').innerHTML = (j.groups || []).length ? j.groups.map((g) => '👥 <b>' + escapeHtml(g.title || g.id) + '</b> <small style="color:var(--p-muted,#777)">' + escapeHtml(g.id) + ' · ' + escapeHtml((g.bots || []).map((x) => '@' + x).join(', ')) + '</small> <button class="btn btn-secondary btn-sm" title="Olvidar" onclick="rbForget(\'' + escapeHtml(g.id) + '\')">✕</button>').join('<br>') : 'Todavía no hay grupos: meté el bot en cada grupo (o escribí /start ahí).';
+        const cl = j.closes || []; const stl = { pending: '⏳ pendiente a cotizar', quoted: '💱 cotizado · 📤 pendiente a enviar', sent: '✅ enviado' };
+        document.getElementById('rbCloses').innerHTML = cl.length ? '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><tr><th align="left">Cierre</th><th align="left">Estructura</th><th align="left">De → A</th><th align="left">Período</th><th align="right">Comp.</th><th align="right">Total</th><th align="left">Estado</th><th></th></tr>' + cl.map((x) =>
+            '<tr style="border-top:1px solid var(--p-border,#e5e5e5)"><td>' + _rbD(x.createdAt) + '</td><td>' + escapeHtml(x.structName || '') + '</td><td>' + escapeHtml(x.fromTitle) + ' → ' + escapeHtml(x.toTitle) + '</td><td>' + (x.periodFrom ? _rbD(x.periodFrom) + ' → ' + _rbD(x.createdAt) : '') + '</td><td align="right">' + x.count + '</td><td align="right"><b>' + _rbM(x.total) + '</b></td><td>' + (stl[x.status] || x.status) +
             (x.quoteNote ? ' · ' + escapeHtml(x.quoteNote) : '') + (x.quotedBy ? ' <small>(' + escapeHtml(x.quotedBy) + ')</small>' : '') + (x.sentBy ? ' <small>(' + escapeHtml(x.sentBy) + ')</small>' : '') + '</td><td style="white-space:nowrap">' +
             (x.status === 'pending' ? '<button class="btn btn-secondary btn-sm" onclick="rbSetClose(\'' + x.id + '\',\'quoted\')">💱 Cotizado</button> ' : '') + (x.status !== 'sent' ? '<button class="btn btn-secondary btn-sm" onclick="rbSetClose(\'' + x.id + '\',\'sent\')">✅ Enviado</button>' : '<button class="btn btn-secondary btn-sm" onclick="rbSetClose(\'' + x.id + '\',\'pending\')">↩️</button>') + '</td></tr>').join('') + '</table></div>' : 'Todavía no hay cierres.';
         const rc = j.recent || []; const sl = { open: '✅ reenviado', closed: '🔒 cerrado', hold: '⚠️ sin reenviar', failed: '❌ falló' };
-        document.getElementById('rbRecent').innerHTML = rc.length ? '<b>Últimos comprobantes:</b><br>' + rc.slice(0, 25).map((x) => _rbD(x.createdAt) + ' · ' + escapeHtml(x.fromTitle) + (x.toTitle ? ' → ' + escapeHtml(x.toTitle) : '') + ' · ' + (x.amount ? _rbM(x.amount) + (x.amountFrom === 'ia' ? '' : ' (escrito)') : 'sin monto') + ' · ' + (sl[x.status] || x.status) + (x.error ? ' (' + escapeHtml(x.error) + ')' : '')).join('<br>') : '';
+        document.getElementById('rbRecent').innerHTML = rc.length ? rc.slice(0, 25).map((x) => _rbD(x.createdAt) + ' · ' + escapeHtml(x.fromTitle) + (x.toTitle ? ' → ' + escapeHtml(x.toTitle) : '') + ' · ' + (x.amount ? _rbM(x.amount) + (x.amountFrom === 'ia' ? '' : ' (escrito)') : 'sin monto') + ' · ' + (sl[x.status] || x.status) + (x.error ? ' (' + escapeHtml(x.error) + ')' : '')).join('<br>') : 'Todavía no hay comprobantes.';
     } catch (_) { st.textContent = 'Error de conexión'; }
 }
-function rbRenderRoutes() {
-    const box = document.getElementById('rbRoutes'); if (!box || !_rb) return;
-    const gs = _rb.groups; const opt = (sel, none) => (none ? '<option value="">' + none + '</option>' : '<option value="">— elegí —</option>') + gs.map((g) => '<option value="' + escapeHtml(g.id) + '"' + (String(sel) === String(g.id) ? ' selected' : '') + '>' + escapeHtml(g.title || g.id) + '</option>').join('');
-    box.innerHTML = _rb.routes.length ? _rb.routes.map((r, i) => '<div style="border:1px solid var(--p-border,#e5e5e5);border-radius:10px;padding:8px;margin-bottom:8px">' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><b>Manda:</b> <select onchange="rbR(' + i + ',\'from\',this.value)">' + opt(r.from) + '</select> <button class="btn btn-secondary btn-sm" onclick="rbCloseNow(' + i + ')">🔒 Cerrar ahora</button> <button class="btn btn-secondary btn-sm" onclick="rbDelRoute(' + i + ')">✕ Sacar</button></div>' +
-        r.rules.map((x, k) => '<div style="display:flex;gap:6px;align-items:center;margin-top:6px">termina en ,<input type="text" maxlength="2" inputmode="numeric" value="' + escapeHtml(x.cents || '') + '" oninput="rbRule(' + i + ',' + k + ',\'cents\',this.value)" style="width:48px;text-align:center"> → <select onchange="rbRule(' + i + ',' + k + ',\'to\',this.value)">' + opt(x.to) + '</select> <button class="btn btn-secondary btn-sm" onclick="rbDelRule(' + i + ',' + k + ')">✕</button></div>').join('') +
-        '<div style="display:flex;gap:6px;align-items:center;margin-top:6px"><button class="btn btn-secondary btn-sm" onclick="rbAddRule(' + i + ')">+ Centavos</button> Otros centavos → <select onchange="rbR(' + i + ',\'otherTo\',this.value)">' + opt(r.otherTo, 'No reenviar (avisa)') + '</select></div>' +
-        ((r.sums || []).length ? '<div style="margin-top:6px;font-size:12.5px">' + r.sums.map((x) => 'Acumulado → ' + escapeHtml(x.title) + ': <b>' + _rbM(x.total) + '</b> (' + x.count + ')').join(' · ') + (r.hold ? ' · ⚠️ ' + r.hold + ' sin reenviar' : '') + '</div>' : '') + '</div>').join('')
-        : '<p style="margin:0;font-size:13px;color:var(--p-muted,#777)">Todavía no hay reenvíos. Tocá "+ Grupo que manda comprobantes".</p>';
+function rbRenderStructs() {
+    const box = document.getElementById('rbStructs'); if (!box || !_rb) return;
+    const gs = _rb.groups;
+    const opt = (sel, none) => '<option value="">' + (none || '— elegí el grupo —') + '</option>' + gs.map((g) => '<option value="' + escapeHtml(g.id) + '"' + (String(sel) === String(g.id) ? ' selected' : '') + '>' + escapeHtml(g.title || g.id) + '</option>').join('');
+    if (!_rb.structs.length) { box.innerHTML = '<div class="card" style="margin-bottom:1rem">Todavía no hay estructuras. Tocá <b>+ Agregar estructura</b>.</div>'; return; }
+    box.innerHTML = _rb.structs.map((st, si) => {
+        const bot = _rb.bots.find((b) => b.id === String(st.botId || '')); const botOk = bot && !bot.bad && bot.hook && bot.hook.ok;
+        const routes = st.routes.map((r, i) => '<div style="border:1px solid var(--p-border,#e5e5e5);border-radius:10px;padding:8px;margin-top:8px">' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><b>Grupo que MANDA:</b> <select onchange="rbR(' + si + ',' + i + ',\'from\',this.value)">' + opt(r.from) + '</select>' + (st.on ? ' <button class="btn btn-secondary btn-sm" title="Manda al grupo la explicación de los centavos y la fija arriba" onclick="rbHelp(' + si + ',' + i + ')">📌 Mandar explicación</button> <button class="btn btn-secondary btn-sm" onclick="rbCloseNow(' + si + ',' + i + ')">🔒 Cerrar ahora</button>' : '') + ' <button class="btn btn-secondary btn-sm" onclick="rbDelRoute(' + si + ',' + i + ')">✕</button></div>' +
+            (r.rules || []).map((x, k) => '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">termina en ,<input type="text" maxlength="2" inputmode="numeric" value="' + escapeHtml(x.cents || '') + '" oninput="rbRule(' + si + ',' + i + ',' + k + ',\'cents\',this.value)" style="width:48px;text-align:center"> → reenvía a <select onchange="rbRule(' + si + ',' + i + ',' + k + ',\'to\',this.value)">' + opt(x.to) + '</select> <button class="btn btn-secondary btn-sm" onclick="rbDelRule(' + si + ',' + i + ',' + k + ')">✕</button></div>').join('') +
+            '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="rbAddRule(' + si + ',' + i + ')">+ Terminación</button> Todo lo demás → <select onchange="rbR(' + si + ',' + i + ',\'otherTo\',this.value)">' + opt(r.otherTo, 'No reenviar (avisa)') + '</select></div>' +
+            ((r.sums || []).length ? '<div style="margin-top:6px;font-size:12.5px">' + r.sums.map((x) => 'Suma → ' + escapeHtml(x.title) + ': <b>' + _rbM(x.total) + '</b> (' + x.count + ')').join(' · ') + (r.hold ? ' · ⚠️ ' + r.hold + ' sin reenviar' : '') + '</div>' : '') + (r.month ? '<div style="font-size:12.5px">📅 Total del mes (sin corte): <b>' + _rbM(r.month.total) + '</b> (' + r.month.count + ')</div>' : '') + '</div>').join('');
+        return '<details class="card" style="margin-bottom:1rem"' + (_rbOpen[st.id] ? ' open' : '') + ' ontoggle="rbToggle(\'' + st.id + '\',this.open)"><summary style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:1rem">🧩 ' + escapeHtml(st.name || 'Estructura') + '</b>' +
+            '<span style="font-size:12.5px">' + (st.on ? '🟢 funcionando' : '⚪ apagada') + ' · ' + (bot ? '@' + escapeHtml(bot.username) + (botOk ? ' ✅' : ' ❌ sin conexión') : 'sin bot') + ' · ' + st.routes.length + ' grupo(s) que mandan</span></summary>' +
+            '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">Nombre <input type="text" maxlength="40" value="' + escapeHtml(st.name || '') + '" oninput="rbS(' + si + ',\'name\',this.value)" style="width:200px"></div>' +
+            '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">🤖 Bot: <b>' + (bot ? '@' + escapeHtml(bot.username) : '—') + '</b> <input type="password" id="rbTok_' + si + '" placeholder="' + (bot ? 'Cambiar token' : 'Token del bot (de @BotFather)') + '" autocomplete="off" style="min-width:220px;flex:1"> <button class="btn btn-secondary btn-sm" onclick="rbStructToken(' + si + ')">💾 ' + (bot ? 'Cambiar' : 'Cargar') + ' token</button>' + (bot && bot.hook && bot.hook.lastError ? ' <small style="color:var(--p-red,#d9001f)">' + escapeHtml(bot.hook.lastError) + '</small>' : '') + '</div>' +
+            '<div style="margin-top:8px"><b>Circuito</b> <small style="color:var(--p-muted,#777)">(si un grupo siempre reenvía al mismo, sin terminaciones: elegilo en "Todo lo demás")</small></div>' + (routes || '<p style="margin:.3rem 0;font-size:13px;color:var(--p-muted,#777)">Todavía no hay grupos que manden.</p>') +
+            '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="rbAddRoute(' + si + ')">+ Grupo que manda</button> <button class="btn btn-primary btn-sm" onclick="rbSaveStruct(' + si + ')">💾 Guardar estructura</button> ' +
+            (st.on ? '<button class="btn btn-secondary btn-sm" onclick="rbOnOff(' + si + ',false)">⏸️ Apagar</button>' : '<button class="btn btn-primary btn-sm" onclick="rbOnOff(' + si + ',true)">▶️ Encender (que empiece)</button>') + ' <button class="btn btn-secondary btn-sm" onclick="rbDelStruct(' + si + ')">🗑️ Borrar estructura</button></div></details>';
+    }).join('');
 }
-function rbR(i, f, v) { if (_rb && _rb.routes[i]) _rb.routes[i][f] = v; }
-function rbRule(i, k, f, v) { if (_rb && _rb.routes[i] && _rb.routes[i].rules[k]) _rb.routes[i].rules[k][f] = f === 'cents' ? String(v).replace(/\D/g, '').slice(0, 2) : v; }
-function rbAddRoute() { if (!_rb) return; _rb.routes.push({ from: '', rules: [{ cents: '', to: '' }], otherTo: '' }); rbRenderRoutes(); }
-function rbDelRoute(i) { if (!_rb) return; _rb.routes.splice(i, 1); rbRenderRoutes(); }
-function rbAddRule(i) { if (!_rb || !_rb.routes[i]) return; _rb.routes[i].rules.push({ cents: '', to: '' }); rbRenderRoutes(); }
-function rbDelRule(i, k) { if (!_rb || !_rb.routes[i]) return; _rb.routes[i].rules.splice(k, 1); rbRenderRoutes(); }
-async function _rbPost(url, body, okMsg) {
-    try { const r = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok || j.success === false) { showToast(escapeHtml(j.error || 'Error'), 'error'); return null; } if (okMsg) showToast(okMsg, 'success'); loadRcptBot(); return j; } catch (_) { showToast('Error de conexión', 'error'); return null; }
+function rbToggle(id, open) { _rbOpen[id] = !!open; }
+function rbS(si, f, v) { if (_rb && _rb.structs[si]) _rb.structs[si][f] = v; }
+function rbR(si, i, f, v) { const r = _rb && _rb.structs[si] && _rb.structs[si].routes[i]; if (r) r[f] = v; }
+function rbRule(si, i, k, f, v) { const r = _rb && _rb.structs[si] && _rb.structs[si].routes[i]; if (r && r.rules[k]) r.rules[k][f] = f === 'cents' ? String(v).replace(/\D/g, '').slice(0, 2) : v; }
+function rbAddRoute(si) { const st = _rb && _rb.structs[si]; if (!st) return; st.routes.push({ from: '', rules: [], otherTo: '' }); _rbOpen[st.id] = true; rbRenderStructs(); }
+function rbDelRoute(si, i) { const st = _rb && _rb.structs[si]; if (!st) return; st.routes.splice(i, 1); rbRenderStructs(); }
+function rbAddRule(si, i) { const r = _rb && _rb.structs[si] && _rb.structs[si].routes[i]; if (!r) return; (r.rules = r.rules || []).push({ cents: '', to: '' }); rbRenderStructs(); }
+function rbDelRule(si, i, k) { const r = _rb && _rb.structs[si] && _rb.structs[si].routes[i]; if (!r) return; r.rules.splice(k, 1); rbRenderStructs(); }
+async function _rbPost(url, body, okMsg, noReload) {
+    try { const r = await _rbFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok || j.success === false) { showToast(escapeHtml(j.error || 'Error'), 'error'); return null; } if (okMsg) showToast(okMsg, 'success'); if (!noReload) loadRcptBot(); return j; } catch (_) { showToast('Error de conexión', 'error'); return null; }
 }
-async function rbSaveToken() { const t = document.getElementById('rbToken'); const j = await _rbPost('/api/admin/rcptbot/token', { token: t.value.trim() }, null); if (j) { t.value = ''; showToast('✅ Bot @' + escapeHtml(j.bot) + ' guardado · conexión: ' + escapeHtml(j.webhook), 'success'); } }
-function rbReconnect() { _rbPost('/api/admin/rcptbot/reconnect', {}, '✅ Reconectado'); }
-function rbSaveRoutes() { if (!_rb) return; _rbPost('/api/admin/rcptbot/routes', { routes: _rb.routes.map((r) => ({ from: r.from, rules: r.rules, otherTo: r.otherTo || null })) }, '✅ Reenvíos guardados'); }
-function rbCloseNow(i) { const r = _rb && _rb.routes[i]; if (!r || !r.from) return; if (!confirm('¿Cerrar AHORA la suma de este grupo? Queda pendiente a cotizar y la cuenta vuelve a $0.')) return; _rbPost('/api/admin/rcptbot/close', { from: r.from }, '🔒 Cerrado'); }
+const _rbBody = (st) => ({ id: st.id, name: st.name, routes: st.routes.map((r) => ({ from: r.from, rules: r.rules || [], otherTo: r.otherTo || null })) });
+async function rbNewStruct() { const n = window.prompt('Nombre de la estructura (ej. Buffalo):', 'Estructura ' + (((_rb && _rb.structs.length) || 0) + 1)); if (n == null) return; const j = await _rbPost('/api/admin/rcptbot/struct', { name: n }, '✅ Estructura creada', true); if (j) { _rbOpen[j.id] = true; loadRcptBot(); } }
+function rbSaveStruct(si) { const st = _rb && _rb.structs[si]; if (st) _rbPost('/api/admin/rcptbot/struct', _rbBody(st), '✅ Estructura guardada'); }
+async function rbOnOff(si, on) { const st = _rb && _rb.structs[si]; if (!st) return; const j = await _rbPost('/api/admin/rcptbot/struct', _rbBody(st), null, true); if (!j) return; _rbPost('/api/admin/rcptbot/struct', { id: st.id, on }, on ? '▶️ Estructura encendida: ya reenvía y suma' : '⏸️ Estructura apagada'); }
+function rbDelStruct(si) { const st = _rb && _rb.structs[si]; if (!st || !confirm('¿Borrar la estructura "' + (st.name || '') + '"? Los cierres anteriores quedan guardados.')) return; _rbPost('/api/admin/rcptbot/struct-remove', { id: st.id }, 'Estructura borrada'); }
+async function rbStructToken(si) { const st = _rb && _rb.structs[si]; const t = document.getElementById('rbTok_' + si); if (!st || !t || !t.value.trim()) { showToast('Pegá el token', 'error'); return; } _rbOpen[st.id] = true; const j = await _rbPost('/api/admin/rcptbot/bot', { token: t.value.trim(), structId: st.id }, null); if (j) showToast('✅ Bot @' + escapeHtml(j.bot) + ' cargado · conexión: ' + escapeHtml(j.webhook), 'success'); }
+async function rbReconnect() { const j = await _rbPost('/api/admin/rcptbot/reconnect', {}, null); if (j) showToast(escapeHtml(j.result || 'Listo'), 'success'); }
+async function rbAddGroup() { const i = document.getElementById('rbGroupId'); const j = await _rbPost('/api/admin/rcptbot/group-add', { id: i.value.trim() }, '✅ Grupo agregado'); if (j) i.value = ''; }
+function rbCloseNow(si, i) { const st = _rb && _rb.structs[si]; const r = st && st.routes[i]; if (!r || !r.from) return; if (!confirm('¿Cerrar AHORA la suma de este grupo? Queda pendiente a cotizar y la suma vuelve a $0.')) return; _rbPost('/api/admin/rcptbot/close', { from: r.from, structId: st.id }, '🔒 Cerrado'); }
+function rbHelp(si, i) { const st = _rb && _rb.structs[si]; const r = st && st.routes[i]; if (r && r.from) _rbPost('/api/admin/rcptbot/help', { from: r.from, structId: st.id }, '📌 Explicación enviada al grupo', true); }
 function rbSetClose(id, status) { _rbPost('/api/admin/rcptbot/quote', { id, status }, '✅ Listo'); }
-function rbForget(id) { if (!confirm('¿Olvidar este grupo? También se sacan sus reenvíos.')) return; _rbPost('/api/admin/rcptbot/forget-group', { id }, 'Listo'); }
+function rbForget(id) { if (!confirm('¿Olvidar este grupo?')) return; _rbPost('/api/admin/rcptbot/forget-group', { id }, 'Listo'); }
 // #1078: 🤖 Chatbot — cronograma semanal del canal de Telegram (plantilla por día de la semana; la vista muestra los próximos 7 días con fecha)
 let _cb = null;
 const CB_DOW = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];

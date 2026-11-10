@@ -9,6 +9,14 @@ const rcptFwdSchema = new mongoose.Schema({
   toChat: { type: String, default: null },
   toTitle: { type: String, default: '' },
   srcMsgId: { type: Number, required: true },
+  // #1079-b (varios bots): con qué bot llegó y el archivo, para reenviarlo con OTRO bot si el destino no tiene el mismo (los file_id son por bot)
+  srcBot: { type: String, default: null },
+  structId: { type: String, default: null, index: true }, // #1079-c: estructura (circuito) a la que pertenece
+  fileId: { type: String, default: null },
+  fileKind: { type: String, default: null }, // photo | document
+  fileMime: { type: String, default: null },
+  fileName: { type: String, default: null },
+  caption: { type: String, default: '' },
   fwdMsgId: { type: Number, default: null },
   replyMsgId: { type: Number, default: null },
   amount: { type: Number, default: null },
@@ -27,6 +35,9 @@ const rcptCloseSchema = new mongoose.Schema({
   fromTitle: { type: String, default: '' },
   toChat: { type: String, default: null },
   toTitle: { type: String, default: '' },
+  structId: { type: String, default: null, index: true },
+  structName: { type: String, default: '' },
+  periodFrom: { type: Date, default: null }, // primer comprobante del período
   count: { type: Number, default: 0 },
   total: { type: Number, default: 0 },
   missing: { type: Number, default: 0 },

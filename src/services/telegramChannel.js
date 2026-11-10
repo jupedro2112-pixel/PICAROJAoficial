@@ -38,8 +38,8 @@ async function call(token, method, payload, opts = {}) {
 }
 // Foto / video por archivo (Buffer) o por URL pública.
 async function sendMedia(token, kind, chatId, media, extra) {
-  const method = kind === 'video' ? 'sendVideo' : 'sendPhoto';
-  const field = kind === 'video' ? 'video' : 'photo';
+  const method = kind === 'video' ? 'sendVideo' : kind === 'document' ? 'sendDocument' : 'sendPhoto'; // #1079: + documento (PDF del bot de comprobantes)
+  const field = kind === 'video' ? 'video' : kind === 'document' ? 'document' : 'photo';
   if (typeof media === 'string') return call(token, method, Object.assign({ chat_id: chatId, [field]: media }, extra));
   const FormData = require('form-data'); const fd = new FormData();
   fd.append('chat_id', String(chatId));

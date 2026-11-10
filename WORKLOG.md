@@ -18,6 +18,17 @@
   Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
   (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
 
+### 1079-b..e. Bot de comprobantes: varios bots, ESTRUCTURAS, clave propia, suma del mes y explicación de los centavos (2026-11-10) — panel v283
+- **Owner:** "ponelo último con clave; agregar los tokens de cada bot; meto los bots en todos los grupos"; "estructuras de bot que se puedan cerrar por
+  estructura (4 y si quiero agrego 1): token, id y que empiece"; "pendiente a cotizar con fecha todo detallado y la suma nueva; /cotizado ⇒ pendiente a
+  enviar; /enviado ⇒ el pendiente se va"; "en el grupo 1, aparte, una suma sin corte que se corta al terminar el mes"; "explicación al bot: que presten
+  atención a los centavos ,99 o ,43".
+- `Config['rcptbot'].structs` [{id,name,on,botId,routes}] (rutas efectivas = estructuras ENCENDIDAS), `bots` [{id,username,tokenEnc,secret}], webhook por
+  bot `/api/rcptbot/webhook/<botId>`, `groups[].bots`; reenvío entre bots distintos (baja con uno, sube con otro); `_rbOnce` (comandos una vez aunque haya 2
+  bots); un grupo que manda va encendido en UNA sola estructura. Clave `Config['rcptBotPinHash']` (`_rbPinGate` en CADA ruta /api/admin/rcptbot*; la crea el
+  admin la primera vez). `_rbMonthSum` (mes calendario ART). `_rbHelpTxt` (/start, /ayuda, al encender ⇒ fijada, 📌 del panel). Botones `rb:<id>:<n>` / `rb:<id>:m` (#1079-f): centavos equivocados ⇒ elegir el grupo a mano (el destino recibe "el cliente se equivocó con el decimal, pero va a este grupo") o mover uno ya reenviado (ANULADO en el grupo viejo; sólo si no se cerró). Panel → 🔐 Privado → 🧾 (último).
+- Tests: `scripts/test-rcptbot.js` + `scripts/test-rcptbot-flow.js` (simulación de punta a punta con Telegram y base falsos, 15 casos).
+
 ### 1078. 🤖 Chatbot: cronograma semanal del canal de Telegram, editable desde el panel (2026-11-10) — panel v279
 - **Owner:** "historias de lo principal, partidos, el más jugado de la semana, info de los sorteos, un bono semanal, todo con el bot automático; una sección
   de chatbot en el panel para ver qué se publica toda la semana, el cronograma, editar, elegir entre todas las opciones, y dejar algo predeterminado fijado".

@@ -20,6 +20,14 @@ caso('grupo por centavos', () => {
 caso('cierre 13 h lunes a viernes, /cotizado y /enviado en el destino, pendiente anterior en cada suma', () => {
   assert.ok(/if \(dow === 0 \|\| dow === 6 \|\| _tgArtHour\(now\) < 13\) return;/.test(S) && /'value\.lastAutoClose': \{ \$ne: dk \}/.test(S));
   assert.ok(/\(cotizado\|enviado\)/.test(S) && /async function _rbPendTxt/.test(S) && /\$\{_rbSumTxt\(s\)\}\$\{pend\}/.test(S));
-  assert.ok(/req\.originalUrl === '\/api\/rcptbot\/webhook'/.test(S), 'el webhook no pasa el limitador');
+  assert.ok(/req\.originalUrl\.startsWith\('\/api\/rcptbot\/webhook\/'\)/.test(S), 'el webhook no pasa el limitador');
+});
+caso('#1079-b/c varios bots, estructuras y clave propia', () => {
+  assert.ok(/app\.post\('\/api\/rcptbot\/webhook\/:bot'/.test(S) && /async function _rbPinGate\(req, res, next\)/.test(S) && /getConfig\('rcptBotPinHash'/.test(S));
+  const rr = S.match(/app\.(get|post)\('\/api\/admin\/rcptbot(\/[a-z-]+)?',[^\n]*/g) || []; assert.ok(rr.length >= 10, 'rutas: ' + rr.length);
+  for (const x of rr) assert.ok(/authMiddleware, adminMiddleware, _rbPinGate, async/.test(x), 'ruta sin clave: ' + x.slice(0, 80));
+  assert.ok(/v\.routes = v\.structs\.filter\(\(st\) => st && st\.on && st\.botId\)/.test(S), 'sólo las estructuras encendidas reenvían');
+  assert.ok(/PENDIENTE A ENVIAR/.test(S) && /Suma nueva: <b>\$0<\/b>/.test(S));
+  assert.ok(!/2222/.test(S.slice(S.indexOf('#1079 BOT DE COMPROBANTES'), S.indexOf("app.post('/api/telegram/webhook'"))), 'nunca una clave en el código');
 });
 console.log(`\n${ok}/${ok + fail} casos OK`); if (fail) process.exit(1);
