@@ -3203,6 +3203,7 @@
         notifCtaGo: notifCtaGo, notifCtaClose: notifCtaClose, // #892
         get platformsData() { return _platforms; } };
     VIP.home.installManifestSync = installManifestSync; // #826
+    VIP.home.modalIntoCasino = _modalIntoCasino; // #1091: el sorteo (Anotate desde la hoja chica de Girox) se abre ADENTRO del casino
     Object.assign(VIP.home, { favOpenPicker, favClosePicker, favSearch, favMore, favToggle, favToggleTop, favPlay }); // #840
     Object.assign(VIP.home, { openFitPhone, closeFitPhone, fitFilter, fitPick, fitNudge, fitNudgeBottom, fitBottomAuto, fitStretch }); // #865/#867/#868
     // ---------------- #868 DESLIZAR DESDE EL COSTADO PARA VOLVER ----------------

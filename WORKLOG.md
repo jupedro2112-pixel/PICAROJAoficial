@@ -29,6 +29,14 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1091. Sorteo: "Anotate, es gratis" desde Girox no abría nada (2026-11-10) — app v717
+- **Owner:** "cuando entra la gente al sorteo semanal a inscribirse ponen anotarse y queda ahí, ninguno de los 2 abre; que abra en ese mismo menú de Girox".
+- **Causa:** la hoja chica del sorteo (píldora del casino → `openMini`) abre la ventana completa con `goMenu` → `VIP.sorteos.open`, pero `#srtModal` vive
+  dentro de `#chatScreen .chat-section` (contexto de apilado del menú) y quedaba DEBAJO de `#casinoOverlay`: se cerraba la hoja y no aparecía nada
+  (pasaba con los dos sorteos). Sólo el camino del chat (`spInfo('sorteo')`) mudaba la ventana al casino.
+- **Arreglo:** `VIP.sorteos.open` llama `VIP.home.modalIntoCasino('srtModal')` (nuevo export de `_modalIntoCasino`): con el casino abierto la ventana se
+  muda adentro del overlay y vuelve sola a su lugar al cerrarse (observador). Anotarse, Telegram y Bases funcionan ahí adentro.
+
 ### 1090. Correcciones por pérdidas (owner aprobó) (2026-11-10) — panel v294
 - **Owner:** aprobó las "correcciones por pérdidas" de la revisión nocturna (REVISION-NOCHE.md §7, propuestas 1, 2, 7, 9 y 10). Ningún %, tope ni rollover
   configurado cambió para el admin; sólo se cerraron caminos donde se perdía plata.

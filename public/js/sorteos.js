@@ -64,6 +64,9 @@
     // para abajo también". Siempre la VENTANA (#srtModal): el panel desplegado (#928) queda sin uso.
     function open(key, ev) {
         const m = _el('srtModal'); if (!m) return; _swipeInit();
+        // #1091 (owner: "en el sorteo ponen Anotarse y queda ahí, no abre"): la ventana vive en el menú y con Girox abierto quedaba DEBAJO del
+        // casino. Con el casino abierto se muda adentro de #casinoOverlay (vuelve sola a su lugar al cerrarse, observador de home.js).
+        try { if (VIP.home && VIP.home.modalIntoCasino) VIP.home.modalIntoCasino('srtModal'); } catch (_) {}
         _open = key || 'mensual'; m.hidden = false; document.documentElement.classList.add('srt-lock');
         const t = _el('srtTerms'); if (t) t.hidden = true;
         if (_data) paintView(_open); else { const b = _el('srtBody'); if (b) b.innerHTML = '<div class="srt-note">Cargando…</div>'; }
