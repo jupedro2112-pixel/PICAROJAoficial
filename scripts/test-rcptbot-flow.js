@@ -312,6 +312,16 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const a = G.src({ group: 'G1', rules: [{ cents: '82', to: 'G2' }] }); const b = G.dst({ group: 'G2', sources: ['G1'] });
     assert.ok(/termina en ,82  →  G2/.test(a) && /\/cierre 500\.000/.test(a) && /\/nuevocbu/.test(b) && /\/parar/.test(b) && /\/cotizado/.test(b));
   });
+  await caso('#1087 grupo que pasa a SUPERGRUPO (cambia de ID): estructura, lista y sumas abiertas pasan al ID nuevo', async () => {
+    const refs = (id) => JSON.stringify(cfgDocs[0].value.structs).split('"' + id + '"').length - 1;
+    const had = refs('-2'); assert.ok(had > 0, 'la estructura usa -2'); const open2 = RcptFwd.rows.filter((x) => x.toChat === '-2' && x.status === 'open').length;
+    await hook({ message: { message_id: 1, chat: { id: -1009, type: 'supergroup', title: 'asuncionbot' }, from: { first_name: 'Ana' }, migrate_from_chat_id: -2 } });
+    assert.strictEqual(refs('-2'), 0, 'no queda el ID viejo'); assert.strictEqual(refs('-1009'), had, 'el ID nuevo en su lugar');
+    const gs = cfgDocs[0].value.groups; assert.ok(gs.some((g) => g.id === '-1009' && g.title === 'asuncionbot') && !gs.some((g) => g.id === '-2'), JSON.stringify(gs));
+    assert.strictEqual(RcptFwd.rows.filter((x) => x.toChat === '-1009' && x.status === 'open').length, open2);
+    await hook({ message: { message_id: 2, chat: { id: -2, type: 'group', title: 'asuncionbot' }, from: { first_name: 'Ana' }, migrate_to_chat_id: -1009 } }); // el aviso del grupo viejo no lo hace dos veces
+    assert.strictEqual(cfgDocs[0].value.groups.filter((g) => g.id === '-1009').length, 1);
+  });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
   console.log(`\n${ok} casos OK`);

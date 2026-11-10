@@ -30,10 +30,10 @@ async function call(token, method, payload, opts = {}) {
   try {
     const r = await require('axios').post(API + token + '/' + method, payload, Object.assign({ timeout: 30000, maxBodyLength: 60 * 1024 * 1024 }, opts));
     const d = r.data || {};
-    return d.ok ? { ok: true, result: d.result } : { ok: false, error: d.description || 'error de Telegram' };
+    return d.ok ? { ok: true, result: d.result } : { ok: false, error: d.description || 'error de Telegram', migrateTo: d.parameters && d.parameters.migrate_to_chat_id }; // #1087: grupo pasado a supergrupo
   } catch (e) {
     const d = e.response && e.response.data;
-    return { ok: false, error: (d && d.description) || e.message, retryAfter: d && d.parameters && d.parameters.retry_after };
+    return { ok: false, error: (d && d.description) || e.message, retryAfter: d && d.parameters && d.parameters.retry_after, migrateTo: d && d.parameters && d.parameters.migrate_to_chat_id };
   }
 }
 // Foto / video por archivo (Buffer) o por URL pública.

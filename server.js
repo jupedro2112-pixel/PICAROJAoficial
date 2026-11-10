@@ -31635,12 +31635,60 @@ function _rbTokFor(c, chatId, prefer) {
 }
 async function _rbGroupSeen(chat, botId, gone) {
   if (!chat || !/^(group|supergroup)$/.test(chat.type)) return;
-  const id = String(chat.id); const title = String(chat.title || '').slice(0, 80); const c = await _rbCfg(); const g = _rbGroup(c, id);
+  const id = String(chat.id); const title = String(chat.title || '').slice(0, 80); const c = await _rbCfg(true); const g = _rbGroup(c, id); // #1087: lectura FRESCA (con la copia de 30 s un grupo sacado y vuelto a meter quedaba afuera)
   const bots = new Set(((g && g.bots) || []).map(String)); if (gone) bots.delete(String(botId)); else bots.add(String(botId));
   if (g && g.title === title && bots.size === (g.bots || []).length && [...bots].every((x) => (g.bots || []).includes(x))) return;
   await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id } } }, { upsert: true });
-  if (bots.size) await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.groups': { $each: [{ id, title: title || (g && g.title) || id, bots: [...bots], at: new Date() }], $slice: -60 } } });
+  if (bots.size) await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.groups': { $each: [{ id, title: title || (g && g.title) || id, bots: [...bots], at: new Date() }], $slice: -400 } } }); // #1087: antes -60 (con muchos equipos se perdían los más viejos)
   _rbMem.at = 0;
+}
+// #1087: REPARA lo que ya quedó roto: cada grupo de las estructuras (y los grupos comunes de la lista) se consulta a Telegram; si pasó a supergrupo,
+// Telegram devuelve el ID nuevo (migrate_to_chat_id) y se mueve todo. Si el bot está y el grupo no figuraba, se agrega. Corre al abrir el panel (cada 10 min).
+let _rbRepairAt = 0, _rbRepairLast = { at: null, out: [] };
+async function _rbRepairGroups(force) {
+  if (!force && Date.now() - _rbRepairAt < 600000) return []; _rbRepairAt = Date.now();
+  const c = await _rbCfg(true); if (c.onRender) return []; const out = []; const ids = new Set();
+  for (const st of c.structs || []) for (const r of st.routes || []) { if (r.from) ids.add(String(r.from)); if (r.otherTo) ids.add(String(r.otherTo)); for (const x of r.rules || []) if (x.to) ids.add(String(x.to)); }
+  for (const g of c.groups || []) if (!String(g.id).startsWith('-100')) ids.add(String(g.id));
+  for (const id of [...ids].slice(0, 80)) {
+    for (const b of c.botsDec || []) {
+      if (!b.token) continue; const r = await tgChannel.call(b.token, 'getChat', { chat_id: id });
+      if (r.migrateTo) { const old = _rbGroup(c, id); await _rbGroupMigrate(id, { id: r.migrateTo, type: 'supergroup', title: (old && old.title) || '' }, b.id); out.push(((old && old.title) || id) + ' → pasó a supergrupo (' + r.migrateTo + ')'); break; }
+      if (r.ok && /^(group|supergroup)$/.test(r.result.type)) { const g = _rbGroup(c, id); if (!g || !(g.bots || []).map(String).includes(String(b.id))) { await _rbGroupSeen(r.result, b.id); out.push((r.result.title || id) + ' → agregado'); } break; }
+    }
+  }
+  _rbRepairLast = { at: new Date(), out }; return out;
+}
+// #1087: Telegram convierte un grupo común en SUPERGRUPO (pasa al poner admins / cambiar permisos) y el grupo CAMBIA DE ID ⇒ se pasa todo al ID nuevo:
+// la lista de grupos, las estructuras (manda / terminaciones / todo lo demás), los comprobantes y cierres abiertos y el CBU de bajada (campo por campo).
+async function _rbGroupMigrate(oldId, newChat, botId) {
+  oldId = String(oldId); const newId = String(newChat.id); if (!oldId || !newId || oldId === newId) return;
+  const once = await _rbOnce('mig', oldId + '>' + newId).catch(() => true); if (!once) return;
+  await _rbGroupSeen(newChat, botId).catch(() => {});
+  const c = await _rbCfg(true); const old = _rbGroup(c, oldId);
+  if (old) { const g = _rbGroup(c, newId); const bots = [...new Set([...(old.bots || []), ...((g && g.bots) || [])].map(String))]; await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id: { $in: [oldId, newId] } } } }); await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.groups': { $each: [{ id: newId, title: String(newChat.title || old.title || newId).slice(0, 80), bots, at: new Date(), migratedFrom: oldId }], $slice: -400 } } }); }
+  const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const structs = ((d.value || {}).structs || []);
+  for (let si = 0; si < structs.length; si++) {
+    const st = structs[si]; const set = {};
+    (st.routes || []).forEach((r, i) => {
+      if (String(r.from) === oldId) set[`value.structs.${si}.routes.${i}.from`] = newId;
+      if (String(r.otherTo || '') === oldId) set[`value.structs.${si}.routes.${i}.otherTo`] = newId;
+      (r.rules || []).forEach((x, k) => { if (String(x.to) === oldId) set[`value.structs.${si}.routes.${i}.rules.${k}.to`] = newId; });
+    });
+    if (Object.keys(set).length) await Config.collection.updateOne({ key: 'rcptbot', [`value.structs.${si}.id`]: st.id }, { $set: set });
+  }
+  const M = _rbM();
+  await M.RcptFwd.updateMany({ fromChat: oldId, status: { $in: ['hold', 'open'] } }, { $set: { fromChat: newId } }); await M.RcptFwd.updateMany({ toChat: oldId, status: { $in: ['hold', 'open'] } }, { $set: { toChat: newId } });
+  await M.RcptClose.updateMany({ fromChat: oldId, status: { $in: ['pending', 'quoted'] } }, { $set: { fromChat: newId } }); await M.RcptClose.updateMany({ toChat: oldId, status: { $in: ['pending', 'quoted'] } }, { $set: { toChat: newId } });
+  const cb = ((await Config.collection.findOne({ key: 'rcptbotcbu' })) || {}).value || {}; const cs = {}; const rn = {};
+  for (const [k, x] of Object.entries(cb.items || {})) { if (!x) continue; if (String(x.from) === oldId) cs[`value.items.${k}.from`] = newId; if (String(x.to) === oldId) cs[`value.items.${k}.to`] = newId; }
+  for (const part of ['stops', 'graces', 'pend']) for (const [k, x] of Object.entries(cb[part] || {})) {
+    if (x && typeof x === 'object') { if (String(x.from) === oldId) cs[`value.${part}.${k}.from`] = newId; if (String(x.to) === oldId) cs[`value.${part}.${k}.to`] = newId; }
+    if (k.split('|').includes(oldId)) rn[`value.${part}.${k}`] = `value.${part}.` + k.split('|').map((y) => (y === oldId ? newId : y)).join('|');
+  }
+  if (Object.keys(cs).length) await Config.collection.updateOne({ key: 'rcptbotcbu' }, { $set: cs });
+  if (Object.keys(rn).length) await Config.collection.updateOne({ key: 'rcptbotcbu' }, { $rename: rn });
+  _rbMem.at = 0; logger.info(`[rcptbot] grupo ${oldId} pasó a supergrupo ${newId}: estructuras y sumas movidas`);
 }
 // Una sola vez por mensaje aunque lo reciban 2 bots o 2 instancias (comandos, correcciones).
 async function _rbOnce(chatId, msgId) {
@@ -32307,6 +32355,8 @@ app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
     }
     if (u.callback_query) { const cfg = await _rbCfg(); if (String(u.callback_query.data || '').startsWith('rbc:')) await _rbCbuCb(cfg, bot, u.callback_query); else if (String(u.callback_query.data || '').startsWith('rbm:')) await _rbMenuCb(cfg, bot, u.callback_query); else await _rbOnCallback(cfg, bot, u.callback_query); return; } // #1079-f/i
     const m = u.message; if (!m || !m.chat) return;
+    if (m.migrate_to_chat_id) { await _rbGroupMigrate(m.chat.id, { id: m.migrate_to_chat_id, type: 'supergroup', title: m.chat.title }, bot.id); return; } // #1087
+    if (m.migrate_from_chat_id) { await _rbGroupMigrate(m.migrate_from_chat_id, m.chat, bot.id); return; }
     if (m.chat.type === 'private') { await tgChannel.call(bot.token, 'sendMessage', { chat_id: m.chat.id, text: 'Este bot trabaja sólo en grupos: reenvía los comprobantes y lleva la suma.' }); return; }
     await _rbOnMessage(await _rbCfg(), bot, m);
   } catch (e) { logger.warn('[rcptbot] ' + e.message); if (!res.headersSent) res.json({ ok: true }); }
@@ -32337,6 +32387,8 @@ async function _rbPinGate(req, res, next) { // va en CADA ruta /api/admin/rcptbo
 }
 app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try {
+    if (req.query.repair === '1') await _rbRepairGroups(true).catch((e) => logger.warn('[rcptbot] repair ' + e.message)); // 🩺 Revisar grupos (botón)
+    else _rbRepairGroups(false).catch((e) => logger.warn('[rcptbot] repair ' + e.message)); // #1087: de fondo, cada 10 min como mucho
     const c = await _rbCfg(true); const bots = [];
     for (const b of c.botsDec || []) {
       let hook = null; if (b.token) { const wi = await tgChannel.call(b.token, 'getWebhookInfo', {}); if (wi.ok) hook = { ok: /\/api\/rcptbot\/webhook\//.test(wi.result.url || ''), pending: wi.result.pending_update_count, lastError: wi.result.last_error_message || null }; }
@@ -32359,7 +32411,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
     const groups = (c.groups || []).map((g) => ({ id: g.id, title: g.title, bots: (g.bots || []).map((id) => ((c.botsDec || []).find((b) => b.id === id) || {}).username || id) }));
-    res.json({ success: true, onRender: !!c.onRender, bots, groups, structs, closes, recent, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
+    res.json({ success: true, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/bot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar o reemplazar un bot (por su token)

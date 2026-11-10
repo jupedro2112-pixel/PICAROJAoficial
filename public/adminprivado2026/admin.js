@@ -6463,6 +6463,28 @@ async function rbChangePin() {
     if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; } sessionStorage.setItem('rcptbot_pin', p1); showToast('🔑 Clave cambiada', 'success');
 }
 const _rbD = (d) => d ? new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+// #1087: lista de grupos (+ lo que reparó la revisión: grupos que pasaron a supergrupo o que faltaban)
+function _rbGroupsHtml(j) {
+    const rp = (j.repaired && j.repaired.out) || [];
+    return (rp.length ? '<div style="margin-bottom:6px;padding:6px 8px;border-radius:8px;background:var(--p-green-soft,#e7f7ec);font-size:12.5px">🩺 Arreglado solo: ' + rp.map(escapeHtml).join(' · ') + '</div>' : '') + ((j.groups || []).length ? j.groups.map((g) => '👥 <b>' + escapeHtml(g.title || g.id) + '</b> <small style="color:var(--p-muted,#777)">' + escapeHtml(g.id) + ' · ' + escapeHtml((g.bots || []).map((x) => '@' + x).join(', ')) + '</small> <button class="btn btn-secondary btn-sm" title="Olvidar" onclick="rbForget(\'' + escapeHtml(g.id) + '\')">✕</button>').join('<br>') : 'Todavía no hay grupos: meté el bot en cada grupo (o escribí /start ahí).');
+}
+// #1087: mientras está abierta la sección, la lista de grupos se actualiza sola (sin tocar lo que estés editando en las estructuras)
+let _rbGrTimer = null;
+async function rbRefreshGroups(repair) {
+    const box = document.getElementById('rbGroups'); if (!box || !_rb) return;
+    if (!repair && !box.offsetParent) { clearInterval(_rbGrTimer); _rbGrTimer = null; return; }
+    try {
+        const r = await _rbFetch('/api/admin/rcptbot' + (repair ? '?repair=1' : '')); if (!r.ok) return; const j = await r.json();
+        const ids = (x) => (x || []).map((g) => g.id + ':' + g.title + ':' + (g.bots || []).join(',')).sort().join('|');
+        box.innerHTML = _rbGroupsHtml(j);
+        if (ids(j.groups) !== ids(_rb.groups)) {
+            _rb.groups = j.groups || []; _rb.bots = j.bots || _rb.bots;
+            if (repair) _rb.structs = (j.structs || []).map((x) => Object.assign({}, x, { routes: JSON.parse(JSON.stringify(x.routes || [])) }));
+            const ed = document.activeElement; if (!(ed && ed.closest && ed.closest('#rbStructs'))) rbRenderStructs();
+        }
+        if (repair) showToast((j.repaired && j.repaired.out && j.repaired.out.length) ? '🩺 Grupos arreglados: ' + j.repaired.out.length : '🩺 Revisado: todos los grupos están bien', 'success');
+    } catch (_) {}
+}
 async function loadRcptBot() {
     const st = document.getElementById('rbStatus'); if (!st) return;
     try {
@@ -6472,7 +6494,8 @@ async function loadRcptBot() {
         _rb = { groups: j.groups || [], bots: j.bots || [], structs: (j.structs || []).map((x) => Object.assign({}, x, { routes: JSON.parse(JSON.stringify(x.routes || [])) })) };
         st.innerHTML = (j.onRender ? '⚠️ En Render los bots no se conectan (comparte la base). ' : '') + 'Lectura IA de montos: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? ' · <span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '');
         rbRenderStructs();
-        document.getElementById('rbGroups').innerHTML = (j.groups || []).length ? j.groups.map((g) => '👥 <b>' + escapeHtml(g.title || g.id) + '</b> <small style="color:var(--p-muted,#777)">' + escapeHtml(g.id) + ' · ' + escapeHtml((g.bots || []).map((x) => '@' + x).join(', ')) + '</small> <button class="btn btn-secondary btn-sm" title="Olvidar" onclick="rbForget(\'' + escapeHtml(g.id) + '\')">✕</button>').join('<br>') : 'Todavía no hay grupos: meté el bot en cada grupo (o escribí /start ahí).';
+        document.getElementById('rbGroups').innerHTML = _rbGroupsHtml(j);
+        if (!_rbGrTimer) _rbGrTimer = setInterval(() => rbRefreshGroups(false), 20000);
         const cl = j.closes || []; const stl = { pending: '⏳ pendiente a cotizar', quoted: '💱 cotizado · 📤 pendiente a enviar', sent: '✅ enviado' };
         document.getElementById('rbCloses').innerHTML = cl.length ? '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><tr><th align="left">Cierre</th><th align="left">Estructura</th><th align="left">De → A</th><th align="left">Período</th><th align="right">Comp.</th><th align="right">Total</th><th align="left">Estado</th><th></th></tr>' + cl.map((x) =>
             '<tr style="border-top:1px solid var(--p-border,#e5e5e5)"><td>' + _rbD(x.createdAt) + '</td><td>' + escapeHtml(x.structName || '') + '</td><td>' + escapeHtml(x.fromTitle) + ' → ' + escapeHtml(x.toTitle) + '</td><td>' + (x.periodFrom ? _rbD(x.periodFrom) + ' → ' + _rbD(x.createdAt) : '') + '</td><td align="right">' + x.count + '</td><td align="right"><b>' + _rbM(x.total) + '</b>' + (x.partialOf ? '<br><small>parcial de ' + _rbM(x.partialOf) + '</small>' : '') + '</td><td>' + (stl[x.status] || x.status) +

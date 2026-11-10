@@ -426,7 +426,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   modelos `RcptFwd`/`RcptClose`): destino por los CENTAVOS, suma por origen→destino + suma del mes, cierre 13 h lun–vie, `/cotizado` y `/enviado` en el destino.
   Toda ruta `/api/admin/rcptbot*` lleva `_rbPinGate` (clave propia). No mezclar con el bot del canal (`telegramBot`). Tests `test-rcptbot*.js`.
   **#1084/#1085:** lo que hace el grupo de DESTINO queda ahí (no se avisa al que manda, salvo CBU); botones del menú = cartel (show_alert ≤200), nunca mensaje;
-  Cotizar = precio USDT + comisión por force_reply (`_rbQuote`), Enviado = foto (`_rbSentPhoto`). CBU de bajada (#1079-n) en `Config['rcptbotcbu']` (escribir POR CAMPO, nunca el objeto entero); la terminación vigente se cambia sólo vía `_rbCbuActivate`.
+  Cotizar = precio USDT + comisión por force_reply (`_rbQuote`), Enviado = foto (`_rbSentPhoto`). **#1087:** un grupo que pasa a supergrupo cambia de ID ⇒ `_rbGroupMigrate` mueve todo (no guardar IDs de grupo en otro lado sin sumarlo ahí). CBU de bajada (#1079-n) en `Config['rcptbotcbu']` (escribir POR CAMPO, nunca el objeto entero); la terminación vigente se cambia sólo vía `_rbCbuActivate`.
 - **🤖 CRONOGRAMA DEL CANAL (#1078):** con `Config['tgSchedule'].on` (default) lo AUTOMÁTICO del canal sale SÓLO por `_tgSchedTick` (panel → 🤖 Chatbot);
   un posteo automático NUEVO del canal es un tipo más en `TG_SCHED_KINDS` + `_tgSchedPost`, nunca otro cron suelto (se duplicaría).
 - **📊 GRUPO PRIVADO DE REPORTES (#1046):** Telegram, vinculado con código de un solo uso desde el panel; sólo `telegramBot.adminChats` recibe datos; números de

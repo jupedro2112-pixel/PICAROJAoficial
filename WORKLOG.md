@@ -18,6 +18,17 @@
   Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
   (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
 
+### 1087. Bot de comprobantes: grupos que no aparecían en la estructura (2026-11-10) — panel v290
+- **Owner:** "veo equipos que puse admin y no figuran los grupos en Bot de comprobantes dentro de la estructura, ¿hay algo mal?".
+- **Causa probable:** al hacer admin al bot, Telegram puede convertir el grupo en SUPERGRUPO y el grupo CAMBIA DE ID. La estructura quedaba apuntando
+  al ID viejo (en el panel se ve "— elegí el grupo —") y el bot no lo movía. Además: el registro de grupos leía una copia de 30 s (un grupo sacado y
+  vuelto a meter podía quedar afuera) y la lista guardaba sólo 60 grupos.
+- **Arreglo:** `_rbGroupMigrate` (mensajes `migrate_to_chat_id` / `migrate_from_chat_id`) pasa al ID nuevo la lista, las estructuras (campo por campo),
+  comprobantes/cierres abiertos y el CBU de bajada. `_rbRepairGroups` repara lo YA roto: consulta a Telegram cada grupo de las estructuras (getChat
+  devuelve `migrate_to_chat_id`, `telegramChannel.call` ahora lo expone como `migrateTo`) y agrega los que faltan; corre de fondo al abrir el panel (cada
+  10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
+  la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
+
 ### 1086. Tarjeta de datos del chat en BLANCO con letras negras y bono en verde (2026-11-10) — app v715
 - **Owner:** "el fondo verde del chat nuevo en la burbuja donde están los datos se pierde: fondo blanco y letras negras; el bono remarcado con verde y letras negras".
 - La regla del chat nuevo (`#supportPanel.sp-in-casino .message.agente`, `--p-wa-out`) pisaba la tarjeta `#spBankMsg`: selector más específico + tokens `--p-sbm-*`.

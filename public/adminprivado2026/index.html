@@ -3140,7 +3140,8 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                 </div>
                 <div id="rbStructs"></div>
                 <details class="card" style="margin-bottom:1rem"><summary style="cursor:pointer;font-weight:800">👥 Grupos que ven los bots</summary>
-                    <p style="margin:.4rem 0;font-size:12.5px;color:var(--p-muted,#777)">Aparecen solos cuando metés un bot en un grupo. Si alguno no aparece: escribí <b>/start</b> en ese grupo, o poné su ID.</p>
+                    <p style="margin:.4rem 0;font-size:12.5px;color:var(--p-muted,#777)">Aparecen solos cuando metés un bot en un grupo (la lista se actualiza sola). Si alguno no aparece: escribí <b>/start</b> en ese grupo, o poné su ID. Si al hacer admin al bot el grupo pasó a <b>supergrupo</b> (cambia de ID), se arregla solo; para forzarlo tocá 🩺.</p>
+                    <button class="btn btn-secondary btn-sm" style="margin-bottom:6px" onclick="rbRefreshGroups(true)">🩺 Revisar grupos ahora</button>
                     <div id="rbGroups"></div>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><input type="text" id="rbGroupId" placeholder="ID del grupo (ej. -1001234567890)" style="min-width:220px"> <button class="btn btn-secondary btn-sm" onclick="rbAddGroup()">➕ Agregar grupo por ID</button></div>
                 </details>
