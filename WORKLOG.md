@@ -23,7 +23,7 @@
   copiar desde el chat; si hay bono vigente que aparezca ahí con los datos; sacando lo rojo se gana chat".
 - `#spBonusNow` y `#spBank` (arriba, #1077) quedan ocultos por CSS; `spBankMsgPaint` arma `#spBankMsg` (mensaje LOCAL, no se guarda) con bono vigente
   (`/api/bonus/vigente`), titular, alias y CBU con Copiar y "Adjuntar comprobante"; un MutationObserver lo mantiene siempre ÚLTIMO en `#chatMessages`
-  (también después de `renderMessages`). Modo normal (`sp-classic`) no lo muestra. Se repinta al abrir el chat y tras cada carga.
+  (también después de `renderMessages`). Modo normal (`sp-classic`) no lo muestra. Se repinta al abrir el chat y tras cada carga. **#1082-b (app v714):** estilo de la captura del owner ("Depositar · Paso 1 de 2", CBU/CVU y ALIAS en mono con Copiar verde `--p-green`, Titular + Mínimo `minDepositArs`, "Subir comprobante"), chiquito.
 
 ### 1081. Información del servicio premium por sectores + Info y Perfil centrados (2026-11-10) — app v712
 - **Owner:** "lo de Información del servicio más prolijo, premium y sectorizado, sin bajar tanto, todo en una pantalla y que se pueda expandir; más centrado

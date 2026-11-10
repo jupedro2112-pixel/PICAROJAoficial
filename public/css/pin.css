@@ -3372,15 +3372,23 @@ html[data-theme="dark"] #infoMsg .im-card.open { box-shadow: 0 6px 20px rgba(0,0
    ÚLTIMO mensaje del chat (#spBankMsg, lo mantiene home.js), con Copiar y Adjuntar. Modo normal (sp-classic) no lo muestra. */
 #spBonusNow, #spBank { display: none !important; }
 body.sp-classic #spBankMsg { display: none !important; }
-#spBankMsg .sp-bankmsg { max-width: 92% !important; padding: 10px 12px !important; display: flex; flex-direction: column; gap: 6px; font: 400 13px/1.4 var(--p-font); }
-#spBankMsg .sbm-bonus { background: var(--p-red-soft, rgba(217,0,31,.08)); color: var(--p-text); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; line-height: 1.35; }
-#spBankMsg .sbm-bonus b { color: var(--p-red); }
-#spBankMsg .sbm-h { font-weight: 800; font-size: 13px; }
-#spBankMsg .sbm-row { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 9px; border: 1px solid var(--p-border); background: var(--p-card);
-  color: var(--p-text); font: 400 12.5px var(--p-font); text-align: left; }
-#spBankMsg .sbm-row > span { flex: 0 0 52px; color: var(--p-muted); font-size: 11.5px; }
-#spBankMsg .sbm-row > b { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
-#spBankMsg .sbm-row > i { flex: 0 0 auto; font-style: normal; font-weight: 800; font-size: 11.5px; color: var(--p-red); }
-#spBankMsg .sbm-copy { cursor: pointer; }
-#spBankMsg .sbm-copy:active { transform: scale(.98); }
-#spBankMsg .sbm-attach { margin-top: 2px; width: 100%; border: 0; border-radius: 999px; padding: 10px 12px; background: var(--p-red); color: #fff; font: 800 12.5px var(--p-font); cursor: pointer; }
+#spBankMsg .sp-bankmsg { width: 92% !important; max-width: 340px !important; padding: 0 !important; overflow: hidden; display: flex; flex-direction: column; font: 400 12.5px/1.35 var(--p-font);
+  background: var(--p-card) !important; color: var(--p-text) !important; border: 1px solid var(--p-border) !important; border-radius: 14px !important; }
+#spBankMsg .sbm-bonus { margin: 8px 10px 0; background: var(--p-green-soft); color: var(--p-text); border-radius: 9px; padding: 6px 9px; font-size: 12px; line-height: 1.3; }
+#spBankMsg .sbm-bonus b { color: var(--p-green); }
+#spBankMsg .sbm-head { padding: 8px 12px 7px; border-bottom: 1px solid var(--p-border); display: flex; flex-direction: column; }
+#spBankMsg .sbm-head b { font: 800 14px var(--p-font); }
+#spBankMsg .sbm-head small { font: 600 11px var(--p-font); color: var(--p-muted); }
+#spBankMsg .sbm-r { display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 12px; }
+#spBankMsg .sbm-kv { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+#spBankMsg .sbm-kv small { font: 700 9.5px var(--p-font); letter-spacing: .6px; color: var(--p-muted); }
+#spBankMsg .sbm-kv code { font: 700 13px ui-monospace, Menlo, Consolas, monospace; color: var(--p-text); overflow-wrap: anywhere; background: none; padding: 0; }
+#spBankMsg .sbm-cp { flex: 0 0 auto; border: 0; border-radius: 9px; padding: 8px 12px; background: var(--p-green); color: #fff; font: 800 12px var(--p-font); cursor: pointer; }
+#spBankMsg .sbm-cp:active { transform: scale(.96); }
+#spBankMsg .sbm-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 12px; padding: 6px 0; border-top: 1px solid var(--p-border); font-size: 11.5px; color: var(--p-muted); }
+#spBankMsg .sbm-foot b { color: var(--p-text); }
+#spBankMsg .sbm-foot .sbm-min { color: #b7791f; }
+#spBankMsg .sbm-attach { margin: 2px 10px 10px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 10px; padding: 10px 12px; background: var(--p-green); color: #fff;
+  font: 800 13px var(--p-font); cursor: pointer; }
+#spBankMsg .sbm-attach:active { transform: scale(.98); }
+html[data-theme="dark"] #spBankMsg .sbm-foot .sbm-min { color: #f6c453; }

@@ -538,11 +538,14 @@
             _spBk = c; const e = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, '');
             const bono = j && Number(j.pct) > 0 ? '<div class="sbm-bonus">🎁 <b>BONO VIGENTE: +' + Math.round(Number(j.pct)) + '%</b> ' + e(j.label) + (Number(j.capArs) > 0 ? ' (hasta $' + Math.round(j.capArs).toLocaleString('es-AR') + ' de carga)' : '') + (j.until ? ' · hasta las ' + e(j.until) : '') + '</div>' : '';
             if (!_sbmEl) { _sbmEl = document.createElement('div'); _sbmEl.className = 'message-wrapper sp-bankmsg-w'; _sbmEl.id = 'spBankMsg'; }
-            _sbmEl.innerHTML = '<div class="message agente sp-bankmsg">' + bono + '<div class="sbm-h">🏦 Para cargar, transferí a esta cuenta</div>' +
-                (c.titular ? '<div class="sbm-row"><span>Titular</span><b>' + e(c.titular) + '</b></div>' : '') +
-                (c.alias ? '<button type="button" class="sbm-row sbm-copy" onclick="VIP.home.spCopy(\'alias\')"><span>Alias</span><b>' + e(c.alias) + '</b><i>Copiar</i></button>' : '') +
-                (c.number ? '<button type="button" class="sbm-row sbm-copy" onclick="VIP.home.spCopy(\'cbu\')"><span>CBU</span><b>' + e(c.number) + '</b><i>Copiar</i></button>' : '') +
-                '<button type="button" class="sbm-attach" onclick="VIP.autoload.pickReceipt(\'chat\')">📎 Ya transferí · ADJUNTAR COMPROBANTE</button></div>';
+            // #1082-b (owner, con captura): estilo "Depositar · Paso 1 de 2", chiquito, CBU y alias con Copiar verde, titular + mínimo y "Subir comprobante"
+            const md = _platforms && Number(_platforms.minDepositArs) > 0 ? '$' + Math.round(_platforms.minDepositArs).toLocaleString('es-AR') : '';
+            const row = (k, v, w) => '<div class="sbm-r"><div class="sbm-kv"><small>' + k + '</small><code>' + e(v) + '</code></div><button type="button" class="sbm-cp" onclick="VIP.home.spCopy(\'' + w + '\')">Copiar</button></div>';
+            _sbmEl.innerHTML = '<div class="message agente sp-bankmsg">' + bono +
+                '<div class="sbm-head"><b>Depositar</b><small>Paso 1 de 2 · hacé la transferencia</small></div>' +
+                (c.number ? row('CBU / CVU', c.number, 'cbu') : '') + (c.alias ? row('ALIAS', c.alias, 'alias') : '') +
+                '<div class="sbm-foot">' + (c.titular ? '<span>Titular <b>' + e(c.titular) + '</b></span>' : '') + (md ? '<span>Mínimo <b class="sbm-min">' + md + '</b></span>' : '') + '</div>' +
+                '<button type="button" class="sbm-attach" onclick="VIP.autoload.pickReceipt(\'chat\')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg> Subir comprobante</button></div>';
             _sbmKeepLast();
             try { VIP.chat.scrollToBottom(); } catch (_) {}
         } catch (_) {}
