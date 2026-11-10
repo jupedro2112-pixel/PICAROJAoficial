@@ -3203,7 +3203,15 @@ async function handlePayoutStatusWebhook(p) {
       logger.info(`[hgcash-pay] PAGADO payout=${payout.id} user=${payout.username} $${payout.amount}`);
     } else if (status === 'ERROR' || status === 'CANCELLED') {
       const reason = p.errorCode || p.error || status;
-      await PendingPayout.updateOne({ id: payout.id }, { $set: { status: 'failed', hgStatus: status, error: String(reason).slice(0, 300) } });
+      // Revisión nocturna: un aviso tardío/repetido de error NO reabre un retiro ya pagado o rechazado
+      // (si no, el reintento automático lo volvía a pagar o se pagaba con las fichas ya devueltas).
+      const updF = await PendingPayout.updateOne({ id: payout.id, status: { $in: ['paying', 'failed', 'pending_review'] } }, { $set: { status: 'failed', hgStatus: status, error: String(reason).slice(0, 300) } });
+      if (!(updF.modifiedCount || updF.nModified || updF.matchedCount || updF.n)) {
+        await PendingPayout.updateOne({ id: payout.id }, { $set: { hgStatus: status } });
+        await _emitAdminOnlyChatNote(payout.userId, payout.username, `ℹ️ hgcash avisó ${status} (${reason}) sobre el retiro de $${Number(payout.amount).toLocaleString('es-AR')}, pero en el panel ya estaba ${payout.status === 'paid' ? 'PAGADO' : 'RECHAZADO'}: no se tocó. Revisá en hgcash si salió o no.`).catch(() => {});
+        logger.warn(`[hgcash-pay] aviso ${status} tardío ignorado payout=${payout.id} estado=${payout.status}`);
+        return;
+      }
       _bankPayoutFailed(reason, payout).catch(() => {}); // #442/#443
       // Si las fichas ya se descontaron (flujo nuevo confirmado), aclararlo: NO devolver.
       const yaDescontado = (payout.deductAtPay === true && payout.debitConfirmed === true);
@@ -15029,10 +15037,12 @@ app.post('/api/admin/bank-outage', authMiddleware, adminMiddleware, async (req, 
 //  - _withdrawHoldOf: el retiro vigente del cliente que NO salió solo (en revisión) o que se está procesando. Lo usan la app (cartel fijo) y el panel.
 //  - _payoutHoldSupportNote: si el cliente escribe al soporte con un retiro retenido, nota interna en su chat (una cada 2 h).
 const WITHDRAW_REVIEW_DEFAULT = '🔎 Tu retiro de ${amount} quedó en REVISIÓN de seguridad. Lo revisa una persona del equipo y te avisamos por acá apenas salga. No tenés que hacer nada: tu saldo no se tocó.';
-async function _notifyWithdrawHold(user, amount) {
+async function _notifyWithdrawHold(user, amount, opts) {
   try { _payoutHoldNoteAt.delete('noHold:' + (user && user.id)); } catch (_) {} // revisión: el retiro recién frenado se avisa a soporte en el próximo mensaje
-  const txt = await renderSystemCommand('/sys_withdraw_review', WITHDRAW_REVIEW_DEFAULT, { amount: Number(amount || 0).toLocaleString('es-AR') });
+  let txt = await renderSystemCommand('/sys_withdraw_review', WITHDRAW_REVIEW_DEFAULT, { amount: Number(amount || 0).toLocaleString('es-AR') });
   if (!txt) return;
+  // Revisión nocturna: si las fichas YA se descontaron (reintento de un retiro fallido), no decirle "tu saldo no se tocó".
+  if (opts && opts.chipsTaken) txt = String(txt).replace(/\s*(No tenés que hacer nada:?\s*)?tu saldo no se tocó\.?/i, ' Las fichas del retiro ya están apartadas: no se pierden.').trim();
   const u = await User.findOne({ id: user.id }).select('id username fcmToken fcmTokens fcmTokenContext').lean();
   if (u) await _sendUserSystemMessage(u, txt, { metadata: { kind: 'withdraw_review', channel: 'support' }, push: { title: '🔎 Tu retiro está en revisión', body: 'Lo revisa una persona del equipo. Te avisamos apenas salga.' } });
 }
@@ -15233,10 +15243,11 @@ async function _withdrawalRequestHandler(req, res) {
       // si lo anuláramos, se pagarían los dos). Los 'failed' sin fichas descontadas también se reemplazan (si no, el reintento automático
       // los seguía intentando y quedaban dos vigentes).
       const _touchedSince = new Date(Date.now() - 30 * 60000);
-      const _olds = await PendingPayout.find({ userId: user.id, id: { $ne: _newPayoutId }, status: { $in: ['pending_review', 'failed'] }, deductAtPay: true, debitConfirmed: { $ne: true },
+      const _olds = await PendingPayout.find({ userId: user.id, id: { $ne: _newPayoutId }, status: { $in: ['pending_review', 'failed'] }, deductAtPay: true, debitConfirmed: null, // revisión nocturna: false = "Descuento no confirmado" (las fichas pudieron salir) ⇒ lo resuelve una persona
+        error: { $not: /No se pudo descontar|Descuento no confirmado/i },
         $and: [{ $or: [{ hgTransactionId: null, hgTxId: null }, { hgStatus: { $regex: /fail|error|reject|cancel/i } }] }, { $or: [{ paidBy: null }, { updatedAt: { $lt: _touchedSince } }] }] }).select('id amount hgStatus status').lean();
       for (const o of _olds) {
-        const r = await PendingPayout.updateOne({ id: o.id, status: o.status, debitConfirmed: { $ne: true } },
+        const r = await PendingPayout.updateOne({ id: o.id, status: o.status, debitConfirmed: null },
           { $set: { status: 'cancelled', paidVia: 'replaced', chipsReturned: false, error: 'Reemplazado por el retiro nuevo de $' + amountNum.toLocaleString('es-AR') + ' (el cliente pidió otro monto)', replacedBy: _newPayoutId } });
         if (r.modifiedCount) _replaced.push(o);
       }
@@ -25341,7 +25352,7 @@ async function _payoutFraudRecheckTick() {
         try { io.to('admins').emit('payouts_changed', { userId: u.id }); } catch (_) {}
       };
       if (!prCfg.autoBelow || !hgcashPay.isEnabled()) { await toReview('el pago automático está apagado o el banco automático no está configurado'); continue; }
-      const g = await _withdrawFraudGate(u, Number(p.amount));
+      const g = await _withdrawFraudGate(u, Number(p.amount), { cbu: p.cbu, alias: p.alias }); // revisión nocturna: + destino (CBU ya cobrado en otra cuenta)
       if (g.unchecked) {
         const n = Number((p.fraudRecheck && p.fraudRecheck.n) || 0) + 1;
         if (n >= 6) await toReview('el chequeo antifraude no respondió en 20 min (revisalo a mano)');
@@ -25524,8 +25535,8 @@ app.post('/api/admin/payouts/review-config', authMiddleware, adminMiddleware, as
 // pedidos pendientes del mismo cliente con el mismo criterio seguro de #1002: fichas sin descontar, sin envío al banco (o envío fallido) y
 // sin que otro agente lo haya tocado en los últimos 30 min. Los que ya tocaron plata/fichas quedan visibles para resolverlos a mano.
 function _payoutSupersedable(p, now) {
-  if (!p || !['pending_review', 'failed'].includes(p.status) || p.deductAtPay !== true || p.debitConfirmed === true) return false;
-  if (/No se pudo descontar/i.test(String(p.error || ''))) return false; // #1033: el descuento pudo haberse hecho (timeout): lo resuelve una persona
+  if (!p || !['pending_review', 'failed'].includes(p.status) || p.deductAtPay !== true || p.debitConfirmed != null) return false; // revisión nocturna: false = descuento no confirmado
+  if (/No se pudo descontar|Descuento no confirmado/i.test(String(p.error || ''))) return false; // #1033: el descuento pudo haberse hecho (timeout): lo resuelve una persona
   const bankOk = (!p.hgTransactionId && !p.hgTxId) || /fail|error|reject|cancel/i.test(String(p.hgStatus || ''));
   const untouched = !p.paidBy || new Date(p.updatedAt || 0).getTime() < (now || Date.now()) - 30 * 60000;
   return bankOk && untouched;
@@ -25536,7 +25547,7 @@ async function _closeOtherPayouts(userId, keepId, by) {
     const done = [];
     for (const o of olds) {
       if (!_payoutSupersedable(o)) continue;
-      const r = await PendingPayout.updateOne({ id: o.id, status: o.status, debitConfirmed: { $ne: true } },
+      const r = await PendingPayout.updateOne({ id: o.id, status: o.status, debitConfirmed: null },
         { $set: { status: 'cancelled', paidVia: 'replaced', chipsReturned: false, replacedBy: keepId, error: 'Anulado: se pagó otro retiro del mismo cliente' + (by ? ' (' + by + ')' : '') } });
       if (r.modifiedCount) done.push(o);
     }
@@ -25565,7 +25576,7 @@ async function _payPendingPayout(id, actor, baseUrl) {
       const pu = await User.findOne({ id: payout.userId }).select('isBlocked fraudReview').lean();
       if (pu && (pu.isBlocked || (pu.fraudReview && pu.fraudReview.status === 'watch'))) {
         await PendingPayout.updateOne({ id: payout.id }, { $set: { reviewRequired: true, autoPay: false, reviewReason: pu.isBlocked ? 'cuenta BLOQUEADA' : 'antifraude: en observación' } });
-        if (!pu.isBlocked) _notifyWithdrawHold({ id: payout.userId }, payout.amount).catch(() => {}); // #1010
+        if (!pu.isBlocked) _notifyWithdrawHold({ id: payout.userId }, payout.amount, { chipsTaken: payout.debitConfirmed === true }).catch(() => {}); // #1010
         return res.status(409).json({ error: 'Cuenta bloqueada o en observación: el pago queda para revisión.' });
       }
     }
