@@ -8,6 +8,14 @@
 
 ## Sesión 2026-11-09
 
+### 1077. Chat de la burbuja de Girox más grande, con datos bancarios fijos, adjuntar y bono vigente (2026-11-10) — app v710
+- **Owner:** "agrandarlo un poco más y que apenas entren se vea fijado los datos bancarios, para adjuntar en el mismo chat y avisar el bono vigente" +
+  "cuando aparece de primera carga que se vea ahí en el chat el bono que tiene activo siempre".
+- Burbuja 340×480 ⇒ 400×620 (pin.css, al final). Arriba, FIJO: `#spBonusNow` (bono vigente, toca ⇒ `pickReceipt('chat')`), `#spBank` con título y botón
+  "📎 Ya transferí · ADJUNTAR COMPROBANTE". `GET /api/bonus/vigente` (server.js) dice qué bono lleva la PRÓXIMA carga en el mismo orden que
+  `resolveAutoBonus` pero SÓLO LEYENDO (1ª carga con el % del publicista → historia → 2ª carga → ruleta → lote → carga automática); si cambia el orden de
+  `resolveAutoBonus`, cambiar esa ruta. Se repinta al abrir el chat y tras cada carga.
+
 ### 1076. Telegram: el link donde se reciben los mensajes del bot se elige desde el panel (2026-11-10) — panel v278
 - **Owner:** el canal anda pero el grupo privado da "401 Unauthorized" en el diagnóstico. Causa: OTRA página corre este mismo sistema (copia de #1054,
   `botbot.zip`) y registra el bot hacia `https://picaroja.com` (el default de `TG_WEBHOOK_BASE`) con SU clave ⇒ Telegram le entrega a PICA ROJA con una clave

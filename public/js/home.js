@@ -505,9 +505,23 @@
         try { VIP.ui.copyText(v); } catch (_) {}
         try { VIP.ui.showToast((which === 'cbu' ? 'CBU' : 'Alias') + ' copiado ✅', 'success'); } catch (_) {}
     }
+    // #1077: cartel fijo con el bono que lleva la PRÓXIMA carga de ESTE cliente (servidor: /api/bonus/vigente, sólo lee)
+    async function spBonusNowPaint() {
+        const b = _el('spBonusNow'), t = _el('spBonusNowTxt'); if (!b || !t) return;
+        try {
+            const tok = VIP.state && VIP.state.currentToken; if (!tok) { b.hidden = true; return; }
+            const r = await fetch(VIP.config.API_URL + '/api/bonus/vigente', { headers: { Authorization: 'Bearer ' + tok }, cache: 'no-store' });
+            const j = await r.json().catch(() => null);
+            if (!j || !(Number(j.pct) > 0)) { b.hidden = true; return; }
+            const tope = Number(j.capArs) > 0 ? ' (hasta $' + Math.round(j.capArs).toLocaleString('es-AR') + ' de carga)' : '';
+            t.innerHTML = '<b>BONO VIGENTE: +' + Math.round(Number(j.pct)) + '%</b> ' + String(j.label || '').replace(/[<>&]/g, '') + tope + (j.until ? ' · hasta las ' + String(j.until).replace(/[<>&]/g, '') : '') + ' <i>Adjuntar</i>';
+            b.hidden = false;
+        } catch (_) { b.hidden = true; }
+    }
     async function spPromoPaint() {
         spUiMode();
         spBankPaint();
+        try { spBonusNowPaint(); } catch (_) {}
         const tk = _el('spTicker'), tx = _el('spTickerTxt'); if (!tk || !tx) return;
         try {
             const j = await _fdPromoLoad(); _spPromo = j || null;
@@ -2669,6 +2683,7 @@
         try { if (!spNewCasino()) setTimeout(_notifCtaAfterDeposit, 4500); } catch (_) {} /* #1042-t: con el chat nuevo, sin cartel */ // #892        try { setTimeout(function () { if (VIP.reviews && VIP.reviews.maybeOffer) VIP.reviews.maybeOffer('deposit'); }, 7000); } catch (_) {} // #875: después de la carga, si ya es la 5ª+
         try { _fdPromoP = null; _fdNotesPaint(); } catch (_) {} // refresca contador de cargas / guía
         try { setTimeout(storyBonusRefresh, 1500); } catch (_) {} // #742: el bono de la historia se consumió con esta carga
+        try { setTimeout(spBonusNowPaint, 2500); } catch (_) {} // #1077: el cartel del bono vigente del chat cambia con la carga
         try { if (!(VIP.ui && VIP.ui._casinoOpen)) return; } catch (_) { return; }
         // #1042-t (owner): con el chat NUEVO, lo de la carga va escrito en el chat de la burbuja ("¡Buena suerte!"), sin carteles.
         if (spNewCasino()) { try { toggleCasinoLoad(false); } catch (_) {} spShowChat(); return; }

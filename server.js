@@ -16835,6 +16835,31 @@ app.get('/api/first-deposit-promo', authMiddleware, async (req, res) => {
     res.json({ show: n === 0 && pct > 0, noDeposits: n === 0, depositsCount: n, pct, pctApp, extra, extraMonto: fixed, capArs: cap, installGiftEnabled: extra > 0 || fixed > 0, text }); // #675: noDeposits para la guía · #690: depositsCount (la franja de carga mínima se muestra hasta la 3ª carga)
   } catch (e) { res.json({ show: false }); }
 });
+// #1077 (owner: "que apenas entren al chat se vea el bono vigente"): qué bono lleva la PRÓXIMA carga del cliente, en el mismo orden que
+// resolveAutoBonus pero SÓLO LEYENDO (no reserva ni consume nada). Si cambia el orden de resolveAutoBonus, cambiar acá también.
+app.get('/api/bonus/vigente', authMiddleware, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const u = await User.findOne({ id: req.user.userId }).select('id username noWelcomeGifts fraudFlags duplicateOf storyBonus secondDepositOffer dailyRoulettePendingPct dailyRoulettePendingExpiresAt').lean();
+    if (!u || (u.duplicateOf && u.duplicateOf.username)) return res.json({ pct: 0 });
+    const now = Date.now(); const hhmm = (d) => new Date(d).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' });
+    const blockWelcome = _isFlagged(u) || (await _noWelcomeActive(u));
+    if (!blockWelcome) {
+      const fp = await getFirstDepositBonusPct(u);
+      if (fp > 0 && await _isFirstRealDeposit(u)) { const cap = await getFirstDepositCapArs(u); return res.json({ pct: fp, kind: 'first', label: 'en tu primera carga', capArs: cap > 0 ? cap : 0 }); }
+    }
+    const sb = u.storyBonus || {};
+    if (Number(sb.pct) > 0 && sb.expiresAt && new Date(sb.expiresAt).getTime() > now) return res.json({ pct: Number(sb.pct), kind: 'story', label: 'en tu próxima carga', until: hhmm(sb.expiresAt) });
+    const so = u.secondDepositOffer || {};
+    if (!blockWelcome && so.status === 'offered' && Number(so.pct) > 0 && so.expiresAt && new Date(so.expiresAt).getTime() > now) return res.json({ pct: Number(so.pct), kind: 'second', label: 'en tu segunda carga', until: hhmm(so.expiresAt) });
+    if (Number(u.dailyRoulettePendingPct) > 0 && (!u.dailyRoulettePendingExpiresAt || new Date(u.dailyRoulettePendingExpiresAt).getTime() > now)) return res.json({ pct: Number(u.dailyRoulettePendingPct), kind: 'roulette', label: 'de la ruleta en tu carga de hoy', until: u.dailyRoulettePendingExpiresAt ? hhmm(u.dailyRoulettePendingExpiresAt) : null });
+    const pb = await _getActivePromoBonus(u.username).catch(() => null);
+    if (pb && Number(pb.percent) > 0 && pb.applyMode !== 'agent') return res.json({ pct: Number(pb.percent), kind: 'promo', label: 'en tu próxima carga', until: pb.expiresAt ? hhmm(pb.expiresAt) : null });
+    const ap = await getAutoLoadBonusPct();
+    if (ap > 0) return res.json({ pct: ap, kind: 'auto', label: 'en cada carga con comprobante' });
+    res.json({ pct: 0 });
+  } catch (e) { res.json({ pct: 0 }); }
+});
 app.get('/api/install-gift/status', authMiddleware, async (req, res) => {
   try {
     const user = await User.findOne({ id: req.user.userId }).lean();

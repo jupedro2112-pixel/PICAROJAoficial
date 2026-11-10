@@ -3298,3 +3298,23 @@ body:not(.sp-classic) #ctSupport { display: none !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .chat-topbar-avatar { width: 30px !important; height: 30px !important; flex: 0 0 30px !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .sp-acts button { min-height: 32px !important; font-size: 11px !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .sp-bk-row { padding: 2px 8px !important; font-size: 11px !important; }
+
+/* #1077 (owner: "agrandarlo un poco más y que apenas entren se vea fijado los datos bancarios, para adjuntar en el mismo chat y avisar el bono vigente"):
+   la burbuja de Girox pasa de 340×480 a 400×620 (sigue centrada y abajo); arriba quedan FIJOS el bono vigente, titular/alias/CBU y el botón de adjuntar. */
+#casinoOverlay > #supportPanel.sp-in-casino { width: min(400px, calc(100vw - 16px)) !important; height: min(620px, calc(100vh - 130px - var(--sat, 0px))) !important; }
+@supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: min(620px, calc(100dvh - 130px - var(--sat, 0px))) !important; } }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-actbar { flex: 0 0 auto; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-bk-row { padding: 4px 10px !important; font-size: 12.5px !important; }
+body:not(.sp-classic) .sp-bonus-now { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 6px; padding: 7px 10px; border: 1px solid var(--p-red); border-radius: 10px;
+  background: var(--p-red); color: var(--p-inv); font: 600 12.5px/1.3 var(--p-font); text-align: left; cursor: pointer; box-sizing: border-box; }
+body:not(.sp-classic) .sp-bonus-now[hidden] { display: none; }
+body:not(.sp-classic) .sp-bonus-now .sp-bn-ico { flex: 0 0 auto; font-size: 18px; }
+body:not(.sp-classic) .sp-bonus-now .sp-bn-txt { flex: 1; min-width: 0; }
+body:not(.sp-classic) .sp-bonus-now b { font-weight: 900; letter-spacing: .02em; }
+body:not(.sp-classic) .sp-bonus-now i { float: right; font-style: normal; font-weight: 800; font-size: 11px; background: var(--p-inv); color: var(--p-red); border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
+body:not(.sp-classic) .sp-bk-head { padding: 5px 10px 3px; font: 800 11.5px/1.2 var(--p-font); color: var(--p-muted); letter-spacing: .03em; text-transform: uppercase; }
+body:not(.sp-classic) .sp-bk-head + .sp-bk-row { border-top: 1px solid var(--p-border); }
+body:not(.sp-classic) .sp-bk-attach { display: block; width: 100%; padding: 9px 10px; border: 0; border-top: 1px solid var(--p-border); background: var(--p-green); color: var(--p-inv);
+  font: 900 12.5px/1.2 var(--p-font); letter-spacing: .02em; cursor: pointer; }
+body:not(.sp-classic) .sp-bk-attach:active { background: var(--p-text); }
+body.sp-classic .sp-bonus-now { display: none !important; }
