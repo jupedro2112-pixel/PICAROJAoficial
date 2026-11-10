@@ -20,6 +20,8 @@
 
     const PW_KEY = 'vip_access_pw'; // contraseña del cliente guardada en SU dispositivo (base64)
     let _cbu = null;
+    let _cbuAt = 0; // revisión nocturna: cuándo se trajo (el CBU se vuelve a pedir a los 5 min y al volver la app a primer plano)
+    const CBU_TTL_MS = 5 * 60 * 1000;
     let _pwVisible = false;
     let _lastBlobUrl = null;
     let _loading = null;
@@ -96,7 +98,7 @@
         if (!_cbu) ['alBank', 'alTitular', 'alCbu', 'alAlias'].forEach(id => _set(id, 'cargando…'));
         if (!_loading) _loading = _loadCbu().finally(() => { _loading = null; });
         const cbu = await _loading;
-        if (cbu) _cbu = cbu;
+        if (cbu) { _cbu = cbu; _cbuAt = Date.now(); }
         if (_cbu) {
             _set('alBank', _cbu.bank); _set('alTitular', _cbu.titular); _set('alCbu', _cbu.number);
             _set('alAlias', _cbu.alias || '—'); // #271
@@ -237,7 +239,6 @@
     // La captura lleva SOLO lo que el cliente tiene que guardar (owner #228): link de la
     // app, su usuario y su contraseña. Nada de CBU ni pasos (eso cambia y vive en la app).
     // #478 (owner): título = logo de la marca; la clave se ve SIEMPRE (la guardada o la predeterminada de acceso).
-    const DEFAULT_ACCESS_PW = 'asd123';
     const _brandLogo = new Image(); try { _brandLogo.src = '/icons/icon-192x192.png'; } catch (_) {}
     function _drawCard() {
         const W = 1080, H = 1080;
@@ -265,9 +266,10 @@
         }
         row('Link de la app', appLink().replace(/^https?:\/\//, ''), '#ff6b6b');
         row('Usuario', username(), '#ffffff');
-        const pwSaved = getPassword(); const pw = pwSaved || DEFAULT_ACCESS_PW;
-        row('Contraseña', pw, '#ffd166');
-        if (!pwSaved) { ctx.fillStyle = '#9aa0b2'; ctx.font = '600 24px Montserrat, system-ui, sans-serif'; ctx.fillText('(clave inicial: si la cambiaste, usá la tuya)', pad, y - 20); y += 20; } // #486
+        // Revisión nocturna: desde #956 las cuentas nacen con clave ALEATORIA: sin clave guardada NO se dibuja la vieja 'asd123' (no entraba).
+        const pwSaved = getPassword();
+        if (pwSaved) row('Contraseña', pwSaved, '#ffd166');
+        else { ctx.fillStyle = '#9aa0b2'; ctx.font = '700 28px Montserrat, system-ui, sans-serif'; ctx.fillText('CONTRASEÑA', pad, y); y += 56; ctx.fillStyle = '#ffd166'; ctx.font = '700 36px Montserrat, system-ui, sans-serif'; y = _wrap(ctx, 'La clave que elegiste (si no la sabés, cambiala en Perfil)', pad, y, W - pad * 2, 46) + 44; } // #486
         ctx.fillStyle = '#6f7790'; ctx.font = '500 24px Montserrat, system-ui, sans-serif'; ctx.textAlign = 'center';
         ctx.fillText('Generada el ' + new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }), W / 2, H - 70);
         return c;
@@ -279,7 +281,7 @@
         const btn = (_pfOpen() && _el('pfCaptureBtn')) || _el('alCaptureBtn');
         if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
         try {
-            if (!_cbu) { const c = await _loadCbu(); if (c) _cbu = c; }
+            if (!_cbu || Date.now() - _cbuAt > CBU_TTL_MS) { const c = await _loadCbu(); if (c) { _cbu = c; _cbuAt = Date.now(); } }
             const canvas = _drawCard();
             const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
             if (!blob) throw new Error('sin imagen');
@@ -323,12 +325,14 @@
     function getCbu() { return _cbu; }
     // #839: la Carga rápida del casino (Girox directo) pide los datos SOLA; antes esperaba a que el Inicio completo los cargara y en
     // Girox directo quedaba "cargando datos…" para siempre.
+    // Revisión nocturna: el dato guardado vale 5 min (si el owner cambia la cuenta, la app abierta en Girox directo ya no copia la vieja).
     function ensureCbu() {
-        if (_cbu) return Promise.resolve(_cbu);
-        if (!VIP.state || !VIP.state.currentToken) return Promise.resolve(null);
+        if (_cbu && Date.now() - _cbuAt < CBU_TTL_MS) return Promise.resolve(_cbu);
+        if (!VIP.state || !VIP.state.currentToken) return Promise.resolve(_cbu);
         if (!_loading) _loading = _loadCbu().finally(() => { _loading = null; });
-        return _loading.then((c) => { if (c) _cbu = c; return _cbu; });
+        return _loading.then((c) => { if (c) { _cbu = c; _cbuAt = Date.now(); } return _cbu; });
     }
+    try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _cbuAt = 0; }); } catch (_) {}
     VIP.autoload = { init, refresh, getCbu, ensureCbu, togglePassword, saveManualPassword, copy, sendReceipt, saveCapture, hidePreview, rememberPassword, forgetPassword, getPassword, appLink,
         pickReceipt, guideOpen, guideClose, guideGo, guideOther, guideForce /* #1030 */ };
 })();

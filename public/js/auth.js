@@ -657,7 +657,7 @@ VIP.auth = (function () {
             // #426: paso siguiente — mostrar usuario + clave ("¡Te registraste con éxito!") y recién con "Entrar" se inicia la sesión.
             _quickAccess = d.accessToken;
             try { if (d.username && d.password) sessionStorage.setItem('vip_signup_creds', JSON.stringify({ u: d.username, p: d.password, at: Date.now() })); } catch (_) {} // #831 respaldo
-            try { if (d.password && VIP.autoload && VIP.autoload.setPassword) VIP.autoload.setPassword(d.password); } catch (_) {}
+            try { if (d.password && VIP.autoload && VIP.autoload.rememberPassword) VIP.autoload.rememberPassword(d.password); } catch (_) {} // revisión nocturna: setPassword no existía ⇒ Perfil quedaba sin la clave
             const u = document.getElementById('quickUser'), p = document.getElementById('quickPass'), note = document.getElementById('quickDoneNote');
             if (u) u.textContent = d.username || '—';
             if (p) p.textContent = d.password || '—';
@@ -752,6 +752,7 @@ VIP.auth = (function () {
                 if (response.ok && data && data.token) {
                     VIP.state.currentToken = data.token;
                     localStorage.setItem('userToken', data.token);
+                    _rememberSignupPw(); // revisión nocturna: la clave del alta queda en Perfil
                     try { sessionStorage.removeItem('vip_signup_creds'); } catch (_) {}
                     return true; // el caller sigue con verifyToken() → sesión completa
                 }
@@ -767,6 +768,9 @@ VIP.auth = (function () {
         return false;
     }
     // #831: la landing (mismo dominio) deja usuario+clave por 2 h en sessionStorage de la pestaña antes de ir a la app; sólo se usan si el link falló.
+    function _rememberSignupPw() {
+        try { const c = JSON.parse(sessionStorage.getItem('vip_signup_creds') || 'null'); if (c && c.p && Date.now() - (c.at || 0) < 2 * 3600000 && VIP.autoload && VIP.autoload.rememberPassword) VIP.autoload.rememberPassword(c.p); } catch (_) {}
+    }
     async function _loginWithSignupCreds() {
         let c = null; try { c = JSON.parse(sessionStorage.getItem('vip_signup_creds') || 'null'); } catch (_) {}
         if (!c || !c.u || !c.p || Date.now() - (c.at || 0) > 2 * 3600000) return false;
@@ -777,6 +781,7 @@ VIP.auth = (function () {
                 let d = null; try { d = await r.json(); } catch (_) {}
                 if (r.ok && d && d.token) {
                     VIP.state.currentToken = d.token; localStorage.setItem('userToken', d.token);
+                    try { if (VIP.autoload && VIP.autoload.rememberPassword) VIP.autoload.rememberPassword(c.p); } catch (_) {}
                     try { sessionStorage.removeItem('vip_signup_creds'); } catch (_) {}
                     try { VIP.state._openGiroxAfterLogin = true; sessionStorage.setItem('vip_from_pauta', '1'); } catch (_) {} // #1017: recién registrado ⇒ Girox directo
                     return true;
@@ -940,7 +945,9 @@ VIP.auth = (function () {
         const currentPwGroup = document.getElementById('currentPasswordGroup');
         const currentPwInput = document.getElementById('currentPasswordInput');
         const needCurrentPw = !VIP.state.passwordChangePending && !!verifiedPhone;
-        if (currentPwGroup) currentPwGroup.style.display = needCurrentPw ? '' : 'none';
+        // Revisión nocturna: en el cambio VOLUNTARIO se muestra siempre (la "entrada temporal" sin SMS también la pide el servidor);
+        // obligatoria sólo con teléfono verificado (sin teléfono, el código SMS prueba la identidad).
+        if (currentPwGroup) currentPwGroup.style.display = !VIP.state.passwordChangePending ? '' : 'none';
         if (currentPwInput) {
             currentPwInput.value = '';
             if (needCurrentPw) currentPwInput.setAttribute('required', '');
@@ -1160,7 +1167,8 @@ VIP.auth = (function () {
             _vipChangePwdPending = {
                 newPassword,
                 phone: whatsappFull,
-                closeAllSessions
+                closeAllSessions,
+                currentPassword // revisión nocturna: el server la pide fuera del cambio obligatorio
             };
             const form = document.getElementById('changePasswordForm');
             const otpStep = document.getElementById('changePasswordOtpStep');
@@ -1391,7 +1399,8 @@ VIP.auth = (function () {
                     newPassword: _vipChangePwdPending.newPassword,
                     phone: _vipChangePwdPending.phone,
                     whatsapp: _vipChangePwdPending.phone,
-                    closeAllSessions: _vipChangePwdPending.closeAllSessions
+                    closeAllSessions: _vipChangePwdPending.closeAllSessions,
+                    currentPassword: _vipChangePwdPending.currentPassword || undefined
                 })
             });
             const data = await response.json().catch(() => ({}));

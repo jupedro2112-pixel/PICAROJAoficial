@@ -52,7 +52,7 @@ for (const f of js) {
 }
 const used = {}; for (const f of ['public/index.html', ...js]) { const t = fs.readFileSync(f, 'utf8'); for (const x of t.matchAll(/VIP\.(\w+)\.(\w+)\s*\(/g)) { const mm = (used[x[1]] = used[x[1]] || new Map()); mm.set(x[2], (mm.get(x[2]) || new Set()).add(f.replace('public/', ''))); } }
 const KNOWN_SKIP = new Set(['ui', 'campaign']); // exportan con `return Object.assign(...)` / api.x = …: el parser no los lee
-const KNOWN_GUARDED = new Set(['autoload.setPassword']); // llamada feature-detected (`if (VIP.autoload.setPassword)`) en auth.js: no existe a propósito
+const KNOWN_GUARDED = new Set([]); // revisión nocturna: 'autoload.setPassword' no existía (era rememberPassword) ⇒ ya no se tolera
 let bad = 0; for (const ns of Object.keys(used).sort()) { if (KNOWN_SKIP.has(ns)) continue; for (const [fn, fl] of used[ns]) if (!(exp[ns] && exp[ns].has(fn)) && !KNOWN_GUARDED.has(ns + '.' + fn)) { bad++; console.log('❌ FALTA VIP.' + ns + '.' + fn + '  <- ' + [...fl].join(', ')); } }
 console.log((bad ? '❌ ' : '✅ ') + 'namespaces:', Object.keys(used).length, 'llamadas distintas:', Object.values(used).reduce((a, m) => a + m.size, 0), 'faltantes:', bad);
 process.exit(bad ? 1 : 0);

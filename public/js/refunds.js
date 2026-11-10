@@ -140,10 +140,7 @@ VIP.refunds = (function () {
             if (data.success) {
                 VIP.ui.showToast(`✅ ${data.message}`, 'success');
                 if (VIP.ui.syncBalance) VIP.ui.syncBalance();
-                // Deja constancia en el chat (mismo patrón que los reembolsos).
-                if (VIP.chat && VIP.chat.sendSystemMessage) {
-                    VIP.chat.sendSystemMessage(`💸 Rakeback semanal reclamado: $${(data.amount || 0).toLocaleString()}`);
-                }
+                // Revisión nocturna: ya no se escribe en el chat como si fuera el cliente (reabría el chat y despertaba al bot); alcanza con el toast.
             } else {
                 VIP.ui.showToast(`ℹ️ ${data.message}`, 'info');
             }
@@ -450,7 +447,7 @@ VIP.refunds = (function () {
                 VIP.ui.showToast(`✅ ${data.message}`, 'success');
                 VIP.ui.hideModal('refundModal');
                 loadRefundStatus();
-                VIP.chat.sendSystemMessage(`🎁 Reembolso ${type} reclamado: $${data.amount.toLocaleString()}`);
+                // Revisión nocturna: ya no se escribe en el chat como si fuera el cliente (reabría el chat y despertaba al bot); alcanza con el toast.
 
                 // Meta Pixel — RefundClaim (custom, deduplicado con CAPI).
                 if (VIP.pixel) VIP.pixel.trackWithId(metaEventId, 'RefundClaim', {

@@ -518,7 +518,8 @@ VIP.chat = (function () {
         setTimeout(scrollToBottom, 100);
         setTimeout(scrollToBottom, 300);
 
-        if (VIP.state.socket && VIP.state.socket.connected) {
+        // Revisión nocturna: sólo por socket si ya se IDENTIFICÓ (recién reconectado y sin identificar, el server contestaba 'No autenticado' y el mensaje se perdía) ⇒ si no, REST.
+        if (VIP.state.socket && VIP.state.socket.connected && VIP.state.socketAuthed) {
             VIP.state.socket.emit('send_message', { content, type: 'text', channel: 'support', quick: quick || undefined }); // #377/#384
             return;
         }

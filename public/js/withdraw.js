@@ -432,7 +432,7 @@ VIP.withdraw = (function () {
                 VIP.ui.hideModal('withdrawModal');
                 let _newChat = false; try { _newChat = !!(VIP.home && VIP.home.spNewCasino && VIP.home.spNewCasino()); } catch (_) {}
                 if (!_newChat) VIP.ui.showToast('✅ ' + (data.message || 'Retiro solicitado correctamente'), 'success'); // #1042-t: con el chat nuevo va escrito en el chat
-                try { if (VIP.home && VIP.home.onWithdrawRequested) VIP.home.onWithdrawRequested(_wdAmt); } catch (_) {} // #714: cartel ¡Felicitaciones!
+                try { if (VIP.home && VIP.home.onWithdrawRequested) VIP.home.onWithdrawRequested(_wdAmt, { review: !!data.review, delayed: !!data.delayed }); } catch (_) {} // #714: cartel ¡Felicitaciones! (revisión nocturna: neutro si quedó en revisión)
                 setTimeout(() => VIP.chat.loadMessages(), 500);
                 setTimeout(() => VIP.ui.syncBalance(), 1500);
                 setTimeout(loadHold, 4000); // #1010: si quedó en revisión, aparece el cartel
@@ -488,7 +488,8 @@ VIP.withdraw = (function () {
         if (!h) { if (el) el.hidden = true; return; }
         if (!el) {
             el = document.createElement('button'); el.type = 'button'; el.id = 'wdHoldBar'; el.className = 'wd-hold-bar';
-            el.onclick = () => { try { if (VIP.home && VIP.home.openSupport) VIP.home.openSupport(); } catch (_) {} };
+            // Revisión nocturna: con Girox abierto y el chat nuevo, abre el chat de la burbuja (no el Soporte de atrás, que quedaba tapado).
+            el.onclick = () => { try { if (VIP.home && VIP.home.spNewCasino && VIP.home.spNewCasino() && VIP.home.spShowChat) VIP.home.spShowChat(); else if (VIP.home && VIP.home.openSupport) VIP.home.openSupport(); } catch (_) {} };
             document.body.appendChild(el);
         }
         const amt = '$' + Number(h.amount || 0).toLocaleString('es-AR');

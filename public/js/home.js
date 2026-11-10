@@ -306,7 +306,7 @@
         const openLoad = which === 'load' ? lp.hidden : false, openWd = which === 'wd' ? wp.hidden : false;
         lp.hidden = !openLoad; wp.hidden = !openWd; if (lb) lb.setAttribute('aria-expanded', openLoad ? 'true' : 'false'); if (wb) wb.setAttribute('aria-expanded', openWd ? 'true' : 'false');
         if (openLoad) {
-            if (!_bvCbu) { try { const r = await fetch(VIP.config.API_URL + '/api/config/cbu', { headers: { Authorization: 'Bearer ' + VIP.state.currentToken } }); if (r.ok) _bvCbu = await r.json(); } catch (_) {} }
+            try { const c0 = await VIP.autoload.ensureCbu(); if (c0) _bvCbu = c0; } catch (_) {} // revisión nocturna: misma caché con vencimiento que la Carga rápida
             const c = _bvCbu || {}; const set = (id, v) => { const e = _el(id); if (e) e.textContent = v || 'no disponible'; };
             set('pvAlias', c.alias); set('pvCbu', c.number || c.cbu); set('pvTitular', c.titular); set('pvBank', c.bank);
             try { _fdNotesPaint(); } catch (_) {}
@@ -338,8 +338,8 @@
         const openLoad = which === 'load' ? lp.hidden : false, openWd = which === 'wd' ? wp.hidden : false;
         if (lp) lp.hidden = !openLoad; if (wp) wp.hidden = !openWd; if (lb) lb.setAttribute('aria-expanded', openLoad ? 'true' : 'false'); if (wb) wb.setAttribute('aria-expanded', openWd ? 'true' : 'false');
         try { const md = _platforms && _platforms.minDepositArs; if (md > 0) { const e = _el('bvMinDep'); if (e) e.textContent = _m$(md); } const mw = _platforms && _platforms.withdrawMinArs; if (mw > 0) { const e2 = _el('bvMinWd'); if (e2) e2.textContent = _m$(mw); document.querySelectorAll('.wd-amt').forEach((x) => { x.textContent = _m$(mw); }); } } catch (_) {} // #757: + retiro mínimo en el botón RETIRAR
-        if (openLoad && !_bvCbu) {
-            try { const r = await fetch(VIP.config.API_URL + '/api/config/cbu', { headers: { Authorization: 'Bearer ' + VIP.state.currentToken } }); if (r.ok) _bvCbu = await r.json(); } catch (_) {}
+        if (openLoad) {
+            try { const c0 = await VIP.autoload.ensureCbu(); if (c0) _bvCbu = c0; } catch (_) {} // revisión nocturna: siempre el CBU vigente
             const c = _bvCbu || {}; const set = (id, v) => { const e = _el(id); if (e) e.textContent = v || 'no disponible'; };
             set('bvAlias', c.alias); set('bvCbu', c.number || c.cbu); set('bvTitular', c.titular); set('bvBank', c.bank);
         }
@@ -550,6 +550,8 @@
             try { VIP.chat.scrollToBottom(); } catch (_) {}
         } catch (_) {}
     }
+    // Revisión nocturna: al volver la app a primer plano se repintan los datos del chat (el CBU pudo cambiar con la app abierta).
+    try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && _sbmEl && _sbmEl.parentNode) setTimeout(() => { try { spBankMsgPaint(); } catch (_) {} }, 300); }); } catch (_) {}
     async function spPromoPaint() {
         spUiMode();
         try { spBankMsgPaint(); } catch (_) {} // #1082: datos + bono vigente como último mensaje del chat (ya no arriba)
@@ -2751,7 +2753,7 @@
     }
     // #714 (owner): "quiero darle unas felicitaciones a la gente: en breve ya sale su pago, recordá que tenemos muchos beneficios para vos
     // en el menú completo" — al pedir un retiro (desde donde sea), 5 s o ✕, mismo estilo.
-    function onWithdrawRequested(amount) {
+    function onWithdrawRequested(amount, info) {
         try { if (VIP.ui && VIP.ui._casinoOpen) toggleCasinoLoad(false); } catch (_) {} // #723: tras el retiro se cierra el panel
         if (spNewCasino()) { spShowChat(); return; } // #1042-t: "en breve ya sale tu pago" escrito en el chat de la burbuja, sin cartel
         const old = _el('luckCard'); if (old) old.remove();
@@ -2759,8 +2761,12 @@
         document.body.insertAdjacentHTML('beforeend',
             '<div id="luckCard" class="luck-card luck-wd" role="status">' +
               '<button type="button" class="luck-x" onclick="VIP.home.luckClose()" aria-label="Cerrar">✕</button>' +
-              '<div class="luck-t">🎉 ¡Felicitaciones!' + (amt ? ' <small>Retiro de $' + amt.toLocaleString('es-AR') + ' solicitado</small>' : '') + '</div>' +
-              '<div class="luck-p"><b>En breve ya sale tu pago.</b> Recordá que tenemos <b>muchos beneficios para vos</b> en el <b>menú completo</b>.</div>' +
+              // revisión nocturna: si el retiro quedó en revisión / demorado, texto neutro (el servidor ya le escribió por qué); antes decía "en breve ya sale"
+              ((info && (info.review || info.delayed))
+                ? '<div class="luck-t">📨 Recibimos tu pedido' + (amt ? ' <small>Retiro de $' + amt.toLocaleString('es-AR') + '</small>' : '') + '</div>' +
+                  '<div class="luck-p"><b>Te avisamos por el chat apenas salga.</b> Recordá que tenemos <b>muchos beneficios para vos</b> en el <b>menú completo</b>.</div>'
+                : '<div class="luck-t">🎉 ¡Felicitaciones!' + (amt ? ' <small>Retiro de $' + amt.toLocaleString('es-AR') + ' solicitado</small>' : '') + '</div>' +
+              '<div class="luck-p"><b>En breve ya sale tu pago.</b> Recordá que tenemos <b>muchos beneficios para vos</b> en el <b>menú completo</b>.</div>') +
               '<button type="button" class="luck-btn" onclick="VIP.home.luckClose(); VIP.home.casinoFullMenu()">☰ Ver el menú completo ›</button>' +
             '</div>');
         clearTimeout(_luckT); _luckT = setTimeout(luckClose, 5000);

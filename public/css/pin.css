@@ -3038,6 +3038,8 @@ html[data-theme="dark"] .srt-tk-list summary { color: var(--srt-lite); }
 .wd-hold-bar[hidden] { display: none !important; }
 .wd-hold-bar small { color: var(--p-muted); font-size: 11.5px; line-height: 1.35; }
 .wd-hold-bar.is-review { border-color: var(--p-red); background: var(--p-red-soft); }
+/* Revisión nocturna: con el casino abierto (z 99999) el cartel quedaba tapado: va arriba, por encima del casino y debajo de los toasts (100002+), sin tapar la burbuja */
+body.casino-open .wd-hold-bar { z-index: 100001; top: calc(var(--sat, env(safe-area-inset-top, 0px)) + 58px); bottom: auto; }
 
 /* #1030 (owner 2026-11-08): GUÍA antes de adjuntar el comprobante (#rcptGuideModal). Todo por tokens --p-* (modo nocturno incluido). */
 .rg-modal .modal-content.rg-card { max-width: 400px !important; padding: 22px 18px 16px !important; text-align: left; }

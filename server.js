@@ -15364,6 +15364,7 @@ async function _withdrawalRequestHandler(req, res) {
     }
 
     // #566: ≥ umbral → queda en CONFIRMACIÓN DE PAGOS (una persona revisa); por debajo → se paga SOLO por hgcash, ya mismo.
+    let _wdOutcome = null; // revisión nocturna: la app lo usa para no decir "en breve ya sale tu pago" si quedó en revisión
     try {
       const prCfg = await getPayoutReviewConfig();
       // #814 (owner 2026-10-22): "pagos y retiros automáticos, excepto mayores a $100.000" ⇒ revisión sólo si SUPERA el umbral.
@@ -15391,7 +15392,9 @@ async function _withdrawalRequestHandler(req, res) {
           ? `🔎 RETIRO EN REVISIÓN: $${amountNum.toLocaleString('es-AR')} — cuenta todavía sin historial con un retiro mayor a $${prCfg.minArs.toLocaleString('es-AR')} (${trustWhy.join(' · ')}). Confirmalo o rechazalo en Panel → Confirmación de pagos.`
           : `🔎 RETIRO EN REVISIÓN: $${amountNum.toLocaleString('es-AR')} — el pago automático está apagado o el banco automático no está configurado. Confirmalo o rechazalo en Panel → Confirmación de pagos.`).catch(() => {});
         _notifyWithdrawHold(user, amountNum).catch(() => {}); // #1010: el cliente se entera de que está en revisión
+        _wdOutcome = 'review';
       } else if (deferFraud) {
+        _wdOutcome = 'delayed';
         await _emitAdminOnlyChatNote(user.id, user.username, `⏳ RETIRO de $${amountNum.toLocaleString('es-AR')}: el chequeo antifraude no respondió a tiempo (API lenta). Se reintenta SOLO cada 3 min; si da limpio se paga solo, si a los 20 min sigue sin responder queda en Confirmación de pagos.`).catch(() => {});
         _notifyWithdrawDelayed(_newPayoutId).catch(() => {}); // #1020: el cliente recibe "por la gran cantidad de pagos, en hasta 20 minutos"
       } else {
@@ -15404,6 +15407,7 @@ async function _withdrawalRequestHandler(req, res) {
       logger.warn(`[pay-review] no se pudo clasificar el retiro: ${e.message} ⇒ re-chequeo automático`);
       try { await PendingPayout.updateOne({ id: _newPayoutId, status: 'pending_review', autoPay: { $ne: true }, reviewRequired: { $ne: true } }, { $set: { fraudRecheck: { n: 0, at: new Date() } } }); } catch (_) {}
       _notifyWithdrawDelayed(_newPayoutId).catch(() => {});
+      _wdOutcome = 'delayed';
     }
 
     // Meta CAPI — WithdrawRequest (señal de usuario activo / ganador).
@@ -15422,7 +15426,8 @@ async function _withdrawalRequestHandler(req, res) {
     // creado el PendingPayout y mandado el mensaje → el cliente reintentaba y duplicaba.
     res.json({
       success: true,
-      message: `Retiro de ${amountFmt} solicitado correctamente`
+      message: `Retiro de ${amountFmt} solicitado correctamente`,
+      review: _wdOutcome === 'review', delayed: _wdOutcome === 'delayed' // revisión nocturna
     });
     // #728 (owner): el usuario de prueba vuelve a "primer cliente" solo, 8 s después de pedir el retiro (sólo entorno de prueba).
     try { if (_isTestEnv() && AUTO_RESET_USERNAMES.includes(String(user.username))) setTimeout(() => { _resetTestUser({ id: user.id, username: user.username }, 'auto tras retiro').catch(() => {}); }, 8000); } catch (_) {}

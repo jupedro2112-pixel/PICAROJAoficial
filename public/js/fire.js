@@ -257,13 +257,7 @@ VIP.fire = (function () {
                 startFireCountdown();
                 updateFireButton();
 
-                if (data.rewardType === 'cash_pending') {
-                    VIP.chat.sendSystemMessage(`🏆 ¡Fueguito día ${data.streak}! Tenés $${data.reward.toLocaleString('es-AR')} para reclamar en el recuadro de Fueguito.`);
-                } else if (data.rewardType === 'next_load_bonus') {
-                    VIP.chat.sendSystemMessage(`🎉 ¡Recompensa Fueguito día 15! Tenés 30% en tu próxima carga. Avisale a un operador cuando quieras usarlo.`);
-                } else {
-                    VIP.chat.sendSystemMessage(`🔥 Día ${data.streak} de racha Fueguito!`);
-                }
+                // Revisión nocturna: ya no se escribe en el chat como si fuera el cliente (reabría el chat y despertaba al bot); alcanza con el toast.
 
                 setTimeout(() => { VIP.ui.hideModal('fireModal'); }, 1500);
             } else {
@@ -293,7 +287,7 @@ VIP.fire = (function () {
                 VIP.ui.showToast(`🎉 ${data.message}`, 'success');
                 VIP.state.fireStatus.pendingCashReward    = 0;
                 VIP.state.fireStatus.pendingCashRewardDay = 0;
-                VIP.chat.sendSystemMessage(`🎉 ¡Fueguito! ${data.message}`);
+                // Revisión nocturna: ya no se escribe en el chat como si fuera el cliente (reabría el chat y despertaba al bot); alcanza con el toast.
                 // Recargar el modal para reflejar el cambio
                 await loadFireStatus();
                 setTimeout(() => { VIP.ui.hideModal('fireModal'); }, 1500);
