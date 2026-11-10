@@ -607,7 +607,7 @@ document.addEventListener('change', function (ev) {
                     <label>Monto $<input type="number" id="cajaAmount" min="1" step="1" placeholder="0" inputmode="numeric"></label>
                     <label>¿Por qué cuenta pasó?<select id="cajaAccount"><option value="main">🏦 Banco principal (la cuenta de hgcash)</option><option value="external">🔁 Externo: otra cuenta / efectivo (no pasa por el banco)</option></select></label>
                     <label>Detalle (qué fue)<input type="text" id="cajaConcept" maxlength="120" placeholder="ej. fondeo para pagar retiros · pago a publicista · comisión del banco"></label>
-                    <label>De quién / a quién (opcional)<input type="text" id="cajaParty" maxlength="80" placeholder="nombre del que mandó o del que cobró"></label>
+                    <label title="#1090: en un INGRESO por el banco principal, poné el nombre del titular tal como figura en el banco; sin eso no se cruza solo (para no tomar la transferencia de un cliente)">De quién / a quién (en ingresos al banco: nombre como figura en el banco)<input type="text" id="cajaParty" maxlength="80" placeholder="nombre del que mandó o del que cobró"></label>
                     <label>Fecha<input type="date" id="cajaDate"></label>
                     <div class="caja-file">
                         <input type="file" id="cajaFile" accept="image/*,application/pdf" style="display:none" onchange="cajaFilePicked(this)">
@@ -2579,8 +2579,8 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                             <div id="giftBatchCapHint" style="color:#8fd3a8;font-size:.78rem;max-width:520px;line-height:1.4"></div>
                         </div>
                         <div id="giftBatchRolloverWrap" style="display:none">
-                            <label class="form-label" style="display:block;margin-bottom:.3rem" title="Regalo de fichas: se acredita solo como BONO con este rollover. 0 = sin rollover (retirable); x2/x5 = debe apostar N× antes de retirar.">🎯 Rollover (x)</label>
-                            <input type="number" id="giftBatchRollover" class="form-input" min="0" max="50" step="1" value="0" style="width:90px" />
+                            <label class="form-label" style="display:block;margin-bottom:.3rem" title="Regalo de fichas: se acredita solo como BONO con este rollover (debe apostar N× antes de retirar). #1090: nunca menos que el rollover global (×5): si ponés menos, el servidor usa el global.">🎯 Rollover (x, mín. global)</label>
+                            <input type="number" id="giftBatchRollover" class="form-input" min="5" max="50" step="1" value="5" style="width:90px" />
                         </div>
                         <div>
                             <label class="form-label" style="display:block;margin-bottom:.3rem">Vigencia (horas)</label>

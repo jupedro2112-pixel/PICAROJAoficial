@@ -29,6 +29,27 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1090. Correcciones por pérdidas (owner aprobó) (2026-11-10) — panel v294
+- **Owner:** aprobó las "correcciones por pérdidas" de la revisión nocturna (REVISION-NOCHE.md §7, propuestas 1, 2, 7, 9 y 10). Ningún %, tope ni rollover
+  configurado cambió para el admin; sólo se cerraron caminos donde se perdía plata.
+- **Bonificación manual (propuesta 1):** el admin general sigue libre. Depositor / comunidad: máximo $15.000 por bonificación (`Config['giftMaxArs']`), máximo
+  $30.000 por día por agente (hora argentina) y nada a cuentas secundarias, bloqueadas o con marcas / en observación. Rechazo 403 con `code` STAFF_BONUS_* y
+  cartel en el panel. El "¿Dar OTRA VEZ?" (#1088-b) sigue igual.
+- **Regalos semanales sólo para CLIENTE FIEL (propuesta 2; regla #1039: 3 cargas + 7 días):** historia con bono (la del miércoles y las del admin), regalo al
+  azar de historias, giro GRATIS de la ruleta y códigos sorpresa / de Telegram. El no fiel no ve esas historias, no recibe la push ni el aviso del giro
+  gratis, y si igual intenta: "Disponible cuando seas CLIENTE FIEL (3 cargas y 7 días desde la primera)". Un bono de historia ya reclamado por un no fiel no
+  se usa en la carga. Sin tocar: 1ª carga, 2ª carga, extra por instalar, reembolsos, misiones, fueguito y ofertas de bienvenida día 5/15/30.
+- **Lotes de fichas (propuesta 7):** rollover nunca menos que el global (×5), también en lotes viejos que se canjeen ahora. Panel: el campo arranca en 5.
+- **Caja / Anotar movimientos (propuesta 9):** un INGRESO anotado sólo se cruza solo con una entrada del banco si está claro que no es de un cliente (viene de
+  una cuenta nuestra, o el nombre del banco coincide con el "de quién" que escribió el agente, esa cuenta nunca le cargó fichas a un cliente y no hay un
+  comprobante pendiente por ese monto). Si no, queda "⚠️ A VERIFICAR" y la transferencia sigue disponible para el cliente.
+- **Gastos por API (propuesta 10):** timeout / error de red / 5xx / "duplicate" ⇒ "⏳ en proceso (consultando al banco)", no "falló". Cron cada 3 min pregunta
+  al banco (estado del pedido, webhook, lista de movimientos): lo pasa a pagado o fallido; 24 h sin aparecer en el banco ⇒ fallido. Nunca re-envía el pago;
+  mientras está en proceso no se puede borrar ni pagar otro igual (mismo CBU y monto).
+- Tests: nuevo `test-loss-fixes-1090.js` (13 casos) + 5 casos nuevos en `test-caja-movimientos.js`; corridos OK gift-rollovers, bonus-cap, dup-account,
+  roulette-free, story-segments, caja-movimientos, security-1053, payout-auto, cashback-spec, retention-journey, weekly-review, bonus-fraud, business-board,
+  fraud-auto, close-accounts, receipt-match, telegram-channel, telegram-admin, support-bot, sorteos-server, push-text, vip-exports.
+
 ### 1089. Bot de comprobantes: el grupo 1 (el que manda) ve SÓLO la suma; el detalle va al grupo 2; SIN cierre automático de las 13 h (2026-11-10) — panel v293
 - **Owner:** "grupo 1 sólo tienen que recibir mensaje de la suma de las transferencias, hacer cierre cuando completen un monto, y el detalle sería en el segundo grupo".
 - En el grupo que MANDA se sacó todo lo de cotización/envío: ✅ REENVIADO (sólo monto + acumulado + total del mes), /total y el botón 📊 (suma por destino + mes),

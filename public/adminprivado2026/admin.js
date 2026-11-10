@@ -3555,6 +3555,12 @@ async function handleDirectBonus(allowRepeat) {
             showToast('Bonificación repetida cancelada (no se dio dos veces).', 'info');
             return;
         }
+        // #1090: topes del staff (no admin) para la Bonificación ⇒ cartel claro con el motivo.
+        if (response.status === 403 && data && /^STAFF_BONUS/.test(String(data.code || ''))) {
+            window.alert('⛔ No se dio la bonificación.\n\n' + data.error);
+            showToast(data.error, 'error');
+            return;
+        }
         if (!response.ok) {
             throw new Error(data.error || 'Error al aplicar bonus');
         }
@@ -6990,6 +6996,7 @@ function _cajaBm(it) {
     const bm = it.bankMatch || {}; const st = bm.status || (it.account === 'main' ? 'pending' : 'na');
     if (st === 'na') return '<span class="caja-bm-na">— no pasa por el banco</span>';
     if (st === 'matched') return '<span class="caja-bm-ok" title="' + escapeHtml((bm.party || '') + (bm.note ? ' · ' + bm.note : '')) + '">✅ visto en el banco' + (bm.party ? ' <small>(' + escapeHtml(bm.party) + ')</small>' : '') + (bm.note ? ' ⚠️' : '') + '</span>';
+    if (bm.suspects && bm.suspects.length) return '<span class="caja-bm-wait" title="' + escapeHtml(bm.note || '') + '">⚠️ A VERIFICAR: hay una entrada igual que podría ser de un cliente (no se cruzó sola)</span>'; // #1090
     return '<span class="caja-bm-wait" title="Se vuelve a buscar cada 10 min durante 3 días">⏳ no se ve en el banco' + (bm.checks ? ' <small>(' + bm.checks + ' búsq.)</small>' : '') + '</span>';
 }
 async function cajaLoad() {
@@ -7052,7 +7059,7 @@ async function cajaSave(force) {
 function cajaReceipt(id) { try { window.open('/api/admin/caja-movimientos/' + encodeURIComponent(id) + '/receipt', '_blank'); } catch (_) {} }
 async function cajaVerify(id) {
     try { const r = await authFetch('/api/admin/caja-movimientos/' + encodeURIComponent(id) + '/verify', { method: 'POST' }); const j = await r.json(); if (!r.ok) { showToast(j.error || 'Error', 'error'); return; }
-        const st = ((j.item || {}).bankMatch || {}).status; showToast(st === 'matched' ? '✅ Visto en el banco' : st === 'na' ? 'No pasa por el banco principal' : '⏳ Todavía no aparece en el banco', st === 'matched' ? 'success' : 'info'); cajaLoad(); } catch (_) { showToast('Error de conexión', 'error'); }
+        const _bmv = (j.item || {}).bankMatch || {}; const st = _bmv.status; showToast(st === 'matched' ? '✅ Visto en el banco' : st === 'na' ? 'No pasa por el banco principal' : (_bmv.suspects && _bmv.suspects.length ? '⚠️ ' + (_bmv.note || 'A verificar') : '⏳ Todavía no aparece en el banco'), st === 'matched' ? 'success' : 'info'); cajaLoad(); } catch (_) { showToast('Error de conexión', 'error'); }
 }
 async function cajaDelete(id) {
     if (!confirm('¿Borrar esta anotación? El cierre del día se recalcula.')) return;
@@ -7068,7 +7075,7 @@ async function loadGastos() {
         const m = function (n) { return '$' + Math.round(Number(n) || 0).toLocaleString('es-AR'); };
         if (t) t.innerHTML = _diaKpi('Gastos de hoy', m(j.totalHoy)) + _diaKpi('Gastos (30 d)', m(j.total)) + _diaKpi('Fondeos (30 d)', m(j.fondeos || 0)) + _diaKpi('API del banco', j.apiOk ? '✅ conectada' : '❌ sin token'); // #904
         const items = j.items || [];
-        l.innerHTML = items.length ? '<table class="data-table"><thead><tr><th>Día</th><th>Concepto</th><th>Monto</th><th>Destino</th><th>Cómo</th><th>Estado</th><th>Por</th><th></th></tr></thead><tbody>' + items.map(function (g) { return '<tr><td>' + escapeHtml(g.dateKey) + '</td><td>' + escapeHtml(g.concept) + '</td><td><b>' + m(g.amount) + '</b></td><td><small>' + escapeHtml(g.toName || '') + (g.toCBU ? '<br>' + escapeHtml(g.toCBU) : '') + '</small></td><td>' + (g.kind === 'fondeo' ? '<b style="color:var(--p-green,#16a34a)">🏦 Fondeo · ingreso</b>' : g.paidVia === 'hgcash' ? '🏦 API' : '✍️ a mano') + '</td><td>' + (g.kind === 'fondeo' ? '<span class="cl-st fin">✅ registrado</span>' : g.status === 'paid' ? '<span class="cl-st fin">✅ pagado</span>' : (g.status === 'failed' ? '<span class="cl-st bad" title="' + escapeHtml(g.hgError || '') + '">❌ falló</span>' : '⏳')) + '</td><td><small>' + escapeHtml(g.createdBy || '') + '</small></td><td>' + (g.paidVia === 'hgcash' && g.status === 'paid' ? '' : '<button class="btn-secondary btn-small" onclick="gastoBorrar(\'' + g.id + '\')">🗑</button>') + '</td></tr>'; }).join('') + '</tbody></table>' : '<div style="color:#888;padding:14px;text-align:center;">Sin gastos cargados.</div>';
+        l.innerHTML = items.length ? '<table class="data-table"><thead><tr><th>Día</th><th>Concepto</th><th>Monto</th><th>Destino</th><th>Cómo</th><th>Estado</th><th>Por</th><th></th></tr></thead><tbody>' + items.map(function (g) { return '<tr><td>' + escapeHtml(g.dateKey) + '</td><td>' + escapeHtml(g.concept) + '</td><td><b>' + m(g.amount) + '</b></td><td><small>' + escapeHtml(g.toName || '') + (g.toCBU ? '<br>' + escapeHtml(g.toCBU) : '') + '</small></td><td>' + (g.kind === 'fondeo' ? '<b style="color:var(--p-green,#16a34a)">🏦 Fondeo · ingreso</b>' : g.paidVia === 'hgcash' ? '🏦 API' : '✍️ a mano') + '</td><td>' + (g.kind === 'fondeo' ? '<span class="cl-st fin">✅ registrado</span>' : g.status === 'paid' ? '<span class="cl-st fin">✅ pagado</span>' : (g.status === 'failed' ? '<span class="cl-st bad" title="' + escapeHtml(g.hgError || '') + '">❌ falló</span>' : (g.status === 'paying' ? '<span class="cl-st" title="' + escapeHtml((g.hgError || '') + ' · se consulta al banco cada 3 min') + '">⏳ en proceso (consultando al banco)</span>' : '⏳'))) + '</td><td><small>' + escapeHtml(g.createdBy || '') + '</small></td><td>' + (g.paidVia === 'hgcash' && (g.status === 'paid' || g.status === 'paying') ? '' : '<button class="btn-secondary btn-small" onclick="gastoBorrar(\'' + g.id + '\')">🗑</button>') + '</td></tr>'; }).join('') + '</tbody></table>' : '<div style="color:#888;padding:14px;text-align:center;">Sin gastos cargados.</div>';
     } catch (_) { l.innerHTML = '<div style="color:#ff8080;">Error de conexión</div>'; }
 }
 async function gastoCrear() {
@@ -7081,7 +7088,8 @@ async function gastoCrear() {
     try {
         const r = await authFetch('/api/admin/gastos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json();
         if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); if (msg) msg.textContent = '❌ ' + (j.error || ''); return; }
-        showToast(kind === 'fondeo' ? '🏦 Fondeo registrado: el cierre de ese día lo toma como ingreso' : (body.payNow ? '💸 Gasto pagado y registrado' : '💸 Gasto registrado'), 'success'); if (msg) msg.textContent = '✅ listo';
+        if (j.inProcess) { window.alert('⏳ ' + (j.message || 'El pago quedó EN PROCESO en el banco. NO lo vuelvas a pagar.')); if (msg) msg.textContent = '⏳ en proceso (consultando al banco)'; } // #1090
+        else { showToast(kind === 'fondeo' ? '🏦 Fondeo registrado: el cierre de ese día lo toma como ingreso' : (body.payNow ? '💸 Gasto pagado y registrado' : '💸 Gasto registrado'), 'success'); if (msg) msg.textContent = '✅ listo'; }
         ['gsConcept', 'gsAmount', 'gsCbu', 'gsName', 'gsCuit', 'gsDate'].forEach(function (id) { const el = document.getElementById(id); if (el) el.value = ''; });
         loadGastos();
     } catch (_) { showToast('Error de conexión', 'error'); }

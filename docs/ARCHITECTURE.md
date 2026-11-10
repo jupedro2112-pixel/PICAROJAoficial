@@ -1912,7 +1912,10 @@ anotación (`taken`). Entradas: matchStatus en pending/no_match/needs_review/ign
 iguales y `toName` del agente, se prefiere la que coincide por `_nameMatch`. Salidas: fuera las de retiros (`PendingPayout.id` =
 `externalId`, `hgTransactionId`) y cash-outs propios (`_CAJA_OUR_EXT` = gasto-/refund-/devol/vip-). Sin candidatos ⇒ `hgcashPay.listMovements`
 sobre la ventana: el movimiento que coincide se guarda en `BankMovement` (topic 'CAJA', entrada ⇒ 'caja', salida ⇒ 'ignored', `cajaExpenseId`).
-Se elige el más cercano al mediodía del día; la entrada se marca 'caja'; nota si había varios. Sin nada ⇒ `unmatched` y `_cajaVerifyTick`
+Se elige el más cercano al mediodía del día; la entrada se marca 'caja'; nota si había varios. **#1090:** una ENTRADA sólo se cruza sola si `_cajaInboundRisk` da null
+(de una cuenta secundaria nuestra por CBU, o nombre del banco = "de quién" del agente + esa cuenta nunca le cargó a un cliente + sin `matchedUserId` +
+sin `Comprobante` pendiente por ese monto en la ventana); si no ⇒ `unmatched` con `bankMatch.suspects` ("A VERIFICAR") y la entrada queda intacta para el
+cliente (tampoco se guarda como 'caja' la que trae la API del banco). Sin nada ⇒ `unmatched` y `_cajaVerifyTick`
 (cada 10 min, lock `cajaverify`, 3 días, 3 consultas a la API por pasada) lo vuelve a intentar y recalcula el cierre al encontrarlo.
 
 **Cierre:** `_closeReconcile` separa por cuenta: `sistema.fondeosMain/fondeosExt/gastosMain/gastosExt/gastosMainVistos/cajaNoVisto(N)`;
@@ -2053,3 +2056,24 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   (`getWelcomeCodeRolloverX`), fueguito (`_fireMult`) y premios en $ de la ruleta (`spinDoc.rolloverX`). Código sorpresa/Telegram pasa por `_capGift`.
   Bonificación manual: `_agentDepositDupGuard(body, 'agent-bonus')` ⇒ 409 `DUP_BONUS` (panel confirma y reenvía `allowRepeat`). Revisión semanal:
   re-medir la MISMA semana parte de `cur.decision.prevLevel` y se guarda si difiere del nivel vigente (un ajuste por semana).
+
+## Correcciones por pérdidas (#1090, 2026-11-10, owner aprobó)
+- **Bonificación manual (`POST /api/admin/bonus`):** admin general libre. Resto del staff ⇒ `_staffBonusCheck`: tope por bonificación `Config['giftMaxArs']`
+  ($15.000; si está en 0 igual $15.000), tope diario por agente `STAFF_BONUS_DAY_MAX` ($30.000, suma de sus Transaction 'bonus' "Bonificación otorgada" del día
+  ART) y nada a secundarias / bloqueadas / con fraudFlags / en observación ⇒ 403 `STAFF_BONUS_MAX | STAFF_BONUS_DAY | STAFF_BONUS_NOT_ELIGIBLE` (el panel lo
+  muestra en un cartel). El freno de 90 s (`DUP_BONUS`) sigue antes.
+- **Regalos semanales sólo para CLIENTE FIEL (`_isTrustedClient`, regla #1039):** `_storyNeedsTrust(s)` = historia PÚBLICA con bono (miércoles / admin) o
+  `autoKind:'regalo_azar'` ⇒ `claim-bonus` 403 `NOT_TRUSTED` y `claimStoryBonusPercent` no la usa en la carga; `/api/stories/active` y `/public` esconden a
+  los no fieles esas historias y las del código (`_storyHiddenForUntrusted`, cache `_isTrustedCached` 10 min); `_storyGiftTick` sólo crea regalos a fieles;
+  push de historia con bono y del código sorpresa ⇒ `_pushTrustedOnly` (filtro `id $in _trustedIdsAmong(null)`, una agregación); `_rouletteFreeEligible`
+  ⇒ `why:'trust'` (el spin responde 403 `NOT_TRUSTED`, el estado trae `freeNeedsTrust`) y `_rouletteNudgeTick` sólo avisa a fieles; `_codeDropClaimHandler`
+  403 `NOT_TRUSTED` (sirve también para los de Telegram y el canje desde el chat). NO aplica a 1ª/2ª carga, extra por instalar, reembolsos, misiones,
+  fueguito ni a las ofertas personales de bienvenida (día 5/15/30). Un regalo semanal NUEVO usa `_isTrustedClient` / `_trustedIdsAmong`.
+- **Lotes de fichas:** `rolloverX` del lote nunca menos que `_giftRolloverX()` (al crear y al acreditar/avisar: `_batchRolloverX(batch)`, también lotes
+  viejos con ×0 que se canjean después).
+- **Gastos por API:** sin respuesta / red / 5xx / 408 / 409 duplicate (`_gastoAmbiguous`) ⇒ `Expense.status:'paying'` + `hgCheck` y 202 `inProcess` (nunca
+  "falló"). `_gastoPayingTick` (3 min, `_cronClaim('gastopaying')`) consulta: `getTransactionStatus(hgId)` → `BankMovement` Outbound con externalId
+  `gasto-<id>` → `listMovements` (externalID); visto ⇒ 'paid', rechazado ⇒ 'failed', 24 h sin aparecer en la lista del banco ⇒ 'failed' (no salió). El
+  webhook TRANSACTION_REQUEST con externalID `gasto-` también lo resuelve. Nunca re-envía el pago. Mientras está 'paying': no se puede borrar y un pago
+  igual (mismo CBU + monto) da 409 `GASTO_IN_PROCESS`. (Un cash-out aceptado con estado PENDING sigue quedando 'paid' como antes.)
+- Test `scripts/test-loss-fixes-1090.js` (+ casos #1090 en `test-caja-movimientos.js`).

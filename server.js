@@ -3163,6 +3163,13 @@ async function handlePayoutStatusWebhook(p) {
     const ext = p.externalID ? String(p.externalID) : null;
     const hgId = p.id ? String(p.id) : null;
     const extBase = ext ? String(ext).replace(/-r\d+$/, '') : ext; // #820: reintentos con externalID `<id>-rN`
+    // #1090: aviso de estado de un GASTO pagado por API (externalID 'gasto-<id>'): resuelve el que quedó EN PROCESO.
+    if (ext && /^gasto-/.test(ext)) {
+      const g = await Expense.findOne({ id: ext.slice(6), status: 'paying' }).lean();
+      if (g && _GASTO_DONE.test(status)) await _gastoPayingSet(g, 'paid', { hgId: g.hgId || hgId, hgError: null }, 'webhook del banco: ' + status);
+      else if (g && _GASTO_REJ.test(status)) await _gastoPayingSet(g, 'failed', { hgError: 'El banco lo rechazó (' + status + ')' }, 'webhook del banco: ' + status);
+      return;
+    }
     const query = ext ? { id: extBase } : (hgId ? { hgTransactionId: hgId } : null);
     if (!query) return;
     const payout = await PendingPayout.findOne(query);
@@ -5944,6 +5951,27 @@ async function _isTrustedClient(userId) {
   const first = rows[0] && rows[0].timestamp; return !!first && (Date.now() - new Date(first).getTime()) >= rule.days * 86400000;
 }
 async function _noWelcomeActive(u) { if (!u || u.noWelcomeGifts !== true) return false; try { return !(await _isTrustedClient(u.id)); } catch (_) { return true; } }
+// #1090 (owner aprobó, correcciones por pérdidas): los REGALOS SEMANALES (historia con bono —la del miércoles y las del admin—, regalo al azar
+// de historias, giro GRATIS de la ruleta y códigos sorpresa / de Telegram) son SÓLO para CLIENTES FIELES (misma regla #1039, `_isTrustedClient`).
+// NO aplica a: bono de 1ª / 2ª carga, extra por instalar, reembolsos, misiones, fueguito, ofertas personales de bienvenida (día 5/15/30).
+// `_trustedIdsAmong(ids)` = misma regla en UNA agregación (crons y push masivas); `ids` null = todos. `_isTrustedCached` = 10 min (listados).
+async function _trustedIdsAmong(ids) {
+  if (Array.isArray(ids) && !ids.length) return [];
+  const rule = await _trustRule(); const cutoff = new Date(Date.now() - rule.days * 86400000);
+  const match = Object.assign({ userId: Array.isArray(ids) ? { $in: ids.map(String) } : { $nin: [null, ''] } }, _REAL_DEP_TRUST);
+  const rows = await Transaction.aggregate([{ $match: match }, { $group: { _id: '$userId', n: { $sum: 1 }, first: { $min: '$timestamp' } } }, { $match: { n: { $gte: rule.deposits }, first: { $lte: cutoff } } }, { $project: { _id: 1 } }]).allowDiskUse(true);
+  return rows.map((r) => String(r._id));
+}
+const _trustCache = new Map();
+async function _isTrustedCached(userId) {
+  const k = String(userId); const c = _trustCache.get(k); if (c && Date.now() - c.at < 600000) return c.v;
+  let v = false; try { v = await _isTrustedClient(k); } catch (_) { v = false; }
+  _trustCache.set(k, { at: Date.now(), v }); if (_trustCache.size > 20000) _trustCache.delete(_trustCache.keys().next().value);
+  return v;
+}
+// #1090: push masiva SÓLO a clientes fieles (regalos semanales: historia con bono, código sorpresa).
+async function _pushTrustedOnly(title, body, data) { const ids = await _trustedIdsAmong(null); if (!ids.length) return { success: false, error: 'sin clientes fieles' }; return sendNotificationToAllUsers(User, title, body, data, { id: { $in: ids } }); }
+async function _notTrustedMsg() { const r = await _trustRule().catch(() => TRUST_RULE_DEFAULT); return `Disponible cuando seas CLIENTE FIEL (${r.deposits} cargas y ${r.days} días desde la primera). ¡Seguí jugando con nosotros! 💪`; }
 // #1039 (owner): "que no tengan sistema de referidos" ⇒ Config['referralsEnabled'] (default true; apagado por la migración #1039). Apagado: la app
 // esconde Referidos (body.no-ref), /api/referrals/* responde 403 REFERRALS_OFF, el alta ignora el código de referido y no corre el pago mensual.
 async function _referralsEnabled() { try { return (await getConfig('referralsEnabled', true)) !== false; } catch (_) { return true; } }
@@ -12158,6 +12186,23 @@ app.post('/api/admin/withdrawal', authMiddleware, withdrawerMiddleware, async (r
   }
 });
 
+// #1090: límites de la Bonificación manual para el staff que NO es admin general. Tope por bonificación = Config['giftMaxArs'] ($15.000;
+// si está en 0 = "sin tope" para los regalos, acá igual rige $15.000) · tope por día (ART) y por agente = STAFF_BONUS_DAY_MAX, sumando sus
+// Transaction 'bonus' de "Bonificación otorgada" de hoy. Devuelve null si puede, o { code, error } para responder 403.
+const STAFF_BONUS_PER_DEFAULT = 15000, STAFF_BONUS_DAY_MAX = 30000;
+async function _staffBonusCheck(staff, u, amount) {
+  const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+  if (u.duplicateOf) return { code: 'STAFF_BONUS_NOT_ELIGIBLE', error: 'Es una CUENTA SECUNDARIA' + (u.duplicateOf.username ? ' (la principal es ' + u.duplicateOf.username + ')' : '') + ': sólo el admin general puede bonificarla.' };
+  if (u.isBlocked) return { code: 'STAFF_BONUS_NOT_ELIGIBLE', error: 'La cuenta está BLOQUEADA: sólo el admin general puede bonificarla.' };
+  if (_isFlagged(u) || (u.fraudReview && u.fraudReview.status === 'watch')) return { code: 'STAFF_BONUS_NOT_ELIGIBLE', error: 'El cliente tiene marcas de estafa o está en observación (🛡️ Antifraude): sólo el admin general puede bonificarlo.' };
+  await _refreshGiftMax(); const per = _giftMaxCache > 0 ? _giftMaxCache : STAFF_BONUS_PER_DEFAULT;
+  if (amount > per) return { code: 'STAFF_BONUS_MAX', error: 'Tope por bonificación para agentes: ' + $(per) + '. Para dar más, pedíselo al admin general.' };
+  const dayStart = new Date(datosIa.dateKeyART(new Date()) + 'T03:00:00.000Z');
+  const agg = await Transaction.aggregate([{ $match: { type: 'bonus', adminId: staff.userId, description: 'Bonificación otorgada', timestamp: { $gte: dayStart } } }, { $group: { _id: null, s: { $sum: '$amount' } } }]);
+  const used = Math.round((agg[0] && agg[0].s) || 0);
+  if (used + amount > STAFF_BONUS_DAY_MAX) return { code: 'STAFF_BONUS_DAY', error: 'Tope diario de bonificaciones por agente: ' + $(STAFF_BONUS_DAY_MAX) + '. Hoy ya diste ' + $(used) + (used < STAFF_BONUS_DAY_MAX ? '; te quedan ' + $(STAFF_BONUS_DAY_MAX - used) : '') + '. Para más, pedíselo al admin general.' };
+  return null;
+}
 app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, res) => {
   // #1088-b (fuga de bonos): la reference de la Bonificación se arma en cada pedido ⇒ un doble clic / reenvío del navegador la pagaba DOS veces.
   // Mismo freno que la carga manual (#995): misma persona + mismo monto en 90 s ⇒ 409 DUP_BONUS; el panel pregunta y reenvía con allowRepeat.
@@ -12188,6 +12233,12 @@ app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, re
     const bonusAmount = parseFloat(amount);
     if (isNaN(bonusAmount) || bonusAmount <= 0) {
       return res.status(400).json({ error: 'Monto de bonificación inválido' });
+    }
+    // #1090 (owner aprobó, correcciones por pérdidas): el admin general sigue LIBRE; el resto del staff (depositor / comunidad) con tope por
+    // bonificación, tope diario por agente y sin bonificar cuentas secundarias / bloqueadas / con marcas o en observación.
+    if (req.user.role !== 'admin') {
+      const _lim = await _staffBonusCheck(req.user, bonusUser, bonusAmount);
+      if (_lim) return res.status(403).json(_lim);
     }
 
     // BONO NATIVO (owner 2026-08-05): antes esto era un DEPÓSITO libre → en el
@@ -16475,6 +16526,15 @@ async function claimSecondDepositPercent(user, usedBy) {
 async function claimStoryBonusPercent(user, usedBy, amount) {
   try {
     const now = new Date();
+    // #1090: un bono de historia que es REGALO SEMANAL (pública con bono / regalo al azar) sólo se usa siendo CLIENTE FIEL (por si quedó
+    // reclamado antes del cambio). No se consume: si llega a fiel antes de que venza, se usa en esa carga.
+    try {
+      const cur = await User.findOne({ id: user.id }).select('storyBonus').lean(); const csb = cur && cur.storyBonus;
+      if (csb && csb.storyId && Number(csb.pct) > 0) {
+        const st = await Story.findOne({ id: csb.storyId }).select('autoKind audienceUserId bonusPct').lean();
+        if (st && _storyNeedsTrust(st) && !(await _isTrustedClient(user.id))) return { pct: 0, claimed: false };
+      }
+    } catch (_) { return { pct: 0, claimed: false }; } // fail-closed: es un regalo
     const prev = await User.findOneAndUpdate(
       { id: user.id, 'storyBonus.pct': { $gt: 0 }, 'storyBonus.expiresAt': { $gt: now } },
       { $set: { 'storyBonus.pct': 0 } },
@@ -22565,6 +22625,21 @@ app.post('/api/admin/cleanup-tests', authMiddleware, adminMiddleware, async (req
 // banco ⇒ explican salidas · externos ⇒ sólo al resultado. Lo anotado y NO visto en el banco deja el control del cierre en "revisar".
 function _expAccount(g) { return (g && g.account) || (g && g.paidVia === 'hgcash' ? 'main' : 'external'); }
 const _CAJA_OUR_EXT = /^(gasto-|refund-|devol|vip-)/i; // externalID de cash-outs propios (gastos por API, devoluciones): nunca son "otro egreso"
+// #1090 (owner aprobó): una ENTRADA del banco sólo se cruza SOLA con un ingreso anotado si está claro que NO es de un cliente (si no, el cliente
+// que transfirió se quedaba sin sus fichas: la entrada pasaba a 'caja' y el auto-cargador ya no la tocaba). Claro = viene de una de NUESTRAS
+// cuentas secundarias (CBU), o el nombre del banco coincide con el "de quién" que escribió el agente Y esa cuenta nunca le cargó a un cliente,
+// el movimiento no quedó asociado a un cliente y no hay un comprobante de cliente pendiente por ese monto en la ventana. Si no ⇒ null + motivo.
+async function _cajaInboundRisk(exp, m, amt, from, to) {
+  if (m.matchStatus === 'caja' && m.cajaExpenseId === exp.id) return null; // ya era de esta anotación
+  if (m.fromCBU && typeof _bankAccountForCbu === 'function') { try { if ((await _bankAccountForCbu(m.fromCBU)) !== 'main') return null; } catch (_) {} } // de una cuenta nuestra
+  if (m.matchedUserId) return 'el banco la asoció a un cliente (' + (m.matchedUsername || m.matchedUserId) + ')';
+  if (!exp.toName) return 'no se indicó de quién vino (poné el nombre que figura en el banco)';
+  if (!m.fromName || !_nameMatch(exp.toName, m.fromName)) return 'el nombre del banco' + (m.fromName ? ' (' + m.fromName + ')' : '') + ' no coincide con "' + exp.toName + '"';
+  const or = []; if (m.fromCUIT) or.push({ fromCUIT: m.fromCUIT }); if (m.fromCBU) or.push({ fromCBU: m.fromCBU });
+  if (or.length && await BankMovement.exists({ movementId: { $ne: m.movementId }, $or: or, matchedUserId: { $nin: [null, ''] } })) return 'esa cuenta ya le cargó fichas a un cliente';
+  if (typeof Comprobante !== 'undefined' && await Comprobante.exists({ reviewStatus: 'pending', autoCharged: { $ne: true }, amount: { $gte: amt - 1, $lte: amt + 1 }, createdAt: { $gte: from, $lte: to } })) return 'hay un comprobante de un cliente pendiente por ese monto';
+  return null;
+}
 async function _cajaBankVerify(exp, opts) {
   opts = opts || {};
   const prev = (exp.bankMatch && typeof exp.bankMatch === 'object') ? exp.bankMatch : {};
@@ -22580,7 +22655,7 @@ async function _cajaBankVerify(exp, opts) {
   const taken = new Set((await Expense.find({ id: { $ne: exp.id }, 'bankMatch.movementId': { $nin: [null, ''] } }).select('bankMatch').lean()).map((x) => String((x.bankMatch || {}).movementId || '')).filter(Boolean));
   const q = { direction: dir, amount: { $gte: amt - 1, $lte: amt + 1 }, $or: [{ date: { $gte: from, $lte: to } }, { date: null, createdAt: { $gte: from, $lte: to } }] };
   if (dir === 'Inbound') q.matchStatus = { $in: ['pending', 'no_match', 'needs_review', 'ignored', 'error', 'caja', null] };
-  let cands = (await BankMovement.find(q).select('movementId externalId amount date createdAt status matchStatus fromName fromCUIT toName cajaExpenseId').limit(40).lean())
+  let cands = (await BankMovement.find(q).select('movementId externalId amount date createdAt status matchStatus fromName fromCUIT fromCBU matchedUserId matchedUsername toName cajaExpenseId').limit(40).lean())
     .filter((m) => !/reject|fail|cancel|error/i.test(String(m.status || '')) && !taken.has(String(m.movementId)) && (!m.cajaExpenseId || m.cajaExpenseId === exp.id));
   if (dir === 'Outbound') {
     // afuera lo que salió por un retiro (PendingPayout) o un cash-out propio (gasto por API, devolución)
@@ -22591,6 +22666,12 @@ async function _cajaBankVerify(exp, opts) {
   } else if (cands.length > 1 && exp.toName) {
     // varias entradas iguales el mismo día: si el agente dijo DE QUIÉN vino, preferir la que coincide por nombre
     const byName = cands.filter((m) => m.fromName && _nameMatch(exp.toName, m.fromName)); if (byName.length) cands = byName;
+  }
+  const suspects = []; // #1090: entradas iguales que podrían ser de un cliente (no se tocan)
+  if (dir === 'Inbound' && cands.length) {
+    const ok = [];
+    for (const m of cands) { const why = await _cajaInboundRisk(exp, m, amt, from, to); if (why) suspects.push({ movementId: m.movementId, party: m.fromName || null, why }); else ok.push(m); }
+    cands = ok;
   }
   // #1038: si NO está en BankMovement, preguntar a la API del banco por la ventana (sólo cuando hay token y no se pidió "sin API")
   if (!cands.length && !opts.noLive && hgcashPay.isEnabled()) {
@@ -22606,6 +22687,7 @@ async function _cajaBankVerify(exp, opts) {
             if (dir === 'Outbound' && p.externalID && _CAJA_OUR_EXT.test(String(p.externalID))) continue;
             if (dir === 'Outbound' && p.externalID && (await PendingPayout.exists({ $or: [{ id: String(p.externalID) }, { hgTransactionId: id }] }))) continue;
             if (await BankMovement.exists({ movementId: id })) continue; // está pero no calificó arriba (acreditada a un cliente, etc.)
+            if (dir === 'Inbound') { const why = await _cajaInboundRisk(exp, { movementId: id, fromName: p.fromName || null, fromCUIT: p.fromCUIT || null, fromCBU: p.fromCBU || null }, amt, from, to); if (why) { suspects.push({ movementId: id, party: p.fromName || null, why }); continue; } } // #1090: no se guarda como 'caja' (el webhook/poll la trae normal)
             const doc = { movementId: id, externalId: p.externalID || p.externalId || null, coelsaCode: p.coelsaCode || p.coelsa || null, amount: it.amount || amt, amountRaw: p.amount != null ? String(p.amount) : null, currency: p.currency || null,
               direction: dir, status: p.status || it.status || null, type: p.type || null, accountId: p.accountId || accId, fromName: p.fromName || null, fromCBU: p.fromCBU || null, fromCUIT: p.fromCUIT || null,
               toName: p.toName || null, toCBU: p.toCBU || null, toCUIT: p.toCUIT || null, date: it.date || (p.date ? new Date(p.date) : null), timezone: p.timezone || null, topic: 'CAJA', eventType: 'caja-verify', raw: p };
@@ -22618,6 +22700,7 @@ async function _cajaBankVerify(exp, opts) {
       }
     } catch (e) { logger.warn('[caja] consulta API del banco: ' + e.message); }
   }
+  if (!cands.length && suspects.length) return save({ status: 'unmatched', suspects: suspects.slice(0, 5), note: 'A VERIFICAR: hay ' + (suspects.length === 1 ? 'una entrada' : suspects.length + ' entradas') + ' de $' + amt.toLocaleString('es-AR') + (suspects[0].party ? ' (' + suspects[0].party + ')' : '') + ' que podría ser de un CLIENTE (' + suspects[0].why + '): no se cruzó sola para que nadie se quede sin sus fichas. Verificalo en el banco.' });
   if (!cands.length) return save({ status: 'unmatched', note: dir === 'Inbound' ? 'la entrada todavía no se ve en el banco principal' : 'la salida todavía no se ve en el banco principal' });
   cands.sort((a, b) => Math.abs(((a.date || a.createdAt) || now).getTime() - mid) - Math.abs(((b.date || b.createdAt) || now).getTime() - mid));
   const m = cands[0];
@@ -22687,7 +22770,7 @@ app.post('/api/admin/caja-movimientos', authMiddleware, adminMiddleware, async (
     try { await _closeEnsure(dateKey, true); } catch (_) {}
     logger.info(`[caja] ${req.user.username}: ${tipo} $${amount} "${concept}" cuenta=${account} ${dateKey} banco=${(bm || {}).status || '?'}`);
     const item = _cajaItem(Object.assign(doc.toObject ? doc.toObject() : doc, { bankMatch: bm || doc.bankMatch }), accs);
-    const msg = !bm || bm.status === 'na' ? 'Anotado. No pasa por el banco principal: va al resultado del cierre tal cual.' : bm.status === 'matched' ? ('Anotado y VISTO en el banco (' + (tipo === 'ingreso' ? 'entrada' : 'salida') + ' de $' + amount.toLocaleString('es-AR') + (bm.party ? ', ' + bm.party : '') + ').') : 'Anotado. Todavía no aparece en el banco: se vuelve a buscar cada 10 min durante 3 días; si no aparece, el cierre lo marca.';
+    const msg = !bm || bm.status === 'na' ? 'Anotado. No pasa por el banco principal: va al resultado del cierre tal cual.' : bm.status === 'matched' ? ('Anotado y VISTO en el banco (' + (tipo === 'ingreso' ? 'entrada' : 'salida') + ' de $' + amount.toLocaleString('es-AR') + (bm.party ? ', ' + bm.party : '') + ').') : (bm.suspects && bm.suspects.length ? 'Anotado. ' + bm.note : 'Anotado. Todavía no aparece en el banco: se vuelve a buscar cada 10 min durante 3 días; si no aparece, el cierre lo marca.'); // #1090
     res.json({ success: true, item, message: msg });
   } catch (e) { logger.error('[caja] create ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
@@ -22745,6 +22828,8 @@ app.post('/api/admin/gastos', authMiddleware, adminMiddleware, async (req, res) 
     const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(b.dateKey || '')) ? String(b.dateKey) : datosIa.dateKeyART(new Date());
     // #1038: por qué cuenta pasó (por API ⇒ principal). A mano en la principal ⇒ se cruza con el banco como en Anotar movimientos.
     const _accs = await _bankAccounts(); let account = payNow ? 'main' : String(b.account || 'external').trim(); if (account !== 'main' && account !== 'external' && !_accs.some((a) => a.id === account)) account = 'external';
+    // #1090: hay un pago IGUAL (mismo CBU y monto) EN PROCESO en el banco => no se manda otro (sería pagar dos veces).
+    if (payNow && toCBU) { const _d = String(toCBU).replace(/\D/g, ''); const _inProc = await Expense.findOne({ paidVia: 'hgcash', status: 'paying', amount, toCBU: { $in: [toCBU, _d] } }).select('id concept').lean(); if (_inProc) return res.status(409).json({ code: 'GASTO_IN_PROCESS', error: 'Hay un pago igual ($' + amount.toLocaleString('es-AR') + ' a ese CBU, "' + _inProc.concept + '") EN PROCESO en el banco. Esperá a que el banco lo confirme (se consulta solo cada 3 min): NO lo vuelvas a pagar.' }); }
     const doc = await Expense.create({ id: uuidv4(), kind, dateKey, amount, concept, toCBU, toName, toCUIT, paidVia: payNow ? 'hgcash' : 'manual', status: payNow ? 'paying' : 'paid', account, bankMatch: { status: account === 'main' && !payNow ? 'pending' : 'na', checks: 0 }, createdBy: req.user.username });
     if (!payNow && account === 'main') { try { await _cajaBankVerify(doc.toObject(), {}); } catch (e) { logger.warn('[gastos] verify ' + e.message); } }
     if (payNow) {
@@ -22756,6 +22841,15 @@ app.post('/api/admin/gastos', authMiddleware, adminMiddleware, async (req, res) 
       const build = (acct) => hgcashPay.createCashOut({ accountId: acct, amount, toCBU, toName: toName || undefined, toCUIT: toCUIT || undefined, concept: ('Gasto - ' + concept + ' - PICA ROJA').slice(0, 100), externalID: ('gasto-' + doc.id).slice(0, 100), webhookUrl: `${baseUrl}/api/hgcash/webhook` });
       let result = await build(accountId);
       if (!result.ok && result.httpStatus === 403) { const fresh = await resolveHgcashAccountId({ force: true }); if (fresh && String(fresh) !== String(accountId)) { accountId = fresh; result = await build(accountId); } }
+      // #1090 (owner aprobó): sin respuesta (timeout / red), 5xx, 408 o "duplicate" (409) el banco PUDO haber tomado el pago => NO es "falló":
+      // queda EN PROCESO y `_gastoPayingTick` le pregunta al banco hasta saber si salió o no. Nunca se re-envía solo.
+      if (!result.ok && _gastoAmbiguous(result)) {
+        await Expense.updateOne({ id: doc.id }, { $set: { status: 'paying', hgError: ('EN PROCESO (el banco no respondió claro): ' + String(result.error || 'sin respuesta')).slice(0, 300), hgCheck: { since: new Date(), checks: 0, lastAt: null, last: null } } });
+        setTimeout(() => { _gastoPayingTick().catch(() => {}); }, 60 * 1000);
+        try { await _closeEnsure(dateKey, true); } catch (_) {}
+        logger.warn(`[gastos] ${req.user.username}: $${amount} "${concept}" EN PROCESO (respuesta ambigua del banco: ${String(result.error || '').slice(0, 120)})`);
+        return res.status(202).json({ success: true, inProcess: true, item: await Expense.findOne({ id: doc.id }).lean(), message: 'El banco no respondió claro: el gasto queda EN PROCESO y se le consulta solo cada 3 minutos hasta saber si salió. NO lo vuelvas a pagar.' });
+      }
       if (!result.ok) { await Expense.updateOne({ id: doc.id }, { $set: { status: 'failed', hgError: String(result.error || 'error').slice(0, 300) } }); return res.status(502).json({ error: 'El banco rechazó el pago: ' + String(result.error || 'sin detalle').slice(0, 200), id: doc.id }); }
       await Expense.updateOne({ id: doc.id }, { $set: { status: 'paid', hgId: (result.data && result.data.id) || null } });
       try { _bankPayoutOk(); } catch (_) {}
@@ -22770,10 +22864,62 @@ app.delete('/api/admin/gastos/:id', authMiddleware, adminMiddleware, async (req,
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
     const g = await Expense.findOne({ id: String(req.params.id) }).lean(); if (!g) return res.status(404).json({ error: 'No existe' });
     if (g.paidVia === 'hgcash' && g.status === 'paid') return res.status(400).json({ error: 'Ese gasto ya se pagó por la API: no se puede borrar (quedaría la salida del banco sin explicar).' });
+    if (g.paidVia === 'hgcash' && g.status === 'paying') return res.status(400).json({ error: 'Ese pago está EN PROCESO en el banco: esperá a que se confirme si salió o no (se consulta solo cada 3 min).' }); // #1090
     await Expense.deleteOne({ id: g.id }); try { await _closeEnsure(g.dateKey, true); } catch (_) {}
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
+// #1090: GASTOS POR API "EN PROCESO" — el pago quedó sin respuesta clara del banco. Cada 3 min (lock multi-instancia) se le pregunta al banco:
+// 1) por el id del pedido (`hgId`, si lo hubo) · 2) por la salida con externalID 'gasto-<id>' que dejó el webhook (BankMovement) · 3) por la
+// lista de movimientos de la API. Visto => 'paid'; rechazado por el banco => 'failed'; 24 h sin aparecer en la lista del banco => 'failed'
+// (no salió). Mientras tanto queda 'paying' (el cierre lo cuenta como gasto) y el panel no deja borrarlo ni pagar otro igual.
+function _gastoAmbiguous(r) { const hs = Number(r && r.httpStatus) || 0; return !hs || hs >= 500 || hs === 408 || (hs === 409 && /duplicate/i.test(String((r && r.error) || ''))); }
+const _GASTO_REJ = /^(ERROR|CANCEL+ED|REJECTED|FAILED|DECLINED)$/i, _GASTO_DONE = /^(DONE|COMPLETED|APPROVED|SUCCESS|PAID|EXECUTED)$/i;
+let _gastoPayingRunning = false;
+async function _gastoPayingSet(g, status, extra, note) {
+  const r = await Expense.updateOne({ id: g.id, status: 'paying' }, { $set: Object.assign({ status, hgCheck: Object.assign({}, g.hgCheck || {}, { resolvedAt: new Date(), last: note }) }, extra || {}) });
+  if (r && (r.modifiedCount || r.nModified)) { logger.info(`[gastos] ${g.id} ($${g.amount} "${g.concept}") EN PROCESO => ${status}: ${note}`); try { await _closeEnsure(g.dateKey, true); } catch (_) {} }
+}
+async function _gastoPayingTick() {
+  if (_gastoPayingRunning || !hgcashPay.isEnabled()) return; _gastoPayingRunning = true; let claimed = false;
+  try {
+    const now = Date.now();
+    const list = await Expense.find({ paidVia: 'hgcash', status: 'paying', createdAt: { $lte: new Date(now - 60 * 1000), $gte: new Date(now - 7 * 86400000) } }).sort({ createdAt: 1 }).limit(20).lean();
+    if (!list.length) return;
+    if (!(await _cronClaim('gastopaying', 150 * 1000))) return; claimed = true;
+    let accId = null; try { accId = await resolveHgcashAccountId(); } catch (_) {}
+    for (const g of list) {
+      try {
+        const ext = ('gasto-' + g.id).slice(0, 100); const since = new Date(new Date(g.createdAt).getTime() - 10 * 60000);
+        await Expense.updateOne({ id: g.id, status: 'paying' }, { $set: { 'hgCheck.lastAt': new Date() }, $inc: { 'hgCheck.checks': 1 } }).catch(() => {});
+        if (g.hgId) {
+          const st = await hgcashPay.getTransactionStatus(g.hgId);
+          if (st.ok && st.status && _GASTO_DONE.test(st.status)) { await _gastoPayingSet(g, 'paid', { hgError: null }, 'el banco confirmó el pago (' + st.status + ')'); continue; }
+          if (st.ok && st.status && _GASTO_REJ.test(st.status)) { await _gastoPayingSet(g, 'failed', { hgError: 'El banco lo rechazó (' + st.status + ')' }, 'rechazado por el banco'); continue; }
+        }
+        const bm = await BankMovement.findOne({ direction: 'Outbound', externalId: ext }).select('movementId status').lean();
+        if (bm) {
+          if (_GASTO_REJ.test(String(bm.status || ''))) await _gastoPayingSet(g, 'failed', { hgError: 'El banco lo rechazó (' + bm.status + ')' }, 'rechazado por el banco (webhook)');
+          else await _gastoPayingSet(g, 'paid', { hgId: g.hgId || bm.movementId, hgError: null }, 'la salida está en el banco (' + (bm.status || 'ok') + ')');
+          continue;
+        }
+        if (accId) {
+          const lm = await hgcashPay.listMovements({ accountId: accId, from: since, to: new Date() });
+          if (lm.ok) {
+            const it = (lm.items || []).find((x) => x && x.raw && String(x.raw.externalID || x.raw.externalId || '') === ext);
+            if (it) {
+              if (_GASTO_REJ.test(String(it.status || ''))) await _gastoPayingSet(g, 'failed', { hgError: 'El banco lo rechazó (' + it.status + ')' }, 'rechazado por el banco (lista)');
+              else await _gastoPayingSet(g, 'paid', { hgId: g.hgId || (it.id ? String(it.id) : null), hgError: null }, 'la salida está en la lista del banco');
+              continue;
+            }
+            if (now - new Date(g.createdAt).getTime() > 24 * 3600000) await _gastoPayingSet(g, 'failed', { hgError: 'No salió: 24 h sin aparecer en los movimientos del banco' }, 'no apareció en el banco en 24 h');
+          }
+        }
+      } catch (e) { logger.warn('[gastos] en proceso ' + g.id + ': ' + e.message); }
+    }
+  } catch (e) { logger.warn('[gastos] tick en proceso: ' + e.message); } finally { _gastoPayingRunning = false; if (claimed) _cronRelease('gastopaying'); }
+}
+setTimeout(() => { _gastoPayingTick().catch(() => {}); setInterval(() => { _gastoPayingTick().catch(() => {}); }, 3 * 60 * 1000); }, 5 * 60 * 1000);
 // #763 (owner): CARGAS AUTOMÁTICAS — "cómo va la carga automática en el sistema: reporte de cuántas hay y el detalle de cada cliente
 // que va cargando". Hoy / 7 días / 30 días: automáticas vs a mano, montos, % de éxito, entradas del banco sin acreditar; y las últimas 150.
 app.get('/api/admin/cargas-auto', authMiddleware, adminMiddleware, async (req, res) => {
@@ -26886,7 +27032,9 @@ async function _rouletteFreeEligible(userId, username, cfg) {
     const u = await User.findOne({ id: userId }).select('fraudFlags isBlocked duplicateOf').lean();
     if (!u || u.isBlocked || u.duplicateOf || _isFlagged(u)) return { ok: false, why: 'flag' };
     const n = await Transaction.countDocuments(Object.assign({ $or: [{ userId }, { username }] }, SCHED_ADAPTER.realDepositMatch()));
-    return n >= f.minDeposits ? { ok: true, deposits: n } : { ok: false, why: 'deposits', deposits: n };
+    if (n < f.minDeposits) return { ok: false, why: 'deposits', deposits: n };
+    if (!(await _isTrustedClient(userId))) return { ok: false, why: 'trust', deposits: n }; // #1090: el giro GRATIS es sólo para CLIENTES FIELES
+    return { ok: true, deposits: n };
   } catch (e) { logger.warn(`[roulette] chequeo del giro gratis falló: ${e.message}`); return { ok: false, why: 'error' }; } // fail-closed: es un regalo
 }
 function _rouletteEndOfDayART(now) { return new Date(new Date(_rouletteDateKeyART(now) + 'T23:59:59.999-03:00').getTime()); }
@@ -27054,6 +27202,7 @@ app.get('/api/roulette/status', authMiddleware, async (req, res) => {
       needsActiveWeek: appOk && act.active && !week.active && !eligible, // #228: sin carga esta semana · #677: sin llegar a la carga del día
       mode, // #1010: 'free' (giro gratis, % para hoy) · 'gold' (con la carga del día) · null
       goldLocked: mode === 'free', // cargando minDepositArs hoy el giro pasa a DORADO
+      freeNeedsTrust: free.why === 'trust', // #1090: el giro gratis es sólo para clientes fieles
       freePrizes: _prizesClient(cfg.free.prizes),
       goldPrizes: _prizesClient(cfg.prizes),
       todayLoaded: week.sum != null ? week.sum : null, // #677: lo cargado hoy (para "llevás $X")
@@ -27435,7 +27584,8 @@ app.post('/api/roulette/spin', authMiddleware, async (req, res) => {
     const act0 = await _rouletteIsActiveClient(userId, username, cfg.minCargas30d);
     let goldReady = act0.active;
     if (goldReady && cfg.requireActiveWeek) { const w0 = await _rouletteIsActiveThisWeek(userId, username, await _rouletteMinDepositArs(cfg)); goldReady = w0.active; }
-    if (!goldReady) { const fe = await _rouletteFreeEligible(userId, username, cfg); if (fe.ok) { spinMode = 'free'; table = cfg.free.prizes; } }
+    if (!goldReady) { const fe = await _rouletteFreeEligible(userId, username, cfg); if (fe.ok) { spinMode = 'free'; table = cfg.free.prizes; }
+      else if (fe.why === 'trust') return res.status(403).json({ error: 'El giro GRATIS: ' + (await _notTrustedMsg()) + ' Con la carga del día tenés el giro dorado.', code: 'NOT_TRUSTED' }); } // #1090
     // Gate: solo clientes ACTIVOS (más de N cargas en los últimos 30 días; N editable).
     const act = spinMode === 'free' ? { active: true } : act0;
     if (!act.active) {
@@ -28605,6 +28755,10 @@ async function getStoriesConfig() {
     defaultDurationSec: Number.isFinite(d) && d >= 2 && d <= 60 ? Math.round(d) : 6
   };
 }
+// #1090: historias que son REGALO SEMANAL (sólo clientes fieles): con bono y pública (miércoles / admin), regalo al azar y el código sorpresa.
+// Las personales de bienvenida (día 5/15/30) NO entran (son de la bienvenida, con sus propias reglas).
+function _storyNeedsTrust(s) { return !!s && (s.autoKind === 'regalo_azar' || (!s.audienceUserId && Number(s.bonusPct) > 0)); }
+function _storyHiddenForUntrusted(s) { return _storyNeedsTrust(s) || (!!s && (s.autoKind === 'codigo' || s.autoKind === 'codigo_teaser')); }
 function _storyPublic(s, req) {
   const base = ''; // mismo origen
   let mediaUrl = s.mediaUrl || '';
@@ -28637,7 +28791,7 @@ async function _storySegmentOf(userId) {
 app.get('/api/stories/public', async (req, res) => {
   try {
     const now = new Date();
-    const items = await Story.find({ isActive: true, expiresAt: { $gt: now }, audienceUserId: null, audience: { $in: ['all', null, 'new'] } }).sort({ publishedAt: 1 }).limit(12).lean(); // #886: nunca las personales · #1003: el visitante es "nuevo"
+    const items = (await Story.find({ isActive: true, expiresAt: { $gt: now }, audienceUserId: null, audience: { $in: ['all', null, 'new'] } }).sort({ publishedAt: 1 }).limit(20).lean()).filter((s) => !_storyHiddenForUntrusted(s)).slice(0, 12); // #886: nunca las personales · #1003: el visitante es "nuevo" · #1090: sin regalos semanales (un visitante nunca es cliente fiel)
     res.set('Cache-Control', 'public, max-age=60');
     res.json({ items: items.map((s) => _storyPublic(s, req)) });
   } catch (e) { logger.warn(`[stories] public: ${e.message}`); res.status(500).json({ error: 'Error del servidor' }); }
@@ -28648,7 +28802,9 @@ app.get('/api/stories/active', authMiddleware, async (req, res) => {
     // #886: las generales + las PERSONALES de este cliente (bono de bienvenida a los 5/15/30 días); las de otros no se ven.
     // #1003: + segmento — los NUEVOS (todavía sin carga) ven las informativas; los ACTIVOS (ya cargaron), las de rotación. 'all' = todos.
     const seg = await _storySegmentOf(String(req.user.userId));
-    const items = await Story.find({ isActive: true, expiresAt: { $gt: now }, audience: { $in: ['all', null, seg] }, $or: [{ audienceUserId: null }, { audienceUserId: String(req.user.userId) }] }).sort({ publishedAt: 1 }).limit(30).lean();
+    let items = await Story.find({ isActive: true, expiresAt: { $gt: now }, audience: { $in: ['all', null, seg] }, $or: [{ audienceUserId: null }, { audienceUserId: String(req.user.userId) }] }).sort({ publishedAt: 1 }).limit(30).lean();
+    // #1090: quien todavía no es CLIENTE FIEL no ve los regalos semanales (historia con bono, regalo al azar, código sorpresa).
+    if (items.some(_storyHiddenForUntrusted) && !(await _isTrustedCached(req.user.userId))) items = items.filter((s) => !_storyHiddenForUntrusted(s));
     const out = items.map((s) => _storyPublic(s, req));
     // #1003: historia del CÓDIGO SORPRESA ⇒ estado en vivo (lugares que quedan, quiénes ya reclamaron, si este cliente ya lo canjeó).
     const cdIds = items.filter((s) => s.codeDropId).map((s) => s.codeDropId);
@@ -28835,6 +28991,8 @@ app.post('/api/stories/:id/claim-bonus', authMiddleware, async (req, res) => {
     if (_isFlagged(user)) return res.status(403).json({ error: 'Tu cuenta no puede usar este bono. Escribinos a Soporte.' });
     // #1088-b: la oferta personal de BIENVENIDA (día 5/15/30) respeta la misma regla que el resto de la bienvenida (#974/#975/#1039).
     if (s.autoKind === 'bienvenida') { const _ab = await _welcomeAbuseOf(user).catch(() => null); if (_ab) return res.status(403).json({ error: 'Tu cuenta no tiene regalos de bienvenida.', code: 'NO_WELCOME' }); }
+    // #1090: historia con bono pública (la del miércoles y las del admin) y regalo al azar ⇒ sólo CLIENTE FIEL (fail-closed: sin cache).
+    if (_storyNeedsTrust(s) && !(await _isTrustedClient(user.id).catch(() => false))) return res.status(403).json({ error: await _notTrustedMsg(), code: 'NOT_TRUSTED' });
     const cur = user.storyBonus || {};
     if (cur.storyId === s.id && Number(cur.pct) > 0 && cur.expiresAt && new Date(cur.expiresAt).getTime() > Date.now()) {
       return res.json({ success: true, already: true, pct: cur.pct, expiresAt: cur.expiresAt });
@@ -28947,7 +29105,7 @@ app.post('/api/admin/stories', authMiddleware, adminMiddleware, async (req, res)
       // el servidor se reiniciaba 1,5 s después de publicar la historia (y la push nunca salía).
       setTimeout(() => {
         try {
-          Promise.resolve(sendNotificationToAllUsers(User, pTitle, pBody, { url: '/?story=' + doc.id, storyId: doc.id, tag: 'story-' + doc.id, type: 'story' }))
+          Promise.resolve(bonusPct > 0 ? _pushTrustedOnly(pTitle, pBody, { url: '/?story=' + doc.id, storyId: doc.id, tag: 'story-' + doc.id, type: 'story' }) : sendNotificationToAllUsers(User, pTitle, pBody, { url: '/?story=' + doc.id, storyId: doc.id, tag: 'story-' + doc.id, type: 'story' })) // #1090: con bono ⇒ sólo clientes fieles
             .then((r) => { logger.info(`[stories] push a todos: ${JSON.stringify(r || {}).slice(0, 200)}`); Story.updateOne({ id: doc.id }, { $set: { pushStats: r || null } }).catch(() => {}); })
             .catch((e) => logger.warn(`[stories] push a todos falló: ${e.message}`));
         } catch (e) { logger.warn(`[stories] push a todos falló: ${e.message}`); }
@@ -29175,7 +29333,7 @@ async function _storyAutoTick(opts) {
         const pTitle = bonusPct > 0 ? `🎁 +${bonusPct}% extra en tu próxima carga` : String(it.title || '📣 Novedad en PICA ROJA');
         const pBody = bonusPct > 0 ? `Sólo por ${bonusHours} h: abrí la historia y tocá "Reclamar ahora".` : String(it.text || '').slice(0, 120);
         setTimeout(() => {
-          Promise.resolve(sendNotificationToAllUsers(User, pTitle, pBody, { url: '/?story=' + doc.id, storyId: doc.id, tag: 'story-' + doc.id, type: 'story' }))
+          Promise.resolve(bonusPct > 0 ? _pushTrustedOnly(pTitle, pBody, { url: '/?story=' + doc.id, storyId: doc.id, tag: 'story-' + doc.id, type: 'story' }) : sendNotificationToAllUsers(User, pTitle, pBody, { url: '/?story=' + doc.id, storyId: doc.id, tag: 'story-' + doc.id, type: 'story' })) // #1090: con bono ⇒ sólo clientes fieles
             .then((r) => { Story.updateOne({ id: doc.id }, { $set: { pushStats: r || null } }).catch(() => {}); logger.info(`[historias-auto] push: ${JSON.stringify(r || {}).slice(0, 160)}`); })
             .catch((e) => logger.warn(`[historias-auto] push falló: ${e.message}`));
         }, 50);
@@ -29245,7 +29403,7 @@ async function _codeDropLaunch(cfg, dropKey, by) {
   try { await Story.updateMany({ autoKey: new RegExp('^cdt-'), isActive: true }, { $set: { isActive: false } }); } catch (_) {} // el teaser ya cumplió
   logger.info(`[código-sorpresa] ${dropKey} → ${code} ${_cdMoney(cfg.amount)} × ${cfg.maxClaims} (${cfg.minutes} min) por ${by || 'automático'}`);
   setTimeout(() => {
-    Promise.resolve(sendNotificationToAllUsers(User, `🎁 CÓDIGO ${_cdMoney(cfg.amount)} · primeros ${cfg.maxClaims}`, `Ya salió: entrá a las historias y tocá Reclamar ahora. Vale ${cfg.minutes} min.`, { url: '/?story=' + storyId, storyId, tag: 'codedrop-' + drop.id, type: 'story', kind: 'promo' }))
+    Promise.resolve(_pushTrustedOnly(`🎁 CÓDIGO ${_cdMoney(cfg.amount)} · primeros ${cfg.maxClaims}`, `Ya salió: entrá a las historias y tocá Reclamar ahora. Vale ${cfg.minutes} min.`, { url: '/?story=' + storyId, storyId, tag: 'codedrop-' + drop.id, type: 'story', kind: 'promo' })) // #1090: sólo clientes fieles
       .then((r) => CodeDrop.updateOne({ id: drop.id }, { $set: { pushStats: r || null } }).catch(() => {})).catch((e) => logger.warn('[código-sorpresa] push: ' + e.message));
   }, 50);
   return drop;
@@ -29399,7 +29557,8 @@ async function _storyGiftTick() {
     if (!(await _cronClaim('storygifts', 10 * 60000))) return;
     const dayN = Math.floor(new Date(today + 'T12:00:00Z').getTime() / 86400000);
     const ids = await Transaction.distinct('userId', { type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] }, timestamp: { $gte: new Date(now.getTime() - 30 * 86400000) } });
-    const mine = ids.filter((id) => id && _storyGiftDayFor(id, dayN, cfg.everyDays));
+    const _mine0 = ids.filter((id) => id && _storyGiftDayFor(id, dayN, cfg.everyDays));
+    const mine = await _trustedIdsAmong(_mine0); // #1090: el regalo al azar es sólo para CLIENTES FIELES
     const users = mine.length ? await User.find({ id: { $in: mine }, role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, duplicateOf: null, 'fraudReview.status': { $ne: 'watch' } }).select('id username fraudFlags').lean() : [];
     const rx = await _giftRolloverX().catch(() => 5), dx = await getDepositRolloverX().catch(() => 1);
     let made = 0;
@@ -29457,6 +29616,8 @@ async function _codeDropClaimHandler(req, res) { // #1055: también desde Perfil
     if (user.duplicateOf || _isFlagged(user) || (user.fraudReview && user.fraudReview.status === 'watch')) return res.status(403).json({ error: 'Esta cuenta no participa de los códigos. Escribinos a Soporte si creés que es un error.', code: 'NOT_ELIGIBLE' });
     const cfg = await getCodeDropConfig();
     if (cfg.requireDeposit) { _storySegCache.delete(user.id); if ((await _storySegmentOf(user.id)) !== 'active') return res.status(403).json({ error: 'Los códigos son para clientes que ya cargaron. Hacé tu primera carga y participás del próximo 🎁', code: 'NEEDS_DEPOSIT' }); }
+    // #1090: códigos sorpresa y de Telegram ⇒ sólo CLIENTE FIEL (un canje a medias, 'unknown', ya tiene su lugar y se termina igual).
+    if (!(_mine && _mine.status === 'unknown') && !(await _isTrustedClient(user.id).catch(() => false))) return res.status(403).json({ error: await _notTrustedMsg(), code: 'NOT_TRUSTED' });
     const reference = `vip-cdrop-${d.id}-${user.id}`;
     // Un canje que quedó a medias (falló la red con 1girox o se reinició el server) ya tiene su LUGAR: al reintentar se vuelve a acreditar con la
     // MISMA reference (1girox responde duplicate si ya había entrado), sin ocupar otro lugar.
@@ -29648,8 +29809,9 @@ async function _rouletteNudgeTick(force) {
     const ids60 = (await Transaction.distinct('userId', Object.assign({ timestamp: { $gte: since60 } }, SCHED_ADAPTER.realDepositMatch()))).filter(Boolean);
     const ids = cfg.free.minDeposits <= 1 || !ids60.length ? ids60 : (await Transaction.aggregate([{ $match: Object.assign({ userId: { $in: ids60 } }, SCHED_ADAPTER.realDepositMatch()) },
       { $group: { _id: '$userId', n: { $sum: 1 } } }, { $match: { n: { $gte: cfg.free.minDeposits } } }])).map((a) => a._id);
+    const _trustSet = new Set(await _trustedIdsAmong(ids)); const idsT = ids.filter((id) => _trustSet.has(String(id))); // #1090: el giro gratis es sólo para CLIENTES FIELES
     const todayStart = new Date(today + 'T00:00:00-03:00');
-    const users = ids.length ? await User.find({ id: { $in: ids }, role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, duplicateOf: null, 'fraudFlags.0': { $exists: false },
+    const users = idsT.length ? await User.find({ id: { $in: idsT }, role: 'user', isBlocked: { $ne: true }, isActive: { $ne: false }, duplicateOf: null, 'fraudFlags.0': { $exists: false },
       'rouletteNudge.n': { $not: { $gte: 3 } }, 'rouletteNudge.lastAt': { $not: { $gte: todayStart } } /* revisión: nunca dos veces el mismo día (multi-instancia) */ } /* owner 2026-11-01: sin filtro de Perfil → avisos */).select('id username fcmToken fcmTokens fcmTokenContext notifPrefs').lean() : [];
     const spun = new Set(await DailyRouletteSpin.distinct('userId', { dateKey: _rouletteDateKeyART(now) }));
     let cand = users.filter((u) => !spun.has(u.id) && (!cfg.requireAppInstalled || _rouletteHasAppInstalled(u)));
@@ -33473,6 +33635,8 @@ async function _notifBatchCreditCapCheck(uDoc, amount) {
 //  - retryable=true → fallo transitorio (API caída): se puede reintentar.
 // Idempotente: reference vip-nbatch-{batchId}-{userId} — reintentar tras un
 // fallo FALSO da duplicate:true en la plataforma, jamás doble pago.
+// #1090: rollover de las fichas de un lote = el elegido, pero nunca menos que el global (`_giftRolloverX`, ×5).
+async function _batchRolloverX(batch) { const x = Math.max(0, Math.round(Number(batch && batch.rolloverX) || 0)); const min = await _giftRolloverX().catch(() => 5); return Math.max(x, min); }
 async function _creditNotifBatchGift(uDoc, batch) {
   const capMsg = await _notifBatchCreditCapCheck(uDoc, batch.amount);
   if (capMsg) {
@@ -33485,7 +33649,7 @@ async function _creditNotifBatchGift(uDoc, batch) {
   const pInfo = await girox.getUserInfoByName(uDoc.username, { fresh: true });
   if (!pInfo) return { ok: false, retryable: true, reason: 'no se pudo leer la cuenta del casino' };
   // #1040: ya no se saltea a quien tiene bono activo: `carryOver` le suma lo que le quedaba al bono nuevo (no lo pisa).
-  const rollover = Math.max(0, Number(batch.rolloverX) || 0);
+  const rollover = await _batchRolloverX(batch); // #1090: nunca menos que el global (también lotes viejos con ×0 que todavía se canjean)
   const _ref = `vip-nbatch-${batch.id}-${uDoc.id}`.slice(0, 100);
   const credit = await girox.creditUserBalance(
     uDoc.username, batch.amount, _ref,
@@ -33634,7 +33798,7 @@ async function _processOneNotifBatch(batchId) {
             }
           }
           if (notificar) {
-            const rollover = Math.max(0, Number(batch.rolloverX) || 0);
+            const rollover = await _batchRolloverX(batch);
             const rollTxt = rollover > 0
               ? ` (bono con rollover x${rollover}: apostá ${rollover}× el monto y después podés retirar)`
               : '';
@@ -33858,7 +34022,7 @@ async function _tryClaimNotifBatchCode(reqUser, attempt) {
       { $set: { 'recipients.$.creditedAt': new Date(), 'recipients.$.creditTxId': res2.txId, 'recipients.$.creditError': null } }
     ).catch(() => {});
 
-    const rollover = Math.max(0, Number(batch.rolloverX) || 0);
+    const rollover = await _batchRolloverX(batch);
     const rollTxt = rollover > 0
       ? ` (bono con rollover x${rollover}: apostá ${rollover}× el monto y después podés retirar)`
       : '';
@@ -34043,6 +34207,9 @@ async function _createNotifBatchFromBody(body, user) {
         return res.status(400).json({ error: 'El rollover debe ser un número entre 0 y 50 (0 = sin rollover).' });
       }
       rolloverX = Math.round(rolloverX);
+      // #1090 (owner aprobó): las fichas regaladas por lote nunca con MENOS rollover que el global (#659, ×5): antes se podía elegir ×0
+      // (fichas retirables al instante). Se puede poner más.
+      const _minRx = await _giftRolloverX().catch(() => 5); if (rolloverX < _minRx) rolloverX = _minRx;
       try {
         const cfg = await girox.getPlatformConfig();
         const allowed = cfg.success && cfg.config && cfg.config.bonus && cfg.config.bonus.multipliers;

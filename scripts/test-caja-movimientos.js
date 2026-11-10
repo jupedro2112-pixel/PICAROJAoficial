@@ -17,11 +17,12 @@ const Expense = { find: (f) => q(() => store.exp.filter((d) => match(d, f))), fi
   create: async (d) => { const o = Object.assign({ createdAt: new Date() }, JSON.parse(JSON.stringify(d))); o.createdAt = new Date(o.createdAt); store.exp.push(o); return Object.assign({}, o, { toObject: () => Object.assign({}, o) }); } };
 const BankMovement = { find: (f) => q(() => store.mov.filter((d) => match(d, f))), findOne: (f) => q(() => store.mov.find((d) => match(d, f)) || null), exists: async (f) => store.mov.some((d) => match(d, f)), updateOne: async (f, u) => { const d = store.mov.find((x) => match(x, f)); if (d) apply(d, u); return {}; },
   create: async (d) => { if (store.mov.some((m) => m.movementId === d.movementId)) { const e = new Error('dup'); e.code = 11000; throw e; } store.mov.push(Object.assign({}, d)); return d; } };
+const Comprobante = { exists: async (f) => (store.comps || []).some((d) => match(d, f)) };
 const PendingPayout = { find: (f) => q(() => store.payouts.filter((d) => match(d, f))), exists: async (f) => store.payouts.some((d) => match(d, f)) };
 const hgcashPay = { isEnabled: () => true, listMovements: async () => ({ ok: true, items: store.live }) };
 const routes = {}; const app = { get: (p, ...h) => { routes['GET ' + p] = h[h.length - 1]; }, post: (p, ...h) => { routes['POST ' + p] = h[h.length - 1]; }, delete: (p, ...h) => { routes['DELETE ' + p] = h[h.length - 1]; } };
 const dk = (d) => new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 10);
-const ctx = { Expense, BankMovement, PendingPayout, hgcashPay, app, authMiddleware: 1, adminMiddleware: 1, logger: { info() {}, warn() {}, error(m) { store.err = m; } }, resolveHgcashAccountId: async () => 'acc-1', _cronClaim: async () => true, _closeEnsure: async (k) => { store.closes.push(k); }, _bankAccounts: async () => [{ id: 'sec1', name: 'Cuenta Juan', active: true }],
+const ctx = { Expense, BankMovement, PendingPayout, Comprobante, hgcashPay, app, authMiddleware: 1, adminMiddleware: 1, logger: { info() {}, warn() {}, error(m) { store.err = m; } }, resolveHgcashAccountId: async () => 'acc-1', _cronClaim: async () => true, _closeEnsure: async (k) => { store.closes.push(k); }, _bankAccounts: async () => [{ id: 'sec1', name: 'Cuenta Juan', active: true }],
   _nameMatch: (x, y) => String(x).toLowerCase().split(' ')[0] === String(y).toLowerCase().split(' ')[0], uuidv4: () => 'e-' + (store.exp.length + 1), datosIa: { dateKeyART: dk }, setTimeout: () => 0, setInterval: () => 0, console, Date, Math, Object, Array, JSON, Number, String, Boolean, Promise, Set, Map, RegExp, Error, Buffer, parseInt, encodeURIComponent };
 vm.createContext(ctx); vm.runInContext(block, ctx);
 const call = async (key, req) => { const h = routes[key]; if (!h) throw new Error('ruta ' + key); let out = null, status = 200; const res = { json: (j) => { out = j; return res; }, status: (s) => { status = s; return res; }, set: () => res, send: (x) => { out = x; return res; } }; await h(Object.assign({ params: {}, query: {}, body: {}, user: { username: 'agente1', role: 'depositor' } }, req || {}), res); return { status, out }; };
@@ -30,7 +31,7 @@ const IMG = 'data:image/jpeg;base64,' + Buffer.from('foto').toString('base64');
   const today = dk(new Date()); const now = new Date();
   // --- entrada pendiente del banco de $150.000 (nadie la reclamó) + fondeo anotado ⇒ matched y la entrada queda 'caja'
   store.mov.push({ movementId: 'm-in-1', amount: 150000, direction: 'Inbound', matchStatus: 'pending', date: now, createdAt: now, fromName: 'Pedro Dueño', status: 'approved' });
-  let r = await call('POST /api/admin/caja-movimientos', { body: { kind: 'ingreso', amount: 150000, concept: 'Fondeo para pagar retiros', account: 'main', receipt: { data: IMG, name: 'f.jpg' } } });
+  let r = await call('POST /api/admin/caja-movimientos', { body: { kind: 'ingreso', amount: 150000, concept: 'Fondeo para pagar retiros', account: 'main', party: 'Pedro Dueño', receipt: { data: IMG, name: 'f.jpg' } } });
   assert.strictEqual(r.status, 200, JSON.stringify(r.out)); assert.strictEqual(r.out.item.bankMatch.status, 'matched'); assert.strictEqual(r.out.item.bankMatch.movementId, 'm-in-1');
   assert.strictEqual(store.mov[0].matchStatus, 'caja'); assert.strictEqual(store.mov[0].cajaExpenseId, 'e-1'); assert.ok(/VISTO en el banco/.test(r.out.message)); assert.deepStrictEqual(store.closes, [today]);
   console.log('✔ fondeo principal: cruzado con la entrada pendiente del banco (queda caja, no es carga de nadie)');
@@ -67,5 +68,30 @@ const IMG = 'data:image/jpeg;base64,' + Buffer.from('foto').toString('base64');
   r = await call('DELETE /api/admin/caja-movimientos/:id', { params: { id: 'e-1' }, user: { username: 'admin', role: 'admin' } }); assert.strictEqual(r.status, 200); assert.strictEqual(store.mov.find((m) => m.movementId === 'm-in-1').matchStatus, 'no_match');
   r = await call('GET /api/admin/caja-movimientos/:id/receipt', { params: { id: 'e-3' } }); assert.strictEqual(r.status, 200); assert.ok(Buffer.isBuffer(r.out) && r.out.toString() === 'foto');
   console.log('✔ listado liviano · borrar sólo admin (la entrada vuelve a no_match) · comprobante se sirve');
+  // --- #1090: un ingreso anotado NUNCA se lleva solo la transferencia de un cliente
+  store.mov.push({ movementId: 'm-in-c1', amount: 70000, direction: 'Inbound', matchStatus: 'pending', date: now, createdAt: now, fromName: 'Gomez Cliente', fromCUIT: '20111', status: 'approved' });
+  r = await call('POST /api/admin/caja-movimientos', { body: { kind: 'ingreso', amount: 70000, concept: 'Fondeo sin nombre', account: 'main', receipt: { data: IMG } } });
+  assert.strictEqual(r.status, 200); assert.strictEqual(r.out.item.bankMatch.status, 'unmatched'); assert.ok(r.out.item.bankMatch.suspects && r.out.item.bankMatch.suspects[0].movementId === 'm-in-c1');
+  assert.strictEqual(store.mov.find((m) => m.movementId === 'm-in-c1').matchStatus, 'pending', 'la del cliente sigue pendiente'); assert.ok(/A VERIFICAR/.test(r.out.message));
+  console.log('✔ #1090 sin "de quién": la entrada igual no se cruza (queda A VERIFICAR, la del cliente sigue pendiente)');
+  r = await call('POST /api/admin/caja-movimientos', { body: { kind: 'ingreso', amount: 70000, concept: 'Fondeo con otro nombre', account: 'main', party: 'Pedro', receipt: { data: IMG }, force: true } });
+  assert.strictEqual(r.out.item.bankMatch.status, 'unmatched'); assert.strictEqual(store.mov.find((m) => m.movementId === 'm-in-c1').matchStatus, 'pending');
+  console.log('✔ #1090 nombre del banco distinto al indicado ⇒ no se cruza');
+  store.mov.push({ movementId: 'm-old-c', amount: 9000, direction: 'Inbound', matchStatus: 'auto_charged', matchedUserId: 'u-9', date: now, createdAt: now, fromName: 'Gomez Cliente', fromCUIT: '20111', status: 'approved' });
+  r = await call('POST /api/admin/caja-movimientos', { body: { kind: 'ingreso', amount: 70000, concept: 'Fondeo Gomez', account: 'main', party: 'Gomez', receipt: { data: IMG }, force: true } });
+  assert.strictEqual(r.out.item.bankMatch.status, 'unmatched'); assert.ok(/ya le carg/.test(r.out.item.bankMatch.suspects[0].why)); assert.strictEqual(store.mov.find((m) => m.movementId === 'm-in-c1').matchStatus, 'pending');
+  console.log('✔ #1090 cuenta que ya le cargó a un cliente ⇒ no se cruza');
+  store.mov.push({ movementId: 'm-in-c2', amount: 33000, direction: 'Inbound', matchStatus: 'no_match', date: now, createdAt: now, fromName: 'Pedro Dueño', status: 'approved' });
+  store.comps = [{ reviewStatus: 'pending', amount: 33000, createdAt: now }];
+  r = await call('POST /api/admin/caja-movimientos', { body: { kind: 'ingreso', amount: 33000, concept: 'Fondeo Pedro', account: 'main', party: 'Pedro', receipt: { data: IMG } } });
+  assert.strictEqual(r.out.item.bankMatch.status, 'unmatched'); assert.strictEqual(store.mov.find((m) => m.movementId === 'm-in-c2').matchStatus, 'no_match');
+  store.comps = [];
+  r = await call('POST /api/admin/caja-movimientos/:id/verify', { params: { id: r.out.item.id } });
+  assert.strictEqual(r.out.item.bankMatch.status, 'matched'); assert.strictEqual(store.mov.find((m) => m.movementId === 'm-in-c2').matchStatus, 'caja');
+  console.log('✔ #1090 comprobante de cliente pendiente por ese monto ⇒ espera; resuelto el comprobante, se cruza');
+  store.live = [{ id: 'live-c', amount: 44000, direction: 'in', date: now, raw: { id: 'live-c', fromName: 'Otra Persona' } }];
+  r = await call('POST /api/admin/caja-movimientos', { body: { kind: 'ingreso', amount: 44000, concept: 'Fondeo API', account: 'main', party: 'Pedro', receipt: { data: IMG } } });
+  assert.strictEqual(r.out.item.bankMatch.status, 'unmatched'); assert.ok(!store.mov.some((m) => m.movementId === 'live-c'), 'no se guardó como caja (la trae el webhook normal)');
+  console.log('✔ #1090 entrada que trae la API del banco y no es claramente nuestra ⇒ no se guarda como caja');
   console.log('CAJA OK');
 })().catch((e) => { console.error('❌', e); process.exit(1); });

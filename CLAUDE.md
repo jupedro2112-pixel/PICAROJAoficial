@@ -240,6 +240,11 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `vip-igift-<userId>`, Transaction `install_gift` — un tipo de regalo nuevo va SIEMPRE a
   `CASHBACK_GIFT_TX_TYPES`). Detalle: ARCHITECTURE Home 2.0 (#283).
 
+- **#1090 CORRECCIONES POR PÉRDIDAS:** Bonificación manual de agentes (no admin) con tope $15.000 c/u + $30.000/día y sin secundarias/marcas (`_staffBonusCheck`);
+  regalos SEMANALES (historia con bono, regalo al azar, giro gratis, códigos) sólo para CLIENTE FIEL (`_isTrustedClient` / `_trustedIdsAmong`; uno nuevo igual);
+  lotes de fichas con rollover ≥ global (`_batchRolloverX`); caja: una entrada sólo se cruza sola si `_cajaInboundRisk` da null; gasto por API ambiguo ⇒ 'paying' +
+  `_gastoPayingTick` (nunca re-enviar). Test `scripts/test-loss-fixes-1090.js`.
+
 - **Ganamos "Próximamente" hasta tener la API (#298, 2026-10-17):** sigue habilitada y visible, pero con
   `connected:false` no se puede elegir ni se ofrece al cargar (`decideForDeposit` filtra por API). Se vuelve
   seleccionable sola al configurar `GANAMOS_API_URL/KEY`. El tilde de COMANDOS la esconde del todo si hace falta.

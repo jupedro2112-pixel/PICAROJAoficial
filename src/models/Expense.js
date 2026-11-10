@@ -26,6 +26,9 @@ const schema = new mongoose.Schema({
   status: { type: String, enum: ['paid', 'paying', 'failed'], default: 'paid', index: true },
   hgId: { type: String, default: null },
   hgError: { type: String, default: null },
+  // #1090: pago por API que quedó EN PROCESO (timeout / error de red / 5xx / respuesta ambigua): { since, checks, lastAt, last } — lo resuelve
+  // _gastoPayingTick consultando al banco (nunca se re-envía el pago solo).
+  hgCheck: { type: mongoose.Schema.Types.Mixed, default: null },
   createdBy: { type: String, default: null },
   createdAt: { type: Date, default: Date.now, index: true }
 }, { versionKey: false });
