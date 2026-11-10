@@ -3726,7 +3726,15 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
     try { await _resolvePlatformChoiceMessage(movement, pid); } catch (_) {}
     // Carga OK pero el bono adjunto falló → el bono vuelve a quedar pendiente.
     const _hgBonusApplied = _auto.bonus > 0 && !result.bonusFailed;
-    if (_auto.claimed && !_hgBonusApplied) { await _auto.revert(); logger.error(`[auto-bonus] hgcash user=${user.username}: la carga entró pero el bono adjunto $${_auto.bonus} FALLÓ — vuelve a pendiente`); }
+    if (_auto.claimed && !_hgBonusApplied) {
+      await _auto.revert();
+      if (_auto.source === 'first_deposit' && _auto.bonus > 0) {
+        // Revisión nocturna: el bono de 1ª carga NO vuelve a pendiente (la carga ya quedó grabada: la próxima ya no es "primera").
+        // Se avisa al agente para que lo cargue a mano; antes se perdía sin que nadie se enterara.
+        logger.error(`[auto-bonus] hgcash user=${user.username}: la 1ª carga entró SIN el bono de bienvenida $${_auto.bonus} (1girox no lo aceptó) — avisado al agente`);
+        _emitAdminOnlyChatNote(user.id, user.username, `🚨 PRIORIDAD: la 1ª carga de $${Number(amount).toLocaleString('es-AR')} entró SIN el bono de bienvenida de $${Number(_auto.bonus).toLocaleString('es-AR')} (1girox no lo aceptó). Cargáselo a mano desde Bonificación.`).catch(() => {});
+      } else logger.error(`[auto-bonus] hgcash user=${user.username}: la carga entró pero el bono adjunto $${_auto.bonus} FALLÓ — vuelve a pendiente`);
+    }
     if (_hgBonusApplied) { try { await adapter.claimPendingBonus(user.username); } catch (_) {} }
 
     try { await recordUserActivity(user.id, 'deposit', Number(amount)); } catch (_) {}
@@ -18105,12 +18113,14 @@ app.post('/api/fire/claim-reward', authMiddleware, async (req, res) => {
       try {
         await FireStreak.updateOne(
           { userId, pendingCashReward: 0 },
-          { $set: {
+          { $set: Object.assign({
             pendingCashReward: rewardAmount,
             pendingCashRewardDay: reserved.pendingCashRewardDay,
             pendingCashRewardDesc: reserved.pendingCashRewardDesc,
             pendingCashRewardDate: reserved.pendingCashRewardDate
-          } }
+          }, // revisión nocturna: también el contador de rollover (si no, un fallo de 1girox le borraba lo ya apostado)
+          reserved.rolloverSince ? { rolloverSince: reserved.rolloverSince } : {},
+          reserved.rolloverBase != null ? { rolloverBase: reserved.rolloverBase } : {}) }
         );
       } catch (restoreErr) {
         logger.error(`[FIRE_REWARD] no se pudo restaurar el premio tras fallo de crédito userId=${userId}: ${restoreErr.message}`);
@@ -24241,7 +24251,10 @@ async function _missionTierFor(user, avgWeekly, cfg, wk, claimsByWeek) {
     }
     await User.updateOne({ id: user.id }, { $set: { 'missionTier.promo': promo, 'missionTier.updatedWeek': wk } }).catch(() => {});
   }
-  const idx = Math.min(tiers.length - 1, base + promo);
+  // Revisión nocturna: el ascenso ganado ESTA semana rige desde la semana que viene (como dice /sys_mission_levelup); antes, 15 min
+  // después de subir, cobraba también las misiones del nivel siguiente con las mismas cargas de la semana.
+  const promoNow = (mt.promotedWeek === wk && promo > 0) ? promo - 1 : promo;
+  const idx = Math.min(tiers.length - 1, base + promoNow);
   const next = tiers[idx + 1] || null;
   const vipNext = next ? vipLevels.getLevel(next.vipFrom || 0) : null;
   return { idx, base, promo, tier: tiers[idx], next, avgWeekly: Math.round(avgWeekly || 0), vipIdx, vipName: (vipLevels.getLevel(vipIdx) || {}).name || null, vipNextName: vipNext ? vipNext.name : null, faltaParaSubir: next && next.minWeekly > 0 ? Math.max(0, next.minWeekly - Math.round(avgWeekly || 0)) : null };
@@ -24281,7 +24294,9 @@ async function _missionCredit(m, st, wk, af) {
 }
 let _missionsBusy = false;
 async function _missionsTick() {
-  if (_missionsBusy) return; _missionsBusy = true;
+  if (_missionsBusy) return;
+  if (!(await _cronClaim('missions', 10 * 60000))) return; // revisión nocturna: una sola instancia de EB por pasada
+  _missionsBusy = true;
   try {
     const cfg = await getStrategyConfig(); if (!cfg.missions.enabled || !cfg.missions.tiers.length) return;
     const wk = weekKeyART(new Date()); const stats = await _missionWeekStats(wk); if (!stats.length) return;
@@ -24301,7 +24316,8 @@ async function _missionsTick() {
       for (const m of items) { if (claimed.has(st.userId + '|' + m.id)) continue; if (_missionProgress(m, st).done) { if (n < 100 && await _missionCredit(m, st, wk, cfg.missions.antiFraud)) { n++; claimed.add(st.userId + '|' + m.id); } else allDone = false; } else allDone = false; }
       // #514 ASCENSO: completó TODAS las misiones de su nivel esta semana → la semana que viene le tocan las del nivel siguiente
       if (allDone && T.next && (user.missionTier || {}).promotedWeek !== wk) {
-        await User.updateOne({ id: user.id }, { $inc: { 'missionTier.promo': 1 }, $set: { 'missionTier.promotedWeek': wk, 'missionTier.lastTierId': T.tier.id } });
+        const _up = await User.updateOne({ id: user.id, 'missionTier.promotedWeek': { $ne: wk } }, { $inc: { 'missionTier.promo': 1 }, $set: { 'missionTier.promotedWeek': wk, 'missionTier.lastTierId': T.tier.id } }); // condicionado en la base: nunca dos ascensos en la misma semana
+        if (!(_up.modifiedCount || _up.nModified)) continue;
         const vars = { username: user.username, nivel: T.tier.name, siguiente: T.next.name, emoji: T.next.emoji };
         const text = await renderSystemCommand('/sys_mission_levelup', '🏆 ¡Completaste todas las misiones de {nivel}! Desde la semana que viene jugás en nivel {emoji} {siguiente}: misiones más difíciles y premios más grandes.', vars);
         await _sendUserSystemMessage(user, text, { metadata: { kind: 'mission_levelup', from: T.tier.id, to: T.next.id }, push: { title: `🏆 Subiste a ${T.next.name}`, body: 'Misiones más difíciles, premios más grandes.' } });
