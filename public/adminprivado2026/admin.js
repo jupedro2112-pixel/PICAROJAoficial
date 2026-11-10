@@ -6493,7 +6493,7 @@ function rbRenderStructs() {
             '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><b>Grupo que MANDA:</b> <select onchange="rbR(' + si + ',' + i + ',\'from\',this.value)">' + opt(r.from) + '</select>' + (st.on ? ' <button class="btn btn-secondary btn-sm" title="Manda al grupo la explicación de los centavos y la fija arriba" onclick="rbHelp(' + si + ',' + i + ')">📌 Mandar menú a los grupos</button> <button class="btn btn-secondary btn-sm" onclick="rbCloseNow(' + si + ',' + i + ')">🔒 Cerrar ahora</button>' : '') + ' <button class="btn btn-secondary btn-sm" onclick="rbDelRoute(' + si + ',' + i + ')">✕</button></div>' +
             (r.rules || []).map((x, k) => '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap">termina en ,<input type="text" maxlength="2" inputmode="numeric" value="' + escapeHtml(x.cents || '') + '" oninput="rbRule(' + si + ',' + i + ',' + k + ',\'cents\',this.value)" style="width:48px;text-align:center"> → reenvía a <select onchange="rbRule(' + si + ',' + i + ',' + k + ',\'to\',this.value)">' + opt(x.to) + '</select> <button class="btn btn-secondary btn-sm" onclick="rbDelRule(' + si + ',' + i + ',' + k + ')">✕</button></div>').join('') +
             '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="rbAddRule(' + si + ',' + i + ')">+ Terminación</button> Todo lo demás → <select onchange="rbR(' + si + ',' + i + ',\'otherTo\',this.value)">' + opt(r.otherTo, 'No reenviar (avisa)') + '</select></div>' +
-            ((r.sums || []).length ? '<div style="margin-top:6px;font-size:12.5px">' + r.sums.map((x) => 'Suma → ' + escapeHtml(x.title) + ': <b>' + _rbM(x.total) + '</b> (' + x.count + ')').join(' · ') + (r.hold ? ' · ⚠️ ' + r.hold + ' sin reenviar' : '') + '</div>' : '') + (r.month ? '<div style="font-size:12.5px">📅 Total del mes (sin corte): <b>' + _rbM(r.month.total) + '</b> (' + r.month.count + ')</div>' : '') + (st.id && r.from ? rbCarryHtml(si, i, r) : '') + '</div>').join('');
+            ((r.sums || []).length ? '<div style="margin-top:6px;font-size:12.5px">' + r.sums.map((x) => 'Suma → ' + escapeHtml(x.title) + ': <b>' + _rbM(x.total) + '</b> (' + x.count + ')').join(' · ') + (r.hold ? ' · ⚠️ ' + r.hold + ' sin reenviar' : '') + '</div>' : '') + (r.month ? '<div style="font-size:12.5px">📅 Total del mes (sin corte): <b>' + _rbM(r.month.total) + '</b> (' + r.month.count + ')</div>' : '') + (st.id && r.from ? rbCarryHtml(si, i, r) + rbCbuHtml(si, i, r) : '') + '</div>').join('');
         return '<details class="card" style="margin-bottom:1rem"' + (_rbOpen[st.id] ? ' open' : '') + ' ontoggle="rbToggle(\'' + st.id + '\',this.open)"><summary style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:1rem">🧩 ' + escapeHtml(st.name || 'Estructura') + '</b>' +
             '<span style="font-size:12.5px">' + (st.on ? '🟢 funcionando' : '⚪ apagada') + ' · ' + (bot ? '@' + escapeHtml(bot.username) + (botOk ? ' ✅' : ' ❌ sin conexión') : 'sin bot') + ' · ' + st.routes.length + ' grupo(s) que mandan</span></summary>' +
             '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">Nombre <input type="text" maxlength="40" value="' + escapeHtml(st.name || '') + '" oninput="rbS(' + si + ',\'name\',this.value)" style="width:200px"></div>' +
@@ -6520,6 +6520,35 @@ function rbCarryHtml(si, i, r) {
         '<div style="display:flex;gap:6px;align-items:center;margin:3px 0">Ya llevaban en el mes: <input class="form-input" style="width:140px" id="rbCarM_' + si + '_' + i + '" placeholder="opcional"></div>' +
         '<button class="btn btn-primary btn-sm" onclick="rbCarrySave(' + si + ',' + i + ',' + ds.length + ')">Sumar estos montos</button>' + (list ? '<div style="margin-top:6px">' + list + '</div>' : '') + '</details>';
 }
+// #1079-n: CBU de bajada (cambio programado por fecha, parar, cancelar)
+function rbCbuHtml(si, i, r) {
+    const ds = _rbDestsOf(r); if (!ds.length) return ''; const st = _rb.structs[si]; if (!st.on) return '<div style="font-size:12px;color:#9ab;margin-top:6px">🏦 CBU de bajada: encendé la estructura para programarlo.</div>';
+    const lbl = { active: '✅ VIGENTE', scheduled: '🗓️ PROGRAMADO', activating: '⏳ activando', done: 'terminado' };
+    const items = (r.cbuItems || []).map((x) => '<div style="font-size:12px;margin:2px 0">' + (lbl[x.status] || x.status) + ' → ' + escapeHtml(_rbGTitle(x.to)) + ': <b>' + escapeHtml(x.holder) + '</b> · ' + escapeHtml(x.cbu) + (x.alias ? ' · ' + escapeHtml(x.alias) : '') + ' · <b>,' + escapeHtml(x.cents) + '</b> · desde ' + _rbD(x.since) + (x.until ? ' hasta ' + _rbD(x.until) : '') + (x.status === 'scheduled' ? ' <button class="btn btn-secondary btn-sm" onclick="rbCbuCancel(\'' + x.id + '\')">Cancelar</button>' : '') + '</div>').join('');
+    const stops = Object.keys(r.cbuStops || {}).map((d) => '<div style="font-size:12px;color:#dc2626">⛔ ' + escapeHtml(_rbGTitle(d)) + ': SIN CBU desde ' + _rbD(r.cbuStops[d].at) + '</div>').join('');
+    const k = si + '_' + i; const opt = ds.map((d) => '<option value="' + escapeHtml(d) + '">' + escapeHtml(_rbGTitle(d)) + '</option>').join('');
+    return '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px">🏦 CBU de bajada (cambio programado)</summary><div style="font-size:12.5px;color:#9ab;margin:4px 0">Al activarse cambia la terminación de ese destino, la anterior se acepta 24 h y el bot avisa (fijado) al grupo que manda. Sin "Desde" cambia ya. Con "Hasta" y sin otro programado, al vencer avisa "sin CBU". En Telegram: /nuevocbu, /parar y /cbu en el grupo de destino.</div>' + stops + items +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin-top:6px">' +
+        '<label style="font-size:12px">Destino<select class="form-input" id="rbCb_to_' + k + '">' + opt + '</select></label>' +
+        '<label style="font-size:12px">Titular<input class="form-input" id="rbCb_h_' + k + '"></label>' +
+        '<label style="font-size:12px">CBU (22 números)<input class="form-input" id="rbCb_c_' + k + '" inputmode="numeric"></label>' +
+        '<label style="font-size:12px">Alias<input class="form-input" id="rbCb_a_' + k + '"></label>' +
+        '<label style="font-size:12px">Terminación (,XX)<input class="form-input" id="rbCb_t_' + k + '" placeholder="82" maxlength="3"></label>' +
+        '<label style="font-size:12px">Desde (vacío = ya)<input class="form-input" type="datetime-local" id="rbCb_s_' + k + '"></label>' +
+        '<label style="font-size:12px">Hasta (opcional)<input class="form-input" type="datetime-local" id="rbCb_u_' + k + '"></label></div>' +
+        '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="rbCbuSave(' + si + ',' + i + ')">💾 Guardar CBU</button> <button class="btn btn-secondary btn-sm" onclick="rbCbuStop(' + si + ',' + i + ')">⛔ Parar (no hay CBU)</button></div></details>';
+}
+function rbCbuSave(si, i) {
+    const st = _rb && _rb.structs[si]; const r = st && st.routes[i]; if (!r) return; const k = si + '_' + i; const v = (x) => ((document.getElementById('rbCb_' + x + '_' + k) || {}).value || '').trim();
+    const body = { structId: st.id, from: r.from, to: v('to'), holder: v('h'), cbu: v('c'), alias: v('a'), cents: v('t').replace(/\D/g, ''), since: v('s'), until: v('u') };
+    if (!confirm('¿Guardar el CBU ' + body.cbu + ' (,' + body.cents + ') para ' + _rbGTitle(body.to) + '? ' + (body.since ? 'Cambia solo el ' + body.since.replace('T', ' ') : 'Cambia YA') + ' y avisa al grupo que manda.')) return;
+    _rbPost('/api/admin/rcptbot/cbu', body, '🏦 CBU guardado');
+}
+function rbCbuStop(si, i) {
+    const st = _rb && _rb.structs[si]; const r = st && st.routes[i]; if (!r) return; const to = ((document.getElementById('rbCb_to_' + si + '_' + i) || {}).value || '');
+    if (confirm('¿Avisar que ' + _rbGTitle(to) + ' NO TIENE CBU de bajada hasta nuevo aviso?')) _rbPost('/api/admin/rcptbot/cbu-stop', { structId: st.id, from: r.from, to }, '⛔ Aviso dado');
+}
+function rbCbuCancel(id) { if (confirm('¿Cancelar este CBU programado?')) _rbPost('/api/admin/rcptbot/cbu-cancel', { id }, 'Cancelado'); }
 function rbCarrySave(si, i, n) {
     const st = _rb && _rb.structs[si]; const r = st && st.routes[i]; if (!r) return; const items = [];
     for (let k = 0; k < n; k++) { const el = document.getElementById('rbCar_' + si + '_' + i + '_' + k); if (el && el.value.trim()) items.push({ to: el.dataset.to, amount: el.value.trim() }); }

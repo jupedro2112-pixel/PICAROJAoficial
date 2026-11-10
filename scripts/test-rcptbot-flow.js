@@ -62,21 +62,21 @@ let NOW = new Date('2026-11-10T15:00:00Z'); // martes 12:00 ART
 const RealDate = Date; class FakeDate extends RealDate { constructor(...a) { if (a.length) super(...a); else super(NOW.getTime()); } static now() { return NOW.getTime(); } }
 const routes = {}; const app = { get: (p, ...h) => { routes['GET ' + p] = h[h.length - 1]; }, post: (p, ...h) => { routes['POST ' + p] = h[h.length - 1]; } };
 const SCHED_ART_OFFSET_MS = 3 * 3600000;
-const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : p === 'axios' ? { get: async () => ({ data: Buffer.from('img') }) } : require(p)),
+const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : p === 'axios' ? { get: async () => ({ data: Buffer.from('img') }) } : p.startsWith('./') ? require(require('path').join(__dirname, '..', p)) : require(p)),
   Config, app, authMiddleware: 1, adminMiddleware: 1, tgChannel, comprobanteAi, crypto, uuidv4: () => crypto.randomUUID(), logger: { info() {}, warn: (m) => console.log('WARN', m) },
   _credDecrypt: (x) => x, _credEncrypt: (x) => x, _tgCfg: async () => ({ token: 'CANAL' }), _tgWebhookBase: () => 'https://picaroja.com', getConfig: async () => null,
   _schedArtKey: (d) => new RealDate(new RealDate(d).getTime() - SCHED_ART_OFFSET_MS).toISOString().slice(0, 10),
   _tgArtHour: (d = new FakeDate()) => Number(new RealDate(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24,
   _sha: (v) => crypto.createHash('sha256').update(String(v)).digest('hex'), _pinLocked: () => false, _pinCheck: () => {},
   process: { env: {} }, setTimeout: () => 0, setInterval: () => 0, Date: FakeDate, Math, JSON, Object, Array, String, Number, Buffer, Set, Map, Promise, RegExp, Error, console };
-vm.createContext(ctx); vm.runInContext(blk + '; this._rbCloseTick = _rbCloseTick; this._rbCfg = _rbCfg;', ctx);
+vm.createContext(ctx); vm.runInContext(blk + '; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg;', ctx);
 // --- armado: 1 estructura, bot 111, grupo 1 (-1) manda; ,99 → -2 ; todo lo demás → -3 ---
 cfgDocs.push({ key: 'rcptbot', value: { bots: [{ id: '111', username: 'b111', tokenEnc: '111:TOKEN', secret: 'S' }], groups: [{ id: '-1', title: 'buffalobot', bots: ['111'] }, { id: '-2', title: 'asuncionbot', bots: ['111'] }, { id: '-3', title: 'fichasnuevobot', bots: ['111'] }],
   structs: [{ id: 'E1', name: 'Buffalo', on: true, botId: '111', routes: [{ from: '-1', rules: [{ cents: '99', to: '-2' }], otherTo: '-3' }] }] } });
 const hook = async (update) => { const req = { params: { bot: '111' }, get: () => 'S', body: update }; const res = { headersSent: false, status() { return this; }, end() {}, json() { this.headersSent = true; } }; await routes['POST /api/rcptbot/webhook/:bot'](req, res); };
 const photo = (id, chat = -1) => ({ message: { message_id: id, chat: { id: chat, type: 'supergroup', title: chat === -1 ? 'buffalobot' : 'x' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'f' + id }] } });
 const text = (id, chat, t, reply) => ({ message: { message_id: id, chat: { id: chat, type: 'supergroup', title: chat === -1 ? 'buffalobot' : chat === -2 ? 'asuncionbot' : 'fichasnuevobot' }, from: { first_name: 'Ana' }, text: t, reply_to_message: reply ? { message_id: reply } : undefined } });
-const last = (chat) => sent.filter((x) => String(x.p.chat_id) === String(chat)).slice(-1)[0];
+const last = (chat) => sent.filter((x) => String(x.p.chat_id) === String(chat) && x.method !== 'pinChatMessage' && x.method !== 'editMessageReplyMarkup' && x.method !== 'answerCallbackQuery').slice(-1)[0];
 let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log('✅ ' + n); } catch (e) { console.log('❌ ' + n + '\n   ' + e.message); process.exitCode = 1; } };
 (async () => {
   await caso('comprobante ,99 → asuncionbot, marcado y sumado + total del mes', async () => {
@@ -171,9 +171,9 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   });
   await caso('menú: /ayuda en el DESTINO explica los comandos con botones; /total del destino con pendientes', async () => {
     await hook(text(50, -2, '/ayuda')); const h = last(-2); assert.ok(/GRUPO DE DESTINO/.test(h.p.text) && /\/cotizado/.test(h.p.text) && /\/enviado/.test(h.p.text) && /CÓMO SIGUE/.test(h.p.text), h.p.text);
-    assert.strictEqual(JSON.stringify(h.p.reply_markup.inline_keyboard.map((r) => r[0].callback_data)), JSON.stringify(['rbm:total', 'rbm:quote', 'rbm:sent']));
+    assert.strictEqual(JSON.stringify(h.p.reply_markup.inline_keyboard.map((r) => r[0].callback_data)), JSON.stringify(['rbm:total', 'rbm:quote', 'rbm:sent', 'rbm:cbu', 'rbm:stop']));
     await hook(text(51, -2, '/total')); assert.ok(/SUMA ACTUALIZADA/.test(last(-2).p.text) && /De buffalobot: <b>/.test(last(-2).p.text), last(-2).p.text);
-    await hook(text(52, -1, '/ayuda')); const g = last(-1); assert.ok(/\/cierre 500\.000/.test(g.p.text) && /\/anterior/.test(g.p.text) && g.p.reply_markup.inline_keyboard.length === 3, g.p.text);
+    await hook(text(52, -1, '/ayuda')); const g = last(-1); assert.ok(/\/cierre 500\.000/.test(g.p.text) && /\/anterior/.test(g.p.text) && g.p.reply_markup.inline_keyboard.length === 4, g.p.text);
   });
   const cbIn = (chat, data, mid = 6000) => hook({ callback_query: { id: 'q' + Math.random(), data, from: { first_name: 'Ana' }, message: { message_id: mid, chat: { id: chat, type: 'supergroup', title: 'x' } } } });
   await caso('/cierre 500.000 con 2 destinos: elige la suma, cierra ESE monto y el resto sigue sumando', async () => {
@@ -244,6 +244,43 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(Math.abs(openSum('-2') - (s0 - 500 - 2000.99)) < 0.01);
     aiAmount = 100.99; await hook(photoU(93, 'U5')); await hook(text(94, -1, '/anular', 93)); assert.strictEqual(RcptFwd.rows.find((x) => x.srcMsgId === 93).status, 'anulado');
     await hook(text(95, -1, '/anular')); assert.ok(/respondé ese comprobante/.test(last(-1).p.text));
+  });
+  await caso('CBU: /nuevocbu muestra cómo completar; con datos pide confirmar; confirmado cambia la terminación y avisa al grupo 1', async () => {
+    cfgDocs[0].value.structs[0].routes = [{ from: '-1', rules: [{ cents: '99', to: '-2' }], otherTo: null }]; await ctx._rbCfg(true);
+    await hook(text(100, -2, '/nuevocbu')); assert.ok(/Titular:/.test(last(-2).p.text) && /Terminación: ,/.test(last(-2).p.text));
+    await hook(text(101, -2, '/nuevocbu\nTitular: Juan Perez\nCBU: 123')); assert.ok(/Falta o está mal: <b>CBU \(22 números\), Terminación/.test(last(-2).p.text), last(-2).p.text);
+    await hook(text(102, -2, '/nuevocbu\nTitular: Juan Perez\nCBU: 0000003100012345678901\nAlias: juan.perez.mp\nTerminación: ,82'));
+    const pv = last(-2); assert.ok(/REVISÁ EL CBU NUEVO/.test(pv.p.text) && /,82/.test(pv.p.text) && /Cambia YA/.test(pv.p.text), pv.p.text);
+    await cbIn(-2, pv.p.reply_markup.inline_keyboard[0][0].callback_data);
+    assert.strictEqual(cfgDocs[0].value.structs[0].routes[0].rules[0].cents, '82');
+    const n1 = sent.filter((x) => String(x.p.chat_id) === '-1' && /CAMBIO DE CBU/.test(x.p.text || '')).slice(-1)[0]; assert.ok(n1 && /juan\.perez\.mp/.test(n1.p.text) && /anterior <b>,99/.test(n1.p.text), n1 && n1.p.text);
+    assert.ok(sent.some((x) => x.method === 'pinChatMessage' && String(x.p.chat_id) === '-1'));
+    assert.ok(/CBU NUEVO ACTIVO/.test(last(-2).p.text) && /se dio aviso/.test(last(-2).p.text));
+    await ctx._rbCfg(true); aiAmount = 100.82; await hook(photo(103)); assert.ok(/REENVIADO<\/b> a asuncionbot/.test(last(-1).p.text), last(-1).p.text);
+    aiAmount = 100.99; await hook(photo(104)); assert.ok(/REENVIADO<\/b> a asuncionbot/.test(last(-1).p.text), 'la anterior ,99 se acepta 24 h: ' + last(-1).p.text);
+    await hook(text(105, -1, '/cbu')); assert.ok(/VIGENTE/.test(last(-1).p.text) && /Juan Perez/.test(last(-1).p.text), last(-1).p.text);
+  });
+  await caso('CBU: /parar avisa al grupo 1 y le dice al que lo puso que use /nuevocbu; los reenvíos avisan', async () => {
+    await hook(text(110, -2, '/parar')); assert.ok(/SIN CBU DE BAJADA/.test(last(-1).p.text) && /PARADO<\/b> por Ana/.test(last(-2).p.text) && /\/nuevocbu/.test(last(-2).p.text), last(-2).p.text);
+    await ctx._rbCfg(true); aiAmount = 50.82; await hook(photo(111)); assert.ok(/SIN CBU de bajada/.test(last(-1).p.text), last(-1).p.text);
+  });
+  await caso('CBU programado: avisa ya y cambia SOLO en la fecha; al vencer sin otro avisa sin CBU', async () => {
+    NOW = new Date('2026-12-02T15:00:00Z');
+    await hook(text(120, -2, '/nuevocbu\nTitular: Ana Gomez\nCBU: 0000003100099999999999\nAlias: ana.g\nTerminación: ,43\nDesde: 03/12 13:00\nHasta: 05/12 13:00'));
+    const pv = last(-2); assert.ok(/PROGRAMADO/.test(pv.p.text), pv.p.text); await cbIn(-2, pv.p.reply_markup.inline_keyboard[0][0].callback_data);
+    assert.ok(/CBU PROGRAMADO/.test(last(-1).p.text) && /Cambia SOLO el 3\/12/.test(last(-1).p.text), last(-1).p.text);
+    assert.strictEqual(cfgDocs[0].value.structs[0].routes[0].rules[0].cents, '82');
+    await ctx._rbCbuTick(); assert.strictEqual(cfgDocs[0].value.structs[0].routes[0].rules[0].cents, '82', 'todavía no');
+    NOW = new Date('2026-12-03T16:01:00Z'); await ctx._rbCbuTick(); assert.strictEqual(cfgDocs[0].value.structs[0].routes[0].rules[0].cents, '43');
+    assert.ok(/CAMBIO DE CBU/.test(last(-1).p.text) && /Ana Gomez/.test(last(-1).p.text), last(-1).p.text);
+    NOW = new Date('2026-12-05T16:01:00Z'); await ctx._rbCbuTick(); assert.ok(/SIN CBU DE BAJADA/.test(last(-1).p.text), last(-1).p.text);
+  });
+  await caso('/guia manda el archivo de cada lado', async () => {
+    await hook(text(130, -1, '/guia')); const g1 = sent.filter((x) => x.method === 'sendMedia:document').slice(-1)[0]; assert.ok(g1 && g1.p.chat_id === '-1' && /ENVÍAN/.test(g1.p.caption), JSON.stringify(g1 && g1.p));
+    await hook(text(131, -2, '/guia')); const g2 = sent.filter((x) => x.method === 'sendMedia:document').slice(-1)[0]; assert.ok(g2 && g2.p.chat_id === '-2' && /RECIBEN/.test(g2.p.caption));
+    const G = require(require('path').join(__dirname, '..', 'src/utils/rcptbotGuides'));
+    const a = G.src({ group: 'G1', rules: [{ cents: '82', to: 'G2' }] }); const b = G.dst({ group: 'G2', sources: ['G1'] });
+    assert.ok(/termina en ,82  →  G2/.test(a) && /\/cierre 500\.000/.test(a) && /\/nuevocbu/.test(b) && /\/parar/.test(b) && /\/cotizado/.test(b));
   });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });

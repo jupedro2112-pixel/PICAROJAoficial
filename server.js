@@ -31615,6 +31615,9 @@ async function _rbCfg(fresh) {
   // structs:[{id, name, on, botId, routes:[{from, rules, otherTo}]}]. Las rutas EFECTIVAS son las de las estructuras encendidas, cada una con su bot.
   v.structs = Array.isArray(v.structs) ? v.structs : [];
   v.routes = v.structs.filter((st) => st && st.on && st.botId).flatMap((st) => (st.routes || []).map((r) => Object.assign({}, r, { structId: st.id, structName: st.name || '', botId: String(st.botId) })));
+  const cb = (await Config.collection.findOne({ key: 'rcptbotcbu' })) || {}; v.cbu = Object.assign({ items: {}, stops: {}, graces: {}, pend: {} }, cb.value || {});
+  const nowT = Date.now(); const gr = Object.values(v.cbu.graces || {}).filter((g) => g && new Date(g.until).getTime() > nowT);
+  v.routes.forEach((r) => { r.grace = gr.filter((g) => g.sid === r.structId && String(g.from) === String(r.from)); });
   v.botsDec = (v.bots || []).map((b) => { let token = null; try { token = b.tokenEnc ? _credDecrypt(b.tokenEnc) : null; } catch (_) {} return { id: String(b.id), username: b.username || '', secret: b.secret || '', token: onRender ? null : token, bad: !token }; });
   _rbMem.v = v; _rbMem.at = Date.now(); return v;
 }
@@ -31662,7 +31665,9 @@ function _rbParseAmount(txt, max = 100000000) { // max: un comprobante; los coma
 function _rbCents(amount) { return String(Math.round(Math.abs(Number(amount) || 0) * 100) % 100).padStart(2, '0'); }
 function _rbPickTo(route, amount) {
   if (!route || !(Number(amount) > 0)) return null; const ct = _rbCents(amount);
-  const r = (route.rules || []).find((x) => String(x.cents) === ct); return r ? String(r.to) : (route.otherTo ? String(route.otherTo) : null);
+  const r = (route.rules || []).find((x) => String(x.cents) === ct); if (r) return String(r.to);
+  const g = (route.grace || []).find((x) => String(x.cents) === ct && new Date(x.until).getTime() > Date.now()); if (g) return String(g.to); // #1079-n: terminación del CBU anterior (24 h)
+  return route.otherTo ? String(route.otherTo) : null;
 }
 async function _rbOpenSum(fromChat, toChat, structId) {
   const mq = { fromChat: String(fromChat), toChat: String(toChat), status: 'open' }; if (structId) mq.structId = structId;
@@ -31695,6 +31700,7 @@ async function _rbPendTxt(fromChat, toChat, structId, exceptId) {
 // la estructura (fijado arriba del grupo si el bot puede) y desde el panel (📌 Mandar explicación); el aviso de "centavos sin grupo" repite la lista.
 function _rbRulesList(c, route) {
   const l = (route.rules || []).map((x) => `• termina en <b>,${_rbH(x.cents)}</b> → ${_rbH(_rbTitle(c, x.to))}`);
+  for (const g of route.grace || []) l.push(`• ,${_rbH(g.cents)} (CBU anterior, hasta ${_rbDT(g.until)}) → ${_rbH(_rbTitle(c, g.to))}`);
   l.push(route.otherTo ? `• cualquier otra terminación → ${_rbH(_rbTitle(c, route.otherTo))}` : '• cualquier otra terminación → <b>NO se reenvía</b>');
   return l.join('\n');
 }
@@ -31725,27 +31731,38 @@ function _rbPickKb(c, route, recId, exceptTo) {
 // suma actualizada, todo el detalle"). Menú = mensaje fijado con botones 'rbm:<acción>' (cierre / cotizado / enviado piden confirmar).
 const _RB_CIRCUITO = '🔁 <b>CÓMO SIGUE</b>: comprobantes → se suman → <b>CIERRE</b> (13 h lun–vie, o con el botón) → ⏳ PENDIENTE A COTIZAR → el destino marca 💱 COTIZADO → 📤 PENDIENTE A ENVIAR → el destino marca ✅ ENVIADO → listo. Después del cierre la suma arranca de $0; el total del mes sigue hasta fin de mes.';
 function _rbSrcCmdsTxt() {
-  return '\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada, los pendientes y el total del mes\n🔒 /cierre — dar el cierre del TOTAL (la suma vuelve a $0)\n🔒 /cierre 500.000 — cerrar SÓLO ese monto: queda anotado y el resto sigue sumando\n📥 /anterior 13.686.199 — sumar lo que venían acumulando ANTES del bot (se suma a lo nuevo)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado o reenviado)\n🗑️ /anular — respondiendo un comprobante: lo saca de la suma (avisa en los dos grupos)\n🚫 Comprobante DUPLICADO: el bot avisa y NO lo suma (si es otro distinto, botón para sumarlo)\n✏️ Responder la foto con el monto — corregir un monto mal leído\n↪️ Botón "Me equivoqué: cambiar grupo" — mover un comprobante al grupo correcto\n❓ /ayuda — ver este menú de nuevo\n\n' + _RB_CIRCUITO;
+  return '\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada, los pendientes y el total del mes\n🔒 /cierre — dar el cierre del TOTAL (la suma vuelve a $0)\n🔒 /cierre 500.000 — cerrar SÓLO ese monto: queda anotado y el resto sigue sumando\n📥 /anterior 13.686.199 — sumar lo que venían acumulando ANTES del bot (se suma a lo nuevo)\n🏦 /cbu — ver a qué CBU transferir ahora (titular, CBU, alias y terminación)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado o reenviado)\n🗑️ /anular — respondiendo un comprobante: lo saca de la suma (avisa en los dos grupos)\n🚫 Comprobante DUPLICADO: el bot avisa y NO lo suma (si es otro distinto, botón para sumarlo)\n✏️ Responder la foto con el monto — corregir un monto mal leído\n↪️ Botón "Me equivoqué: cambiar grupo" — mover un comprobante al grupo correcto\n❓ /ayuda — ver este menú de nuevo · 📘 /guia — la guía completa en archivo\n\n' + _RB_CIRCUITO;
 }
 const _RB_CMDS_BTN = [{ text: '📋 Ver comandos', callback_data: 'rbm:help' }]; // #1079-k: en cada suma
 const _rbKb = (...rows) => ({ inline_keyboard: rows.filter(Boolean).concat([_RB_CMDS_BTN]) });
-const _RB_SRC_KB = { inline_keyboard: [[{ text: '📊 Ver suma actualizada', callback_data: 'rbm:total' }], [{ text: '🔒 Dar cierre ahora', callback_data: 'rbm:close' }], [{ text: '📥 Sumar lo anterior', callback_data: 'rbm:ant' }]] };
-const _RB_DST_KB = { inline_keyboard: [[{ text: '📊 Ver suma y pendientes', callback_data: 'rbm:total' }], [{ text: '💱 Marcar COTIZADO', callback_data: 'rbm:quote' }], [{ text: '✅ Marcar ENVIADO', callback_data: 'rbm:sent' }]] };
+const _RB_SRC_KB = { inline_keyboard: [[{ text: '📊 Ver suma actualizada', callback_data: 'rbm:total' }], [{ text: '🔒 Dar cierre ahora', callback_data: 'rbm:close' }], [{ text: '📥 Sumar lo anterior', callback_data: 'rbm:ant' }], [{ text: '🏦 Ver CBU vigente', callback_data: 'rbm:cbu' }]] };
+const _RB_DST_KB = { inline_keyboard: [[{ text: '📊 Ver suma y pendientes', callback_data: 'rbm:total' }], [{ text: '💱 Marcar COTIZADO', callback_data: 'rbm:quote' }], [{ text: '✅ Marcar ENVIADO', callback_data: 'rbm:sent' }], [{ text: '🏦 Ver CBU', callback_data: 'rbm:cbu' }, { text: '🔄 Nuevo CBU', callback_data: 'rbm:ncbu' }], [{ text: '⛔ Parar (no hay CBU)', callback_data: 'rbm:stop' }]] };
 // rutas encendidas de un bot que mandan a este grupo
 function _rbDstRoutes(c, toChat, botId) { return (c.routes || []).filter((r) => (!botId || r.botId === botId) && _rbDests(c, r).some((d) => d.to === String(toChat))); }
 function _rbDstHelpTxt(c, toChat, routes) {
   const srcs = routes.map((r) => { const cs = (r.rules || []).filter((x) => String(x.to) === String(toChat)).map((x) => ',' + x.cents); return `• de ${_rbH(_rbTitle(c, r.from))}${cs.length ? ' (los que terminan en ' + _rbH(cs.join(' / ')) + ')' : ' (todo lo demás)'}`; }).join('\n');
-  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n💱 /cotizado 1150 — marcar COTIZADO lo pendiente a cotizar (la cotización es opcional) ⇒ queda PENDIENTE A ENVIAR\n✅ /enviado — marcar ENVIADO ⇒ el pendiente se va\n📥 /anterior 13.686.199 — sumar lo que venían acumulando antes del bot${routes.length > 1 ? ' (con varios grupos que mandan, hacelo en el grupo que manda)' : ''}\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n❓ /ayuda — ver este menú de nuevo\n\n${_RB_CIRCUITO}`;
+  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n💱 /cotizado 1150 — marcar COTIZADO lo pendiente a cotizar (la cotización es opcional) ⇒ queda PENDIENTE A ENVIAR\n✅ /enviado — marcar ENVIADO ⇒ el pendiente se va\n📥 /anterior 13.686.199 — sumar lo que venían acumulando antes del bot${routes.length > 1 ? ' (con varios grupos que mandan, hacelo en el grupo que manda)' : ''}\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n🔄 /nuevocbu — cambiar el CBU de bajada (te pide Titular, CBU, Alias y Terminación; con Desde/Hasta queda programado y cambia solo). Se avisa al grupo que manda.\n⛔ /parar — no hay CBU: avisa al grupo que manda que no transfiera hasta nuevo aviso\n🏦 /cbu — ver el CBU vigente y los programados\n❓ /ayuda — ver este menú de nuevo · 📗 /guia — la guía completa en archivo\n\n${_RB_CIRCUITO}`;
 }
 async function _rbPin(c, chat, botId, r) { if (!(r && r.ok && r.result)) return; const b = _rbTokFor(c, chat, botId); if (b) await tgChannel.call(b.token, 'pinChatMessage', { chat_id: chat, message_id: r.result.message_id, disable_notification: true }); }
 async function _rbSendDstHelp(c, toChat, botId, pin) {
   const routes = _rbDstRoutes(c, toChat, botId); if (!routes.length) return null;
   const r = await _rbSend(c, toChat, _rbDstHelpTxt(c, toChat, routes), botId || routes[0].botId, { reply_markup: _RB_DST_KB }); if (pin) await _rbPin(c, toChat, botId || routes[0].botId, r); return r;
 }
-// menú en TODOS los grupos de una ruta (el que manda + cada destino)
+// #1079-o: GUÍA completa como archivo (.txt) — "los que envían" en el grupo que manda, "los que reciben" en el destino; fijada al arrancar y con /guia
+async function _rbSendGuide(c, chat, kind, botId, pin) {
+  const G = require('./src/utils/rcptbotGuides'); let txt;
+  if (kind === 'src') { const route = (c.routes || []).find((r) => String(r.from) === String(chat) && (!botId || r.botId === botId)); if (!route) return null;
+    txt = G.src({ group: _rbTitle(c, chat), rules: (route.rules || []).map((x) => ({ cents: x.cents, to: _rbTitle(c, x.to) })), other: route.otherTo ? _rbTitle(c, route.otherTo) : null }); }
+  else { const rs = _rbDstRoutes(c, chat, botId); if (!rs.length) return null; txt = G.dst({ group: _rbTitle(c, chat), sources: [...new Set(rs.map((r) => _rbTitle(c, r.from)))] }); }
+  const b = _rbTokFor(c, String(chat), botId); if (!b) return null;
+  const r = await tgChannel.sendMedia(b.token, 'document', String(chat), { buffer: Buffer.from(txt, 'utf8'), mime: 'text/plain', filename: kind === 'src' ? 'GUIA-LOS-QUE-ENVIAN.txt' : 'GUIA-LOS-QUE-RECIBEN.txt' }, { caption: kind === 'src' ? '📘 Guía para los que ENVÍAN comprobantes' : '📗 Guía para los que RECIBEN comprobantes' });
+  if (pin) await _rbPin(c, String(chat), botId, r); return r;
+}
+// menú en TODOS los grupos de una ruta (el que manda + cada destino): primero la guía, después el menú (queda arriba)
 async function _rbSendMenus(c, route, pin) {
+  await _rbSendGuide(c, route.from, 'src', route.botId, pin).catch(() => {});
   const r = await _rbSendHelp(c, route, pin);
-  for (const d of _rbDests(c, route)) if (d.to !== String(route.from)) await _rbSendDstHelp(c, d.to, route.botId, pin).catch(() => {});
+  for (const d of _rbDests(c, route)) if (d.to !== String(route.from)) { await _rbSendGuide(c, d.to, 'dst', route.botId, pin).catch(() => {}); await _rbSendDstHelp(c, d.to, route.botId, pin).catch(() => {}); }
   return r;
 }
 async function _rbSrcTotalTxt(c, route) {
@@ -31823,7 +31840,8 @@ async function _rbRoute(c, rec, amount, from, opts = {}) {
   await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { fwdMsgId: cp.result && cp.result.message_id } });
   const ms = await _rbMonthSum(rec.fromChat, rec.structId);
   const multi = _rbDests(c, route).length > 1;
-  const r = await reply(`✅ <b>REENVIADO</b> a ${_rbH(toTitle)} · <b>${_rbMoney2(amount)}</b>${from === 'texto' || from === 'corregido' ? ' (monto escrito)' : ''}${wrong ? '\n⚠️ Los centavos (,' + _rbCents(amount) + ') no coincidían: elegido a mano.' : ''}\n${_rbSumTxt(s)}${pend}\n${_rbMonthTxt(ms)}`, _rbKb(multi ? [{ text: '↪️ ¿Terminación mal? Cambiar grupo', callback_data: `rb:${rec.id}:m` }] : null));
+  const stop = c.cbu && c.cbu.stops && c.cbu.stops[_rbCbuKey(rec.structId, rec.fromChat, to)];
+  const r = await reply((stop ? `⛔ <b>OJO: ${_rbH(toTitle)} está SIN CBU de bajada</b> (parado desde ${_rbDT(stop.at)}). No transfieran hasta el aviso de CBU nuevo.\n` : '') + `✅ <b>REENVIADO</b> a ${_rbH(toTitle)} · <b>${_rbMoney2(amount)}</b>${from === 'texto' || from === 'corregido' ? ' (monto escrito)' : ''}${wrong ? '\n⚠️ Los centavos (,' + _rbCents(amount) + ') no coincidían: elegido a mano.' : ''}\n${_rbSumTxt(s)}${pend}\n${_rbMonthTxt(ms)}`, _rbKb(multi ? [{ text: '↪️ ¿Terminación mal? Cambiar grupo', callback_data: `rb:${rec.id}:m` }] : null));
   if (r.ok) await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { replyMsgId: r.result && r.result.message_id } });
 }
 async function _rbOnReceipt(c, bot, m, file, route) {
@@ -31934,6 +31952,10 @@ async function _rbMenuCb(c, bot, cq) {
   const done = () => tgChannel.call(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
   if (act === 'no') { await done(); return ans('Cancelado'); }
   if (act === 'total') { await ans(); await _rbSend(c, chat, route ? await _rbSrcTotalTxt(c, route) : await _rbDstTotalTxt(c, chat, dstR), bot.id, { reply_markup: _rbKb() }); return; }
+  if (act === 'cbu') { await ans(); await _rbSend(c, chat, _rbCbuShowTxt(c, route ? [route] : dstR, !!route), bot.id, { reply_markup: _rbKb() }); return; }
+  if (act === 'ncbu' && !route) { await ans(); await _rbSend(c, chat, _RB_CBU_TPL, bot.id); return; }
+  if (act === 'stop' && !route) return ask('⛔ ¿Avisar que NO HAY CBU de bajada hasta nuevo aviso?', 'stopok');
+  if (act === 'stopok' && !route) { await done(); await ans(); await _rbCbuStop(c, dstR, chat, by, bot.id); return; }
   if (act === 'help') { await ans(); if (route) await _rbSendHelp(c, route, false); else await _rbSendDstHelp(c, chat, bot.id, false); return; }
   if (act === 'ant') { await ans(); await _rbSend(c, chat, '📥 Para sumar lo que venían acumulando antes del bot escribí <b>/anterior</b> y el monto, ej.:\n<b>/anterior 13.686.199</b>\nSe suma a lo nuevo y la suma sigue normal hasta el próximo cierre.', bot.id); return; }
   if (route) {
@@ -32001,6 +32023,118 @@ async function _rbCarryCmd(c, bot, m, fromChat, text, by, sign = 1) {
   if (pair.to !== String(r.from)) await _rbSend(c, pair.to, msg, r.botId, { reply_markup: _rbKb() });
 }
 // #1079-m: /anular respondiendo un comprobante (la foto o la respuesta del bot en el grupo que manda, o el reenviado en el destino) ⇒ sale de la suma
+// ── #1079-n CBU DE BAJADA (owner: "configurar de tal fecha a tal fecha se envía a tal CBU con terminación tal y cambia automático; si el grupo 2 manda
+// /nuevocbu lo cambia: titular, CBU, alias y terminación; confirmado, avisa al grupo 1; si no hay CBU, /parar avisa que no hay CBU de bajada hasta nuevo
+// aviso y al que lo puso le dice que apenas tenga ponga /nuevocbu"). Config['rcptbotcbu'] = { items:{id:{sid,from,to,holder,cbu,alias,cents,since,until,
+// status scheduled|active|done|canceled}}, stops:{key:{at,by}}, graces:{id:{sid,from,to,cents,until}}, pend:{id} } (escrito POR CAMPO). Al activarse, la
+// terminación de la regla de ese destino pasa a la nueva y la anterior se acepta 24 h (transferencias ya hechas).
+const _rbCbuKey = (sid, from, to) => `${sid}|${from}|${to}`.replace(/\./g, '_');
+const _RB_CBU_TPL = '🔄 <b>NUEVO CBU DE BAJADA</b>\nCopiá este mensaje, completalo y mandalo:\n\n/nuevocbu\nTitular: \nCBU: \nAlias: \nTerminación: ,\n\n(opcional, para programarlo: <b>Desde: 15/11 13:00</b> y <b>Hasta: 20/11 13:00</b>; sin Desde cambia ya)';
+async function _rbCbuSet(fields) { await Config.collection.updateOne({ key: 'rcptbotcbu' }, { $set: fields }, { upsert: true }); _rbMem.at = 0; }
+function _rbCbuDate(txt) {
+  const mm = String(txt || '').match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?:\s+(\d{1,2})(?::(\d{2}))?)?/); if (!mm) return null;
+  const y = mm[3] ? (mm[3].length === 2 ? 2000 + Number(mm[3]) : Number(mm[3])) : Number(_schedArtKey(new Date()).slice(0, 4));
+  const p2 = (n) => String(n).padStart(2, '0'); const d = new Date(`${y}-${p2(mm[2])}-${p2(mm[1])}T${p2(mm[4] || 0)}:${p2(mm[5] || 0)}:00-03:00`);
+  return isNaN(d.getTime()) ? null : d;
+}
+function _rbCbuParse(text) {
+  const g = (re) => { const m2 = String(text).match(re); return m2 ? m2[1].trim() : ''; };
+  const d = { holder: g(/titular\s*:?\s*(.+)/i).slice(0, 80), cbu: g(/\b(?:cbu|cvu)\s*:?\s*([\d\s-]+)/i).replace(/\D/g, ''), alias: g(/alias\s*:?\s*([A-Za-z0-9._-]+)/i).slice(0, 30), cents: g(/(?:terminaci[oó]n|centavos|decimal)\s*:?\s*,?\s*(\d{1,2})\b/i), since: _rbCbuDate(g(/desde\s*:?\s*(.+)/i)), until: _rbCbuDate(g(/hasta\s*:?\s*(.+)/i)) };
+  if (d.cents.length === 1) d.cents = '0' + d.cents;
+  const err = []; if (!d.holder) err.push('Titular'); if (!/^\d{22}$/.test(d.cbu)) err.push('CBU (22 números)'); if (!/^\d{2}$/.test(d.cents)) err.push('Terminación (2 números, ej. ,82)');
+  if (/desde/i.test(text) && !d.since) err.push('Desde (ej. 15/11 13:00)'); if (/hasta/i.test(text) && !d.until) err.push('Hasta (ej. 20/11 13:00)');
+  if (d.since && d.until && d.until <= d.since) err.push('Hasta tiene que ser después de Desde');
+  return { d, err };
+}
+function _rbCbuData(x) { return `👤 Titular: <b>${_rbH(x.holder)}</b>\n🏦 CBU: <code>${_rbH(x.cbu)}</code>${x.alias ? `\n🔤 Alias: <code>${_rbH(x.alias)}</code>` : ''}\n💲 Terminación: <b>,${_rbH(x.cents)}</b>${x.since ? '\n📅 Desde: ' + _rbDT(x.since) : ''}${x.until ? '\n📅 Hasta: ' + _rbDT(x.until) : ''}`; }
+function _rbCbuShowTxt(c, routes, asSrc) {
+  const items = Object.values((c.cbu && c.cbu.items) || {}).filter(Boolean); const out = [];
+  for (const r of routes) for (const d of _rbDests(c, r)) {
+    const k = _rbCbuKey(r.structId, r.from, d.to); const mine = items.filter((x) => _rbCbuKey(x.sid, x.from, x.to) === k);
+    const act = mine.filter((x) => x.status === 'active').sort((a, b) => new Date(b.since) - new Date(a.since))[0]; const sch = mine.filter((x) => x.status === 'scheduled').sort((a, b) => new Date(a.since) - new Date(b.since));
+    const stop = c.cbu && c.cbu.stops && c.cbu.stops[k];
+    out.push(`<b>${_rbH(_rbTitle(c, r.from))} → ${_rbH(_rbTitle(c, d.to))}</b>\n` + (stop ? `⛔ <b>SIN CBU DE BAJADA</b> desde ${_rbDT(stop.at)} (hasta nuevo aviso)` : act ? '✅ <b>VIGENTE</b>\n' + _rbCbuData(act) : 'Sin CBU cargado en el bot') + sch.map((x) => '\n🗓️ <b>PROGRAMADO</b>\n' + _rbCbuData(x)).join(''));
+  }
+  return '🏦 <b>CBU DE BAJADA</b>\n' + (out.join('\n\n') || 'Sin datos') + (asSrc ? '' : '\n\nPara cambiarlo: /nuevocbu · sin CBU: /parar');
+}
+// activa un CBU (ya validado): regla del destino con la terminación nueva, la anterior 24 h, avisos fijados
+async function _rbCbuActivate(item, by) {
+  const c = await _rbCfg(true); const st = JSON.parse(JSON.stringify((c.structs || []).find((x) => x.id === item.sid) || null)); if (!st) return { ok: false, why: 'la estructura ya no existe' };
+  const r = (st.routes || []).find((x) => String(x.from) === String(item.from)); if (!r) return { ok: false, why: 'el grupo ya no está en la estructura' };
+  r.rules = r.rules || []; const same = r.rules.find((x) => String(x.to) === String(item.to)); const now = new Date(); const sets = {};
+  const clash = r.rules.find((x) => String(x.cents) === item.cents && String(x.to) !== String(item.to)); if (clash) return { ok: false, why: `la terminación ,${item.cents} ya va a ${_rbTitle(c, clash.to)}` };
+  if (same && same.cents !== item.cents) { const gid = uuidv4().slice(0, 8); sets['value.graces.' + gid] = { sid: item.sid, from: String(item.from), to: String(item.to), cents: same.cents, until: new Date(now.getTime() + 24 * 3600000) }; same.cents = item.cents; }
+  else if (!same) r.rules.push({ cents: item.cents, to: String(item.to) });
+  await _rbStructPut(st);
+  const k = _rbCbuKey(item.sid, item.from, item.to);
+  for (const x of Object.values(c.cbu.items || {})) if (x && x.status === 'active' && _rbCbuKey(x.sid, x.from, x.to) === k) sets['value.items.' + x.id + '.status'] = 'done';
+  sets['value.items.' + item.id + '.status'] = 'active'; sets['value.items.' + item.id + '.activatedAt'] = now; sets['value.stops.' + k] = null;
+  await _rbCbuSet(sets);
+  const c2 = await _rbCfg(true); const rt = (c2.routes || []).find((x) => x.structId === item.sid && String(x.from) === String(item.from));
+  const old = same && sets[Object.keys(sets).find((x) => x.startsWith('value.graces.'))];
+  const msg = `📢 <b>CAMBIO DE CBU</b> · ${_rbH(_rbTitle(c2, item.from))} → ${_rbH(_rbTitle(c2, item.to))}\nDesde ahora transferir a:\n${_rbCbuData(Object.assign({}, item, { since: null }))}${item.until ? '\n📅 Hasta: ' + _rbDT(item.until) : ''}${old ? `\n⚠️ Los comprobantes que terminan en la anterior <b>,${_rbH(old.cents)}</b> se aceptan hasta ${_rbDT(old.until)}.` : ''}`;
+  if (rt) { const r1 = await _rbSend(c2, String(item.from), msg, rt.botId, { reply_markup: _rbKb() }); await _rbPin(c2, String(item.from), rt.botId, r1); }
+  await _rbSend(c2, String(item.to), `✅ <b>CBU NUEVO ACTIVO</b>${by ? ' · ' + _rbH(by) : ''} y <b>se dio aviso</b> a ${_rbH(_rbTitle(c2, item.from))}:\n${_rbCbuData(Object.assign({}, item, { since: null }))}`, rt && rt.botId);
+  return { ok: true };
+}
+// alta (desde Telegram o el panel): valida, activa ya o deja programado y avisa
+async function _rbCbuCreate(c, route, to, d, by) {
+  const cur = (route.rules || []).find((x) => String(x.cents) === d.cents && String(x.to) !== String(to)); if (cur) return { ok: false, why: `la terminación ,${d.cents} ya va a ${_rbTitle(c, cur.to)}` };
+  const id = uuidv4(); const item = { id, sid: route.structId, from: String(route.from), to: String(to), holder: d.holder, cbu: d.cbu, alias: d.alias || '', cents: d.cents, since: d.since || new Date(), until: d.until || null, status: 'scheduled', by: String(by || '').slice(0, 60), createdAt: new Date() };
+  await _rbCbuSet({ ['value.items.' + id]: item });
+  if (new Date(item.since).getTime() <= Date.now() + 30000) { const ok = await Config.collection.updateOne({ key: 'rcptbotcbu', ['value.items.' + id + '.status']: 'scheduled' }, { $set: { ['value.items.' + id + '.status']: 'activating' } }); if (ok.modifiedCount !== 1) return { ok: true }; const a = await _rbCbuActivate(item, by); if (!a.ok) await _rbCbuSet({ ['value.items.' + id + '.status']: 'canceled', ['value.items.' + id + '.error']: a.why }); return a; }
+  const msg = `🗓️ <b>CBU PROGRAMADO</b> · ${_rbH(_rbTitle(c, route.from))} → ${_rbH(_rbTitle(c, to))}\nCambia SOLO el ${_rbDT(item.since)}:\n${_rbCbuData(item)}\nHasta ese momento sigue el CBU actual.`;
+  await _rbSend(c, String(route.from), msg, route.botId, { reply_markup: _rbKb() }); await _rbSend(c, String(to), msg + '\n✅ Se dio aviso a ' + _rbH(_rbTitle(c, route.from)) + '.', route.botId);
+  return { ok: true, scheduled: true };
+}
+async function _rbCbuCmd(c, bot, chat, dstR, text, by) {
+  const body = text.replace(/^\/nuevocbu(@\w+)?/i, '').trim();
+  if (!body) { await _rbSend(c, chat, _RB_CBU_TPL, bot.id); return; }
+  const { d, err } = _rbCbuParse(body);
+  if (err.length) { await _rbSend(c, chat, '❌ Falta o está mal: <b>' + _rbH(err.join(', ')) + '</b>\n\n' + _RB_CBU_TPL, bot.id); return; }
+  const pid = uuidv4().slice(0, 12);
+  await _rbCbuSet({ ['value.pend.' + pid]: { d, chat, by, at: new Date(), routes: dstR.map((r) => ({ sid: r.structId, from: String(r.from) })) } });
+  const kb = dstR.length === 1 ? [[{ text: '✅ Confirmar y avisar', callback_data: `rbc:${pid}:0` }]] : dstR.map((r, n) => [{ text: ('✅ Para ' + _rbTitle(c, r.from)).slice(0, 60), callback_data: `rbc:${pid}:${n}` }]).concat([[{ text: '✅ Para todos', callback_data: `rbc:${pid}:a` }]]);
+  kb.push([{ text: 'Cancelar', callback_data: `rbc:${pid}:x` }]);
+  await _rbSend(c, chat, `🔎 <b>REVISÁ EL CBU NUEVO</b>\n${_rbCbuData(d)}\n${d.since && d.since.getTime() > Date.now() + 30000 ? 'Queda PROGRAMADO: cambia solo en esa fecha.' : 'Cambia YA.'}\nAl confirmar se avisa al grupo que manda.`, bot.id, { reply_markup: { inline_keyboard: kb } });
+}
+async function _rbCbuCb(c, bot, cq) {
+  const mm = String(cq.data || '').match(/^rbc:([0-9a-f-]{12}):(x|a|\d{1,2})$/); const ans = (t) => tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: t || '', show_alert: !!t });
+  const chat = cq.message && cq.message.chat && String(cq.message.chat.id); if (!mm || !chat) return ans();
+  const p = c.cbu && c.cbu.pend && c.cbu.pend[mm[1]]; if (!p || String(p.chat) !== chat) return ans('Vencido: mandá /nuevocbu de nuevo.');
+  const cl = await Config.collection.updateOne({ key: 'rcptbotcbu', ['value.pend.' + mm[1] + '.chat']: chat }, { $set: { ['value.pend.' + mm[1]]: null } }); _rbMem.at = 0; if (cl.modifiedCount !== 1) return ans('Ya se resolvió.');
+  await tgChannel.call(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
+  if (mm[2] === 'x') return ans('Cancelado');
+  await ans(); const by = [cq.from && cq.from.first_name, cq.from && cq.from.last_name].filter(Boolean).join(' ') || p.by;
+  const d = Object.assign({}, p.d, { since: p.d.since ? new Date(p.d.since) : null, until: p.d.until ? new Date(p.d.until) : null });
+  const pick = mm[2] === 'a' ? p.routes : [p.routes[Number(mm[2])]].filter(Boolean);
+  for (const pr of pick) {
+    const route = (c.routes || []).find((r) => r.structId === pr.sid && String(r.from) === pr.from); if (!route) continue;
+    const r = await _rbCbuCreate(c, route, chat, d, by); if (!r.ok) await _rbSend(c, chat, '❌ No se cambió (' + _rbH(_rbTitle(c, route.from)) + '): ' + _rbH(r.why) + '.', bot.id);
+  }
+}
+async function _rbCbuStop(c, dstR, chat, by, botId) {
+  const sets = {}; const at = new Date(); for (const r of dstR) sets['value.stops.' + _rbCbuKey(r.structId, r.from, chat)] = { at, by: String(by || '').slice(0, 60) };
+  await _rbCbuSet(sets);
+  for (const r of dstR) { const r1 = await _rbSend(c, String(r.from), `⛔ <b>SIN CBU DE BAJADA</b> en ${_rbH(_rbTitle(c, chat))} hasta nuevo aviso.\nNo transfieran a la cuenta anterior: apenas haya CBU nuevo avisamos acá.`, r.botId, { reply_markup: _rbKb() }); await _rbPin(c, String(r.from), r.botId, r1); }
+  await _rbSend(c, chat, `⛔ <b>PARADO</b>${by ? ' por ' + _rbH(by) : ''}. Se dio aviso a ${_rbH(dstR.map((r) => _rbTitle(c, r.from)).join(', '))}.\n👉 ${by ? _rbH(by) + ', a' : 'A'}penas tengas CBU poné <b>/nuevocbu</b> y completá: Titular, CBU, Alias y Terminación.`, botId);
+}
+// cron: activa los programados y, si un CBU vence sin otro, avisa "sin CBU"
+async function _rbCbuTick() {
+  const c = await _rbCfg(true); if (!(c.botsDec || []).some((b) => b.token)) return; const now = Date.now();
+  const items = Object.values(c.cbu.items || {}).filter(Boolean);
+  for (const x of items.filter((y) => y.status === 'scheduled' && new Date(y.since).getTime() <= now)) {
+    const cl = await Config.collection.updateOne({ key: 'rcptbotcbu', ['value.items.' + x.id + '.status']: 'scheduled' }, { $set: { ['value.items.' + x.id + '.status']: 'activating' } }); if (cl.modifiedCount !== 1) continue;
+    const a = await _rbCbuActivate(x, 'automático (programado)'); if (!a.ok) await _rbCbuSet({ ['value.items.' + x.id + '.status']: 'canceled', ['value.items.' + x.id + '.error']: a.why });
+  }
+  for (const x of items.filter((y) => y.status === 'active' && y.until && new Date(y.until).getTime() <= now)) {
+    const k = _rbCbuKey(x.sid, x.from, x.to); if (items.some((y) => y.id !== x.id && _rbCbuKey(y.sid, y.from, y.to) === k && (y.status === 'scheduled' || y.status === 'activating') && new Date(y.since).getTime() <= now + 60000)) continue;
+    const cl = await Config.collection.updateOne({ key: 'rcptbotcbu', ['value.items.' + x.id + '.status']: 'active' }, { $set: { ['value.items.' + x.id + '.status']: 'done' } }); if (cl.modifiedCount !== 1) continue;
+    const route = (c.routes || []).find((r) => r.structId === x.sid && String(r.from) === String(x.from)); if (!route) continue;
+    await _rbCbuStop(c, [route], String(x.to), 'automático (venció el CBU)', route.botId);
+  }
+}
+setTimeout(() => { setInterval(() => { _rbCbuTick().catch((e) => logger.warn('[rcptbot] cbu ' + e.message)); }, 60000); }, 80000);
 async function _rbAnular(c, bot, m, fromChat, route, dstR, by) {
   const rid = m.reply_to_message && m.reply_to_message.message_id;
   if (!rid) { await _rbSend(c, fromChat, 'Para anular un comprobante, <b>respondé ese comprobante</b> con /anular. Para restar un monto: <b>/restar 50.000</b>.', bot.id); return; }
@@ -32026,6 +32160,10 @@ async function _rbOnMessage(c, bot, m) {
   if (!route && dstR.length && /^\/total(@\w+)?$/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSend(c, fromChat, await _rbDstTotalTxt(c, fromChat, dstR), bot.id, { reply_markup: _rbKb() }); return; }
   if (/^\/(anterior|sumar)(@\w+)?(\s|$)/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbCarryCmd(c, bot, m, fromChat, text, by); return; }
   if (/^\/restar(@\w+)?(\s|$)/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbCarryCmd(c, bot, m, fromChat, text, by, -1); return; }
+  if (/^\/gu[ií]a(@\w+)?$/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSendGuide(c, fromChat, route ? 'src' : 'dst', bot.id, false); return; }
+  if (/^\/cbu(@\w+)?$/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSend(c, fromChat, _rbCbuShowTxt(c, route ? [route] : dstR, !!route), bot.id, { reply_markup: _rbKb() }); return; }
+  if (/^\/nuevocbu(@\w+)?/i.test(text) && dstR.length) { if (await _rbOnce(fromChat, m.message_id)) await _rbCbuCmd(c, bot, fromChat, dstR, text, by); return; }
+  if (/^\/parar(@\w+)?$/i.test(text) && dstR.length) { if (await _rbOnce(fromChat, m.message_id)) await _rbCbuStop(c, dstR, fromChat, by, bot.id); return; }
   if (/^\/anular(@\w+)?$/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbAnular(c, bot, m, fromChat, route, dstR, by); return; }
   const cmd = (text.match(/^\/(cotizado|enviado)(@\w+)?(\s+.*)?$/i) || [])[1];
   if (cmd) {
@@ -32068,7 +32206,7 @@ app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
       else if (/^(left|kicked)$/.test(String(st))) await _rbGroupSeen(u.my_chat_member.chat, bot.id, true);
       return;
     }
-    if (u.callback_query) { const cfg = await _rbCfg(); if (String(u.callback_query.data || '').startsWith('rbm:')) await _rbMenuCb(cfg, bot, u.callback_query); else await _rbOnCallback(cfg, bot, u.callback_query); return; } // #1079-f/i
+    if (u.callback_query) { const cfg = await _rbCfg(); if (String(u.callback_query.data || '').startsWith('rbc:')) await _rbCbuCb(cfg, bot, u.callback_query); else if (String(u.callback_query.data || '').startsWith('rbm:')) await _rbMenuCb(cfg, bot, u.callback_query); else await _rbOnCallback(cfg, bot, u.callback_query); return; } // #1079-f/i
     const m = u.message; if (!m || !m.chat) return;
     if (m.chat.type === 'private') { await tgChannel.call(bot.token, 'sendMessage', { chat_id: m.chat.id, text: 'Este bot trabaja sólo en grupos: reenvía los comprobantes y lleva la suma.' }); return; }
     await _rbOnMessage(await _rbCfg(), bot, m);
@@ -32112,7 +32250,9 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
         const dests = [...new Set([...(r.rules || []).map((x) => String(x.to)), r.otherTo ? String(r.otherTo) : null].filter(Boolean))]; const sums = [];
         for (const d of dests) sums.push(Object.assign({ to: d, title: _rbTitle(c, d) }, await _rbOpenSum(r.from, d, st.id)));
         const carry = await _rbM().RcptFwd.find({ fromChat: String(r.from), structId: st.id, amountFrom: { $in: ['arrastre', 'arrastre_mes'] }, status: { $in: ['open', 'closed'] }, closeId: { $in: [null, 'arrastre-mes'] } }).sort({ createdAt: -1 }).limit(20).select('id toTitle amount amountFrom createdAt').lean();
-        routes.push(Object.assign({}, r, { sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
+        const cbuItems = Object.values((c.cbu && c.cbu.items) || {}).filter((x) => x && x.sid === st.id && String(x.from) === String(r.from) && x.status !== 'canceled').sort((a, b) => new Date(b.since) - new Date(a.since)).slice(0, 12);
+        const cbuStops = {}; for (const d of dests) { const sp = c.cbu && c.cbu.stops && c.cbu.stops[_rbCbuKey(st.id, r.from, d)]; if (sp) cbuStops[d] = sp; }
+        routes.push(Object.assign({}, r, { cbuItems, cbuStops, sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
       structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes });
@@ -32237,6 +32377,31 @@ app.post('/api/admin/rcptbot/carry', authMiddleware, adminMiddleware, _rbPinGate
 });
 app.post('/api/admin/rcptbot/carry-remove', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // sacar un arrastre cargado por error (si todavía no entró en un cierre)
   try { const r = await _rbM().RcptFwd.updateOne({ id: String((req.body || {}).id || ''), amountFrom: { $in: ['arrastre', 'arrastre_mes'] }, closeId: { $in: [null, 'arrastre-mes'] } }, { $set: { status: 'failed', error: 'arrastre quitado desde el panel' } }); res.json(r.matchedCount ? { success: true } : { success: false, error: 'Ya entró en un cierre o no existe' }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// #1079-n: CBU de bajada desde el panel (programar de tal fecha a tal fecha, parar, cancelar un programado)
+app.post('/api/admin/rcptbot/cbu', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    const b = req.body || {}; const c = await _rbCfg(true); const route = (c.routes || []).find((x) => x.structId === String(b.structId || '') && String(x.from) === String(b.from || ''));
+    if (!route) return res.status(400).json({ error: 'Encendé la estructura primero (y guardá el circuito)' });
+    if (!_rbDests(c, route).some((d) => d.to === String(b.to || ''))) return res.status(400).json({ error: 'Elegí el grupo de destino' });
+    const dt = (v) => { const m2 = String(v || '').match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/); return m2 ? new Date(m2[1] + 'T' + m2[2] + ':00-03:00') : null; };
+    const txt = `Titular: ${b.holder || ''}\nCBU: ${b.cbu || ''}\nAlias: ${b.alias || ''}\nTerminación: ${b.cents || ''}`;
+    const { d, err } = _rbCbuParse(txt); d.since = dt(b.since); d.until = dt(b.until);
+    if (b.since && !d.since) err.push('Desde'); if (b.until && !d.until) err.push('Hasta'); if (d.since && d.until && d.until <= d.since) err.push('Hasta tiene que ser después de Desde');
+    if (err.length) return res.status(400).json({ error: 'Falta o está mal: ' + err.join(', ') });
+    const r = await _rbCbuCreate(c, route, String(b.to), d, 'panel · ' + req.user.username);
+    res.json(r.ok ? { success: true, scheduled: !!r.scheduled } : { success: false, error: r.why });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/cbu-cancel', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try { const id = String((req.body || {}).id || '').replace(/[^0-9a-f-]/g, ''); const r = await Config.collection.updateOne({ key: 'rcptbotcbu', ['value.items.' + id + '.status']: 'scheduled' }, { $set: { ['value.items.' + id + '.status']: 'canceled' } }); _rbMem.at = 0; res.json(r.modifiedCount ? { success: true } : { success: false, error: 'Sólo se cancela uno PROGRAMADO' }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/cbu-stop', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    const b = req.body || {}; const c = await _rbCfg(true); const route = (c.routes || []).find((x) => x.structId === String(b.structId || '') && String(x.from) === String(b.from || ''));
+    if (!route || !_rbDests(c, route).some((d) => d.to === String(b.to || ''))) return res.status(400).json({ error: 'Encendé la estructura y elegí el destino' });
+    await _rbCbuStop(c, [route], String(b.to), 'panel · ' + req.user.username, route.botId); res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/struct-remove', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try { const id = String((req.body || {}).id || ''); await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.structs': { id } } }); _rbMem.at = 0; res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
