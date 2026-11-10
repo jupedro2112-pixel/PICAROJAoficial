@@ -31602,7 +31602,7 @@ const _tgPrivRate = { min: 0, n: 0 }; // tope GLOBAL de respuestas por privado (
 // lo copia al destino con "De: <grupo> · $monto" y contesta la foto en el origen con ✅ REENVIADO + acumulado. Responder la foto con un número corrige
 // el monto. /total = acumulado; /cierrededia o "cierre de día" ⇒ cierra la suma (RcptClose) y avisa en los dos grupos. El bot tiene que ser ADMIN en los
 // grupos de origen (si no, Telegram no le pasa las fotos) y miembro en los de destino. ──
-const { RcptFwd, RcptClose } = require('./src/models/RcptFwd');
+const _rbM = () => require('./src/models/RcptFwd'); // carga perezosa (los tests cargan este tramo sin mongoose)
 const _rbMem = { v: null, at: 0 };
 async function _rbCfg(fresh) {
   if (!fresh && _rbMem.v && Date.now() - _rbMem.at < 30000) return _rbMem.v;
@@ -31641,13 +31641,13 @@ function _rbPickTo(route, amount) {
 }
 function _rbTitle(c, id) { const g = (c.groups || []).find((x) => String(x.id) === String(id)); return g ? g.title : String(id); }
 async function _rbOpenSum(fromChat, toChat) {
-  const a = await RcptFwd.aggregate([{ $match: { fromChat: String(fromChat), toChat: String(toChat), status: 'open' } }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+  const a = await _rbM().RcptFwd.aggregate([{ $match: { fromChat: String(fromChat), toChat: String(toChat), status: 'open' } }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
   return a[0] || { total: 0, count: 0 };
 }
 function _rbSumTxt(s) { return `Acumulado: <b>${_rbMoney(s.total)}</b> (${s.count} comprobante${s.count === 1 ? '' : 's'})`; }
 // Cierres anteriores de ese origen→destino que todavía no se ENVIARON (owner: "si no cotiza, en la suma de cada comprobante dejar plasmado el pendiente a cotizar anterior y el monto").
 async function _rbPendTxt(fromChat, toChat) {
-  const cl = await RcptClose.find({ fromChat: String(fromChat), toChat: String(toChat), status: { $in: ['pending', 'quoted'] } }).sort({ createdAt: 1 }).limit(10).lean();
+  const cl = await _rbM().RcptClose.find({ fromChat: String(fromChat), toChat: String(toChat), status: { $in: ['pending', 'quoted'] } }).sort({ createdAt: 1 }).limit(10).lean();
   if (!cl.length) return '';
   const d = (x) => new Date(x.createdAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   return '\n' + cl.map((x) => x.status === 'quoted' ? `💱 Anterior (cierre ${d(x)}): <b>${_rbMoney(x.total)}</b> · cotizado, falta /enviado` : `⏳ Anterior PENDIENTE A COTIZAR (cierre ${d(x)}): <b>${_rbMoney(x.total)}</b>`).join('\n');
@@ -31674,29 +31674,29 @@ const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/<
 async function _rbRoute(c, rec, amount, from, caption) {
   const route = (c.routes || []).find((x) => String(x.from) === rec.fromChat);
   const reply = (text, extra) => tgChannel.call(c.token, 'sendMessage', Object.assign({ chat_id: rec.fromChat, reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true, parse_mode: 'HTML', text }, extra || {}));
-  if (!(Number(amount) > 0)) { await RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ No pude leer el monto. <b>Respondé esta foto con el monto con centavos</b> (ej. 25000,99) y lo reenvío.'); return; }
+  if (!(Number(amount) > 0)) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ No pude leer el monto. <b>Respondé esta foto con el monto con centavos</b> (ej. 25000,99) y lo reenvío.'); return; }
   const to = route && _rbPickTo(route, amount);
-  if (!to) { await RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`⚠️ ${_rbMoney(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó. Si el monto está mal, respondé esta foto con el correcto.`); return; }
+  if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`⚠️ ${_rbMoney(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó. Si el monto está mal, respondé esta foto con el correcto.`); return; }
   const toTitle = _rbTitle(c, to);
-  const set = await RcptFwd.findOneAndUpdate({ id: rec.id, status: { $in: ['hold'] } }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });
+  const set = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: { $in: ['hold'] } }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });
   if (!set) return; // ya se reenvió (otra instancia)
   const s = await _rbOpenSum(rec.fromChat, to);
   const pend = await _rbPendTxt(rec.fromChat, to);
   const cap = `🧾 De: <b>${_rbH(rec.fromTitle)}</b> · <b>${_rbMoney(amount)}</b>${rec.sender ? ' · ' + _rbH(rec.sender) : ''}\n${_rbSumTxt(s)}${pend}` + (caption ? '\n' + _rbH(String(caption).slice(0, 500)) : '');
   const cp = await tgChannel.call(c.token, 'copyMessage', { chat_id: to, from_chat_id: rec.fromChat, message_id: rec.srcMsgId, caption: cap, parse_mode: 'HTML' });
   if (!cp.ok) {
-    await RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'failed', error: String(cp.error).slice(0, 200) } });
+    await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'failed', error: String(cp.error).slice(0, 200) } });
     await _rbSet({ lastError: 'reenvío a ' + toTitle + ': ' + String(cp.error).slice(0, 150), lastErrorAt: new Date() });
     await reply('❌ NO se pudo reenviar a ' + _rbH(toTitle) + ' (' + _rbH(String(cp.error).slice(0, 120)) + '). No se sumó.');
     return;
   }
-  await RcptFwd.updateOne({ id: rec.id }, { $set: { fwdMsgId: cp.result && cp.result.message_id } });
+  await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { fwdMsgId: cp.result && cp.result.message_id } });
   const r = await reply(`✅ <b>REENVIADO</b> a ${_rbH(toTitle)} · <b>${_rbMoney(amount)}</b>${from === 'texto' || from === 'corregido' ? ' (monto escrito)' : ''}\n${_rbSumTxt(s)}${pend}`);
-  if (r.ok) await RcptFwd.updateOne({ id: rec.id }, { $set: { replyMsgId: r.result && r.result.message_id } });
+  if (r.ok) await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { replyMsgId: r.result && r.result.message_id } });
 }
 async function _rbOnReceipt(c, m) {
   const sender = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ') || (m.from && m.from.username) || '';
-  let rec; try { rec = await RcptFwd.create({ id: uuidv4(), fromChat: String(m.chat.id), fromTitle: String(m.chat.title || ''), srcMsgId: m.message_id, sender, status: 'hold' }); } catch (e) { if (e && e.code === 11000) return; throw e; }
+  let rec; try { rec = await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: String(m.chat.id), fromTitle: String(m.chat.title || ''), srcMsgId: m.message_id, sender, status: 'hold' }); } catch (e) { if (e && e.code === 11000) return; throw e; }
   const rd = await _rbReadAmount(c, m);
   await _rbRoute(c, rec, rd.amount, rd.from, m.caption || '');
 }
@@ -31704,19 +31704,19 @@ async function _rbOnReceipt(c, m) {
 // la cuenta empieza de 0"). Cierra TODO lo abierto de ese origen, un cierre por destino (RcptClose 'pending'), y avisa en el origen y en cada destino.
 async function _rbClose(c, fromChat, by) {
   const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
-  await RcptFwd.updateMany({ fromChat: String(fromChat), status: 'open' }, { $set: { status: 'closed', closeId } });
-  const rows = await RcptFwd.aggregate([{ $match: { closeId } }, { $group: { _id: '$toChat', toTitle: { $first: '$toTitle' }, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+  await _rbM().RcptFwd.updateMany({ fromChat: String(fromChat), status: 'open' }, { $set: { status: 'closed', closeId } });
+  const rows = await _rbM().RcptFwd.aggregate([{ $match: { closeId } }, { $group: { _id: '$toChat', toTitle: { $first: '$toTitle' }, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
   if (!rows.length) return { ok: false, why: 'no hay comprobantes abiertos' };
   const when = new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const lines = [];
   for (const r of rows) {
-    await RcptClose.create({ id: uuidv4(), fromChat: String(fromChat), fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), count: r.count, total: r.total, by: String(by || '').slice(0, 60), status: 'pending' });
+    await _rbM().RcptClose.create({ id: uuidv4(), fromChat: String(fromChat), fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), count: r.count, total: r.total, by: String(by || '').slice(0, 60), status: 'pending' });
     const t = `🔒 <b>CIERRE ${_rbH(when)}</b>\nDe: ${_rbH(fromTitle)} → ${_rbH(r.toTitle)}\nComprobantes: <b>${r.count}</b> · Total: <b>${_rbMoney(r.total)}</b>\n⏳ PENDIENTE A COTIZAR. La cuenta vuelve a $0.`;
     await tgChannel.call(c.token, 'sendMessage', { chat_id: r._id, text: t, parse_mode: 'HTML' });
     lines.push(`→ ${_rbH(r.toTitle)}: <b>${_rbMoney(r.total)}</b> (${r.count})`);
   }
   await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, parse_mode: 'HTML', text: `🔒 <b>CIERRE ${_rbH(when)}</b>\n${lines.join('\n')}\n⏳ Pendiente a cotizar. La cuenta vuelve a $0.` });
-  const holds = await RcptFwd.countDocuments({ fromChat: String(fromChat), status: 'hold' });
+  const holds = await _rbM().RcptFwd.countDocuments({ fromChat: String(fromChat), status: 'hold' });
   if (holds) await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, text: `⚠️ Quedan ${holds} comprobante(s) sin reenviar (sin monto o sin grupo para esos centavos): respondelos con el monto correcto.` });
   return { ok: true, closes: rows.length, total: rows.reduce((a, r) => a + r.total, 0) };
 }
@@ -31732,11 +31732,11 @@ async function _rbCloseTick() {
 setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('[rcptbot] cierre ' + e.message)); }, 60000); }, 75000);
 async function _rbDestCmd(c, toChat, cmd, by, arg) {
   const q = cmd === 'cotizado' ? { toChat, status: 'pending' } : { toChat, status: { $in: ['pending', 'quoted'] } };
-  const list = await RcptClose.find(q).sort({ createdAt: 1 }).lean();
+  const list = await _rbM().RcptClose.find(q).sort({ createdAt: 1 }).lean();
   if (!list.length) { await tgChannel.call(c.token, 'sendMessage', { chat_id: toChat, text: cmd === 'cotizado' ? 'No hay cierres pendientes a cotizar.' : 'No hay cierres pendientes de envío.' }); return; }
   const now = new Date(); const rate = Number(String(arg || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || null;
   const set = cmd === 'cotizado' ? { status: 'quoted', quotedBy: String(by).slice(0, 60), quotedAt: now, quoteRate: rate, quoteNote: String(arg || '').slice(0, 200) } : { status: 'sent', sentBy: String(by).slice(0, 60), sentAt: now };
-  await RcptClose.updateMany({ id: { $in: list.map((x) => x.id) } }, { $set: set });
+  await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) } }, { $set: set });
   const total = list.reduce((a, x) => a + (Number(x.total) || 0), 0);
   const t = cmd === 'cotizado' ? `💱 <b>COTIZADO</b> · ${list.length} cierre(s) · ${_rbMoney(total)}${rate ? ' · cotización ' + _rbH(arg) : ''}${by ? ' · ' + _rbH(by) : ''}\nFalta /enviado.` : `✅ <b>ENVIADO</b> · ${list.length} cierre(s) · ${_rbMoney(total)}${by ? ' · ' + _rbH(by) : ''}\nYa no queda pendiente.`;
   await tgChannel.call(c.token, 'sendMessage', { chat_id: toChat, parse_mode: 'HTML', text: t });
@@ -31761,10 +31761,10 @@ async function _rbOnMessage(c, m) {
   }
   if (text && m.reply_to_message) { // corrige el monto respondiendo la foto (o la respuesta del bot)
     if (!/^[\s$\d.,]+$/.test(text)) return; const n = _rbParseAmount(text); if (!n) return; const rid = m.reply_to_message.message_id;
-    const rec = await RcptFwd.findOne({ fromChat, status: { $in: ['hold', 'open'] }, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] }).lean(); if (!rec) return;
+    const rec = await _rbM().RcptFwd.findOne({ fromChat, status: { $in: ['hold', 'open'] }, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] }).lean(); if (!rec) return;
     if (rec.status === 'hold') { await _rbRoute(c, rec, n, 'corregido', ''); return; }
     if (_rbPickTo(route, n) !== rec.toChat) { await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, reply_to_message_id: m.message_id, text: 'Ese monto va a OTRO grupo (por los centavos). Mandá el comprobante de nuevo; éste queda como está.' }); return; }
-    await RcptFwd.updateOne({ id: rec.id, status: 'open' }, { $set: { amount: n, amountFrom: 'corregido' } });
+    await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'open' }, { $set: { amount: n, amountFrom: 'corregido' } });
     if (rec.toChat && rec.fwdMsgId) await tgChannel.call(c.token, 'sendMessage', { chat_id: rec.toChat, reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true, text: '✏️ Monto corregido: ' + _rbMoney(n) });
     const s = await _rbOpenSum(fromChat, rec.toChat);
     await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, reply_to_message_id: m.message_id, parse_mode: 'HTML', text: `✏️ Monto: <b>${_rbMoney(n)}</b>\n${_rbSumTxt(s)}` });
@@ -31807,10 +31807,10 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, async (req, res) 
     for (const r of c.routes || []) {
       const dests = [...new Set([...(r.rules || []).map((x) => String(x.to)), r.otherTo ? String(r.otherTo) : null].filter(Boolean))]; const sums = [];
       for (const d of dests) sums.push(Object.assign({ to: d, title: _rbTitle(c, d) }, await _rbOpenSum(r.from, d)));
-      routes.push(Object.assign({}, r, { sums, hold: await RcptFwd.countDocuments({ fromChat: String(r.from), status: 'hold' }) }));
+      routes.push(Object.assign({}, r, { sums, hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), status: 'hold' }) }));
     }
-    const closes = await RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
-    const recent = await RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
+    const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
+    const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
     res.json({ success: true, hasToken: !!c.token, tokenLast4: c.token ? c.token.slice(-4) : '', decryptError: !!c.decryptError, onRender: !!c.onRender, bot, hook, groups: c.groups || [], routes, closes, recent, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -31867,7 +31867,7 @@ app.post('/api/admin/rcptbot/quote', authMiddleware, adminMiddleware, async (req
     const b = req.body || {}; const st = String(b.status || ''); if (!['pending', 'quoted', 'sent'].includes(st)) return res.status(400).json({ error: 'Estado inválido' });
     const now = new Date(); const who = 'panel · ' + req.user.username;
     const set = st === 'pending' ? { status: 'pending', quoteRate: null, quoteNote: '', quotedBy: '', quotedAt: null, sentBy: '', sentAt: null } : st === 'quoted' ? { status: 'quoted', quotedBy: who, quotedAt: now, quoteNote: String(b.note || '').slice(0, 200) } : { status: 'sent', sentBy: who, sentAt: now };
-    const r = await RcptClose.updateOne({ id: String(b.id || '') }, { $set: set }); res.json(r.matchedCount ? { success: true } : { success: false, error: 'Cierre no encontrado' });
+    const r = await _rbM().RcptClose.updateOne({ id: String(b.id || '') }, { $set: set }); res.json(r.matchedCount ? { success: true } : { success: false, error: 'Cierre no encontrado' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/forget-group', authMiddleware, adminMiddleware, async (req, res) => {
