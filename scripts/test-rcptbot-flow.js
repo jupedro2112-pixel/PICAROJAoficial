@@ -148,6 +148,18 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(sent.some((x) => String(x.p.chat_id) === '-2' && /ANULADO/.test(x.p.text || '')), 'avisa en el grupo viejo');
     const cp = sent.filter((x) => x.method === 'copyMessage').slice(-1)[0]; assert.ok(cp.p.chat_id === '-3' && /Movido desde asuncionbot/.test(cp.p.caption) && /se equivocó con el decimal/.test(cp.p.caption), cp.p.caption);
   });
+  await caso('montos que ya venían sumados: entran al acumulado, al cierre y al mes', async () => {
+    const call = async (path, body) => { let out = null, code = 200; await routes['POST ' + path]({ body, user: { username: 'admin' } }, { status(c) { code = c; return this; }, json(j) { out = j; } }); return { code, out }; };
+    const bad = await call('/api/admin/rcptbot/carry', { structId: 'E1', from: '-1', items: [{ to: '-99', amount: '5' }] }); assert.strictEqual(bad.code, 400);
+    const pre = (await RcptFwd.rows.filter((x) => x.toChat === '-2' && x.status === 'open')).reduce((a, x) => a + x.amount, 0);
+    const r = await call('/api/admin/rcptbot/carry', { structId: 'E1', from: '-1', items: [{ to: '-2', amount: '350.000,50' }], month: '1.000.000' }); assert.ok(r.out && r.out.success, JSON.stringify(r));
+    const t = last(-1).p.text; assert.ok(/Montos que ya venían sumados/.test(t) && /\+\$350\.000,50/.test(t) && /Del mes \(ya cerrado antes\): \+\$1\.000\.000/.test(t), t);
+    const post = RcptFwd.rows.filter((x) => x.toChat === '-2' && x.status === 'open').reduce((a, x) => a + x.amount, 0); assert.ok(Math.abs(post - pre - 350000.5) < 0.001);
+    aiAmount = 100.99; await hook(photo(30)); assert.ok(/Total de diciembre \(sin corte\): <b>\$1\.351\.\d{3}/.test(last(-1).p.text), last(-1).p.text);
+    const n = RcptClose.rows.length; NOW = new Date('2026-12-01T16:10:00Z'); await ctx._rbCloseTick();
+    const cl = RcptClose.rows.slice(n).find((x) => x.toChat === '-2'); assert.ok(cl && cl.total >= 350000.5 + 100.99 - 0.01, JSON.stringify(cl));
+    assert.ok(!RcptClose.rows.slice(n).some((x) => x.toChat == null), 'lo del mes no entra en un cierre');
+  });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
   console.log(`\n${ok} casos OK`);

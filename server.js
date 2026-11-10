@@ -31648,7 +31648,7 @@ async function _rbOnce(chatId, msgId) {
 }
 const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const _rbMoney = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
-const _rbMoney2 = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const _rbMoney2 = (n) => { const v = Number(n) || 0; return '$' + v.toLocaleString('es-AR', Number.isInteger(v) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }; // ,50 (no ,5): los centavos deciden el grupo
 function _rbParseAmount(txt) {
   const ms = String(txt || '').match(/\d[\d.,]*/g); if (!ms) return null; let best = null;
   for (const raw of ms) {
@@ -31955,7 +31955,8 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
       for (const r of st.routes || []) {
         const dests = [...new Set([...(r.rules || []).map((x) => String(x.to)), r.otherTo ? String(r.otherTo) : null].filter(Boolean))]; const sums = [];
         for (const d of dests) sums.push(Object.assign({ to: d, title: _rbTitle(c, d) }, await _rbOpenSum(r.from, d, st.id)));
-        routes.push(Object.assign({}, r, { sums, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
+        const carry = await _rbM().RcptFwd.find({ fromChat: String(r.from), structId: st.id, amountFrom: { $in: ['arrastre', 'arrastre_mes'] }, status: { $in: ['open', 'closed'] }, closeId: { $in: [null, 'arrastre-mes'] } }).sort({ createdAt: -1 }).limit(20).select('id toTitle amount amountFrom createdAt').lean();
+        routes.push(Object.assign({}, r, { sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
       structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes });
@@ -32054,6 +32055,32 @@ app.post('/api/admin/rcptbot/help', authMiddleware, adminMiddleware, _rbPinGate,
     if (!route) return res.status(400).json({ error: 'Encendé la estructura primero (y guardá el circuito)' });
     const r = await _rbSendHelp(c, route, true); res.json(r.ok ? { success: true } : { success: false, error: r.error });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// #1079-g (owner: "hay montos sumados antes"): lo que ya venían sumando ANTES del bot. Se guarda como comprobantes de ARRASTRE (amountFrom 'arrastre',
+// srcMsgId negativo ⇒ nunca choca con un mensaje real): 'open' hacia un destino ⇒ entra en el acumulado y en el próximo cierre de las 13 h;
+// 'mes' ⇒ queda 'closed' (ya cerrado por ellos) y cuenta SÓLO en el total del mes. Así sumas, cierres y mes siguen igual que con los comprobantes.
+app.post('/api/admin/rcptbot/carry', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    const b = req.body || {}; const c = await _rbCfg(true); const st = (c.structs || []).find((x) => x.id === String(b.structId || ''));
+    const route = st && (st.routes || []).find((x) => x.from === String(b.from || '')); if (!route) return res.status(400).json({ error: 'Guardá la estructura con ese grupo primero' });
+    const num = (v) => { const n = _rbParseAmount(String(v == null ? '' : v)); return n && n > 0 ? n : 0; };
+    const dests = _rbDests(c, Object.assign({}, route)); const items = []; let k = 0;
+    for (const it of Array.isArray(b.items) ? b.items : []) { const a = num(it && it.amount); if (!a) continue; if (!dests.some((d) => d.to === String(it.to))) return res.status(400).json({ error: 'Destino inválido' }); items.push({ to: String(it.to), amount: a }); }
+    const month = num(b.month);
+    if (!items.length && !month) return res.status(400).json({ error: 'Poné algún monto' });
+    const by = 'panel · ' + req.user.username; const base = -(Date.now() % 1000000000) * 10;
+    for (const it of items) await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: route.from, fromTitle: _rbTitle(c, route.from), toChat: it.to, toTitle: _rbTitle(c, it.to), srcMsgId: base - (k++), structId: st.id, amount: it.amount, amountFrom: 'arrastre', sender: by, status: 'open' });
+    if (month) await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: route.from, fromTitle: _rbTitle(c, route.from), toChat: null, toTitle: '', srcMsgId: base - (k++), structId: st.id, amount: month, amountFrom: 'arrastre_mes', sender: by, status: 'closed', closeId: 'arrastre-mes' });
+    if (st.on) { // aviso en el grupo que manda
+      const r2 = (c.routes || []).find((x) => x.from === route.from && x.structId === st.id); const lines = [];
+      for (const it of items) lines.push(`→ ${_rbH(_rbTitle(c, it.to))}: +${_rbMoney2(it.amount)} · ${_rbSumTxt(await _rbOpenSum(route.from, it.to, st.id))}`);
+      if (r2) await _rbSend(c, route.from, `📥 <b>Montos que ya venían sumados</b>\n${lines.join('\n')}${month ? '\nDel mes (ya cerrado antes): +' + _rbMoney2(month) : ''}\n${_rbMonthTxt(await _rbMonthSum(route.from, st.id))}`, r2.botId);
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/carry-remove', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // sacar un arrastre cargado por error (si todavía no entró en un cierre)
+  try { const r = await _rbM().RcptFwd.updateOne({ id: String((req.body || {}).id || ''), amountFrom: { $in: ['arrastre', 'arrastre_mes'] }, closeId: { $in: [null, 'arrastre-mes'] } }, { $set: { status: 'failed', error: 'arrastre quitado desde el panel' } }); res.json(r.matchedCount ? { success: true } : { success: false, error: 'Ya entró en un cierre o no existe' }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/struct-remove', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try { const id = String((req.body || {}).id || ''); await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.structs': { id } } }); _rbMem.at = 0; res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }

@@ -27,7 +27,8 @@
   bot `/api/rcptbot/webhook/<botId>`, `groups[].bots`; reenvío entre bots distintos (baja con uno, sube con otro); `_rbOnce` (comandos una vez aunque haya 2
   bots); un grupo que manda va encendido en UNA sola estructura. Clave `Config['rcptBotPinHash']` (`_rbPinGate` en CADA ruta /api/admin/rcptbot*; la crea el
   admin la primera vez). `_rbMonthSum` (mes calendario ART). `_rbHelpTxt` (/start, /ayuda, al encender ⇒ fijada, 📌 del panel). Botones `rb:<id>:<n>` / `rb:<id>:m` (#1079-f): centavos equivocados ⇒ elegir el grupo a mano (el destino recibe "el cliente se equivocó con el decimal, pero va a este grupo") o mover uno ya reenviado (ANULADO en el grupo viejo; sólo si no se cerró). Panel → 🔐 Privado → 🧾 (último).
-- Tests: `scripts/test-rcptbot.js` + `scripts/test-rcptbot-flow.js` (simulación de punta a punta con Telegram y base falsos, 15 casos).
+- **#1079-g (owner: "hay montos sumados antes"):** panel → estructura → 📥 Montos que ya venían sumados: por destino (RcptFwd `amountFrom:'arrastre'`, 'open' ⇒ acumulado + próximo cierre) y "ya llevaban en el mes" (`'arrastre_mes'`, 'closed' con closeId `arrastre-mes` ⇒ sólo total del mes). srcMsgId negativo. Quitar mientras no se cerró (`/carry-remove`). Montos con centavos siempre con 2 decimales. Panel v284.
+- Tests: `scripts/test-rcptbot.js` + `scripts/test-rcptbot-flow.js` (simulación de punta a punta con Telegram y base falsos, 18 casos).
 
 ### 1078. 🤖 Chatbot: cronograma semanal del canal de Telegram, editable desde el panel (2026-11-10) — panel v279
 - **Owner:** "historias de lo principal, partidos, el más jugado de la semana, info de los sorteos, un bono semanal, todo con el bot automático; una sección
