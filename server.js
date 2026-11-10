@@ -31698,6 +31698,11 @@ function _rbRulesList(c, route) {
   l.push(route.otherTo ? `• cualquier otra terminación → ${_rbH(_rbTitle(c, route.otherTo))}` : '• cualquier otra terminación → <b>NO se reenvía</b>');
   return l.join('\n');
 }
+// #1079-l (owner: "cada grupo tiene su decimal fijo, no se juntan; otro grupo envía el otro decimal"): si la terminación es de OTRO grupo que manda, decirlo.
+function _rbOtherGroupTxt(c, route, amount) {
+  const ct = _rbCents(amount); const others = [...new Set((c.routes || []).filter((r) => route && String(r.from) !== String(route.from) && (r.rules || []).some((x) => String(x.cents) === ct)).map((r) => _rbTitle(c, r.from)))];
+  return others.length ? `\n👉 La terminación <b>,${ct}</b> es de <b>${_rbH(others.join(' / '))}</b>: ese comprobante se manda allá.` : '';
+}
 function _rbHelpTxt(c, route) {
   const r0 = (route.rules || [])[0];
   if (!r0) return `📌 <b>CÓMO MANDAR LOS COMPROBANTES</b>\nMandá acá la foto del comprobante ENTERO (que se vea el monto). El bot lo reenvía a ${_rbH(_rbTitle(c, route.otherTo))}, lo marca ✅ REENVIADO y lo suma.\nSi no lee el monto: respondé la foto con el monto (ej. 25000,50).`;
@@ -31793,7 +31798,7 @@ async function _rbRoute(c, rec, amount, from, opts = {}) {
   const reply = (text, kb) => _rbSend(c, rec.fromChat, text, rec.srcBot, Object.assign({ reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true }, kb ? { reply_markup: kb } : {}));
   if (!(Number(amount) > 0)) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ No pude leer el monto. <b>Respondé esta foto con el monto con centavos</b> (ej. 25000,99) y lo reenvío.'); return; }
   const to = opts.forceTo ? (_rbDests(c, route).some((d) => d.to === String(opts.forceTo)) ? String(opts.forceTo) : null) : (route && _rbPickTo(route, amount));
-  if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`❌ <b>TERMINACIÓN MAL</b>: ${_rbMoney2(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó.\n⚠️ Prestá atención a los centavos:\n${_rbRulesList(c, route || {})}\n👇 Si el cliente se equivocó con el decimal, <b>elegí a qué grupo va</b>. Si el monto está mal, respondé esta foto con el correcto (con centavos).`, route ? _rbPickKb(c, route, rec.id) : undefined); return; }
+  if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`❌ <b>TERMINACIÓN MAL</b>: ${_rbMoney2(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó.${_rbOtherGroupTxt(c, route, amount)}\n⚠️ Prestá atención a los centavos:\n${_rbRulesList(c, route || {})}\n👇 Si el cliente se equivocó con el decimal, <b>elegí a qué grupo va</b>. Si el monto está mal, respondé esta foto con el correcto (con centavos).`, route ? _rbPickKb(c, route, rec.id) : undefined); return; }
   const toTitle = _rbTitle(c, to); const dst = _rbTokFor(c, to, (route && route.botId) || rec.srcBot);
   if (!dst) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply('⚠️ Ningún bot cargado está en ' + _rbH(toTitle) + ': agregalo a ese grupo. No se reenvió.'); return; }
   const set = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: 'hold' }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });

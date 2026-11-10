@@ -212,6 +212,14 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await cbIn(-2, 'rbm:help'); assert.ok(/GRUPO DE DESTINO/.test(last(-2).p.text));
     aiAmount = 300.43; await hook(photo(61)); assert.ok(/TERMINACIÓN MAL<\/b>: \$300,43 termina en <b>,43/.test(last(-1).p.text) && /elegí a qué grupo va/.test(last(-1).p.text), last(-1).p.text);
   });
+  await caso('cada grupo con su decimal: ,43 en el grupo del ,99 avisa que es del otro grupo', async () => {
+    cfgDocs[0].value.groups.push({ id: '-4', title: 'grupo43', bots: ['111'] });
+    cfgDocs[0].value.structs[0].routes.push({ from: '-4', rules: [{ cents: '43', to: '-3' }], otherTo: null }); await ctx._rbCfg(true);
+    aiAmount = 800.43; await hook(photo(70)); const t = last(-1).p.text; assert.ok(/TERMINACIÓN MAL/.test(t) && /,43<\/b> es de <b>grupo43/.test(t), t);
+    const kb = last(-1).p.reply_markup.inline_keyboard; assert.ok(kb.length === 1 && /,99 → asuncionbot/.test(kb[0][0].text), JSON.stringify(kb));
+    await hook({ message: { message_id: 71, chat: { id: -4, type: 'supergroup', title: 'grupo43' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'f71' }] } });
+    assert.ok(sent.filter((x) => x.method === 'copyMessage').slice(-1)[0].p.chat_id === '-3' && /REENVIADO<\/b> a fichasnuevobot/.test(last(-4).p.text), last(-4).p.text);
+  });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
   console.log(`\n${ok} casos OK`);
