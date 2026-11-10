@@ -18,6 +18,13 @@
   Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
   (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
 
+### 1081. Información del servicio premium por sectores + Info y Perfil centrados (2026-11-10) — app v712
+- **Owner:** "lo de Información del servicio más prolijo, premium y sectorizado, sin bajar tanto, todo en una pantalla y que se pueda expandir; más centrado
+  porque con la parte superior se tapa; el Perfil igual, centrado y no tanto arriba ni abajo para que no se tape el texto".
+- `_infoCardsWrap` agrega dos sectores (`.im-sector`: "El servicio" = tarjetas 0-2, "Tus beneficios" = 3+) y toda la tarjeta se toca para abrir; cerradas
+  muestran sólo icono + título (grilla de 2) y abiertas ocupan todo el ancho. `infoFoldInit` siempre muestra "Ver más". Subtítulo `.info-sub`.
+- `#infoModal` / `#profileModal` centrados con margen `--sat`/`--sab` + 22 px y scroll ADENTRO (bloque #1081 al final de pin.css).
+
 ### 1080. El sorteo se abre adentro de Girox (2026-11-10) — app v711
 - **Owner:** "cuando abrís el sorteo mensual se abre el menú completo y queda ahí; quiero que se abra todo en Girox, sin ir a otra página".
 - Causa: `VIP.sorteos.goMenu` ("Anotate, es gratis" de la hoja del sorteo arriba del casino) llamaba `VIP.ui.closeCasinoFrame()` y abría la ventana sobre el

@@ -3318,3 +3318,52 @@ body:not(.sp-classic) .sp-bk-attach { display: block; width: 100%; padding: 9px 
   font: 900 12.5px/1.2 var(--p-font); letter-spacing: .02em; cursor: pointer; }
 body:not(.sp-classic) .sp-bk-attach:active { background: var(--p-text); }
 body.sp-classic .sp-bonus-now { display: none !important; }
+
+/* ── #1081 (owner): "Información del servicio más prolija, premium y sectorizada, todo en una pantalla y que se pueda expandir; más CENTRADO
+   porque arriba se tapa; el Perfil igual: centrado, sin pegarse arriba ni abajo para que no se tape el texto". Las dos ventanas quedan en el
+   medio con margen de la barra del teléfono (arriba --sat, abajo --sab) y, si no entran, scrollean ADENTRO. */
+#infoModal.modal:not(.hidden), #profileModal.modal:not(.hidden) { display: flex !important; align-items: center !important; justify-content: center !important;
+  padding: calc(var(--sat, env(safe-area-inset-top, 0px)) + 22px) 14px calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 22px) !important; box-sizing: border-box !important; }
+#infoModal .modal-content, #profileModal .modal-content { margin: auto !important; width: 100% !important; box-sizing: border-box !important; top: auto !important; bottom: auto !important; transform: none;
+  max-height: calc(100dvh - var(--sat, env(safe-area-inset-top, 0px)) - var(--sab, env(safe-area-inset-bottom, 0px)) - 44px) !important; overflow-y: auto !important; overscroll-behavior: contain;
+  border-radius: 22px !important; }
+#infoModal .modal-content { max-width: 520px !important; padding: 18px 16px 14px !important; }
+#profileModal .modal-content { max-width: 420px !important; }
+/* cabecera */
+#infoModal .info-head-sm { text-align: center; margin: 0 0 12px !important; }
+#infoModal .info-head-sm h2 { font: 800 17px/1.2 var(--p-font) !important; letter-spacing: .2px !important; text-transform: none !important; color: var(--p-text) !important; text-shadow: none !important; }
+#infoModal .info-head-sm h2::after { width: 34px !important; height: 3px !important; border-radius: 3px; margin: 8px auto 0 !important; background: var(--p-red) !important; }
+#infoModal .info-sub { margin: 8px auto 0; max-width: 34ch; font: 500 12px/1.4 var(--p-font); color: var(--p-muted); }
+/* sectores + grilla de 2 */
+#infoMsg.im-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; margin: 6px 0 0 !important; }
+#infoMsg .im-sector { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 8px 2px 0; font: 800 10.5px var(--p-font); letter-spacing: 1.3px; text-transform: uppercase; color: var(--p-red); }
+#infoMsg .im-sector::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--p-border); }
+#infoMsg .im-sector:first-child { margin-top: 0; }
+/* tarjeta cerrada: icono + título (2 líneas) + "Ver más", compacta */
+#infoMsg .im-card { flex-direction: column !important; align-items: stretch !important; border-radius: 14px !important; border: 1px solid var(--p-border) !important; background: var(--p-card) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04) !important; cursor: pointer; transition: border-color .15s, box-shadow .15s; min-height: 0; }
+#infoMsg .im-card:not(.open) .im-sec { font-size: 0 !important; padding: 11px 11px 2px !important; -webkit-line-clamp: unset !important; display: block !important; overflow: visible !important; }
+#infoMsg .im-card:not(.open) .im-sec > *:not(:first-child) { display: none !important; }
+#infoMsg .im-card:not(.open) .im-sec > b:first-child { display: flex !important; align-items: center; gap: 8px; margin: 0 !important; font: 700 12.5px/1.25 var(--p-font) !important; color: var(--p-text) !important;
+  white-space: normal !important; overflow: hidden; text-overflow: clip; display: -webkit-box; }
+#infoMsg .im-card:not(.open) .im-sec > b:first-child { display: flex !important; }
+#infoMsg .im-card .im-sec > b:first-child .im-ico { flex: 0 0 30px !important; width: 30px !important; height: 30px !important; border-radius: 9px !important; border: 0 !important;
+  background: var(--p-red-soft, rgba(217,0,31,.08)) !important; color: var(--p-red) !important; display: inline-flex !important; align-items: center; justify-content: center; }
+#infoMsg .im-card .im-sec > b:first-child .im-ico svg { width: 16px !important; height: 16px !important; }
+#infoMsg .im-card:not(.open) .im-more { width: 100% !important; margin: 0 !important; padding: 6px 11px 10px 49px !important; border: 0 !important; text-align: left !important; background: transparent !important;
+  font: 600 11px var(--p-font) !important; color: var(--p-muted) !important; }
+#infoMsg .im-card:hover { border-color: var(--p-text-2, #999) !important; }
+/* abierta: todo el ancho, texto legible */
+#infoMsg .im-card.open { grid-column: 1 / -1 !important; border-color: var(--p-red) !important; box-shadow: 0 6px 20px rgba(0,0,0,.08) !important; cursor: default; }
+#infoMsg .im-card.open .im-sec { font-size: 13px !important; line-height: 1.5 !important; padding: 14px 14px 6px !important; color: var(--p-text-2, var(--p-text)) !important; }
+#infoMsg .im-card.open .im-sec > b:first-child { display: flex !important; align-items: center; gap: 8px; font: 800 14px var(--p-font) !important; color: var(--p-text) !important; margin: 0 0 8px !important; }
+#infoMsg .im-card.open .im-line { display: block; margin-top: 6px; }
+#infoMsg .im-card.open .im-more { border-top: 1px solid var(--p-border) !important; text-align: center !important; padding: 9px !important; font: 700 12px var(--p-font) !important; color: var(--p-muted) !important; }
+/* reseñas y pie */
+#infoModal .info-reviews-wrap { border-radius: 14px !important; margin: 0 0 4px !important; }
+#infoModal .info-reviews-head { padding: 10px 14px !important; font: 700 12.5px var(--p-font) !important; }
+#infoModal .modal-actions { margin-top: 12px !important; }
+#infoModal .im-terms { margin: 0 0 8px !important; }
+@media (max-width: 330px) { #infoMsg.im-grid { grid-template-columns: 1fr !important; } }
+html[data-theme="dark"] #infoMsg .im-card { box-shadow: none !important; }
+html[data-theme="dark"] #infoMsg .im-card.open { box-shadow: 0 6px 20px rgba(0,0,0,.4) !important; }

@@ -2031,7 +2031,16 @@
             const card = document.createElement('div'); card.className = 'im-card' + (p.classList.contains('im-missions') ? ' im-card-missions' : '');
             if (p.id) card.dataset.for = p.id;
             box.insertBefore(card, p); card.appendChild(p); if (btn) card.appendChild(btn);
+            // #1081 (owner: "más prolijo, premium y sectorizado, todo en una pantalla y que se pueda expandir"): toda la tarjeta se toca para abrir/cerrar
+            if (btn) card.addEventListener('click', (e) => { if (e.target.closest('.im-more, a, button, input')) return; btn.click(); });
         });
+        // #1081: dos sectores — el servicio (por qué elegirnos, rollover, plataformas) y tus beneficios (VIP, reembolsos, ruleta, referidos, fueguito, misiones)
+        try {
+            const cards = Array.from(box.querySelectorAll(':scope > .im-card')); const firstBen = cards[3] || null;
+            const sec = (t) => { const d = document.createElement('div'); d.className = 'im-sector'; d.textContent = t; return d; };
+            if (cards[0]) box.insertBefore(sec('El servicio'), cards[0]);
+            if (firstBen) box.insertBefore(sec('Tus beneficios'), firstBen);
+        } catch (_) {}
         box.dataset.cards = '1'; box.classList.add('im-grid');
     }
     function infoFoldInit() {
@@ -2042,7 +2051,7 @@
                 p.classList.remove('open'); const btn = p.nextElementSibling;
                 if (!btn || !btn.classList.contains('im-more')) return;
                 btn.textContent = 'Ver más ›';
-                btn.style.display = (p.style.display === 'none' || p.hidden) ? 'none' : (p.scrollHeight > p.clientHeight + 4 ? '' : 'none');
+                btn.style.display = (p.style.display === 'none' || p.hidden) ? 'none' : ''; // #1081: cerradas muestran sólo el título ⇒ siempre se pueden abrir
             });
         } catch (_) {}
     }
