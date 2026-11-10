@@ -18,6 +18,11 @@
   Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
   (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
 
+### 1083. Subidas sin caída: despliegue INMUTABLE en Elastic Beanstalk (2026-11-10)
+- **Owner:** "no quiero que se reinicie en cada subida, el servidor cae unos segundos por la subida" (los clientes jugando quedaban sin servicio).
+- `.ebextensions/01-sin-caidas.config`: `DeploymentPolicy: Immutable` (instancias nuevas aparte, chequeo de salud y recién ahí reemplazo; si falla, queda la
+  versión anterior). Antes no había config ⇒ "todo junto" con corte. Rige desde la subida SIGUIENTE a la que la trae.
+
 ### 1082. Datos para transferir + bono vigente como ÚLTIMO mensaje del chat (2026-11-10) — app v713
 - **Owner:** "el bono vigente que figura arriba ahí no lo quiero; dejalo en el chat siempre, que el último mensaje sea el de los datos y que se pueda
   copiar desde el chat; si hay bono vigente que aparezca ahí con los datos; sacando lo rojo se gana chat".
