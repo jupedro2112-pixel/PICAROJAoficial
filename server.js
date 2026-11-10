@@ -5836,7 +5836,9 @@ app.get('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, r
 app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general puede cambiar el bot.' });
-    const b = req.body || {}; const cur = await getSupportBotConfig(); const next = Object.assign({}, cur);
+    // Revisión nocturna (trampa #1012): se guardan SÓLO los campos que llegan, con $set por campo. Antes se leía→mezclaba→guardaba el objeto
+    // entero: si la lectura fallaba (getConfig devuelve el default) se perdían classic, learnedOnly, extraInfo y los tiempos.
+    const b = req.body || {}; const next = {};
     if (b.enabled != null) next.enabled = b.enabled === true;
     if (b.classic != null) next.classic = b.classic === true;
     if (b.learnedOnly != null) next.learnedOnly = b.learnedOnly === true;
@@ -5845,7 +5847,9 @@ app.post('/api/admin/support-bot', authMiddleware, adminMiddleware, async (req, 
     if (['low', 'medium', 'high'].includes(b.effort)) next.effort = b.effort;
     for (const k of ['delayMinSec', 'delayMaxSec', 'pauseHours', 'handoffPauseMin', 'muteHours', 'aiMaxReplies']) if (b[k] != null && Number.isFinite(Number(b[k]))) next[k] = Number(b[k]);
     if (typeof b.extraInfo === 'string') next.extraInfo = b.extraInfo.slice(0, 4000);
-    await Config.set('supportBot', next, req.user.username);
+    const $set = { updatedAt: new Date(), updatedBy: req.user.username }; for (const [k, v] of Object.entries(next)) $set['value.' + k] = v;
+    await Config.collection.updateOne({ key: 'supportbot' }, { $set }, { upsert: true }); // key en minúsculas (como la guarda Config.set)
+    try { Config._cache && Config._cache.clear(); } catch (_) {}
     _sbFactsCache = { at: 0, v: null };
     res.json({ success: true, config: await getSupportBotConfig() });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -30828,9 +30832,11 @@ async function _tgMirrorTick(force) {
     st = ok.sort((a, b) => rank(a) - rank(b) || new Date(a.publishedAt) - new Date(b.publishedAt))[0] || null;
   }
   if (!st) return { ok: false, why: 'no hay historias nuevas' };
-  if (!force && !(await _tgBudget(slot))) return { ok: false, why: slot === 'text' ? 'ya salieron los 2 textos del día' : 'ya salió la foto del día (1 por día)' };
+  // Revisión nocturna: primero se RECLAMA la historia y recién después se gasta el cupo (si otra instancia ya la tomó, el cupo no se pierde);
+  // sin cupo, se libera el reclamo.
   const claimed = await Story.findOneAndUpdate({ id: st.id, tgPostedAt: null }, { $set: { tgPostedAt: now } });
   if (!claimed) return { ok: false, why: 'ya publicada' };
+  if (!force && !(await _tgBudget(slot))) { await Story.updateOne({ id: st.id, tgPostedAt: now }, { $set: { tgPostedAt: null } }).catch(() => {}); return { ok: false, why: slot === 'text' ? 'ya salieron los 2 textos del día' : 'ya salió la foto del día (1 por día)' }; }
   const r = await _tgPostStory(c, st, slot === 'text');
   if (r.ok) {
     await Story.updateOne({ id: st.id }, { $set: { tgMsgId: (r.result && r.result.message_id) || null, tgError: null } });
@@ -31026,9 +31032,10 @@ async function _tgBigWinTick() {
   if (!pp) return;
   if (!(await _tgBudgetLeft('text'))) return; // #1056: queda para mañana (el cursor no avanza)
   await _tgSet({ bigWinSince: pp.paidAt });
-  if (!(await _tgBudget('text'))) return;
+  // Revisión nocturna: descartar PRUEBA / staff ANTES de gastar el cupo del día (antes un retiro de prueba se comía uno de los 2 textos).
   if (/PRUEBA/i.test(String(pp.titular || ''))) return;
   const u = await User.findOne({ username: pp.username }).select('role').lean(); if (!u || u.role !== 'user') return;
+  if (!(await _tgBudget('text'))) return;
   const r = await tgChannel.call(c.token, 'sendMessage', { chat_id: c.channel, text: tgChannel.bigWinCaption(pp.username, pp.amount), parse_mode: 'HTML', disable_web_page_preview: true });
   if (!r.ok) await _tgSet({ lastError: 'premio grande: ' + String(r.error).slice(0, 140), lastErrorAt: new Date() });
 }
@@ -31735,7 +31742,12 @@ async function _rbGroupMigrate(oldId, newChat, botId) {
     if (Object.keys(set).length) await Config.collection.updateOne({ key: 'rcptbot', [`value.structs.${si}.id`]: st.id }, { $set: set });
   }
   const M = _rbM();
-  await M.RcptFwd.updateMany({ fromChat: oldId, status: { $in: ['hold', 'open'] } }, { $set: { fromChat: newId } }); await M.RcptFwd.updateMany({ toChat: oldId, status: { $in: ['hold', 'open'] } }, { $set: { toChat: newId } });
+  // Revisión nocturna: los números de mensaje son del grupo VIEJO y el supergrupo numera de nuevo: srcMsgId se corre a un rango negativo que no choca
+  // (ni con mensajes nuevos ni con los 'resto', -(1e6…1e12+1e6)) y se borran los ids de mensaje del lado que migró (si no, un comprobante nuevo con
+  // ese número se descartaba como "ya tomado" y una corrección de monto podía caer en el viejo). El número original queda en srcMsgIdOld.
+  await M.RcptFwd.collection.updateMany({ fromChat: oldId, status: { $in: ['hold', 'open'] } }, [{ $set: { fromChat: newId, replyMsgId: null, srcMsgIdOld: '$srcMsgId',
+    srcMsgId: { $cond: [{ $gt: ['$srcMsgId', 0] }, { $subtract: [-3e12, '$srcMsgId'] }, '$srcMsgId'] } } }]);
+  await M.RcptFwd.updateMany({ toChat: oldId, status: { $in: ['hold', 'open'] } }, { $set: { toChat: newId, fwdMsgId: null } });
   await M.RcptClose.updateMany({ fromChat: oldId, status: { $in: ['pending', 'quoted'] } }, { $set: { fromChat: newId } }); await M.RcptClose.updateMany({ toChat: oldId, status: { $in: ['pending', 'quoted'] } }, { $set: { toChat: newId } });
   const cb = ((await Config.collection.findOne({ key: 'rcptbotcbu' })) || {}).value || {}; const cs = {}; const rn = {};
   for (const [k, x] of Object.entries(cb.items || {})) { if (!x) continue; if (String(x.from) === oldId) cs[`value.items.${k}.from`] = newId; if (String(x.to) === oldId) cs[`value.items.${k}.to`] = newId; }
@@ -31984,16 +31996,23 @@ async function _rbOnReceipt(c, bot, m, file, route) {
 async function _rbClose(c, route, by, opts = {}) {
   const fromChat = String(route.from); const structId = route.structId || null; const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
   const q = { fromChat, status: 'open' }; if (structId) q.structId = structId; if (opts.to) q.toChat = String(opts.to);
-  let part = null;
+  let part = null, reqAmt = null;
   if (opts.amount != null) {
     const cur = await _rbOpenSum(fromChat, opts.to, structId); const a = Math.round(Number(opts.amount) * 100) / 100; const tot = Math.round(cur.total * 100) / 100;
     if (!(a > 0)) return { ok: false, why: 'monto inválido' };
     if (a > tot) return { ok: false, why: `el monto (${_rbMoney2(a)}) es mayor que lo sumado (${_rbMoney2(tot)})` };
-    if (a < tot) part = { amount: a, rest: Math.round((tot - a) * 100) / 100, of: tot };
+    reqAmt = a;
   }
   await _rbM().RcptFwd.updateMany(q, { $set: { status: 'closed', closeId } });
   const rows = await _rbM().RcptFwd.aggregate([{ $match: { closeId } }, { $group: { _id: '$toChat', toTitle: { $first: '$toTitle' }, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 }, first: { $min: '$createdAt' } } }]);
   if (!rows.length) return { ok: false, why: 'no hay comprobantes abiertos' };
+  // Revisión nocturna: el parcial se calcula con lo que REALMENTE se cerró (no con la lectura previa): si entró un comprobante en el medio o
+  // otro cierre se adelantó, antes quedaba un 'resto' inflado o un comprobante fuera de todas las sumas.
+  if (reqAmt != null) {
+    const real = Math.round(rows.reduce((t, r) => t + (Number(r.total) || 0), 0) * 100) / 100;
+    if (reqAmt > real) { await _rbM().RcptFwd.updateMany({ closeId }, { $set: { status: 'open', closeId: null } }); return { ok: false, why: `el monto (${_rbMoney2(reqAmt)}) es mayor que lo sumado (${_rbMoney2(real)})` }; }
+    if (reqAmt < real) part = { amount: reqAmt, rest: Math.round((real - reqAmt) * 100) / 100, of: real };
+  }
   const now = new Date(); const lines = []; const pre = route.botId || null;
   for (const r of rows) {
     const cid = uuidv4();
@@ -32141,7 +32160,7 @@ async function _rbMenuCb(c, bot, cq) {
   if (route) {
     if (act === 'close') return ask('🔒 ¿Dar el CIERRE del TOTAL ahora? Lo sumado pasa a PENDIENTE A COTIZAR y la suma arranca de $0.\n(Parcial: /cierre 500.000)', 'closeok');
     const pc = act.match(/^pc:(\d{1,2}):([\d.]+)$/);
-    if (pc) { await kb({ inline_keyboard: [] }); await ans(); const d = _rbDests(c, route)[Number(pc[1])]; if (!d) return; const r = await _rbClose(c, route, by || 'botón', { to: d.to, amount: Number(pc[2]) }); if (!r.ok) await _rbSend(c, chat, '❌ No se cerró: ' + _rbH(r.why) + '.', bot.id); return; }
+    if (pc) { await kb({ inline_keyboard: [] }); await ans(); if (!(await _rbOnce(chat, 'pc' + ((cq.message && cq.message.message_id) || cq.id)))) return; /* revisión nocturna: el botón de cierre parcial sirve UNA vez */ const d = _rbDests(c, route)[Number(pc[1])]; if (!d) return; const r = await _rbClose(c, route, by || 'botón', { to: d.to, amount: Number(pc[2]) }); if (!r.ok) await _rbSend(c, chat, '❌ No se cerró: ' + _rbH(r.why) + '.', bot.id); return; }
     if (act === 'closeok') { await done(); const r = await _rbClose(c, route, by || 'botón'); return ans(r.ok ? '🔒 Cierre hecho.' : 'No hay comprobantes abiertos para cerrar.'); }
     return ans('Ese botón es del grupo de destino.');
   }
@@ -32396,11 +32415,17 @@ async function _rbOnMessage(c, bot, m) {
 async function _rbSetWebhook(b) {
   return tgChannel.call(b.token, 'setWebhook', { url: _tgWebhookBase(await _tgCfg()) + '/api/rcptbot/webhook/' + b.id, secret_token: b.secret, allowed_updates: ['message', 'my_chat_member', 'callback_query'] }); // #1079-f: + botones
 }
+let _rbFlushAt = 0; // revisión nocturna: vaciado de la copia de la config por un secreto que no coincide, como mucho 1 vez cada 30 s
 app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
   try {
     const c = await _rbCfg(); const bot = (c.botsDec || []).find((b) => b.id === String(req.params.bot || ''));
     const got = String(req.get('x-telegram-bot-api-secret-token') || ''); const sec = String((bot && bot.secret) || '');
-    if (!bot || !sec || got.length !== sec.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec))) { _rbMem.at = 0; return res.status(401).end(); }
+    if (!bot || !sec || got.length !== sec.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec))) {
+      // Revisión nocturna: sólo se relee la base si el bot existe y el secreto tiene el largo correcto (pudo rotar), y no más de 1 vez cada 30 s:
+      // antes cualquier POST falso forzaba 2 lecturas de Mongo por pedido, sin tope.
+      if (bot && sec && got.length === sec.length && Date.now() - _rbFlushAt > 30000) { _rbFlushAt = Date.now(); _rbMem.at = 0; }
+      return res.status(401).end();
+    }
     res.json({ ok: true });
     if (!bot.token) return;
     const u = req.body || {};

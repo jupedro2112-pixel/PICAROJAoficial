@@ -78,7 +78,7 @@ caso('#1056 Reembolsos, premio grande (usuario tapado) y tope diario: 1 foto y 2
   const w = tg.bigWinCaption('juanperez22', 1500000); assert.ok(/ju\*\*\*22/.test(w) && !/juanperez22/.test(w) && /\$1\.500\.000/.test(w) && /Felicitaciones/.test(w));
   const S2 = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
   assert.ok(/const TG_DAY_MAX = \{ photo: 1, text: 2 \}/.test(S2) && /'value\.budget\.day': dk, \[f\]: \{ \$lt: max \}/.test(S2), 'tope atómico');
-  for (const re of [/if \(!force && !\(await _tgBudget\(slot\)\)\)/, /_tgQuiet\(c\) \|\| !\(await _tgBudget\('text'\)\)\) return; \/\/ #1056/, /if \(!\(await _tgBudget\('text'\)\)\) return; \/\/ #1056\n  await _tgSorteoPost/, /bigWinSince: pp\.paidAt \}\);\n  if \(!\(await _tgBudget\('text'\)\)\) return;/]) assert.ok(re.test(S2), String(re));
+  for (const re of [/if \(!force && !\(await _tgBudget\(slot\)\)\)/, /_tgQuiet\(c\) \|\| !\(await _tgBudget\('text'\)\)\) return; \/\/ #1056/, /if \(!\(await _tgBudget\('text'\)\)\) return; \/\/ #1056\n  await _tgSorteoPost/, /bigWinSince: pp\.paidAt \}\);[\s\S]{0,400}?role !== 'user'\) return;\n  if \(!\(await _tgBudget\('text'\)\)\) return;/ /* revisión nocturna: PRUEBA/staff se descartan antes del cupo */]) assert.ok(re.test(S2), String(re));
   assert.ok(/editMessageCaption/.test(S2) && /✅ BONO COMPLETADO/.test(S2), 'completado edita el posteo');
   assert.ok(/era de otro día/.test(S2) && /x\.autoKind === 'deporte' \? 0/.test(S2), 'partidos de hoy primero, nada viejo');
   assert.ok(/everyDays: 7, hours: 48 \}/.test(S2), 'código semanal');
