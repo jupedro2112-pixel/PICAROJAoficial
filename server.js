@@ -7063,6 +7063,14 @@ app.post('/api/auth/change-password/pending', authMiddleware, authLimiter, async
     if (!newPassword || newPassword.length < 6) {
       return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
     }
+    // Revisión nocturna: misma defensa contra robo de token que /change-password: fuera del cambio OBLIGATORIO hay que saber la clave actual
+    // (antes, con la sesión abierta en un celular prestado se cambiaba la clave y se le sacaba la verificación al teléfono).
+    if (user.mustChangePassword !== true) {
+      const currentPassword = req.body && req.body.currentPassword;
+      let currentOk = false;
+      if (currentPassword) { try { currentOk = await bcrypt.compare(String(currentPassword), user.password); } catch (_) { currentOk = false; } }
+      if (!currentOk) return res.status(401).json({ error: 'La contraseña actual es incorrecta', code: 'BAD_CURRENT_PASSWORD' });
+    }
 
     const requestedPhoneRaw = (typeof phone === 'string' && phone.trim())
       || (typeof whatsapp === 'string' && whatsapp.trim())
@@ -18203,7 +18211,7 @@ async function computeCampaignStats(code) {
   // transacción marcada como bono/regalo aunque por error venga como type='deposit'
   // (futuras integraciones / scripts). Hoy install-bonus se registra como type='bonus'
   // y queda fuera por el filtro principal — esta exclusión es defensiva.
-  const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code'];
+  const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund']; // revisión nocturna: la devolución de un retiro rechazado no es carga
   const [depositsByUser, withdrawalsAgg] = await Promise.all([
     Transaction.aggregate([
       { $match: {
@@ -18782,7 +18790,7 @@ function _campaignRangeParse(q) {
 }
 async function _campaignStatsRange(code, start, end) {
   const normalizedCode = String(code).toUpperCase().trim();
-  const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code'];
+  const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund']; // revisión nocturna: la devolución de un retiro rechazado no es carga
   const [clicks, users] = await Promise.all([
     CampaignClick.countDocuments({ campaignCode: normalizedCode, clickedAt: { $gte: start, $lt: end } }),
     User.find({ acquisitionCampaign: normalizedCode }).select('id username createdAt').lean()
@@ -18846,7 +18854,7 @@ async function _publicCampaignStats(token) {
   let depToday = { count: 0, total: 0, users: 0 };
   if (names.length) {
     const agg = await Transaction.aggregate([
-      { $match: { type: 'deposit', username: { $in: names }, createdAt: { $gte: todayStart }, $or: [{ 'metadata.source': { $exists: false } }, { 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code'] } }] } },
+      { $match: { type: 'deposit', username: { $in: names }, createdAt: { $gte: todayStart }, status: { $nin: ['failed', 'cancelled'] }, description: { $not: /PRUEBA/i }, $or: [{ 'metadata.source': { $exists: false } }, { 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } }] } }, // revisión nocturna: = _REAL_DEP
       { $group: { _id: '$username', total: { $sum: '$amount' }, count: { $sum: 1 } } }
     ]);
     depToday = { count: agg.reduce((s, x) => s + x.count, 0), total: Math.round(agg.reduce((s, x) => s + (x.total || 0), 0)), users: agg.length };
@@ -18875,11 +18883,11 @@ async function _publicCampaignRange(code, from, to) {
     CampaignClick.aggregate([{ $match: { campaignCode: code, clickedAt: { $gte: start, $lt: end } } },
       { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$clickedAt', timezone: tz } }, n: { $sum: 1 } } }]),
     names.length ? Transaction.aggregate([
-      { $match: { type: 'deposit', username: { $in: names }, createdAt: { $gte: start, $lt: end }, $or: [{ 'metadata.source': { $exists: false } }, { 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code'] } }] } },
+      { $match: { type: 'deposit', username: { $in: names }, createdAt: { $gte: start, $lt: end }, status: { $nin: ['failed', 'cancelled'] }, description: { $not: /PRUEBA/i }, $or: [{ 'metadata.source': { $exists: false } }, { 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } }] } }, // revisión nocturna: = _REAL_DEP
       { $group: { _id: { d: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: tz } }, u: '$username' }, total: { $sum: '$amount' }, count: { $sum: 1 } } }
     ]) : [],
     names.length ? Transaction.aggregate([
-      { $match: { type: 'deposit', username: { $in: names }, $or: [{ 'metadata.source': { $exists: false } }, { 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code'] } }] } },
+      { $match: { type: 'deposit', username: { $in: names }, status: { $nin: ['failed', 'cancelled'] }, description: { $not: /PRUEBA/i }, $or: [{ 'metadata.source': { $exists: false } }, { 'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund'] } }] } }, // revisión nocturna: = _REAL_DEP
       { $group: { _id: '$username', first: { $min: '$createdAt' } } }, { $match: { first: { $gte: start, $lt: end } } }
     ]) : []
   ]);
@@ -19314,7 +19322,7 @@ app.get('/api/admin/publisher-admin/my-stats', authMiddleware, publisherAdminMid
     let totalDeposits = 0;
     let totalWithdrawals = 0;
     if (usernames.length > 0) {
-      const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code'];
+      const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund']; // revisión nocturna: la devolución de un retiro rechazado no es carga
       const [depAgg, witAgg] = await Promise.all([
         Transaction.aggregate([
           { $match: {
@@ -19440,6 +19448,7 @@ app.post('/api/admin/publisher-admin/users/:userId/access-link', authMiddleware,
     if (target.role !== 'user') {
       return res.status(403).json({ error: 'Solo se pueden generar links para cuentas de clientes.' });
     }
+    if (await _clientHasDeposits(target)) { return res.status(403).json({ error: 'Este cliente ya cargó: el cambio de clave / link de acceso lo hace sólo el admin general (seguridad).', code: 'ADMIN_ONLY_FOR_DEPOSITORS' }); } // revisión nocturna
     if (target.isBlocked) {
       return res.status(400).json({ error: 'La cuenta está bloqueada — no se puede generar el link.' });
     }
@@ -19477,6 +19486,7 @@ app.post('/api/admin/publisher-admin/users/:userId/change-password', authMiddlew
     if (target.role !== 'user') {
       return res.status(403).json({ error: 'No se puede cambiar la contraseña de cuentas que no son de usuario final' });
     }
+    if (await _clientHasDeposits(target)) { return res.status(403).json({ error: 'Este cliente ya cargó: el cambio de clave / link de acceso lo hace sólo el admin general (seguridad).', code: 'ADMIN_ONLY_FOR_DEPOSITORS' }); } // revisión nocturna
 
     target.password = newPassword; // pre-save hook hashea
     target.passwordChangedAt = new Date();
@@ -19778,7 +19788,7 @@ app.get('/api/admin/publishers/dashboard', authMiddleware, adminMiddleware, asyn
     }
 
     // Para cada publisher, sumar deposits y withdrawals de sus usernames.
-    const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code'];
+    const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund']; // revisión nocturna: la devolución de un retiro rechazado no es carga
     const txDateFilter = {};
     if (hasDateFilter) txDateFilter.timestamp = dateFilter;
 
@@ -19868,7 +19878,7 @@ app.get('/api/admin/publishers/:publisher/users', authMiddleware, adminMiddlewar
     let depByUser = {};
     let witByUser = {};
     if (usernames.length > 0) {
-      const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code'];
+      const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'welcome_code', 'payout_refund']; // revisión nocturna: la devolución de un retiro rechazado no es carga
       const [depAgg, witAgg] = await Promise.all([
         Transaction.aggregate([
           { $match: {
@@ -21215,6 +21225,12 @@ app.get('/api/admin/reembolsos', authMiddleware, adminMiddleware, async (req, re
 // ============================================
 
 // Cambiar contraseña de usuario (admin) - CON PERMISOS POR ROL
+// Revisión nocturna (misma regla que #1053): sólo el admin general toca la clave / el acceso de un cliente que YA cargó
+// (si no, un agente o publicista podía ponerle una clave nueva, entrar y retirar el saldo a su propio CBU).
+async function _clientHasDeposits(u) {
+  if (!u) return false;
+  return !!(await Transaction.exists({ $or: [{ userId: u.id }, { username: u.username }], type: 'deposit', status: { $nin: ['failed', 'cancelled'] } }));
+}
 app.post('/api/admin/change-password', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { userId, newPassword } = req.body;
@@ -21245,6 +21261,7 @@ app.post('/api/admin/change-password', authMiddleware, adminMiddleware, async (r
     if (adminRole !== 'admin' && user.role !== 'user') {
       return res.status(403).json({ error: 'Solo puedes cambiar contraseñas de usuarios, no de administradores' });
     }
+    if (adminRole !== 'admin' && await _clientHasDeposits(user)) { return res.status(403).json({ error: 'Este cliente ya cargó: el cambio de clave / link de acceso lo hace sólo el admin general (seguridad).', code: 'ADMIN_ONLY_FOR_DEPOSITORS' }); }
 
     user.password = newPassword;
     user.passwordChangedAt = new Date();
