@@ -22631,7 +22631,9 @@ app.get('/api/admin/caja-movimientos', authMiddleware, adminMiddleware, async (r
   try {
     const days = Math.max(1, Math.min(60, parseInt(req.query.days, 10) || 7));
     const since = datosIa.dateKeyART(new Date(Date.now() - days * 86400000)); const hoy = datosIa.dateKeyART(new Date());
-    const items = await Expense.find({ dateKey: { $gte: since }, status: { $ne: 'failed' } }).sort({ createdAt: -1 }).limit(200).lean();
+    // Revisión nocturna: los agentes ven sólo lo anotado desde Caja (los Gastos privados del admin van con la clave de Datos, #770).
+    const _cq = { dateKey: { $gte: since }, status: { $ne: 'failed' } }; if (req.user.role !== 'admin') _cq.source = 'caja';
+    const items = await Expense.find(_cq).sort({ createdAt: -1 }).limit(200).lean();
     const accs = (await _bankAccounts()).filter((a) => a.active !== false);
     const out = items.map((g) => _cajaItem(g, accs));
     const sum = (arr) => Math.round(arr.reduce((s, g) => s + g.amount, 0));
@@ -22673,7 +22675,8 @@ app.post('/api/admin/caja-movimientos', authMiddleware, adminMiddleware, async (
 });
 app.get('/api/admin/caja-movimientos/:id/receipt', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const g = await Expense.findOne({ id: String(req.params.id) }).select('+receipt.data receipt').lean();
+    const g = await Expense.findOne({ id: String(req.params.id) }).select('+receipt.data receipt source').lean();
+    if (g && req.user.role !== 'admin' && g.source !== 'caja') return res.status(403).json({ error: 'Sólo el admin general' }); // revisión nocturna
     const rd = g && g.receipt && g.receipt.data; if (!rd) return res.status(404).json({ error: 'Sin comprobante' });
     const mm = String(rd).match(/^data:([^;]+);base64,(.+)$/); if (!mm) return res.status(404).json({ error: 'Comprobante ilegible' });
     res.set('Content-Type', mm[1]); res.set('Cache-Control', 'private, max-age=600'); res.send(Buffer.from(mm[2], 'base64'));
@@ -22682,6 +22685,7 @@ app.get('/api/admin/caja-movimientos/:id/receipt', authMiddleware, adminMiddlewa
 app.post('/api/admin/caja-movimientos/:id/verify', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const g = await Expense.findOne({ id: String(req.params.id) }).lean(); if (!g) return res.status(404).json({ error: 'No existe' });
+    if (req.user.role !== 'admin' && g.source !== 'caja') return res.status(403).json({ error: 'Sólo el admin general' }); // revisión nocturna
     const bm = await _cajaBankVerify(g, {}); try { await _closeEnsure(g.dateKey, true); } catch (_) {}
     res.json({ success: true, item: _cajaItem(Object.assign(g, { bankMatch: bm }), await _bankAccounts()) });
   } catch (e) { logger.error('[caja] verify ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
@@ -22727,7 +22731,7 @@ app.post('/api/admin/gastos', authMiddleware, adminMiddleware, async (req, res) 
     if (!payNow && account === 'main') { try { await _cajaBankVerify(doc.toObject(), {}); } catch (e) { logger.warn('[gastos] verify ' + e.message); } }
     if (payNow) {
       if (!hgcashPay.isEnabled()) { await Expense.deleteOne({ id: doc.id }); return res.status(503).json({ error: 'hgcash no está configurado (token de API).' }); }
-      if (!toCBU || !/^(\d{22}|[a-z0-9._-]{6,40})$/i.test(toCBU)) { await Expense.deleteOne({ id: doc.id }); return res.status(400).json({ error: 'Para pagar por la API hace falta el CBU/CVU (22 dígitos) o el alias.' }); }
+      if (!toCBU || String(toCBU).replace(/\D/g, '').length !== 22) { await Expense.deleteOne({ id: doc.id }); return res.status(400).json({ error: 'Para pagar por la API hace falta el CBU/CVU de 22 dígitos (el banco no acepta alias).' }); } // revisión nocturna: createCashOut sólo acepta 22 dígitos
       let accountId = await resolveHgcashAccountId();
       if (!accountId) { await Expense.deleteOne({ id: doc.id }); return res.status(400).json({ error: 'No se pudo determinar la cuenta hgcash a debitar.' }); }
       const baseUrl = getPublicBaseUrl();

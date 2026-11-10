@@ -3703,7 +3703,7 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                         <label style="display:flex;flex-direction:column;gap:3px">Tipo<select id="gsKind" onchange="gastoKindChange()"><option value="gasto">💸 Gasto (sale plata)</option><option value="fondeo">🏦 Fondeo (entra plata para pagos · ingreso del cierre)</option></select></label>
 <label>Concepto<input type="text" id="gsConcept" maxlength="120" placeholder="ej. Comisión publicista, publicidad, sueldo…"></label>
                         <label>Monto $<input type="number" id="gsAmount" min="1" step="1" placeholder="0"></label>
-                        <label>CBU / CVU / alias<input type="text" id="gsCbu" maxlength="40" placeholder="22 dígitos o alias"></label>
+                        <label>CBU / CVU (alias sólo si lo pagás a mano)<input type="text" id="gsCbu" maxlength="40" placeholder="22 dígitos (por la API no se acepta alias)"></label>
                         <label>Titular<input type="text" id="gsName" maxlength="80" placeholder="Nombre del destinatario"></label>
                         <label>CUIT (opcional)<input type="text" id="gsCuit" maxlength="13" placeholder="20-12345678-9"></label>
                         <label>Fecha (opcional)<input type="date" id="gsDate"></label>

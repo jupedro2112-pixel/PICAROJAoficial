@@ -8,8 +8,8 @@
 'use strict';
 const GIFT_SOURCES = ['install_bonus', 'welcome_gift', 'payout_refund'];
 // #469: lo que la casa REGALA (todo lo que no es carga ni retiro)
-const PROMO_TYPES = ['bonus', 'refund', 'roulette', 'fire_reward', 'rakeback', 'vip_levelup', 'install_gift', 'referral_commission', 'mission'];
-const PROMO_LABEL = { bonus: 'bonos de carga', refund: 'reembolsos', roulette: 'ruleta', fire_reward: 'fueguito', rakeback: 'rakeback', vip_levelup: 'nivel VIP', install_gift: 'extra por instalar', referral_commission: 'referidos', mission: 'misiones' };
+const PROMO_TYPES = ['bonus', 'refund', 'roulette', 'fire_reward', 'rakeback', 'vip_levelup', 'install_gift', 'referral_commission', 'mission', 'review_gift', 'code_drop']; // revisión nocturna: = CASHBACK_GIFT_TX_TYPES (faltaban código sorpresa y regalo por reseña)
+const PROMO_LABEL = { bonus: 'bonos de carga', refund: 'reembolsos', roulette: 'ruleta', fire_reward: 'fueguito', rakeback: 'rakeback', vip_levelup: 'nivel VIP', install_gift: 'extra por instalar', referral_commission: 'referidos', mission: 'misiones', review_gift: 'regalo por reseña', code_drop: 'código sorpresa' };
 const DAY = 86400000;
 const TZ = '-03:00';
 
