@@ -18,6 +18,11 @@
   Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
   (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
 
+### 1080. El sorteo se abre adentro de Girox (2026-11-10) — app v711
+- **Owner:** "cuando abrís el sorteo mensual se abre el menú completo y queda ahí; quiero que se abra todo en Girox, sin ir a otra página".
+- Causa: `VIP.sorteos.goMenu` ("Anotate, es gratis" de la hoja del sorteo arriba del casino) llamaba `VIP.ui.closeCasinoFrame()` y abría la ventana sobre el
+  menú. Ahora NO cierra el casino: `#srtModal` se abre encima de Girox (`body.casino-open .srt-modal` ya va arriba del overlay) y al cerrarla se vuelve al juego.
+
 ### 1079-b..e. Bot de comprobantes: varios bots, ESTRUCTURAS, clave propia, suma del mes y explicación de los centavos (2026-11-10) — panel v283
 - **Owner:** "ponelo último con clave; agregar los tokens de cada bot; meto los bots en todos los grupos"; "estructuras de bot que se puedan cerrar por
   estructura (4 y si quiero agrego 1): token, id y que empiece"; "pendiente a cotizar con fecha todo detallado y la suma nueva; /cotizado ⇒ pendiente a

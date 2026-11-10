@@ -282,7 +282,7 @@
                     '<p class="srt-mini-txt">🎟️ 1° premio por sorteo de tickets entre los anotados · 2° y 3° por ranking. ' + (s2.key === 'gran' ? 'Del ' + esc(fday(s2.start)) + ' al ' + esc(fday(s2.end)) + ' · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.rules.dayDepositPts ? ' · +' + num(s2.rules.dayDepositPts) + ' por día que cargás' : '') + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO EXTRA') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' al azar' : '') : 'Todos los meses · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' para los que cargan ' + num(s2.extra.minDeposits) + ' veces en el mes' : '')) + '. Ganan los 3 anotados con más puntos.</p></div>';
             };
             return '<div class="srt-mini-box"><div class="srt-mini-head"><b>🏆 ¡Increíbles premios!</b><button type="button" class="srt-x" onclick="VIP.sorteos.closeMini()" aria-label="Cerrar">✕</button></div>' + ordered.map(one).join('') +
-                '<button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + ordered[0].key + '\')">Anotate, es gratis ›</button><p class="srt-mini-foot">El detalle completo y las Bases están en el menú.</p></div>';
+                '<button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + ordered[0].key + '\')">Anotate, es gratis ›</button><p class="srt-mini-foot">Adentro tenés el detalle completo y las Bases.</p></div>';
         };
         m.innerHTML = inner(); document.body.appendChild(m); m._paint = () => { m.innerHTML = inner(); };
         clearInterval(_tick); _tick = setInterval(tickCd, 1000);
@@ -290,12 +290,11 @@
     }
     function closeMini() { const m = _el('srtMini'); if (m) m.remove(); if (!_open && !_inline) clearInterval(_tick); }
     // "Ver más": cierra la hoja y el casino y despliega el sorteo en el menú (donde estén las dos mitades).
+    // #1080 (owner: "cuando abrís el sorteo mensual se abre el menú completo y queda ahí; que se abra todo en Girox, sin ir a otra página"): ya NO cierra
+    // el casino; la ventana del sorteo se abre ENCIMA de Girox (srt-modal va arriba del casino) y al cerrarla se vuelve al juego.
     function goMenu(key) {
         closeMini();
-        try { if (VIP.ui && VIP.ui.closeCasinoFrame) VIP.ui.closeCasinoFrame(); } catch (_) {}
-        setTimeout(() => {
-            open(key); // #941: la ventana del sorteo sobre el menú
-        }, 350);
+        setTimeout(() => { open(key); }, 120);
     }
     function tcToggle(btn) { try { const ol = btn.nextElementSibling; const open = ol.hidden; ol.hidden = !open; btn.setAttribute('aria-expanded', open ? 'true' : 'false'); const i = btn.querySelector('i'); if (i) i.textContent = open ? 'Minimizar ▴' : 'Maximizar ▾'; if (open) setTimeout(() => { try { btn.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (_) {} }, 50); } catch (_) {} }
     function tgOpen() { const u = _data && _data.telegramUrl; if (u) window.open(u, '_blank', 'noopener'); }
