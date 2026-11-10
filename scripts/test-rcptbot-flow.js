@@ -220,6 +220,31 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await hook({ message: { message_id: 71, chat: { id: -4, type: 'supergroup', title: 'grupo43' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'f71' }] } });
     assert.ok(sent.filter((x) => x.method === 'copyMessage').slice(-1)[0].p.chat_id === '-3' && /REENVIADO<\/b> a fichasnuevobot/.test(last(-4).p.text), last(-4).p.text);
   });
+  const photoU = (id, uid, chat = -1) => ({ message: { message_id: id, chat: { id: chat, type: 'supergroup', title: 'buffalobot' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'f' + id, file_unique_id: uid }] } });
+  const openSum = (to) => RcptFwd.rows.filter((x) => x.toChat === to && x.status === 'open').reduce((a, x) => a + x.amount, 0);
+  await caso('DUPLICADO sin cotizar: avisa, NO suma; "es otro" lo suma', async () => {
+    aiAmount = 4000.99; await hook(photoU(80, 'U1')); const s0 = openSum('-2');
+    await hook(photoU(81, 'U1')); assert.ok(/COMPROBANTE DUPLICADO · NO SE SUMA/.test(last(-1).p.text), last(-1).p.text); assert.strictEqual(openSum('-2'), s0);
+    const btn = last(-1).p.reply_markup.inline_keyboard[0][0]; assert.ok(/Es otro/.test(btn.text));
+    await cbIn(-1, btn.callback_data); assert.ok(Math.abs(openSum('-2') - s0 - 4000.99) < 0.01);
+  });
+  await caso('duplicado de algo ya COTIZADO ⇒ no se detecta (se suma normal)', async () => {
+    aiAmount = 7000.99; await hook(photoU(82, 'U2')); await hook(text(83, -1, '/cierre')); await hook(text(84, -2, '/cotizado'));
+    const s0 = openSum('-2'); await hook(photoU(85, 'U2')); assert.ok(/REENVIADO/.test(last(-1).p.text), last(-1).p.text); assert.ok(Math.abs(openSum('-2') - s0 - 7000.99) < 0.01);
+  });
+  await caso('duplicado de algo CERRADO pero sin cotizar ⇒ sí se detecta', async () => {
+    aiAmount = 9000.99; await hook(photoU(86, 'U3')); await hook(text(87, -1, '/cierre'));
+    await hook(photoU(88, 'U3')); assert.ok(/DUPLICADO/.test(last(-1).p.text) && /ya entró en un cierre/.test(last(-1).p.text), last(-1).p.text);
+  });
+  await caso('/restar en los dos grupos y /anular respondiendo un comprobante', async () => {
+    aiAmount = 2000.99; await hook(photoU(90, 'U4')); const s0 = openSum('-2');
+    await hook(text(91, -2, '/restar 500'));  assert.ok(/RESTADO<\/b>: −\$500/.test(last(-2).p.text) && /RESTADO/.test(last(-1).p.text), last(-2).p.text); assert.ok(Math.abs(openSum('-2') - (s0 - 500)) < 0.01);
+    const rec = RcptFwd.rows.find((x) => x.srcMsgId === 90);
+    await hook(text(92, -2, '/anular', rec.fwdMsgId)); assert.strictEqual(rec.status, 'anulado'); assert.ok(/ANULADO<\/b>: −\$2\.000,99/.test(last(-1).p.text) && /ANULADO/.test(last(-2).p.text));
+    assert.ok(Math.abs(openSum('-2') - (s0 - 500 - 2000.99)) < 0.01);
+    aiAmount = 100.99; await hook(photoU(93, 'U5')); await hook(text(94, -1, '/anular', 93)); assert.strictEqual(RcptFwd.rows.find((x) => x.srcMsgId === 93).status, 'anulado');
+    await hook(text(95, -1, '/anular')); assert.ok(/respondé ese comprobante/.test(last(-1).p.text));
+  });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
   console.log(`\n${ok} casos OK`);

@@ -13,6 +13,9 @@ const rcptFwdSchema = new mongoose.Schema({
   srcBot: { type: String, default: null },
   structId: { type: String, default: null, index: true }, // #1079-c: estructura (circuito) a la que pertenece
   fileId: { type: String, default: null },
+  fileUid: { type: String, default: null, index: true }, // #1079-m: file_unique_id de Telegram (la MISMA imagen reenviada)
+  dupKey: { type: String, default: null, index: true }, // #1079-m: COELSA / n° de operación leído por la IA (el mismo comprobante, otra captura)
+  dupOf: { type: String, default: null },
   fileKind: { type: String, default: null }, // photo | document
   fileMime: { type: String, default: null },
   fileName: { type: String, default: null },
@@ -22,7 +25,7 @@ const rcptFwdSchema = new mongoose.Schema({
   amount: { type: Number, default: null },
   amountFrom: { type: String, default: null }, // 'ia' | 'texto' | 'corregido' | 'arrastre' | 'arrastre_mes' | 'resto'
   sender: { type: String, default: '' },
-  status: { type: String, default: 'hold', index: true }, // hold (sin monto / sin grupo para esos centavos) | open | closed | failed
+  status: { type: String, default: 'hold', index: true }, // hold (sin monto / sin grupo para esos centavos) | open | closed | failed | dup (duplicado, no suma) | anulado (/anular)
   error: { type: String, default: null },
   closeId: { type: String, default: null, index: true }
 }, { timestamps: true });
@@ -40,6 +43,7 @@ const rcptCloseSchema = new mongoose.Schema({
   periodFrom: { type: Date, default: null }, // primer comprobante del período
   count: { type: Number, default: 0 },
   total: { type: Number, default: 0 },
+  batchId: { type: String, default: null, index: true }, // #1079-m: = RcptFwd.closeId de los comprobantes de este cierre
   partialOf: { type: Number, default: null }, // #1079-j: cierre PARCIAL (/cierre 500.000) de este total; el resto siguió sumando
   missing: { type: Number, default: 0 },
   by: { type: String, default: '' },
