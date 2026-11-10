@@ -206,6 +206,10 @@ document.addEventListener('change', function (ev) {
 <span>🤖</span>
 <span>Chatbot (canal Telegram)</span>
 </a>
+<a href="#" class="nav-item" data-section="rcptbot" title="Bot de Telegram que reenvía comprobantes de un grupo a otro según los centavos, suma y cierra a las 13 h">
+<span>🧾</span>
+<span>Bot de comprobantes</span>
+</a>
 
 
 
@@ -3122,6 +3126,31 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
             <section id="sorteosSection" class="section">
                 <div class="panel-header"><h2>🏆 Sorteos <small style="font-size:.6em;color:#888;font-weight:700">ranking en vivo · mensual y Gran Sorteo</small></h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-secondary" onclick="sorteosRecalc()">↻ Recalcular puntos ahora</button><button class="btn btn-secondary" onclick="loadSorteos()">🔄</button></div></div>
                 <div id="srtAdmin">Cargando…</div>
+            </section>
+            <!-- #1079 (owner): bot que reenvía comprobantes entre grupos de Telegram según los centavos, suma, cierra 13 h y queda pendiente a cotizar -->
+            <section id="rcptbotSection" class="section">
+                <div class="panel-header"><h2>🧾 Bot de comprobantes (Telegram)</h2></div>
+                <div class="card" style="margin-bottom:1rem">
+                    <h3 style="margin:0 0 .4rem;font-size:1rem">1 · El bot</h3>
+                    <p style="margin:0 0 .5rem;font-size:12.5px;color:var(--p-muted,#777)">Bot NUEVO de @BotFather, sólo para esto (no el del canal). Agregalo a TODOS los grupos; en los grupos que MANDAN comprobantes tiene que ser <b>administrador</b> (si no, Telegram no le pasa las fotos). Al agregarlo aparece solo abajo; si no, escribí <b>/start</b> en ese grupo.</p>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="password" id="rbToken" placeholder="Token del bot (números:letras)" autocomplete="off" style="min-width:260px;flex:1"> <button class="btn btn-primary btn-sm" onclick="rbSaveToken()">💾 Guardar y probar</button> <button class="btn btn-secondary btn-sm" onclick="rbReconnect()">🔧 Reconectar</button> <button class="btn btn-secondary btn-sm" onclick="loadRcptBot()">🔄</button></div>
+                    <div id="rbStatus" style="margin-top:6px;font-size:12.5px"></div>
+                </div>
+                <div class="card" style="margin-bottom:1rem">
+                    <h3 style="margin:0 0 .4rem;font-size:1rem">2 · Dónde reenvía (según cómo terminan los centavos)</h3>
+                    <p style="margin:0 0 .5rem;font-size:12.5px;color:var(--p-muted,#777)">Por cada grupo que manda comprobantes, poné los centavos y a qué grupo van (ej. <b>99</b> → Grupo X, <b>43</b> → Grupo Y). "Otros centavos" es opcional: si no hay regla, el comprobante NO se reenvía y se avisa en el grupo. Cierre automático a las <b>13 h de lunes a viernes</b> (el lunes junta todo el finde).</p>
+                    <div id="rbRoutes"></div>
+                    <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-secondary btn-sm" onclick="rbAddRoute()">+ Grupo que manda comprobantes</button> <button class="btn btn-primary btn-sm" onclick="rbSaveRoutes()">💾 Guardar reenvíos</button></div>
+                </div>
+                <div class="card" style="margin-bottom:1rem">
+                    <h3 style="margin:0 0 .4rem;font-size:1rem">3 · Cierres (13 h) · pendiente a cotizar → /cotizado → /enviado</h3>
+                    <div id="rbCloses"></div>
+                </div>
+                <div class="card" style="margin-bottom:1rem">
+                    <h3 style="margin:0 0 .4rem;font-size:1rem">Grupos que ve el bot · últimos comprobantes</h3>
+                    <div id="rbGroups"></div><div id="rbRecent" style="margin-top:8px"></div>
+                    <p style="margin:.6rem 0 0;font-size:12px;color:var(--p-muted,#777)">En los grupos: <b>/total</b> = acumulado · responder una foto con el monto (ej. 25000,99) lo corrige · <b>/cierrededia</b> cierra antes de hora. En el grupo que recibe: <b>/cotizado</b> (opcional con la cotización, ej. /cotizado 1150) y <b>/enviado</b>.</p>
+                </div>
             </section>
             <!-- #1078 (owner): qué publica el bot en el canal de Telegram toda la semana; editable, con lo predeterminado fijado -->
             <section id="chatbotSection" class="section">

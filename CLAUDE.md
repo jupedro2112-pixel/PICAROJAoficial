@@ -422,6 +422,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **OFICINA (#1013) ELIMINADA (#1015):** saturó la base al cambiar el día (armaba informes pesados en cada refresco). Nunca hacer cálculos pesados dentro de una ruta de lectura: sólo cron con lock.
 - **`Config.collection.*` = key EN MINÚSCULAS (revisión #1046):** el modelo Config baja la key a minúsculas en `getConfig`/`set`; un `updateOne({ key: 'telegramBot' })`
   por la colección cruda escribe un doc que nadie lee (le pasó al canal de Telegram y a migraciones del bot). Test `scripts/test-telegram-admin.js`.
+- **🧾 BOT DE COMPROBANTES (#1079):** bot de Telegram APARTE (`Config['rcptbot']`, webhook `/api/rcptbot/webhook`, modelos `RcptFwd`/`RcptClose`): destino por los
+  CENTAVOS del monto, suma por origen→destino, cierre automático 13 h lun–vie, `/cotizado` y `/enviado` en el destino. No mezclar con el bot del canal (`telegramBot`).
 - **🤖 CRONOGRAMA DEL CANAL (#1078):** con `Config['tgSchedule'].on` (default) lo AUTOMÁTICO del canal sale SÓLO por `_tgSchedTick` (panel → 🤖 Chatbot);
   un posteo automático NUEVO del canal es un tipo más en `TG_SCHED_KINDS` + `_tgSchedPost`, nunca otro cron suelto (se duplicaría).
 - **📊 GRUPO PRIVADO DE REPORTES (#1046):** Telegram, vinculado con código de un solo uso desde el panel; sólo `telegramBot.adminChats` recibe datos; números de

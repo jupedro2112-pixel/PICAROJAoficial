@@ -213,7 +213,7 @@ const generalLimiter = rateLimit({
   // Desactiva la validación de IPv6-fallback de la lib: usamos cookie para admins
   // e IP para clientes a propósito (no necesitamos el helper de IPv6 acá).
   validate: { keyGeneratorIpFallback: false },
-  skip: (req) => req.originalUrl === '/api/telegram/webhook', // revisión #1047: Telegram manda todo desde pocas IPs (la ruta tiene secreto propio)
+  skip: (req) => req.originalUrl === '/api/telegram/webhook' || req.originalUrl === '/api/rcptbot/webhook', // #1079: + bot de comprobantes · revisión #1047: Telegram manda todo desde pocas IPs (la ruta tiene secreto propio)
   message: { error: 'Demasiadas solicitudes. Intenta más tarde.' }
 });
 
@@ -31595,6 +31595,285 @@ async function _tgSecretNow() {
   return _tgSecretMem.p;
 }
 const _tgPrivRate = { min: 0, n: 0 }; // tope GLOBAL de respuestas por privado (por instancia)
+// ── #1079 BOT DE COMPROBANTES (owner: "un bot que reenvíe comprobantes de un grupo a otro, los marque como reenviados y vaya sumando; unos 5 grupos;
+// yo configuro dónde reenviar; la suma sigue hasta que pongan /cierrededia; el monto lo lee la IA; un bot nuevo aparte"). BOT PROPIO (no el del canal):
+// Config['rcptbot'] = { tokenEnc, webhookSecret, groups:[{id,title,at}], routes:[{from,to}], lastError } — escrito campo a campo por la colección cruda.
+// Webhook /api/rcptbot/webhook (secreto propio). Origen: foto o documento (imagen/PDF) ⇒ lee el monto (IA de comprobantes; si no, el número del texto),
+// lo copia al destino con "De: <grupo> · $monto" y contesta la foto en el origen con ✅ REENVIADO + acumulado. Responder la foto con un número corrige
+// el monto. /total = acumulado; /cierrededia o "cierre de día" ⇒ cierra la suma (RcptClose) y avisa en los dos grupos. El bot tiene que ser ADMIN en los
+// grupos de origen (si no, Telegram no le pasa las fotos) y miembro en los de destino. ──
+const { RcptFwd, RcptClose } = require('./src/models/RcptFwd');
+const _rbMem = { v: null, at: 0 };
+async function _rbCfg(fresh) {
+  if (!fresh && _rbMem.v && Date.now() - _rbMem.at < 30000) return _rbMem.v;
+  const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const v = Object.assign({ groups: [], routes: [] }, d.value || {});
+  let token = null; try { token = v.tokenEnc ? _credDecrypt(v.tokenEnc) : null; } catch (_) { v.decryptError = true; }
+  v.token = token; if (process.env.RENDER === 'true' && process.env.TG_ON_RENDER !== '1') { v.token = null; v.onRender = true; } // Render comparte la base: no mueve el webhook
+  _rbMem.v = v; _rbMem.at = Date.now(); return v;
+}
+async function _rbSet(fields) {
+  const $set = { updatedAt: new Date() }; for (const [k, v] of Object.entries(fields || {})) $set['value.' + k] = v;
+  await Config.collection.updateOne({ key: 'rcptbot' }, { $set }, { upsert: true }); _rbMem.at = 0; try { Config._cache && Config._cache.clear(); } catch (_) {}
+}
+async function _rbGroupSeen(chat) {
+  if (!chat || !/^(group|supergroup)$/.test(chat.type)) return;
+  const id = String(chat.id); const title = String(chat.title || '').slice(0, 80);
+  const c = await _rbCfg(); const g = (c.groups || []).find((x) => String(x.id) === id); if (g && g.title === title) return;
+  await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id } } }, { upsert: true });
+  await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.groups': { $each: [{ id, title, at: new Date() }], $slice: -40 } } });
+  _rbMem.at = 0;
+}
+const _rbMoney = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+function _rbParseAmount(txt) {
+  const ms = String(txt || '').match(/\d[\d.,]*/g); if (!ms) return null; let best = null;
+  for (const raw of ms) {
+    let t = raw.replace(/[.,]$/, '');
+    if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); else if (/\.\d{1,2}$/.test(t) && !/\.\d{3}/.test(t)) t = t.replace(/,/g, ''); else t = t.replace(/[.,]/g, '');
+    const n = Number(t); if (Number.isFinite(n) && n >= 1 && n <= 100000000 && (best === null || n > best)) best = n;
+  }
+  return best;
+}
+// Destino según los CENTAVOS del monto (owner: "si termina en ,99 va al grupo tal, si termina en ,43 a otro"). route = { from, rules:[{cents:'99', to}], otherTo }.
+function _rbCents(amount) { return String(Math.round(Math.abs(Number(amount) || 0) * 100) % 100).padStart(2, '0'); }
+function _rbPickTo(route, amount) {
+  if (!route || !(Number(amount) > 0)) return null; const ct = _rbCents(amount);
+  const r = (route.rules || []).find((x) => String(x.cents) === ct); return r ? String(r.to) : (route.otherTo ? String(route.otherTo) : null);
+}
+function _rbTitle(c, id) { const g = (c.groups || []).find((x) => String(x.id) === String(id)); return g ? g.title : String(id); }
+async function _rbOpenSum(fromChat, toChat) {
+  const a = await RcptFwd.aggregate([{ $match: { fromChat: String(fromChat), toChat: String(toChat), status: 'open' } }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+  return a[0] || { total: 0, count: 0 };
+}
+function _rbSumTxt(s) { return `Acumulado: <b>${_rbMoney(s.total)}</b> (${s.count} comprobante${s.count === 1 ? '' : 's'})`; }
+// Cierres anteriores de ese origen→destino que todavía no se ENVIARON (owner: "si no cotiza, en la suma de cada comprobante dejar plasmado el pendiente a cotizar anterior y el monto").
+async function _rbPendTxt(fromChat, toChat) {
+  const cl = await RcptClose.find({ fromChat: String(fromChat), toChat: String(toChat), status: { $in: ['pending', 'quoted'] } }).sort({ createdAt: 1 }).limit(10).lean();
+  if (!cl.length) return '';
+  const d = (x) => new Date(x.createdAt).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return '\n' + cl.map((x) => x.status === 'quoted' ? `💱 Anterior (cierre ${d(x)}): <b>${_rbMoney(x.total)}</b> · cotizado, falta /enviado` : `⏳ Anterior PENDIENTE A COTIZAR (cierre ${d(x)}): <b>${_rbMoney(x.total)}</b>`).join('\n');
+}
+async function _rbReadAmount(c, m) {
+  // Foto (la más grande) o documento imagen ⇒ IA de comprobantes con la imagen en base64 (nunca la URL de Telegram: lleva el token).
+  let fileId = null, mime = 'image/jpeg';
+  if (Array.isArray(m.photo) && m.photo.length) fileId = m.photo[m.photo.length - 1].file_id;
+  else if (m.document && /^image\//.test(String(m.document.mime_type || ''))) { fileId = m.document.file_id; mime = m.document.mime_type; }
+  if (fileId && comprobanteAi.isEnabled && comprobanteAi.isEnabled()) {
+    try {
+      const f = await tgChannel.call(c.token, 'getFile', { file_id: fileId });
+      if (f.ok && f.result && f.result.file_path && !(f.result.file_size > 8 * 1024 * 1024)) {
+        const r = await require('axios').get('https://api.telegram.org/file/bot' + c.token + '/' + f.result.file_path, { responseType: 'arraybuffer', timeout: 20000, maxContentLength: 8 * 1024 * 1024 });
+        const ai = await comprobanteAi.analyzeComprobante('data:' + mime + ';base64,' + Buffer.from(r.data).toString('base64'));
+        if (ai && ai.ok && Number(ai.amount) > 0) return { amount: Math.round(Number(ai.amount) * 100) / 100, from: 'ia' };
+      }
+    } catch (e) { logger.warn('[rcptbot] lectura ' + e.message); }
+  }
+  const t = _rbParseAmount(m.caption || ''); return t ? { amount: t, from: 'texto' } : { amount: null, from: null };
+}
+const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Reenvía un comprobante YA anotado (rec) con su monto: elige el grupo por los centavos; sin monto o sin grupo para esos centavos queda 'hold'.
+async function _rbRoute(c, rec, amount, from, caption) {
+  const route = (c.routes || []).find((x) => String(x.from) === rec.fromChat);
+  const reply = (text, extra) => tgChannel.call(c.token, 'sendMessage', Object.assign({ chat_id: rec.fromChat, reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true, parse_mode: 'HTML', text }, extra || {}));
+  if (!(Number(amount) > 0)) { await RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ No pude leer el monto. <b>Respondé esta foto con el monto con centavos</b> (ej. 25000,99) y lo reenvío.'); return; }
+  const to = route && _rbPickTo(route, amount);
+  if (!to) { await RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`⚠️ ${_rbMoney(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó. Si el monto está mal, respondé esta foto con el correcto.`); return; }
+  const toTitle = _rbTitle(c, to);
+  const set = await RcptFwd.findOneAndUpdate({ id: rec.id, status: { $in: ['hold'] } }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });
+  if (!set) return; // ya se reenvió (otra instancia)
+  const s = await _rbOpenSum(rec.fromChat, to);
+  const pend = await _rbPendTxt(rec.fromChat, to);
+  const cap = `🧾 De: <b>${_rbH(rec.fromTitle)}</b> · <b>${_rbMoney(amount)}</b>${rec.sender ? ' · ' + _rbH(rec.sender) : ''}\n${_rbSumTxt(s)}${pend}` + (caption ? '\n' + _rbH(String(caption).slice(0, 500)) : '');
+  const cp = await tgChannel.call(c.token, 'copyMessage', { chat_id: to, from_chat_id: rec.fromChat, message_id: rec.srcMsgId, caption: cap, parse_mode: 'HTML' });
+  if (!cp.ok) {
+    await RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'failed', error: String(cp.error).slice(0, 200) } });
+    await _rbSet({ lastError: 'reenvío a ' + toTitle + ': ' + String(cp.error).slice(0, 150), lastErrorAt: new Date() });
+    await reply('❌ NO se pudo reenviar a ' + _rbH(toTitle) + ' (' + _rbH(String(cp.error).slice(0, 120)) + '). No se sumó.');
+    return;
+  }
+  await RcptFwd.updateOne({ id: rec.id }, { $set: { fwdMsgId: cp.result && cp.result.message_id } });
+  const r = await reply(`✅ <b>REENVIADO</b> a ${_rbH(toTitle)} · <b>${_rbMoney(amount)}</b>${from === 'texto' || from === 'corregido' ? ' (monto escrito)' : ''}\n${_rbSumTxt(s)}${pend}`);
+  if (r.ok) await RcptFwd.updateOne({ id: rec.id }, { $set: { replyMsgId: r.result && r.result.message_id } });
+}
+async function _rbOnReceipt(c, m) {
+  const sender = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ') || (m.from && m.from.username) || '';
+  let rec; try { rec = await RcptFwd.create({ id: uuidv4(), fromChat: String(m.chat.id), fromTitle: String(m.chat.title || ''), srcMsgId: m.message_id, sender, status: 'hold' }); } catch (e) { if (e && e.code === 11000) return; throw e; }
+  const rd = await _rbReadAmount(c, m);
+  await _rbRoute(c, rec, rd.amount, rd.from, m.caption || '');
+}
+// CIERRE (owner: "siempre 13 h todos los días; el viernes cierra 13 h y vuelve el lunes 13 h con todo el finde; a las 13 h queda pendiente a cotizar y
+// la cuenta empieza de 0"). Cierra TODO lo abierto de ese origen, un cierre por destino (RcptClose 'pending'), y avisa en el origen y en cada destino.
+async function _rbClose(c, fromChat, by) {
+  const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
+  await RcptFwd.updateMany({ fromChat: String(fromChat), status: 'open' }, { $set: { status: 'closed', closeId } });
+  const rows = await RcptFwd.aggregate([{ $match: { closeId } }, { $group: { _id: '$toChat', toTitle: { $first: '$toTitle' }, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+  if (!rows.length) return { ok: false, why: 'no hay comprobantes abiertos' };
+  const when = new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const lines = [];
+  for (const r of rows) {
+    await RcptClose.create({ id: uuidv4(), fromChat: String(fromChat), fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), count: r.count, total: r.total, by: String(by || '').slice(0, 60), status: 'pending' });
+    const t = `🔒 <b>CIERRE ${_rbH(when)}</b>\nDe: ${_rbH(fromTitle)} → ${_rbH(r.toTitle)}\nComprobantes: <b>${r.count}</b> · Total: <b>${_rbMoney(r.total)}</b>\n⏳ PENDIENTE A COTIZAR. La cuenta vuelve a $0.`;
+    await tgChannel.call(c.token, 'sendMessage', { chat_id: r._id, text: t, parse_mode: 'HTML' });
+    lines.push(`→ ${_rbH(r.toTitle)}: <b>${_rbMoney(r.total)}</b> (${r.count})`);
+  }
+  await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, parse_mode: 'HTML', text: `🔒 <b>CIERRE ${_rbH(when)}</b>\n${lines.join('\n')}\n⏳ Pendiente a cotizar. La cuenta vuelve a $0.` });
+  const holds = await RcptFwd.countDocuments({ fromChat: String(fromChat), status: 'hold' });
+  if (holds) await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, text: `⚠️ Quedan ${holds} comprobante(s) sin reenviar (sin monto o sin grupo para esos centavos): respondelos con el monto correcto.` });
+  return { ok: true, closes: rows.length, total: rows.reduce((a, r) => a + r.total, 0) };
+}
+// Cron: lunes a viernes desde las 13:00 (ART), una vez por día entre instancias. Sábado y domingo no cierra ⇒ el lunes junta todo desde el viernes 13 h.
+async function _rbCloseTick() {
+  const c = await _rbCfg(); if (!c.token || !(c.routes || []).length) return;
+  const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+  if (dow === 0 || dow === 6 || _tgArtHour(now) < 13) return;
+  const cl = await Config.collection.updateOne({ key: 'rcptbot', 'value.lastAutoClose': { $ne: dk } }, { $set: { 'value.lastAutoClose': dk } });
+  _rbMem.at = 0; if (cl.modifiedCount !== 1) return;
+  for (const r of c.routes) { try { await _rbClose(c, r.from, 'automático 13 h'); } catch (e) { logger.warn('[rcptbot] cierre ' + e.message); } }
+}
+setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('[rcptbot] cierre ' + e.message)); }, 60000); }, 75000);
+async function _rbDestCmd(c, toChat, cmd, by, arg) {
+  const q = cmd === 'cotizado' ? { toChat, status: 'pending' } : { toChat, status: { $in: ['pending', 'quoted'] } };
+  const list = await RcptClose.find(q).sort({ createdAt: 1 }).lean();
+  if (!list.length) { await tgChannel.call(c.token, 'sendMessage', { chat_id: toChat, text: cmd === 'cotizado' ? 'No hay cierres pendientes a cotizar.' : 'No hay cierres pendientes de envío.' }); return; }
+  const now = new Date(); const rate = Number(String(arg || '').replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.')) || null;
+  const set = cmd === 'cotizado' ? { status: 'quoted', quotedBy: String(by).slice(0, 60), quotedAt: now, quoteRate: rate, quoteNote: String(arg || '').slice(0, 200) } : { status: 'sent', sentBy: String(by).slice(0, 60), sentAt: now };
+  await RcptClose.updateMany({ id: { $in: list.map((x) => x.id) } }, { $set: set });
+  const total = list.reduce((a, x) => a + (Number(x.total) || 0), 0);
+  const t = cmd === 'cotizado' ? `💱 <b>COTIZADO</b> · ${list.length} cierre(s) · ${_rbMoney(total)}${rate ? ' · cotización ' + _rbH(arg) : ''}${by ? ' · ' + _rbH(by) : ''}\nFalta /enviado.` : `✅ <b>ENVIADO</b> · ${list.length} cierre(s) · ${_rbMoney(total)}${by ? ' · ' + _rbH(by) : ''}\nYa no queda pendiente.`;
+  await tgChannel.call(c.token, 'sendMessage', { chat_id: toChat, parse_mode: 'HTML', text: t });
+  for (const f of [...new Set(list.map((x) => x.fromChat))]) { const sub = list.filter((x) => x.fromChat === f); await tgChannel.call(c.token, 'sendMessage', { chat_id: f, parse_mode: 'HTML', text: (cmd === 'cotizado' ? '💱 <b>COTIZADO</b> en ' : '✅ <b>ENVIADO</b> desde ') + _rbH(_rbTitle(c, toChat)) + ': ' + _rbMoney(sub.reduce((a, x) => a + (Number(x.total) || 0), 0)) + (cmd === 'enviado' ? '\nYa no queda pendiente.' : '') }); }
+}
+async function _rbOnMessage(c, m) {
+  await _rbGroupSeen(m.chat).catch(() => {});
+  const fromChat = String(m.chat.id); const route = (c.routes || []).find((x) => String(x.from) === fromChat);
+  const text = String(m.text || '').trim(); const by = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ');
+  // Grupo de DESTINO: /cotizado ⇒ los cierres pendientes a cotizar pasan a cotizados; /enviado ⇒ dejan de estar pendientes (owner).
+  const cmd = (text.match(/^\/(cotizado|enviado)(@\w+)?(\s+.*)?$/i) || [])[1];
+  if (cmd) {
+    const isDest = (c.routes || []).some((r) => (r.rules || []).some((x) => String(x.to) === fromChat) || String(r.otherTo || '') === fromChat);
+    if (isDest) { await _rbDestCmd(c, fromChat, cmd.toLowerCase(), by, (text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || ''); return; }
+  }
+  if (!route) return;
+  if (/^\/cierrededia(@\w+)?$|^cierre de d[ií]a$/i.test(text)) { const r = await _rbClose(c, fromChat, by); if (!r.ok) await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, text: 'No hay comprobantes abiertos para cerrar.' }); return; }
+  if (/^\/total(@\w+)?$/i.test(text)) {
+    const dests = [...new Set([...(route.rules || []).map((x) => String(x.to)), route.otherTo ? String(route.otherTo) : null].filter(Boolean))]; const out = [];
+    for (const d of dests) { const s = await _rbOpenSum(fromChat, d); out.push(`→ ${_rbH(_rbTitle(c, d))}: <b>${_rbMoney(s.total)}</b> (${s.count})`); }
+    await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, parse_mode: 'HTML', text: '📊 Acumulado desde el último cierre (13 h):\n' + (out.join('\n') || 'sin grupos configurados') }); return;
+  }
+  if (text && m.reply_to_message) { // corrige el monto respondiendo la foto (o la respuesta del bot)
+    if (!/^[\s$\d.,]+$/.test(text)) return; const n = _rbParseAmount(text); if (!n) return; const rid = m.reply_to_message.message_id;
+    const rec = await RcptFwd.findOne({ fromChat, status: { $in: ['hold', 'open'] }, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] }).lean(); if (!rec) return;
+    if (rec.status === 'hold') { await _rbRoute(c, rec, n, 'corregido', ''); return; }
+    if (_rbPickTo(route, n) !== rec.toChat) { await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, reply_to_message_id: m.message_id, text: 'Ese monto va a OTRO grupo (por los centavos). Mandá el comprobante de nuevo; éste queda como está.' }); return; }
+    await RcptFwd.updateOne({ id: rec.id, status: 'open' }, { $set: { amount: n, amountFrom: 'corregido' } });
+    if (rec.toChat && rec.fwdMsgId) await tgChannel.call(c.token, 'sendMessage', { chat_id: rec.toChat, reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true, text: '✏️ Monto corregido: ' + _rbMoney(n) });
+    const s = await _rbOpenSum(fromChat, rec.toChat);
+    await tgChannel.call(c.token, 'sendMessage', { chat_id: fromChat, reply_to_message_id: m.message_id, parse_mode: 'HTML', text: `✏️ Monto: <b>${_rbMoney(n)}</b>\n${_rbSumTxt(s)}` });
+    return;
+  }
+  const isReceipt = (Array.isArray(m.photo) && m.photo.length) || (m.document && /^(image\/|application\/pdf)/.test(String(m.document.mime_type || '')));
+  if (isReceipt) await _rbOnReceipt(c, m);
+}
+async function _rbSetWebhook(c) {
+  let secret = c.webhookSecret; if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _rbSet({ webhookSecret: secret }); }
+  return tgChannel.call(c.token, 'setWebhook', { url: _tgWebhookBase(await _tgCfg()) + '/api/rcptbot/webhook', secret_token: secret, allowed_updates: ['message', 'my_chat_member'] });
+}
+app.post('/api/rcptbot/webhook', async (req, res) => {
+  try {
+    const c = await _rbCfg(); const got = String(req.get('x-telegram-bot-api-secret-token') || ''); const sec = String(c.webhookSecret || '');
+    if (!sec || got.length !== sec.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec))) { _rbMem.at = 0; return res.status(401).end(); }
+    res.json({ ok: true });
+    if (!c.token) return;
+    const u = req.body || {};
+    if (u.my_chat_member && u.my_chat_member.chat) {
+      const ch = u.my_chat_member.chat; const st = u.my_chat_member.new_chat_member && u.my_chat_member.new_chat_member.status;
+      if (/^(member|administrator)$/.test(String(st))) await _rbGroupSeen(ch);
+      else if (/^(left|kicked)$/.test(String(st))) { await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id: String(ch.id) } } }); _rbMem.at = 0; }
+      return;
+    }
+    const m = u.message; if (!m || !m.chat) return;
+    if (m.chat.type === 'private') { await tgChannel.call(c.token, 'sendMessage', { chat_id: m.chat.id, text: 'Este bot trabaja sólo en grupos: reenvía los comprobantes y lleva la suma.' }); return; }
+    await _rbOnMessage(c, m);
+  } catch (e) { logger.warn('[rcptbot] ' + e.message); if (!res.headersSent) res.json({ ok: true }); }
+});
+// Panel → 🧾 Bot de comprobantes (sólo admin)
+const _rbAdmin = (req, res) => { if (req.user.role !== 'admin') { res.status(403).json({ error: 'Sólo admin' }); return false; } return true; };
+app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!_rbAdmin(req, res)) return;
+  try {
+    const c = await _rbCfg(true);
+    let bot = null, hook = null;
+    if (c.token) { const me = await tgChannel.call(c.token, 'getMe', {}); bot = me.ok ? me.result.username : null; const wi = await tgChannel.call(c.token, 'getWebhookInfo', {}); if (wi.ok) hook = { url: wi.result.url, pending: wi.result.pending_update_count, lastError: wi.result.last_error_message || null, lastErrorAt: wi.result.last_error_date ? new Date(wi.result.last_error_date * 1000) : null }; }
+    const routes = [];
+    for (const r of c.routes || []) {
+      const dests = [...new Set([...(r.rules || []).map((x) => String(x.to)), r.otherTo ? String(r.otherTo) : null].filter(Boolean))]; const sums = [];
+      for (const d of dests) sums.push(Object.assign({ to: d, title: _rbTitle(c, d) }, await _rbOpenSum(r.from, d)));
+      routes.push(Object.assign({}, r, { sums, hold: await RcptFwd.countDocuments({ fromChat: String(r.from), status: 'hold' }) }));
+    }
+    const closes = await RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
+    const recent = await RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
+    res.json({ success: true, hasToken: !!c.token, tokenLast4: c.token ? c.token.slice(-4) : '', decryptError: !!c.decryptError, onRender: !!c.onRender, bot, hook, groups: c.groups || [], routes, closes, recent, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/token', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!_rbAdmin(req, res)) return;
+  try {
+    const t = String((req.body || {}).token || '').trim(); if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(t)) return res.status(400).json({ error: 'Eso no parece un token de bot (números:letras, de @BotFather)' });
+    const tg = await _tgCfg(); if (tg.token && tg.token === t) return res.status(400).json({ error: 'Ese es el bot del CANAL. Creá uno nuevo en @BotFather sólo para comprobantes.' });
+    const me = await tgChannel.call(t, 'getMe', {}); if (!me.ok) return res.status(400).json({ error: 'Telegram no acepta ese token: ' + me.error });
+    await _rbSet({ tokenEnc: _credEncrypt(t), webhookSecret: crypto.randomBytes(24).toString('hex'), lastError: null });
+    const c = await _rbCfg(true); const w = await _rbSetWebhook(c);
+    res.json({ success: true, bot: me.result.username, webhook: w.ok ? 'ok' : w.error });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/reconnect', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!_rbAdmin(req, res)) return;
+  try { const c = await _rbCfg(true); if (!c.token) return res.status(400).json({ error: 'Falta el token del bot' }); const w = await _rbSetWebhook(c); res.json(w.ok ? { success: true } : { success: false, error: w.error }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/routes', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!_rbAdmin(req, res)) return;
+  try {
+    const c = await _rbCfg(true); const ids = new Set((c.groups || []).map((g) => String(g.id))); const seen = new Set(); const out = [];
+    const known = (x) => { if (!ids.has(x)) throw Object.assign(new Error('Hay un grupo que el bot no conoce (agregá el bot al grupo y escribí algo ahí)'), { http: 400 }); };
+    for (const r of Array.isArray((req.body || {}).routes) ? req.body.routes : []) {
+      const from = String((r && r.from) || ''); if (!from) continue; known(from);
+      if (seen.has(from)) return res.status(400).json({ error: 'Cada grupo de origen va una sola vez (con todas sus reglas adentro)' }); seen.add(from);
+      const rules = []; const cs = new Set();
+      for (const x of Array.isArray(r.rules) ? r.rules : []) {
+        const cents = String((x && x.cents) || '').replace(/\D/g, ''); const to = String((x && x.to) || ''); if (!cents && !to) continue;
+        if (!/^\d{2}$/.test(cents)) return res.status(400).json({ error: 'Los centavos van con 2 números (ej. 99, 43, 05)' });
+        if (!to) return res.status(400).json({ error: 'Falta elegir el grupo para ,' + cents }); known(to);
+        if (to === from) return res.status(400).json({ error: 'Un grupo no puede reenviarse a sí mismo' });
+        if (cs.has(cents)) return res.status(400).json({ error: 'Los centavos ,' + cents + ' están repetidos' }); cs.add(cents); rules.push({ cents, to });
+      }
+      const otherTo = String(r.otherTo || '') || null; if (otherTo) { known(otherTo); if (otherTo === from) return res.status(400).json({ error: 'Un grupo no puede reenviarse a sí mismo' }); }
+      if (!rules.length && !otherTo) continue;
+      out.push({ from, rules: rules.slice(0, 30), otherTo });
+    }
+    if (out.length > 15) return res.status(400).json({ error: 'Máximo 15 grupos de origen' });
+    await _rbSet({ routes: out }); res.json({ success: true, routes: out });
+  } catch (e) { res.status(e.http || 500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/close', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!_rbAdmin(req, res)) return;
+  try {
+    const c = await _rbCfg(true); const from = String((req.body || {}).from || ''); const g = (c.groups || []).find((x) => String(x.id) === from);
+    if (!g || !c.token) return res.status(400).json({ error: 'Grupo desconocido o bot sin token' });
+    const r = await _rbClose(c, from, 'panel · ' + req.user.username); res.json(r.ok ? Object.assign({ success: true }, r) : { success: false, error: r.why });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/quote', authMiddleware, adminMiddleware, async (req, res) => { // cierre ⇒ cotizado / enviado / volver a pendiente (lo mismo que /cotizado y /enviado)
+  if (!_rbAdmin(req, res)) return;
+  try {
+    const b = req.body || {}; const st = String(b.status || ''); if (!['pending', 'quoted', 'sent'].includes(st)) return res.status(400).json({ error: 'Estado inválido' });
+    const now = new Date(); const who = 'panel · ' + req.user.username;
+    const set = st === 'pending' ? { status: 'pending', quoteRate: null, quoteNote: '', quotedBy: '', quotedAt: null, sentBy: '', sentAt: null } : st === 'quoted' ? { status: 'quoted', quotedBy: who, quotedAt: now, quoteNote: String(b.note || '').slice(0, 200) } : { status: 'sent', sentBy: who, sentAt: now };
+    const r = await RcptClose.updateOne({ id: String(b.id || '') }, { $set: set }); res.json(r.matchedCount ? { success: true } : { success: false, error: 'Cierre no encontrado' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/forget-group', authMiddleware, adminMiddleware, async (req, res) => {
+  if (!_rbAdmin(req, res)) return;
+  try { const id = String((req.body || {}).id || ''); await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id }, 'value.routes': { from: id } } }); _rbMem.at = 0; res.json({ success: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.post('/api/telegram/webhook', async (req, res) => {
   try {
     const got = String(req.get('x-telegram-bot-api-secret-token') || '');

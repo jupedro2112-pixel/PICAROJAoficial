@@ -8,6 +8,16 @@
 
 ## Sesión 2026-11-09
 
+### 1079. 🧾 Bot de comprobantes: reenvía entre grupos de Telegram según los centavos, suma, cierre 13 h, /cotizado y /enviado (2026-11-10) — panel v280
+- **Owner:** "un bot que reenvíe comprobantes de un grupo a otro, los marque como reenviados y vaya sumando (unos 5 grupos)"; monto lo lee la IA; bot NUEVO
+  aparte; "según cómo termina el comprobante es el grupo (,99 a uno, ,43 a otro) y la suma sigue desde donde está"; "cierre siempre 13 h; el viernes cierra
+  13 h y vuelve el lunes 13 h con todo el finde; queda pendiente a cotizar y la cuenta empieza de 0"; en el grupo que recibe "/cotizado" y "/enviado" (deja
+  de estar pendiente); "si no cotiza, en la suma de cada comprobante dejar el pendiente a cotizar anterior y el monto".
+- Server: `Config['rcptbot']` (tokenEnc, webhookSecret, groups, routes [{from, rules:[{cents,to}], otherTo}], lastAutoClose), webhook `/api/rcptbot/webhook`
+  (secreto propio, fuera del limitador), modelos `RcptFwd` (hold | open | closed | failed; único fromChat+srcMsgId) y `RcptClose` (pending | quoted | sent).
+  Lectura con `comprobanteAi` (imagen en base64, nunca la URL con el token) o el número escrito; responder la foto con el monto lo corrige. `_rbCloseTick`
+  (lun–vie desde 13 h, una vez por día). Panel → ⚡ Automático → 🧾 Bot de comprobantes (sólo admin). Test `scripts/test-rcptbot.js`.
+
 ### 1078. 🤖 Chatbot: cronograma semanal del canal de Telegram, editable desde el panel (2026-11-10) — panel v279
 - **Owner:** "historias de lo principal, partidos, el más jugado de la semana, info de los sorteos, un bono semanal, todo con el bot automático; una sección
   de chatbot en el panel para ver qué se publica toda la semana, el cronograma, editar, elegir entre todas las opciones, y dejar algo predeterminado fijado".

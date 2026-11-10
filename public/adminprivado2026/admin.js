@@ -5073,6 +5073,7 @@ function switchSection(section) {
     if (section === 'notifications') loadNotificationsPanel();
     if (section === 'cronograma') loadCronograma(); // #190
     if (section === 'chatbot') loadChatbot(); // #1078
+    if (section === 'rcptbot') loadRcptBot(); // #1079
     if (section === 'cronohist') { loadStoriesAuto(); loadNewbieOffers(); loadCodeDrops(); loadStoryGifts(); } // #871 · #886 · #1003
     if (section === 'fraud') loadFraud(); // #873
     if (section === 'inicio') loadInicio(); // #876
@@ -6440,6 +6441,56 @@ async function tgAdminAddId() {
         showToast('✅ Grupo vinculado: ' + escapeHtml(j.title || String(j.id)), 'success'); if (inp) inp.value = ''; try { loadTgChannel(); } catch (_) {}
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
+// #1079: 🧾 Bot de comprobantes
+let _rb = null;
+const _rbM = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+const _rbD = (d) => d ? new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+async function loadRcptBot() {
+    const st = document.getElementById('rbStatus'); if (!st) return;
+    try {
+        const r = await authFetch('/api/admin/rcptbot'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || 'Error'; return; }
+        _rb = { groups: j.groups || [], routes: JSON.parse(JSON.stringify(j.routes || [])).map((x) => ({ from: x.from, rules: x.rules || [], otherTo: x.otherTo || '', sums: x.sums || [], hold: x.hold || 0 })) };
+        const h = j.hook || {};
+        st.innerHTML = (j.onRender ? '⚠️ En Render el bot no se conecta (comparte la base). ' : '') + (j.hasToken ? ('🤖 Bot: <b>@' + escapeHtml(j.bot || '?') + '</b> (…' + escapeHtml(j.tokenLast4) + ')') : '⚠️ Falta el token del bot') +
+            (j.hasToken ? (' · Conexión: ' + (h.url && /\/api\/rcptbot\/webhook$/.test(h.url) ? '✅' : '❌ (tocá 🔧 Reconectar)')) : '') + (h.lastError ? ' · <span style="color:var(--p-red,#d9001f)">Último error de Telegram: ' + escapeHtml(h.lastError) + '</span>' : '') +
+            ' · Lectura IA: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? '<br><span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '');
+        rbRenderRoutes();
+        document.getElementById('rbGroups').innerHTML = (j.groups || []).length ? '<b>Grupos:</b> ' + j.groups.map((g) => escapeHtml(g.title || g.id) + ' <small style="color:var(--p-muted,#777)">' + escapeHtml(g.id) + '</small> <button class="btn btn-secondary btn-sm" onclick="rbForget(\'' + escapeHtml(g.id) + '\')">✕</button>').join(' · ') : 'Todavía no ve ningún grupo: agregá el bot y escribí algo en cada grupo.';
+        const cl = j.closes || [];
+        const stl = { pending: '⏳ pendiente a cotizar', quoted: '💱 cotizado (falta enviar)', sent: '✅ enviado' };
+        document.getElementById('rbCloses').innerHTML = cl.length ? '<div style="overflow-x:auto"><table style="width:100%;font-size:12.5px;border-collapse:collapse"><tr><th align="left">Cierre</th><th align="left">De → A</th><th align="right">Comp.</th><th align="right">Total</th><th align="left">Estado</th><th></th></tr>' + cl.map((x) =>
+            '<tr style="border-top:1px solid var(--p-border,#e5e5e5)"><td>' + _rbD(x.createdAt) + '</td><td>' + escapeHtml(x.fromTitle) + ' → ' + escapeHtml(x.toTitle) + '</td><td align="right">' + x.count + '</td><td align="right"><b>' + _rbM(x.total) + '</b></td><td>' + (stl[x.status] || x.status) +
+            (x.quoteNote ? ' · ' + escapeHtml(x.quoteNote) : '') + (x.quotedBy ? ' <small>(' + escapeHtml(x.quotedBy) + ')</small>' : '') + (x.sentBy ? ' <small>(' + escapeHtml(x.sentBy) + ')</small>' : '') + '</td><td style="white-space:nowrap">' +
+            (x.status === 'pending' ? '<button class="btn btn-secondary btn-sm" onclick="rbSetClose(\'' + x.id + '\',\'quoted\')">💱 Cotizado</button> ' : '') + (x.status !== 'sent' ? '<button class="btn btn-secondary btn-sm" onclick="rbSetClose(\'' + x.id + '\',\'sent\')">✅ Enviado</button>' : '<button class="btn btn-secondary btn-sm" onclick="rbSetClose(\'' + x.id + '\',\'pending\')">↩️</button>') + '</td></tr>').join('') + '</table></div>' : 'Todavía no hay cierres.';
+        const rc = j.recent || []; const sl = { open: '✅ reenviado', closed: '🔒 cerrado', hold: '⚠️ sin reenviar', failed: '❌ falló' };
+        document.getElementById('rbRecent').innerHTML = rc.length ? '<b>Últimos comprobantes:</b><br>' + rc.slice(0, 25).map((x) => _rbD(x.createdAt) + ' · ' + escapeHtml(x.fromTitle) + (x.toTitle ? ' → ' + escapeHtml(x.toTitle) : '') + ' · ' + (x.amount ? _rbM(x.amount) + (x.amountFrom === 'ia' ? '' : ' (escrito)') : 'sin monto') + ' · ' + (sl[x.status] || x.status) + (x.error ? ' (' + escapeHtml(x.error) + ')' : '')).join('<br>') : '';
+    } catch (_) { st.textContent = 'Error de conexión'; }
+}
+function rbRenderRoutes() {
+    const box = document.getElementById('rbRoutes'); if (!box || !_rb) return;
+    const gs = _rb.groups; const opt = (sel, none) => (none ? '<option value="">' + none + '</option>' : '<option value="">— elegí —</option>') + gs.map((g) => '<option value="' + escapeHtml(g.id) + '"' + (String(sel) === String(g.id) ? ' selected' : '') + '>' + escapeHtml(g.title || g.id) + '</option>').join('');
+    box.innerHTML = _rb.routes.length ? _rb.routes.map((r, i) => '<div style="border:1px solid var(--p-border,#e5e5e5);border-radius:10px;padding:8px;margin-bottom:8px">' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><b>Manda:</b> <select onchange="rbR(' + i + ',\'from\',this.value)">' + opt(r.from) + '</select> <button class="btn btn-secondary btn-sm" onclick="rbCloseNow(' + i + ')">🔒 Cerrar ahora</button> <button class="btn btn-secondary btn-sm" onclick="rbDelRoute(' + i + ')">✕ Sacar</button></div>' +
+        r.rules.map((x, k) => '<div style="display:flex;gap:6px;align-items:center;margin-top:6px">termina en ,<input type="text" maxlength="2" inputmode="numeric" value="' + escapeHtml(x.cents || '') + '" oninput="rbRule(' + i + ',' + k + ',\'cents\',this.value)" style="width:48px;text-align:center"> → <select onchange="rbRule(' + i + ',' + k + ',\'to\',this.value)">' + opt(x.to) + '</select> <button class="btn btn-secondary btn-sm" onclick="rbDelRule(' + i + ',' + k + ')">✕</button></div>').join('') +
+        '<div style="display:flex;gap:6px;align-items:center;margin-top:6px"><button class="btn btn-secondary btn-sm" onclick="rbAddRule(' + i + ')">+ Centavos</button> Otros centavos → <select onchange="rbR(' + i + ',\'otherTo\',this.value)">' + opt(r.otherTo, 'No reenviar (avisa)') + '</select></div>' +
+        ((r.sums || []).length ? '<div style="margin-top:6px;font-size:12.5px">' + r.sums.map((x) => 'Acumulado → ' + escapeHtml(x.title) + ': <b>' + _rbM(x.total) + '</b> (' + x.count + ')').join(' · ') + (r.hold ? ' · ⚠️ ' + r.hold + ' sin reenviar' : '') + '</div>' : '') + '</div>').join('')
+        : '<p style="margin:0;font-size:13px;color:var(--p-muted,#777)">Todavía no hay reenvíos. Tocá "+ Grupo que manda comprobantes".</p>';
+}
+function rbR(i, f, v) { if (_rb && _rb.routes[i]) _rb.routes[i][f] = v; }
+function rbRule(i, k, f, v) { if (_rb && _rb.routes[i] && _rb.routes[i].rules[k]) _rb.routes[i].rules[k][f] = f === 'cents' ? String(v).replace(/\D/g, '').slice(0, 2) : v; }
+function rbAddRoute() { if (!_rb) return; _rb.routes.push({ from: '', rules: [{ cents: '', to: '' }], otherTo: '' }); rbRenderRoutes(); }
+function rbDelRoute(i) { if (!_rb) return; _rb.routes.splice(i, 1); rbRenderRoutes(); }
+function rbAddRule(i) { if (!_rb || !_rb.routes[i]) return; _rb.routes[i].rules.push({ cents: '', to: '' }); rbRenderRoutes(); }
+function rbDelRule(i, k) { if (!_rb || !_rb.routes[i]) return; _rb.routes[i].rules.splice(k, 1); rbRenderRoutes(); }
+async function _rbPost(url, body, okMsg) {
+    try { const r = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok || j.success === false) { showToast(escapeHtml(j.error || 'Error'), 'error'); return null; } if (okMsg) showToast(okMsg, 'success'); loadRcptBot(); return j; } catch (_) { showToast('Error de conexión', 'error'); return null; }
+}
+async function rbSaveToken() { const t = document.getElementById('rbToken'); const j = await _rbPost('/api/admin/rcptbot/token', { token: t.value.trim() }, null); if (j) { t.value = ''; showToast('✅ Bot @' + escapeHtml(j.bot) + ' guardado · conexión: ' + escapeHtml(j.webhook), 'success'); } }
+function rbReconnect() { _rbPost('/api/admin/rcptbot/reconnect', {}, '✅ Reconectado'); }
+function rbSaveRoutes() { if (!_rb) return; _rbPost('/api/admin/rcptbot/routes', { routes: _rb.routes.map((r) => ({ from: r.from, rules: r.rules, otherTo: r.otherTo || null })) }, '✅ Reenvíos guardados'); }
+function rbCloseNow(i) { const r = _rb && _rb.routes[i]; if (!r || !r.from) return; if (!confirm('¿Cerrar AHORA la suma de este grupo? Queda pendiente a cotizar y la cuenta vuelve a $0.')) return; _rbPost('/api/admin/rcptbot/close', { from: r.from }, '🔒 Cerrado'); }
+function rbSetClose(id, status) { _rbPost('/api/admin/rcptbot/quote', { id, status }, '✅ Listo'); }
+function rbForget(id) { if (!confirm('¿Olvidar este grupo? También se sacan sus reenvíos.')) return; _rbPost('/api/admin/rcptbot/forget-group', { id }, 'Listo'); }
 // #1078: 🤖 Chatbot — cronograma semanal del canal de Telegram (plantilla por día de la semana; la vista muestra los próximos 7 días con fecha)
 let _cb = null;
 const CB_DOW = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
