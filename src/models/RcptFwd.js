@@ -20,7 +20,7 @@ const rcptFwdSchema = new mongoose.Schema({
   fwdMsgId: { type: Number, default: null },
   replyMsgId: { type: Number, default: null },
   amount: { type: Number, default: null },
-  amountFrom: { type: String, default: null }, // 'ia' | 'texto' | 'corregido'
+  amountFrom: { type: String, default: null }, // 'ia' | 'texto' | 'corregido' | 'arrastre' | 'arrastre_mes' | 'resto'
   sender: { type: String, default: '' },
   status: { type: String, default: 'hold', index: true }, // hold (sin monto / sin grupo para esos centavos) | open | closed | failed
   error: { type: String, default: null },
@@ -40,6 +40,7 @@ const rcptCloseSchema = new mongoose.Schema({
   periodFrom: { type: Date, default: null }, // primer comprobante del período
   count: { type: Number, default: 0 },
   total: { type: Number, default: 0 },
+  partialOf: { type: Number, default: null }, // #1079-j: cierre PARCIAL (/cierre 500.000) de este total; el resto siguió sumando
   missing: { type: Number, default: 0 },
   by: { type: String, default: '' },
   // #1079: cada cierre (13 h) queda PENDIENTE A COTIZAR hasta que en el panel le ponen la cotización

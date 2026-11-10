@@ -2,7 +2,7 @@
 const assert = require('assert'); const fs = require('fs'); const path = require('path');
 const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 const grab = (re) => { const m = S.match(re); assert.ok(m, 'falta ' + re); return m[0]; };
-const src = grab(/function _rbParseAmount\(txt\) \{[\s\S]*?\n\}\n/) + grab(/function _rbCents\(amount\) \{.*\n/) + grab(/function _rbPickTo\(route, amount\) \{[\s\S]*?\n\}\n/);
+const src = grab(/function _rbParseAmount\(txt, max = 100000000\) \{[\s\S]*?\n\}\n/) + grab(/function _rbCents\(amount\) \{.*\n/) + grab(/function _rbPickTo\(route, amount\) \{[\s\S]*?\n\}\n/);
 const f = new Function(src + '; return { _rbParseAmount, _rbCents, _rbPickTo };')();
 let ok = 0, fail = 0; const caso = (n, fn) => { try { fn(); ok++; console.log('✅ ' + n); } catch (e) { fail++; console.log('❌ ' + n + '\n   ' + e.message); } };
 caso('montos escritos', () => {

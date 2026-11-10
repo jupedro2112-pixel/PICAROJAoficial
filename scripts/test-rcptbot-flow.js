@@ -98,8 +98,8 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   await caso('cierre 13 h (martes): pendiente a cotizar detallado, suma nueva $0', async () => {
     NOW = new Date('2026-11-10T16:05:00Z'); // 13:05 ART
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 2);
-    const d2 = last(-2).p.text; assert.ok(/CIERRE/.test(d2) && /PENDIENTE A COTIZAR: \$30\.002/.test(d2) && /Suma nueva: <b>\$0<\/b>/.test(d2) && (d2.match(/PENDIENTE A COTIZAR/g) || []).length === 1, d2);
-    const s1 = last(-1).p.text; assert.ok(/asuncionbot: ⏳ PENDIENTE A COTIZAR <b>\$30\.002/.test(s1) && /Suma nueva/.test(s1) && /Total de noviembre \(sin corte\): <b>\$40\.002/.test(s1), s1);
+    const d2 = last(-2).p.text; assert.ok(/CIERRE/.test(d2) && /PENDIENTE A COTIZAR: \$30\.001,98/.test(d2) && /Suma nueva: <b>\$0<\/b>/.test(d2) && (d2.match(/PENDIENTE A COTIZAR/g) || []).length === 1, d2);
+    const s1 = last(-1).p.text; assert.ok(/asuncionbot: ⏳ PENDIENTE A COTIZAR <b>\$30\.001,98/.test(s1) && /Suma nueva/.test(s1) && /Total de noviembre \(sin corte\): <b>\$40\.002/.test(s1), s1);
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 2, 'no cierra dos veces el mismo día');
   });
   await caso('comprobante nuevo después del cierre: suma desde $0 y muestra el pendiente anterior', async () => {
@@ -168,6 +168,41 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(/SUMADO LO ANTERIOR<\/b>: \+\$13\.686\.199/.test(last(-3).p.text) && /SUMADO LO ANTERIOR/.test(last(-1).p.text), last(-3).p.text);
     await hook(text(41, -1, '/anterior 5000')); assert.ok(/manda a 2 grupos/.test(last(-1).p.text), last(-1).p.text);
     await hook(text(42, -3, '/anterior')); assert.ok(/Escribí el monto/.test(last(-3).p.text));
+  });
+  await caso('menú: /ayuda en el DESTINO explica los comandos con botones; /total del destino con pendientes', async () => {
+    await hook(text(50, -2, '/ayuda')); const h = last(-2); assert.ok(/GRUPO DE DESTINO/.test(h.p.text) && /\/cotizado/.test(h.p.text) && /\/enviado/.test(h.p.text) && /CÓMO SIGUE/.test(h.p.text), h.p.text);
+    assert.strictEqual(JSON.stringify(h.p.reply_markup.inline_keyboard.map((r) => r[0].callback_data)), JSON.stringify(['rbm:total', 'rbm:quote', 'rbm:sent']));
+    await hook(text(51, -2, '/total')); assert.ok(/SUMA ACTUALIZADA/.test(last(-2).p.text) && /De buffalobot: <b>/.test(last(-2).p.text), last(-2).p.text);
+    await hook(text(52, -1, '/ayuda')); const g = last(-1); assert.ok(/\/cierre 500\.000/.test(g.p.text) && /\/anterior/.test(g.p.text) && g.p.reply_markup.inline_keyboard.length === 3, g.p.text);
+  });
+  const cbIn = (chat, data, mid = 6000) => hook({ callback_query: { id: 'q' + Math.random(), data, from: { first_name: 'Ana' }, message: { message_id: mid, chat: { id: chat, type: 'supergroup', title: 'x' } } } });
+  await caso('/cierre 500.000 con 2 destinos: elige la suma, cierra ESE monto y el resto sigue sumando', async () => {
+    const tot = (to) => RcptFwd.rows.filter((x) => x.toChat === to && x.status === 'open').reduce((a, x) => a + x.amount, 0);
+    aiAmount = 1000.99; await hook(photo(56)); // las dos sumas con plata ⇒ pregunta de cuál
+    const before = tot('-3'); const monthBefore = (last(-1).p.text.match(/Total de \w+ \(sin corte\): <b>([^<]+)/) || [])[1];
+    await hook(text(53, -1, '/cierre 500.000')); const q = last(-1); assert.ok(/De qué suma se cierran <b>\$500\.000<\/b>/.test(q.p.text), q.p.text);
+    const btn = q.p.reply_markup.inline_keyboard.find((r) => /fichasnuevobot/.test(r[0].text))[0];
+    await cbIn(-1, btn.callback_data);
+    const cl = RcptClose.rows[RcptClose.rows.length - 1]; assert.ok(cl.toChat === '-3' && cl.total === 500000 && Math.abs(cl.partialOf - before) < 0.01, JSON.stringify(cl));
+    assert.ok(Math.abs(tot('-3') - (before - 500000)) < 0.01, 'resto ' + tot('-3'));
+    assert.ok(/PENDIENTE A COTIZAR: \$500\.000<\/b>/.test(last(-3).p.text) && /Queda sumando el resto/.test(last(-3).p.text), last(-3).p.text);
+    await hook(text(54, -1, '/total')); const t = last(-1).p.text; const monthNow = (t.match(/Total de \w+ \(sin corte\): <b>([^<]+)/) || [])[1];
+    assert.strictEqual(monthNow, monthBefore, 'el resto no duplica el total del mes'); 
+  });
+  await caso('/cierre con monto mayor a la suma ⇒ no cierra', async () => {
+    cfgDocs[0].value.structs[0].routes[0].rules = []; await ctx._rbCfg(true); // 1 solo destino (todo lo demás → -3)
+    const n = RcptClose.rows.length; await hook(text(55, -1, '/cierre 999.999.999')); assert.strictEqual(RcptClose.rows.length, n); assert.ok(/es mayor que lo sumado/.test(last(-1).p.text), last(-1).p.text);
+  });
+  await caso('botón Dar cierre ⇒ confirma ⇒ cierra el total y suma nueva $0', async () => {
+    await cbIn(-1, 'rbm:close'); assert.ok(/CIERRE del TOTAL/.test(last(-1).p.text)); const n = RcptClose.rows.length;
+    await cbIn(-1, 'rbm:closeok'); assert.ok(RcptClose.rows.length > n && /Suma nueva: <b>\$0/.test(last(-1).p.text), last(-1).p.text);
+    assert.strictEqual(RcptFwd.rows.filter((x) => x.toChat === '-3' && x.status === 'open').length, 0);
+  });
+  await caso('botones del destino: COTIZADO y ENVIADO con confirmación', async () => {
+    await cbIn(-3, 'rbm:quote'); assert.ok(/Marcar COTIZADO/.test(last(-3).p.text)); await cbIn(-3, 'rbm:quoteok');
+    assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status !== 'pending'));
+    await cbIn(-3, 'rbm:sentok'); assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status === 'sent'));
+    await cbIn(-3, 'rbm:total'); assert.ok(/Sin cierres pendientes/.test(last(-3).p.text), last(-3).p.text);
   });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
