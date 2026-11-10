@@ -29,6 +29,16 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1093. Bot de comprobantes: detecta TODOS los grupos de cada bot (2026-11-10)
+- **Owner:** "¿por qué no detecta todos los grupos de cada bot? arreglalo así no lo hago manual".
+- **Causas:** (1) `_rbGroupSeen` leía la lista, sacaba el grupo y lo volvía a poner: con 2 bots en el mismo grupo los dos webhooks llegan juntos y el segundo
+  pisaba al primero (un bot quedaba "fuera" del grupo y la estructura no lo mostraba); (2) 🩺 Revisar grupos cortaba en el PRIMER bot que veía el grupo y
+  salteaba los supergrupos ya listados; (3) un bot metido en los grupos ANTES de cargarlo en el panel perdía el aviso de "me agregaron" (no había webhook).
+- **Arreglo:** alta/baja atómica de cada bot en el grupo; la revisión (al abrir el panel cada 10 min y con el botón) consulta todos los grupos conocidos con
+  todos los bots, agrega los que faltan, saca los bots que ya no están y unifica grupos repetidos; al cargar un bot o tocar 🔧 Reconectar se leen los avisos
+  pendientes de Telegram (24 h) antes de conectar el webhook. Los botones del bot también registran el grupo. Tests rcptbot y rcptbot-flow OK.
+- **Límite de Telegram:** un bot no puede listar sus grupos. Si un grupo no aparece igual: escribir `/start` en ese grupo (llega aunque el bot no sea admin).
+
 ### 1092. Chat de la burbuja de Girox: sin modo nocturno, bordes negros, Telegram al lado del nombre, "Verificar SMS" arriba y avisos visibles (2026-11-10) — app v718
 - **Owner:** "el logo de Telegram ponelo al lado del nombre (logo + unite para recibir los beneficios de PICA ROJA), sacá el modo nocturno, dejá los bordes
   en negro inferior y superior y el chat en blanco así como está; lo del Telegram prolijo; cuando copiás o tira una notificación queda arriba tapado,

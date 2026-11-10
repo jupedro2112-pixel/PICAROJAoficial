@@ -31888,13 +31888,47 @@ function _rbTokFor(c, chatId, prefer) {
   return (prefer && ids.includes(String(prefer)) && pick(prefer)) || ids.map(pick).find(Boolean) || null;
 }
 async function _rbGroupSeen(chat, botId, gone) {
+  // #1093 (owner: "no detecta todos los grupos de cada bot"): ATÓMICO. Antes se leía la lista, se sacaba el grupo y se volvía a poner con los bots
+  // calculados: con 2 bots en el mismo grupo los dos webhooks llegan a la vez y el segundo pisaba al primero (ese bot "no estaba" en el grupo).
+  // Ahora el bot se agrega / saca con $addToSet / $pull sobre el grupo y el grupo nuevo se agrega sólo si todavía no está.
   if (!chat || !/^(group|supergroup)$/.test(chat.type)) return;
-  const id = String(chat.id); const title = String(chat.title || '').slice(0, 80); const c = await _rbCfg(true); const g = _rbGroup(c, id); // #1087: lectura FRESCA (con la copia de 30 s un grupo sacado y vuelto a meter quedaba afuera)
-  const bots = new Set(((g && g.bots) || []).map(String)); if (gone) bots.delete(String(botId)); else bots.add(String(botId));
-  if (g && g.title === title && bots.size === (g.bots || []).length && [...bots].every((x) => (g.bots || []).includes(x))) return;
-  await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id } } }, { upsert: true });
-  if (bots.size) await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.groups': { $each: [{ id, title: title || (g && g.title) || id, bots: [...bots], at: new Date() }], $slice: -400 } } }); // #1087: antes -60 (con muchos equipos se perdían los más viejos)
+  const id = String(chat.id); const title = String(chat.title || '').slice(0, 80); const b = String(botId || ''); if (!b) return;
+  const C = Config.collection;
+  if (gone) {
+    const r = await C.updateOne({ key: 'rcptbot', 'value.groups.id': id }, { $pull: { 'value.groups.$.bots': b } });
+    await C.updateOne({ key: 'rcptbot' }, { $pull: { 'value.groups': { id, bots: { $size: 0 } } } });
+    if (r.modifiedCount) _rbMem.at = 0; return;
+  }
+  const $set = title ? { 'value.groups.$.title': title } : {};
+  const r = await C.updateOne({ key: 'rcptbot', 'value.groups.id': id }, Object.assign({ $addToSet: { 'value.groups.$.bots': b } }, title ? { $set } : {}));
+  if (r.matchedCount) { if (r.modifiedCount) _rbMem.at = 0; return; }
+  await C.updateOne({ key: 'rcptbot' }, { $setOnInsert: { value: { bots: [], groups: [], routes: [] } } }, { upsert: true });
+  const p = await C.updateOne({ key: 'rcptbot', 'value.groups.id': { $ne: id } }, { $push: { 'value.groups': { $each: [{ id, title: title || id, bots: [b], at: new Date() }], $slice: -400 } } });
+  if (!p.modifiedCount) await C.updateOne({ key: 'rcptbot', 'value.groups.id': id }, { $addToSet: { 'value.groups.$.bots': b } }); // lo agregó otro en el medio
   _rbMem.at = 0;
+}
+// #1093: un mismo grupo repetido en la lista (quedó de la carrera de antes) ⇒ se junta en uno con todos sus bots.
+async function _rbDedupeGroups() {
+  const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const gs = ((d.value || {}).groups || []); const by = new Map(); let dup = 0;
+  for (const g of gs) { const k = String(g.id); const o = by.get(k); if (!o) { by.set(k, Object.assign({}, g, { bots: [...new Set((g.bots || []).map(String))] })); continue; } dup++; o.bots = [...new Set([...o.bots, ...(g.bots || []).map(String)])]; if (g.title && g.title !== k) o.title = g.title; }
+  if (!dup) return 0;
+  await Config.collection.updateOne({ key: 'rcptbot' }, { $set: { 'value.groups': [...by.values()] } }); _rbMem.at = 0; return dup;
+}
+// #1093: un bot cargado en el panel DESPUÉS de meterlo en los grupos se perdía el aviso de "me agregaron" (todavía no había webhook). Telegram guarda
+// esos avisos 24 h: antes de conectar el webhook se leen con getUpdates (sin confirmarlos: igual le llegan después al webhook, como siempre).
+async function _rbHarvest(b) {
+  if (!b || !b.token) return 0;
+  let r = await tgChannel.call(b.token, 'getUpdates', { limit: 100, timeout: 0 });
+  if (!r.ok && /webhook/i.test(String(r.error || ''))) { await tgChannel.call(b.token, 'deleteWebhook', { drop_pending_updates: false }); r = await tgChannel.call(b.token, 'getUpdates', { limit: 100, timeout: 0 }); }
+  if (!r.ok || !Array.isArray(r.result)) return 0; let n = 0;
+  for (const u of r.result) {
+    const mc = u.my_chat_member; const m = u.message || u.edited_message || (u.callback_query && u.callback_query.message);
+    try {
+      if (mc && mc.chat) { const st = String((mc.new_chat_member && mc.new_chat_member.status) || ''); if (/^(member|administrator)$/.test(st)) { await _rbGroupSeen(mc.chat, b.id); n++; } else if (/^(left|kicked)$/.test(st)) await _rbGroupSeen(mc.chat, b.id, true); }
+      else if (m && m.chat) { await _rbGroupSeen(m.chat, b.id); n++; }
+    } catch (_) {}
+  }
+  return n;
 }
 // #1087: REPARA lo que ya quedó roto: cada grupo de las estructuras (y los grupos comunes de la lista) se consulta a Telegram; si pasó a supergrupo,
 // Telegram devuelve el ID nuevo (migrate_to_chat_id) y se mueve todo. Si el bot está y el grupo no figuraba, se agrega. Corre al abrir el panel (cada 10 min).
@@ -31903,12 +31937,16 @@ async function _rbRepairGroups(force) {
   if (!force && Date.now() - _rbRepairAt < 600000) return []; _rbRepairAt = Date.now();
   const c = await _rbCfg(true); if (c.onRender) return []; const out = []; const ids = new Set();
   for (const st of c.structs || []) for (const r of st.routes || []) { if (r.from) ids.add(String(r.from)); if (r.otherTo) ids.add(String(r.otherTo)); for (const x of r.rules || []) if (x.to) ids.add(String(x.to)); }
-  for (const g of c.groups || []) if (!String(g.id).startsWith('-100')) ids.add(String(g.id));
-  for (const id of [...ids].slice(0, 80)) {
+  // #1093: TODOS los grupos conocidos (antes salteaba los supergrupos) y TODOS los bots por grupo (antes cortaba en el primero que lo veía: con 2 bots en
+  // el grupo, el segundo nunca aparecía). Un grupo conocido por un bot sirve para descubrir que el otro bot también está.
+  for (const g of c.groups || []) ids.add(String(g.id));
+  try { const n = await _rbDedupeGroups(); if (n) out.push(n + ' grupo(s) repetido(s) unificados'); } catch (_) {}
+  for (const id of [...ids].slice(0, 200)) {
     for (const b of c.botsDec || []) {
       if (!b.token) continue; const r = await tgChannel.call(b.token, 'getChat', { chat_id: id });
       if (r.migrateTo) { const old = _rbGroup(c, id); await _rbGroupMigrate(id, { id: r.migrateTo, type: 'supergroup', title: (old && old.title) || '' }, b.id); out.push(((old && old.title) || id) + ' → pasó a supergrupo (' + r.migrateTo + ')'); break; }
-      if (r.ok && /^(group|supergroup)$/.test(r.result.type)) { const g = _rbGroup(c, id); if (!g || !(g.bots || []).map(String).includes(String(b.id))) { await _rbGroupSeen(r.result, b.id); out.push((r.result.title || id) + ' → agregado'); } break; }
+      if (r.ok && /^(group|supergroup)$/.test(r.result.type)) { const g = _rbGroup(c, id); if (!g || !(g.bots || []).map(String).includes(String(b.id))) { await _rbGroupSeen(r.result, b.id); out.push((r.result.title || id) + ' → agregado a @' + (b.username || b.id)); } continue; }
+      if (!r.ok && /kicked|not a member/i.test(String(r.error || ''))) { const g = _rbGroup(c, id); if (g && (g.bots || []).map(String).includes(String(b.id))) { await _rbGroupSeen({ id, title: g.title, type: 'group' }, b.id, true); out.push((g.title || id) + ' → @' + (b.username || b.id) + ' ya no está'); } }
     }
   }
   _rbRepairLast = { at: new Date(), out }; return out;
@@ -32628,6 +32666,7 @@ app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
       else if (/^(left|kicked)$/.test(String(st))) await _rbGroupSeen(u.my_chat_member.chat, bot.id, true);
       return;
     }
+    if (u.callback_query && u.callback_query.message && u.callback_query.message.chat) _rbGroupSeen(u.callback_query.message.chat, bot.id).catch(() => {}); // #1093
     if (u.callback_query) { const cfg = await _rbCfg(); if (String(u.callback_query.data || '').startsWith('rbc:')) await _rbCbuCb(cfg, bot, u.callback_query); else if (String(u.callback_query.data || '').startsWith('rbm:')) await _rbMenuCb(cfg, bot, u.callback_query); else await _rbOnCallback(cfg, bot, u.callback_query); return; } // #1079-f/i
     const m = u.message; if (!m || !m.chat) return;
     if (m.migrate_to_chat_id) { await _rbGroupMigrate(m.chat.id, { id: m.migrate_to_chat_id, type: 'supergroup', title: m.chat.title }, bot.id); return; } // #1087
@@ -32699,9 +32738,11 @@ app.post('/api/admin/rcptbot/bot', authMiddleware, adminMiddleware, _rbPinGate, 
     const entry = { id, username: me.result.username || '', tokenEnc: _credEncrypt(t), secret: crypto.randomBytes(24).toString('hex'), at: new Date() };
     await Config.collection.updateOne({ key: 'rcptbot' }, { $pull: { 'value.bots': { id } } }, { upsert: true });
     await Config.collection.updateOne({ key: 'rcptbot' }, { $push: { 'value.bots': entry } }); _rbMem.at = 0;
+    let harvested = 0; if (!c.onRender) { try { harvested = await _rbHarvest({ id, token: t }); } catch (_) {} } // #1093: grupos donde ya estaba antes de cargarlo
     const w = await _rbSetWebhook({ id, token: t, secret: entry.secret });
+    _rbRepairGroups(true).catch(() => {});
     const sid = String((req.body || {}).structId || ''); if (sid) { const c2 = await _rbCfg(true); const st = (c2.structs || []).find((x) => x.id === sid); if (st) await _rbStructPut(Object.assign({}, st, { botId: id })); }
-    res.json({ success: true, bot: entry.username, webhook: w.ok ? 'ok' : w.error });
+    res.json({ success: true, bot: entry.username, webhook: w.ok ? 'ok' : w.error, groupsFound: harvested });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/bot-remove', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
@@ -32714,7 +32755,7 @@ app.post('/api/admin/rcptbot/bot-remove', authMiddleware, adminMiddleware, _rbPi
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/reconnect', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
-  try { const c = await _rbCfg(true); const out = []; for (const b of c.botsDec || []) { if (!b.token) { out.push('@' + b.username + ': token ilegible, cargalo de nuevo'); continue; } const w = await _rbSetWebhook(b); out.push('@' + b.username + ': ' + (w.ok ? 'ok' : w.error)); } res.json({ success: true, result: out.join(' · ') || 'no hay bots' }); } catch (e) { res.status(500).json({ error: e.message }); }
+  try { const c = await _rbCfg(true); const out = []; for (const b of c.botsDec || []) { if (!b.token) { out.push('@' + b.username + ': token ilegible, cargalo de nuevo'); continue; } let hv = 0; try { hv = await _rbHarvest(b); } catch (_) {} const w = await _rbSetWebhook(b); out.push('@' + b.username + ': ' + (w.ok ? 'ok' : w.error) + (hv ? ' · ' + hv + ' aviso(s) de grupos leídos' : '')); } res.json({ success: true, result: out.join(' · ') || 'no hay bots' }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/group-add', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar un grupo a mano por su ID (si no apareció solo)
   try {
