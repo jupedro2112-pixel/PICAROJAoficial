@@ -2020,3 +2020,28 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   fijo de hoy, una vez, ref `vip-igift-fix-<id>`). Extra por instalar = `fixedArs` siempre y rollover propio `_installGiftRolloverX` (×10).
 - **Panorama de menús (#1042-y):** `AppSession.menu/chat` (los manda la app en el ping) ⇒ cron `_menuRetTick` (1 h, lock `cron_locks`) ⇒ `Config['menuRetention']` ⇒
   INICIO abajo (`/api/admin/inicio/menus`, sólo lee). Un menú nuevo ⇒ sumarlo a `menuNow()`, a la lista válida del ping y a `IN_MENU_LBL`.
+
+## Revisión nocturna (#1088, 2026-11-10) — reglas que quedaron fijas
+- **Webhook de pago saliente (`handlePayoutStatusWebhook`):** ERROR/CANCELLED sólo pasa a 'failed' un retiro `paying | failed | pending_review`. Sobre uno
+  `paid` o `cancelled` guarda `hgStatus` + nota interna y NO lo reabre (si no, `_payoutAutoRetryTick` lo volvía a pagar).
+- **Anular retiros viejos** (reemplazo al pedir otro, `_closeOtherPayouts`): sólo con `debitConfirmed` null (nunca `false` = "Descuento no confirmado") y sin
+  error "No se pudo descontar|Descuento no confirmado".
+- **Re-chequeo antifraude:** `_withdrawFraudGate(u, monto, { cbu, alias })` también en `_payoutFraudRecheckTick`. Respuesta del pedido de retiro: `review` / `delayed`.
+- **Carga a mano:** cierra los comprobantes repetidos (`_depositReviewCloseRepeats`) desde `_depositReviewConsume` y `hgcashConsumeOnManualDeposit` (opción
+  `keepRepeats` cuando viene del Confirmar de la cola). Purchase de Meta sin `req` del panel (IP/UA del registro + `landingUrl`). El lote (PromoBonus) se
+  marca usado sólo si el bono lo tipeó el agente (`!_auto.claimed`).
+- **Misiones:** el nivel ganado en la semana `wk` rige desde la siguiente (`promotedWeek === wk` ⇒ promo−1); ascenso condicionado en la base + `_cronClaim('missions')`.
+- **Regalos en cierres/Datos IA:** `PROMO_TYPES` (datosIaService) = `CASHBACK_GIFT_TX_TYPES`; un tipo de regalo nuevo va a LAS DOS listas.
+- **Clave de clientes:** `_clientHasDeposits` ⇒ sólo el admin general cambia la clave / genera link de un cliente que ya cargó (depositor y publisher_admin no).
+  `/api/auth/change-password/pending` pide `currentPassword` fuera del cambio obligatorio.
+- **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
+- **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
+- **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
+- **Bot de comprobantes:** el cierre parcial usa la suma de lo efectivamente cerrado (`closeId`) y si no alcanza devuelve todo a 'open'; botón `pc` de un solo
+  uso por mensaje. `_rbGroupMigrate`: `srcMsgId` positivo ⇒ `-3e12 - srcMsgId` (original en `srcMsgIdOld`), `replyMsgId` null del lado origen y `fwdMsgId`
+  null del lado destino. El webhook sólo vacía la copia de la config 1 vez cada 30 s y sólo con bot existente.
+- **Canal:** el cupo diario (`_tgBudget`) se gasta DESPUÉS de descartar / reclamar lo que se va a publicar. **Bot de soporte:** su config se guarda por
+  campo (`Config.collection` key `supportbot`, `$set` de `value.*`).
+- **App:** la clave del alta se guarda con `VIP.autoload.rememberPassword` (sin "asd123" en la captura); el CBU vale 5 min (`ensureCbu`) y se relee al volver
+  a primer plano; `#wdHoldBar` va encima del casino (`body.casino-open`, z 100001); `sendMessage` usa socket sólo con `socketAuthed`; reclamos de
+  reembolso/fueguito/rakeback ya no escriben en el chat como el cliente.

@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-09**
+> **Última actualización: 2026-11-10**
 
 ## Sesión 2026-11-09
 
@@ -28,6 +28,51 @@
   devuelve `migrate_to_chat_id`, `telegramChannel.call` ahora lo expone como `migrateTo`) y agrega los que faltan; corre de fondo al abrir el panel (cada
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
+
+### 1088. Revisión nocturna: 29 arreglos de plata, regalos, seguridad, app y bots (2026-11-10) — app v716 · panel v291
+- **Owner:** "hacé todo completo, corregime todo lo raro; mirá que también estoy regalando mucho bono sin estar tan liberado". Se revisaron uno por uno los
+  hallazgos de los revisores; ningún %, tope ni rollover configurado cambió: sólo se hicieron cumplir las reglas que ya existían.
+- **Retiros:**
+  - Un aviso tardío/repetido ERROR/CANCELLED de hgcash ya no reabre un retiro PAGADO o RECHAZADO (antes volvía a 'failed' y el reintento automático lo
+    pagaba otra vez, o se pagaba con las fichas ya devueltas). Sólo pasa a 'failed' si estaba paying/failed/pending_review; si no, guarda hgStatus + nota.
+  - "Descuento no confirmado" (`debitConfirmed:false`, las fichas pudieron salir) nunca se anula solo al pedir otro retiro ni al pagarse otro
+    (`_olds` y `_payoutSupersedable` exigen `debitConfirmed` null y excluyen "No se pudo descontar|Descuento no confirmado"): lo resuelve una persona.
+  - `_payoutFraudRecheckTick` pasa el destino (CBU/alias) a `_withdrawFraudGate`: el control "CBU ya cobró en otra cuenta" ya no se saltea en el re-chequeo.
+  - `_notifyWithdrawHold(..., { chipsTaken })`: si las fichas ya se descontaron no dice "tu saldo no se tocó".
+  - La respuesta de `POST /api/withdrawal/request` trae `review` / `delayed`; la app muestra "Recibimos tu pedido, te avisamos" en vez de "en breve sale".
+- **Cargas:**
+  - La carga a mano (`_depositReviewConsume` y `hgcashConsumeOnManualDeposit`) cierra las copias repetidas del comprobante (`_depositReviewCloseRepeats`,
+    regla #908): antes otra foto del mismo pago quedaba en Cargas pendientes y se podía acreditar dos veces. Desde Confirmar de la cola, respeta `keepRepeats`.
+  - Purchase de Meta de la carga a mano: sin `{ req }` (era IP/navegador/cookies del AGENTE y pisaba el clic del anuncio); usa IP/UA del registro + landingUrl.
+  - Mensaje de carga: `/sys_deposit_bonus` sólo si el bono ENTRÓ (antes "incluye $0 de bonificación").
+  - El PromoBonus (lote) pendiente se marca usado en la carga a mano SÓLO si el bono lo tipeó el agente; un bono de 1ª carga/ruleta/historia ya no lo "quema".
+  - Cola de webhooks salientes: cada item se RESERVA (nextRetryAt) antes de mandarlo (con varias instancias se mandaba dos veces).
+- **Regalos (lo que se regalaba de más):**
+  - Misiones: el ascenso ganado esta semana rige desde la SEMANA QUE VIENE (`_missionTierFor` usa promo−1 si `promotedWeek === wk`), como dice el texto.
+    Antes, 15 min después de subir cobraba también las misiones del nivel siguiente con las mismas cargas. El `$inc` va condicionado en la base y
+    `_missionsTick` usa `_cronClaim('missions')` (con 2 instancias se podía subir dos niveles).
+  - Fueguito: si 1girox falla al cobrar el premio, se restaura también `rolloverSince`/`rolloverBase` (antes le borraba lo ya apostado).
+  - Bono de 1ª carga que 1girox no acepta en la carga automática ⇒ nota PRIORIDAD al agente para cargarlo a mano (antes se perdía sin aviso).
+  - Cierres / Datos IA / Revisión semanal: `PROMO_TYPES` suma `code_drop` y `review_gift` (antes el regalado se veía MENOR y la revisión semanal
+    podía subir un escalón de más). Recalcular los cierres no finalizados si se quiere el número corregido hacia atrás.
+- **Seguridad:**
+  - Depositor/agente ya no cambia la clave de un cliente que YA cargó (`/api/admin/change-password`); el publicista con panel tampoco (change-password
+    y access-link): `_clientHasDeposits`, 403 `ADMIN_ONLY_FOR_DEPOSITORS` (misma regla que #1053). Sólo el admin general.
+  - `/api/auth/change-password/pending` pide la clave actual salvo en el cambio OBLIGATORIO (la app muestra el campo en todo cambio voluntario).
+  - Agentes: "Anotar movimientos" lista sólo lo anotado desde Caja (`source:'caja'`); los Gastos privados (y su comprobante) quedan para el admin.
+  - Webhook del bot de comprobantes: un secreto que no coincide relee la base sólo si el bot existe y el largo coincide, máx. 1 vez cada 30 s.
+- **Números:** link del publicista (`/r/<token>`) y stats de campañas sin la devolución de un retiro rechazado (`payout_refund`), PRUEBA ni fallidas.
+- **App (v716):** la clave del alta rápida queda en Perfil (`rememberPassword`; `setPassword` no existía) y la captura ya no dibuja "asd123" (desde #956 la
+  clave es aleatoria); sin "Reembolso/Fueguito/Rakeback reclamado" escrito como si fuera el cliente (reabría el chat y despertaba al bot); CBU con
+  vencimiento de 5 min + relectura al volver a primer plano (Carga rápida, CARGAR del Inicio/básico y mensaje "Depositar" del chat); cartel del retiro
+  retenido visible encima del casino (abre el chat de la burbuja); el mensaje va por REST si el socket todavía no se identificó.
+- **Panel (v291):** Gastos por API exige CBU de 22 dígitos (el banco no acepta alias).
+- **Bots:** cierre PARCIAL calculado con lo que realmente se cerró y botón de un solo uso (dos toques cerraban de más / inflaban el resto); al pasar a
+  supergrupo los comprobantes abiertos corren `srcMsgId` a un rango negativo (original en `srcMsgIdOld`) y se borran los ids de mensaje del lado que migró;
+  premio grande del canal descarta PRUEBA/staff antes de gastar el cupo y la historia del espejo se reclama antes del cupo; config del bot de soporte se
+  guarda por campo (trampa #1012).
+- Tests corridos OK: payout-auto, gift-rollovers, bonus-cap, security-1053, caja-movimientos, rcptbot(-flow), telegram-admin, telegram-channel (regex
+  actualizada), support-bot, cashback-spec, dup-account, retention-journey, weekly-review, vip-exports.
 
 ### 1086. Tarjeta de datos del chat en BLANCO con letras negras y bono en verde (2026-11-10) — app v715
 - **Owner:** "el fondo verde del chat nuevo en la burbuja donde están los datos se pierde: fondo blanco y letras negras; el bono remarcado con verde y letras negras".
