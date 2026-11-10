@@ -29,12 +29,14 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
-### 1089. Bot de comprobantes: el grupo 1 (el que manda) ve SÓLO la suma; el detalle va al grupo 2 (2026-11-10)
+### 1089. Bot de comprobantes: el grupo 1 (el que manda) ve SÓLO la suma; el detalle va al grupo 2; SIN cierre automático de las 13 h (2026-11-10) — panel v293
 - **Owner:** "grupo 1 sólo tienen que recibir mensaje de la suma de las transferencias, hacer cierre cuando completen un monto, y el detalle sería en el segundo grupo".
 - En el grupo que MANDA se sacó todo lo de cotización/envío: ✅ REENVIADO (sólo monto + acumulado + total del mes), /total y el botón 📊 (suma por destino + mes),
   🔒 CIERRE ("→ destino: cerrado $X (N comp.)" + suma nueva / resto + mes, sin "PENDIENTE A COTIZAR" ni fechas). Textos de /ayuda y guía `src` actualizados
   ("cuando completen el monto: /cierre o /cierre 500.000"). El grupo 2 sigue igual (reenviado con pendientes, cierre detallado, cotizar, enviado).
-- Test `test-rcptbot-flow.js` (36 casos): asserts del grupo 1 sin PENDIENTE y el detalle verificado en el grupo 2; la base falsa ahora tiene `collection.updateMany`
+- **Cierre sólo a mano (owner eligió "sólo a mano"):** `_rbCloseTick` no hace nada salvo `Config['rcptbot'].autoClose13 === true` (default apagado, sin tilde en el
+  panel: si se quiere volver, poner ese campo). El grupo 1 cierra con /cierre o /cierre <monto> cuando completa el monto. Textos del bot, guías y panel sin "13 h".
+- Test `test-rcptbot-flow.js` (36 casos; el cron de las 13 h sólo con `autoClose13`, y sin él no cierra): asserts del grupo 1 sin PENDIENTE y el detalle verificado en el grupo 2; la base falsa ahora tiene `collection.updateMany`
   con pipeline (la usa `_rbGroupMigrate` desde la revisión nocturna: el caso #1087 fallaba sólo en el test).
 
 ### 1088. Revisión nocturna: 29 arreglos de plata, regalos, seguridad, app y bots (2026-11-10) — app v716 · panel v291

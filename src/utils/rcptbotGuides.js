@@ -53,7 +53,7 @@ Ejemplo: $50.000,82 termina en ,82.
    - Ya entró en un cierre: /restar con el monto.
 
 7) CIERRE
-   - Automático a las 13 h de lunes a viernes (el lunes junta todo el fin de semana).
+   - Lo dan USTEDES (no hay cierre automático).
    - Cuando completen el monto: /cierre (todo) o /cierre 500.000 (sólo ese monto; el resto sigue sumando).
    - Acá se ve sólo el monto cerrado y la suma nueva. La cotización y el envío los maneja el grupo que recibe.
    - Después del cierre la suma arranca de $0. El TOTAL DEL MES sigue sin corte hasta fin de mes.
@@ -78,7 +78,7 @@ Cada uno trae el monto y la suma acumulada. Además pueden llegar:
    ⚠️ "el cliente se equivocó con el decimal, pero va a este grupo" (lo eligieron a mano)
    ↪️ movido desde otro grupo · 🗑️ ANULADO · ➖ RESTADO · 📥 sumado lo anterior
 
-2) CIERRE (13 h de lunes a viernes, o cuando el que envía lo da)
+2) CIERRE (lo da el grupo que envía cuando completa el monto)
 Llega 🔒 CIERRE con ⏳ PENDIENTE A COTIZAR: monto, del día/hora al día/hora y cantidad de comprobantes.
 Si fue un cierre parcial lo dice ("cierre PARCIAL de $X") y el resto sigue sumando.
 

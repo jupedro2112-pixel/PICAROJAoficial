@@ -352,7 +352,7 @@ document.addEventListener('change', function (ev) {
 <span>Historial de números 🔒</span>
 </a>
 <!-- #1079-b (owner): último del menú, con clave propia -->
-<a href="#" class="nav-item" data-section="rcptbot" title="Bots de Telegram que reenvían comprobantes entre grupos según los centavos, suman y cierran a las 13 h (con clave propia)">
+<a href="#" class="nav-item" data-section="rcptbot" title="Bots de Telegram que reenvían comprobantes entre grupos según los centavos, suman y cierran cuando el grupo que manda da el cierre (con clave propia)">
 <span>🧾</span>
 <span>Bot de comprobantes 🔒</span>
 </a>
@@ -3133,7 +3133,7 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                 <div class="panel-header"><h2>🧾 Bot de comprobantes (Telegram) 🔒</h2></div>
                 <div class="card" style="margin-bottom:1rem">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
-                        <p style="margin:0;font-size:12.5px;color:var(--p-muted,#777);flex:1;min-width:240px">Cada <b>estructura</b> es un circuito con su bot: el grupo 1 manda el comprobante, el bot lo marca, lo reenvía al grupo 2 (según los centavos) y suma. Cierre 13 h de lunes a viernes ⇒ <b>pendiente a cotizar</b> → <b>/cotizado</b> (pendiente a enviar) → <b>/enviado</b> (se va). En los grupos que MANDAN el bot tiene que ser <b>administrador</b>.</p>
+                        <p style="margin:0;font-size:12.5px;color:var(--p-muted,#777);flex:1;min-width:240px">Cada <b>estructura</b> es un circuito con su bot: el grupo 1 manda el comprobante, el bot lo marca, lo reenvía al grupo 2 (según los centavos) y suma. El grupo 1 ve sólo la suma y da el <b>cierre</b> a mano (/cierre o /cierre &lt;monto&gt;) cuando completa el monto ⇒ en el grupo 2 queda <b>pendiente a cotizar</b> → <b>/cotizado</b> (pendiente a enviar) → <b>/enviado</b> (se va). En los grupos que MANDAN el bot tiene que ser <b>administrador</b>.</p>
                         <span><button class="btn btn-primary btn-sm" onclick="rbNewStruct()">+ Agregar estructura</button> <button class="btn btn-secondary btn-sm" onclick="rbChangePin()">🔑 Clave</button> <button class="btn btn-secondary btn-sm" onclick="rbReconnect()">🔧 Reconectar bots</button> <button class="btn btn-secondary btn-sm" onclick="loadRcptBot()">🔄</button></span>
                     </div>
                     <div id="rbStatus" style="margin-top:6px;font-size:12.5px"></div>

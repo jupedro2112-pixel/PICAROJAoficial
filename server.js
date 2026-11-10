@@ -31874,7 +31874,7 @@ function _rbPickKb(c, route, recId, exceptTo) {
 }
 // #1079-i (owner: "que se explique cómo funcionan los comandos; un menú en cada grupo cuando se configura: dar cierre, cotización, marcar enviado, ver
 // suma actualizada, todo el detalle"). Menú = mensaje fijado con botones 'rbm:<acción>' (cierre / cotizado / enviado piden confirmar).
-const _RB_CIRCUITO = '🔁 <b>CÓMO SIGUE</b>: comprobantes → se suman → <b>CIERRE</b> (13 h lun–vie, o con el botón) → ⏳ PENDIENTE A COTIZAR → el destino marca 💱 COTIZADO → 📤 PENDIENTE A ENVIAR → el destino marca ✅ ENVIADO → listo. Después del cierre la suma arranca de $0; el total del mes sigue hasta fin de mes.';
+const _RB_CIRCUITO = '🔁 <b>CÓMO SIGUE</b>: comprobantes → se suman → <b>CIERRE</b> (lo da el grupo que manda cuando completa el monto: /cierre o el botón) → ⏳ PENDIENTE A COTIZAR → el destino marca 💱 COTIZADO → 📤 PENDIENTE A ENVIAR → el destino marca ✅ ENVIADO → listo. Después del cierre la suma arranca de $0; el total del mes sigue hasta fin de mes.';
 function _rbSrcCmdsTxt() {
   return '\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y el total del mes\n🔒 /cierre — dar el cierre del TOTAL (la suma vuelve a $0)\n🔒 /cierre 500.000 — cerrar SÓLO ese monto: queda anotado y el resto sigue sumando\n📥 /anterior 13.686.199 — sumar lo que venían acumulando ANTES del bot (se suma a lo nuevo)\n🏦 /cbu — ver a qué CBU transferir ahora (titular, CBU, alias y terminación)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado o reenviado)\n🗑️ /anular — respondiendo un comprobante: lo saca de la suma (avisa en los dos grupos)\n🚫 Comprobante DUPLICADO: el bot avisa y NO lo suma (si es otro distinto, botón para sumarlo)\n✏️ Responder la foto con el monto — corregir un monto mal leído\n↪️ Botón "Me equivoqué: cambiar grupo" — mover un comprobante al grupo correcto\n❓ /ayuda — ver este menú de nuevo · 📘 /guia — la guía completa en archivo\n\n🔁 <b>CÓMO SIGUE</b>: los comprobantes se suman → cuando completen el monto, <b>/cierre</b> (o /cierre 500.000 para cerrar sólo ese monto) → la suma arranca de $0 (o sigue con el resto). Cotización y envío los maneja el otro grupo. El total del mes sigue hasta fin de mes.';
 }
@@ -32064,6 +32064,9 @@ async function _rbClose(c, route, by, opts = {}) {
 // Cron: lunes a viernes desde las 13:00 (ART), una vez por día entre instancias. Sábado y domingo no cierra ⇒ el lunes junta todo desde el viernes 13 h.
 async function _rbCloseTick() {
   const c = await _rbCfg(); if (!(c.botsDec || []).some((b) => b.token) || !(c.routes || []).length) return;
+  // #1089 (owner 2026-11-10: "hacer cierre cuando completen un monto" ⇒ "sólo a mano"): el cierre de las 13 h queda APAGADO salvo
+  // Config['rcptbot'].autoClose13 === true. El grupo que manda cierra con /cierre o /cierre <monto>.
+  if (c.autoClose13 !== true) return;
   const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
   if (dow === 0 || dow === 6 || _tgArtHour(now) < 13) return;
   const cl = await Config.collection.updateOne({ key: 'rcptbot', 'value.lastAutoClose': { $ne: dk } }, { $set: { 'value.lastAutoClose': dk } });

@@ -84,6 +84,7 @@ const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : 
 vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg;', ctx);
 // --- armado: 1 estructura, bot 111, grupo 1 (-1) manda; ,99 → -2 ; todo lo demás → -3 ---
 cfgDocs.push({ key: 'rcptbot', value: { bots: [{ id: '111', username: 'b111', tokenEnc: '111:TOKEN', secret: 'S' }], groups: [{ id: '-1', title: 'buffalobot', bots: ['111'] }, { id: '-2', title: 'asuncionbot', bots: ['111'] }, { id: '-3', title: 'fichasnuevobot', bots: ['111'] }],
+  autoClose13: true, // #1089: el cierre de las 13 h sólo con este tilde (default apagado)
   structs: [{ id: 'E1', name: 'Buffalo', on: true, botId: '111', routes: [{ from: '-1', rules: [{ cents: '99', to: '-2' }], otherTo: '-3' }] }] } });
 const hook = async (update) => { const req = { params: { bot: '111' }, get: () => 'S', body: update }; const res = { headersSent: false, status() { return this; }, end() {}, json() { this.headersSent = true; } }; await routes['POST /api/rcptbot/webhook/:bot'](req, res); };
 const photo = (id, chat = -1) => ({ message: { message_id: id, chat: { id: chat, type: 'supergroup', title: chat === -1 ? 'buffalobot' : 'x' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'f' + id }] } });
@@ -109,6 +110,9 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   await caso('/total muestra cada destino y el mes', async () => { await hook(text(5, -1, '/total')); const t = last(-1).p.text; assert.ok(/asuncionbot: <b>\$30\.002<\/b> \(2\)/.test(t) && /fichasnuevobot: <b>\$10\.000<\/b> \(1\)/.test(t) && /Total de noviembre/.test(t), t); });
   await caso('cierre 13 h (martes): pendiente a cotizar detallado, suma nueva $0', async () => {
     NOW = new Date('2026-11-10T16:05:00Z'); // 13:05 ART
+    const rc = cfgDocs.find((d) => d.key === 'rcptbot').value; rc.autoClose13 = false; await ctx._rbCfg(true);
+    await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 0, '#1089: sin autoClose13 NO cierra solo a las 13 h');
+    rc.autoClose13 = true; await ctx._rbCfg(true);
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 2);
     const d2 = last(-2).p.text; assert.ok(/CIERRE/.test(d2) && /PENDIENTE A COTIZAR: \$30\.001,98/.test(d2) && /Suma nueva: <b>\$0<\/b>/.test(d2) && (d2.match(/PENDIENTE A COTIZAR/g) || []).length === 1, d2);
     const s1 = last(-1).p.text; assert.ok(/asuncionbot: cerrado <b>\$30\.001,98<\/b> \(2 comp\.\)/.test(s1) && !/PENDIENTE/.test(s1) && /Suma nueva/.test(s1) && /Total de noviembre \(sin corte\): <b>\$40\.002/.test(s1), s1);

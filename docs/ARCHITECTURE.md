@@ -2037,7 +2037,7 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
 - **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
 - **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
-- **Bot de comprobantes #1089:** el grupo que MANDA recibe sólo sumas (reenviado, /total, cierre con monto cerrado + suma nueva, total del mes); pendientes a cotizar/enviar, cotización y envío sólo en el DESTINO. Un mensaje nuevo al grupo 1 no lleva `_rbPendTxt`.
+- **Bot de comprobantes #1089:** el grupo que MANDA recibe sólo sumas (reenviado, /total, cierre con monto cerrado + suma nueva, total del mes); pendientes a cotizar/enviar, cotización y envío sólo en el DESTINO. Un mensaje nuevo al grupo 1 no lleva `_rbPendTxt`. Cierre automático de las 13 h APAGADO (sólo con `Config['rcptbot'].autoClose13 === true`): el cierre lo da el grupo 1 a mano.
 - **Bot de comprobantes:** el cierre parcial usa la suma de lo efectivamente cerrado (`closeId`) y si no alcanza devuelve todo a 'open'; botón `pc` de un solo
   uso por mensaje. `_rbGroupMigrate`: `srcMsgId` positivo ⇒ `-3e12 - srcMsgId` (original en `srcMsgIdOld`), `replyMsgId` null del lado origen y `fwdMsgId`
   null del lado destino. El webhook sólo vacía la copia de la config 1 vez cada 30 s y sólo con bot existente.
