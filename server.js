@@ -31316,12 +31316,16 @@ app.post('/api/admin/telegram/admin-unlink', authMiddleware, adminMiddleware, as
 });
 // Webhook: botones del panel (ventanitas) y /start por privado (le manda el panel). Sólo con el secreto que le dimos a Telegram.
 const TG_WEBHOOK_BASE = String(process.env.TG_WEBHOOK_BASE || 'https://picaroja.com').replace(/\/+$/, ''); // #1069: antes salía de PUBLIC_URL (si apunta a otra página, el bot publica pero NUNCA recibe los mensajes del grupo) // revisión: la URL del webhook NO sale del link de los botones
+// #1076 (owner: "poder modificar la página de dónde recibe el webhook, dejar predeterminada la que está pero que se pueda ajustar"): el panel manda
+// (Config['telegramBot'].webhookBase) > env TG_WEBHOOK_BASE > https://picaroja.com. Cada página con este mismo sistema pone SU link ⇒ un bot no se pisa entre dos servidores.
+const _TG_HOST_RE = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d{2,5})?$/i;
+function _tgWebhookBase(c) { const v = String((c && c.webhookBase) || '').trim().replace(/\/+$/, ''); return _TG_HOST_RE.test(v) ? v : TG_WEBHOOK_BASE; }
 // #1069: 🩺 diagnóstico de la conexión del bot (panel): getMe + getWebhookInfo; con fix=1 vuelve a registrar el webhook en picaroja.com.
 app.post('/api/admin/telegram/diag', authMiddleware, adminMiddleware, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el admin general.' });
   try {
     const c = await _tgCfg(); if (!c.token) return res.json({ success: true, problems: ['No hay token del bot cargado (o estás en el entorno de prueba, donde Telegram está apagado).'] });
-    const want = TG_WEBHOOK_BASE + '/api/telegram/webhook'; let fixed = null;
+    const want = _tgWebhookBase(c) + '/api/telegram/webhook'; let fixed = null;
     if ((req.body || {}).fix) { const r = await _tgSetWebhook(c, false); fixed = r.ok ? 'ok' : String(r.error || '').slice(0, 160); _tgSecretMem.at = 0; }
     const [me, wh] = await Promise.all([tgChannel.call(c.token, 'getMe', {}), tgChannel.call(c.token, 'getWebhookInfo', {})]);
     const w = (wh && wh.ok && wh.result) || {}; const b = (me && me.ok && me.result) || {}; const problems = [];
@@ -31338,7 +31342,7 @@ async function _tgSetWebhook(c, dropPending) {
   if (!c.token) return { ok: false, error: 'sin token' };
   let secret = c.webhookSecret;
   if (!secret) { secret = crypto.randomBytes(24).toString('hex'); await _tgSet({ webhookSecret: secret }); }
-  return tgChannel.call(c.token, 'setWebhook', { url: TG_WEBHOOK_BASE + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message', 'my_chat_member'], drop_pending_updates: dropPending === true }); // #1047: my_chat_member = lo agregaron/sacaron de un canal o grupo
+  return tgChannel.call(c.token, 'setWebhook', { url: _tgWebhookBase(c) + '/api/telegram/webhook', secret_token: secret, allowed_updates: ['callback_query', 'message', 'my_chat_member'], drop_pending_updates: dropPending === true }); // #1047: my_chat_member = lo agregaron/sacaron de un canal o grupo
 }
 // ── #1051 CLAUDE EN TELEGRAM (configuración). El owner quiere pedirle cambios al código desde el grupo de reportes y recibir el zip listo
 // para subir a Amazon (owner: "que funcione como vos pero ya configurado"). Acá SÓLO se guarda la configuración; el agente se arma después.
@@ -31457,7 +31461,7 @@ app.get('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res)
     const queue = (c.token && c.channel && c.mirror) ? await Story.countDocuments(_tgStoryQuery(c, now)) : 0;
     const posted = await Story.find({ tgPostedAt: { $ne: null } }).sort({ tgPostedAt: -1 }).limit(5).select('id title tgPostedAt tgMsgId').lean();
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, config: { hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false, adminChats: (c.adminChats || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), adminReports: Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {}), adminPairUntil: c.adminPairUntil || null, adminPending: (c.adminPending || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by, byId: x.byId ? String(x.byId) : null, members: x.members == null ? null : x.members })), onRender: !!c.onRender, channelCandidates: (c.channelCandidates || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by, byId: x.byId || null, members: x.members == null ? null : x.members })) }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
+    res.json({ success: true, config: { webhookBase: c.webhookBase || '', webhookDefault: TG_WEBHOOK_BASE, webhookNow: _tgWebhookBase(c), hasToken: !!c.token, tokenLast4: c.tokenLast4 || (process.env.TELEGRAM_BOT_TOKEN && !c.tokenEnc ? 'env' : null), decryptError: !!c.decryptError, channel: c.channel, appUrl: c.appUrl, mirror: c.mirror, panel: c.panel, gapMin: c.gapMin, since: c.since || null, panelMsgId: c.panelMsgId || null, botUsername: c.botUsername || null, channelTitle: c.channelTitle || null, lastPostAt: c.lastPostAt || null, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, buttons: c.btn, drop: _tgDropCfg(c), dropNextAt: c.dropNextAt || null, dropLastAt: c.dropLastAt || null, sorteoPost: c.sorteoPost !== false, adminChats: (c.adminChats || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by })), adminReports: Object.assign({ daily: true, weekly: true, monthly: true }, c.adminReports || {}), adminPairUntil: c.adminPairUntil || null, adminPending: (c.adminPending || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by, byId: x.byId ? String(x.byId) : null, members: x.members == null ? null : x.members })), onRender: !!c.onRender, channelCandidates: (c.channelCandidates || []).map((x) => ({ id: String(x.id), title: x.title, at: x.at, by: x.by, byId: x.byId || null, members: x.members == null ? null : x.members })) }, queue, posted, lastDrop: await CodeDrop.findOne({ createdBy: 'telegram' }).sort({ startsAt: -1 }).select('code amount maxClaims claims status startsAt').lean() });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res) => {
@@ -31475,6 +31479,11 @@ app.post('/api/admin/telegram', authMiddleware, adminMiddleware, async (req, res
     if (b.drop && typeof b.drop === 'object') set.drop = _tgDropCfg({ drop: b.drop }); // #1044-d
     if (typeof b.sorteoPost === 'boolean') set.sorteoPost = b.sorteoPost;
     if (b.adminReports && typeof b.adminReports === 'object') set.adminReports = { daily: b.adminReports.daily !== false, weekly: b.adminReports.weekly !== false, monthly: b.adminReports.monthly !== false }; // #1046
+    if (typeof b.webhookBase === 'string') { // #1076: link de ESTA página para que Telegram le entregue los mensajes (vacío = el predeterminado)
+      const wb = b.webhookBase.trim().replace(/\/+$/, '');
+      if (wb && !_TG_HOST_RE.test(wb)) return res.status(400).json({ error: 'El link de esta página tiene que ser sólo el dominio con https, ej. https://picaroja.com (sin /api ni nada más).' });
+      set.webhookBase = wb || null;
+    }
     if (b.gapMin != null && Number.isFinite(Number(b.gapMin))) set.gapMin = Math.min(600, Math.max(10, Math.round(Number(b.gapMin))));
     // El token se PRUEBA antes de guardar (getMe) y se guarda cifrado.
     let me = null;

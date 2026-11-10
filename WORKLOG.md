@@ -8,6 +8,13 @@
 
 ## Sesión 2026-11-09
 
+### 1076. Telegram: el link donde se reciben los mensajes del bot se elige desde el panel (2026-11-10) — panel v278
+- **Owner:** el canal anda pero el grupo privado da "401 Unauthorized" en el diagnóstico. Causa: OTRA página corre este mismo sistema (copia de #1054,
+  `botbot.zip`) y registra el bot hacia `https://picaroja.com` (el default de `TG_WEBHOOK_BASE`) con SU clave ⇒ Telegram le entrega a PICA ROJA con una clave
+  ajena. El canal anda igual porque sólo PUBLICA (no recibe). Pedido del owner: "poder modificar la página de dónde recibe el webhook, predeterminada la que
+  está pero ajustable" ⇒ `Config['telegramBot'].webhookBase` (panel → 📊 Grupo privado → 🌐 Link de ESTA página) > env `TG_WEBHOOK_BASE` > picaroja.com
+  (`_tgWebhookBase`, sólo dominio https). En la otra página hay que subir esta versión y poner SU link en su panel.
+
 ### 1075. Grupo privado: cada consulta queda guardada + 🩺 Análisis del negocio (2026-11-09)
 - **Owner:** "cuando aprieto un botón quiero que quede plasmado en texto así queda guardada cada información; y un análisis completo de cómo ves el negocio,
   si es sano o qué le modificarías viendo todo lo que ofrecemos". (1) `_tgAdminOnCallback` ya no EDITA el mensaje: manda uno nuevo (con fecha/hora y botones

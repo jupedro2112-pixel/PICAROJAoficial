@@ -885,6 +885,8 @@ document.addEventListener('change', function (ev) {
                                 <code id="tgAdminCmd" style="font-size:13px;user-select:all;"></code>
                             </div>
                             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12.5px;">🆔 ID del grupo (a mano, si no aparece para aprobar): <input type="text" id="tgAdminIdIn" placeholder="-1001234567890" style="width:170px;"> <button class="btn-secondary btn-small" onclick="tgAdminAddId()">➕ Vincular por ID</button></div>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12.5px;">🌐 Link de ESTA página para Telegram: <input type="text" id="tgWebhookBase" placeholder="https://picaroja.com" style="width:220px;"> <button class="btn-secondary btn-small" onclick="tgSaveWebhookBase()">💾 Guardar link</button> <small id="tgWebhookNow" style="color:var(--p-muted,#777);"></small></div>
+                            <p style="margin:2px 0 0;font-size:12px;color:var(--p-muted,#777);">Vacío = el predeterminado. Si este mismo sistema corre en OTRA página, en el panel de esa página poné SU link: así cada una recibe los mensajes de su bot y no se pisan (error 401).</p>
                             <div id="tgDiagOut" style="margin-top:6px;font-size:12.5px;"></div>
                             <div id="tgAdminPending" style="margin-top:6px;font-size:12.5px;"></div>
                             <div id="tgAdminChats" style="margin-top:6px;font-size:12.5px;"></div>

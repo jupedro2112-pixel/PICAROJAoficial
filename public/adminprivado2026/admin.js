@@ -6374,7 +6374,7 @@ async function loadTgChannel() {
     try {
         const r = await authFetch('/api/admin/telegram'); const j = await r.json(); if (!r.ok) { st.textContent = j.error || ''; return; }
         const c = j.config || {}; const g = (id) => document.getElementById(id);
-        if (g('tgChannel')) g('tgChannel').value = c.channel || ''; if (g('tgAppUrl')) g('tgAppUrl').value = c.appUrl || ''; if (g('tgGap')) g('tgGap').value = c.gapMin || 90;
+        if (g('tgChannel')) g('tgChannel').value = c.channel || ''; if (g('tgAppUrl')) g('tgAppUrl').value = c.appUrl || ''; if (g('tgWebhookBase')) g('tgWebhookBase').value = c.webhookBase || ''; if (g('tgWebhookNow')) g('tgWebhookNow').textContent = c.webhookNow ? 'Ahora recibe en: ' + c.webhookNow : ''; // #1076 if (g('tgGap')) g('tgGap').value = c.gapMin || 90;
         const bt = c.buttons || { items: {} }; // #1044-c botones editables
         if (g('tgBtnApp')) g('tgBtnApp').value = bt.appLabel || ''; if (g('tgBtnStory')) g('tgBtnStory').value = bt.storyLabel || ''; if (g('tgServText')) g('tgServText').value = bt.servText || '';
         if (g('tgLinks')) g('tgLinks').value = (bt.links || []).map((l) => l.label + ' | ' + l.url).join('\n');
@@ -6437,6 +6437,15 @@ async function tgAdminAddId() {
         const r = await authFetch('/api/admin/telegram/admin-add-id', { method: 'POST', body: JSON.stringify({ id }) }); const j = await r.json();
         if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
         showToast('✅ Grupo vinculado: ' + escapeHtml(j.title || String(j.id)), 'success'); if (inp) inp.value = ''; try { loadTgChannel(); } catch (_) {}
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+// #1076: guardar el link de ESTA página para el webhook de Telegram y reconectar al toque
+async function tgSaveWebhookBase() {
+    const inp = document.getElementById('tgWebhookBase'); const v = String((inp && inp.value) || '').trim();
+    try {
+        const r = await authFetch('/api/admin/telegram', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ webhookBase: v }) }); const j = await r.json();
+        if (!r.ok) { showToast(escapeHtml(j.error || 'Error'), 'error'); return; }
+        showToast('✅ Link guardado' + (v ? ': ' + escapeHtml(v) : ' (predeterminado)'), 'success'); try { loadTgChannel(); } catch (_) {} tgDiag(true);
     } catch (_) { showToast('Error de conexión', 'error'); }
 }
 // #1069: 🩺 diagnóstico del bot (por qué no responde en el grupo) + 🔧 reconectar

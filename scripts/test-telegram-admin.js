@@ -56,7 +56,7 @@ caso('#1047 Sólo con el token: canal detectado solo (my_chat_member), grupo PEN
   assert.ok(/_tgArrPush\('adminPending'/.test(mcm) && !/_tgArrPush\('adminChats'/.test(mcm), 'un grupo agregado NUNCA queda vinculado sin aprobar');
   assert.ok(!/_tgSet\(\{[^}]*\badmin(Chats|Pending):/.test(S) && !/\bset\.admin(Chats|Pending) =/.test(S), 'listas de grupos sólo con $pull/$push (nunca leer→mezclar→guardar)');
   assert.ok(/const fresh = c\.tokenSavedAt/.test(S), 'el canal se conecta solo sólo en la 1ª hora del token');
-  assert.ok(/url: TG_WEBHOOK_BASE \+ '\/api\/telegram\/webhook'/.test(S) && /skip: \(req\) => req\.originalUrl === '\/api\/telegram\/webhook'/.test(S));
+  assert.ok(/url: _tgWebhookBase\(c\) \+ '\/api\/telegram\/webhook'/.test(S) && /skip: \(req\) => req\.originalUrl === '\/api\/telegram\/webhook'/.test(S));
   assert.ok(/if \(typeof b\.channel === 'string' && \(b\.channel\.trim\(\) \|\| b\.clearChannel === true\)\)/.test(S), 'guardar sin canal no lo desconecta');
   assert.ok(/getConfig\('telegramPanelStats', null\)\) \|\| \{\}; \/\/ revisión: nunca calcula en el webhook/.test(S));
   assert.ok(/app\.post\('\/api\/admin\/telegram\/admin-approve', authMiddleware, adminMiddleware, async \(req, res\) => \{ \/\/ #1047\n  if \(req\.user\.role !== 'admin'\)/.test(S));
@@ -138,6 +138,12 @@ caso('#1075 Análisis del negocio: estado + qué cambiaría; cada botón deja un
   const i = S2.indexOf('async function _tgAdminOnCallback'); const body = S2.slice(i, S2.indexOf('\n}\n', i));
   assert.ok(!/editMessageText/.test(body) && /await _tgAdminSend\(c, chatId, r\.text, r\.markup\);/.test(body), 'cada consulta queda guardada');
   assert.ok(/snap\.offer = \{ firstPct:/.test(S2), 'la oferta la arma el cron');
+});
+caso('#1076 Link del webhook editable desde el panel (panel > env > picaroja.com), sólo dominio https', () => {
+  const S2 = require('fs').readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
+  assert.ok(/function _tgWebhookBase\(c\)/.test(S2) && /url: _tgWebhookBase\(c\) \+ '\/api\/telegram\/webhook'/.test(S2) && /const want = _tgWebhookBase\(c\)/.test(S2));
+  const re = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d{2,5})?$/i;
+  assert.ok(re.test('https://picaroja.com') && re.test('https://otra-pagina.com.ar') && !re.test('http://picaroja.com') && !re.test('https://picaroja.com/api') && !re.test('javascript:alert(1)'));
 });
 console.log(`\n${ok}/${ok + fail} casos OK`);
 process.exit(fail ? 1 : 0);
