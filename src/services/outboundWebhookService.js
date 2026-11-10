@@ -265,6 +265,11 @@ async function processQueue() {
       await OutboundWebhookQueue.deleteOne({ _id: it._id }).catch(() => {});
       continue;
     }
+    // Revisión nocturna: RESERVAR el item antes de mandarlo (cada instancia de EB corre este worker: sin reserva, dos
+    // instancias podían mandar el mismo aviso). Si otra lo tomó, nextRetryAt ya no está vencido y la reserva no devuelve nada.
+    let claimed = null;
+    try { claimed = await OutboundWebhookQueue.findOneAndUpdate({ _id: it._id, nextRetryAt: { $lte: new Date() } }, { $set: { nextRetryAt: new Date(Date.now() + QUEUE_RETRY_MS) } }, { new: true }).lean(); } catch (_) { claimed = null; }
+    if (!claimed) continue;
     const r = await _deliver(dest, it.payload, it.attempts);
     if (r.ok || r.fatal) { await OutboundWebhookQueue.deleteOne({ _id: it._id }).catch(() => {}); continue; }
     await OutboundWebhookQueue.updateOne({ _id: it._id }, { $set: { attempts: r.attempts, lastError: String(r.error || '').slice(0, 200), nextRetryAt: new Date(Date.now() + QUEUE_RETRY_MS) } }).catch(() => {});

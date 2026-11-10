@@ -2357,7 +2357,7 @@ async function _depositReviewConsume(userId, amount, by) {
     if (!c) return false;
     const r = await Comprobante.findOneAndUpdate({ id: c.id, reviewStatus: 'pending' },
       { $set: { reviewStatus: 'confirmed', reviewResolution: 'manual', reviewedBy: by || 'agente', reviewedAt: new Date(), bankMatchStatus: 'manual_charged', autoCharged: true } }, { new: true }).lean();
-    if (r) _emitDepositReviewUpdate(userId, { action: 'confirmed', id: c.id });
+    if (r) { _emitDepositReviewUpdate(userId, { action: 'confirmed', id: c.id }); await _depositReviewCloseRepeats(r, by || 'agente', 'cargó a mano'); } // revisión nocturna: #908 también en la carga a mano
     return !!r;
   } catch (_) { return false; }
 }
@@ -2986,7 +2986,7 @@ async function hgcashHandleChargeFailure(movement, comprobante, errMsg, dataDesc
 // matcheado a ese usuario por el MISMO monto (que no se pudo auto-cargar), lo
 // marcamos como `manual_charged` y consumimos el comprobante. Así esa transferencia
 // /foto NO vuelve a auto-cargar cuando JUGAYGANA se recupere (evita doble carga).
-async function hgcashConsumeOnManualDeposit(userId, username, amount) {
+async function hgcashConsumeOnManualDeposit(userId, username, amount, opts) {
   try {
     const cfg = await getHgcashConfig();
     if (!cfg.enabled) return false;
@@ -3017,6 +3017,8 @@ async function hgcashConsumeOnManualDeposit(userId, username, amount) {
     if (target.matchedComprobanteId) {
       await Comprobante.updateOne({ id: target.matchedComprobanteId },
         { $set: { bankMatchStatus: 'manual_charged', autoCharged: true, reviewStatus: 'confirmed', reviewResolution: 'manual', reviewedBy: 'agente', reviewedAt: new Date() } }); // #376
+      // revisión nocturna (#908): cerrar las copias repetidas de ese comprobante (si no, otro agente podía volver a acreditarlas).
+      if (!(opts && opts.keepRepeats)) { try { const _cmp = await Comprobante.findOne({ id: target.matchedComprobanteId }).lean(); if (_cmp) await _depositReviewCloseRepeats(_cmp, 'agente', 'cargó a mano'); } catch (_) {} }
     }
     await _emitAdminOnlyChatNote(userId, username,
       `🏦 Transferencia hgcash marcada como CARGADA MANUAL ($${Number(target.amount).toLocaleString('es-AR')}). Ese comprobante no se va a auto-cargar de nuevo.`);
@@ -11566,7 +11568,7 @@ async function _agentDepositHandler(req, res, body) {
       // hgcash: si esta carga MANUAL corresponde a una transferencia hgcash pendiente
       // de ese usuario (mismo monto), marcarla como cargada → no se auto-carga después.
       // Fire-and-forget: no frena la respuesta de la carga.
-      hgcashConsumeOnManualDeposit(user.id, user.username, parseFloat(amount)).catch(() => {});
+      hgcashConsumeOnManualDeposit(user.id, user.username, parseFloat(amount), { keepRepeats: !!(body && body._fromReviewId) }).catch(() => {}); // el Confirmar de la cola ya resuelve sus repetidos (o pidió conservarlos)
       if (!(body && body._fromReviewId)) _depositReviewConsume(user.id, parseFloat(amount), req.user && req.user.username).catch(() => {}); // #376: cierra la carga pendiente del mismo monto (#820: no si viene del Confirmar de esa misma cola)
 
       // Nota interna: bono automático aplicado (y corrección de lo que puso el agente).
@@ -11578,7 +11580,9 @@ async function _agentDepositHandler(req, res, body) {
       // ROI de las estrategias: si el depósito incluyó bono, marcamos el
       // PromoBonus vigente del usuario como usado y guardamos el monto de
       // la carga. Con eso los reportes calculan ingreso / costo / ROI.
-      if (_effectiveBonus > 0) {
+      // Revisión nocturna: sólo si el bono lo TIPEÓ el agente (lotes applyMode 'agent'). Si salió de resolveAutoBonus,
+      // claimPromoBonusPercent ya marcó el lote que corresponde; antes un bono de 1ª carga/ruleta/historia "quemaba" el lote pendiente.
+      if (_effectiveBonus > 0 && !_auto.claimed) {
         try {
           await PromoBonus.findOneAndUpdate(
             { username: String(user.username).toLowerCase(), status: 'active', expiresAt: { $gt: new Date() } },
@@ -11628,7 +11632,7 @@ async function _agentDepositHandler(req, res, body) {
       const balanceStr = newBalance !== null ? `$${newBalance}` : 'actualizándose 🔄';
 
       // Crear mensaje de sistema para el usuario
-      const depositCmdName = _effectiveBonus > 0 ? '/sys_deposit_bonus' : '/sys_deposit';
+      const depositCmdName = (bonusActuallyApplied && _effectiveBonus > 0) ? '/sys_deposit_bonus' : '/sys_deposit'; // revisión nocturna: según el bono que ENTRÓ (antes: 'incluye $0 de bonificación')
       const depositCmd = await Command.findOne({ name: depositCmdName, isActive: true });
       // Si el comando existe pero fue vaciado desde el panel → no se envía la confirmación.
       const depositMsgDisabled = depositCmd && (!depositCmd.response || !String(depositCmd.response).trim());
@@ -11902,7 +11906,7 @@ async function _agentDepositHandler(req, res, body) {
       const depositAdminOrderId = result.data?.transfer_id || result.data?.transferId || null;
       metaCapi.track(
         'Purchase',
-        { email: user.email, phone: user.phone, externalId: user.id, fbc: user.metaFbc, fbp: user.metaFbp },
+        { email: user.email, phone: user.phone, externalId: user.id, fbc: user.metaFbc, fbp: user.metaFbp, clientIp: user.registrationIp, clientUserAgent: user.registrationUserAgent },
         {
           value: parseFloat(amount),
           currency: 'ARS',
@@ -11911,7 +11915,7 @@ async function _agentDepositHandler(req, res, body) {
           content_category: metaCapi.valueCategory(parseFloat(amount)),
           order_id: depositAdminOrderId
         },
-        { req }
+        { eventSourceUrl: user.landingUrl || undefined } // revisión nocturna: sin { req } (era la IP/navegador/cookies del AGENTE, pisaba el clic del anuncio)
       );
 
       // Webhook a fb-ads: conversión Purchase para aprendizaje por anuncio.
