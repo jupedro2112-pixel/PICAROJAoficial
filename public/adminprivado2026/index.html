@@ -263,10 +263,6 @@ document.addEventListener('change', function (ev) {
 <span>Cierres 🔒</span>
 <span id="cierresBadge" style="display:none;background:#ffb347;color:#111;font-size:9px;font-weight:900;padding:1px 6px;border-radius:8px;margin-left:auto;">0</span>
 </a>
-<a href="#" class="nav-item" data-section="ownerStaff" id="navOwnerStaff" style="display:none">
-<span>👑</span>
-<span>Staff (dueño)</span>
-</a>
 <a href="#" class="nav-item" data-section="users">
 <span class="icon icon-users"></span>
 <span>Usuarios</span>
@@ -359,6 +355,11 @@ document.addEventListener('change', function (ev) {
 <a href="#" class="nav-item" data-section="rcptbot" title="Bots de Telegram que reenvían comprobantes entre grupos según los centavos, suman y cierran cuando el grupo que manda da el cierre (con clave propia)">
 <span>🧾</span>
 <span>Bot de comprobantes 🔒</span>
+</a>
+<!-- #1121 (owner): abajo de todo, sólo el dueño y con clave (STAFF_SECTION_PIN en AWS) -->
+<a href="#" class="nav-item" data-section="ownerStaff" id="navOwnerStaff" style="display:none">
+<span>👑</span>
+<span>Staff 🔒</span>
 </a>
             </nav>
             <div class="sidebar-footer">

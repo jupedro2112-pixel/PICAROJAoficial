@@ -122,3 +122,24 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   });
   console.log(`\n${ok}/13 casos OK (con el bloqueo)`);
 })();
+
+// ── #1121: sección Staff del dueño con clave (STAFF_SECTION_PIN) ──
+(async () => {
+  await new Promise((r) => setTimeout(r, 120));
+  const i = S.indexOf('const _ownerPinFails = '); const j = S.indexOf("\napp.get('/api/admin/owner/staff'", i);
+  const env = {}; const c3 = { crypto: require('crypto'), process: { env }, Date, String, _panelOwner: () => String(env.PANEL_OWNER || '').toLowerCase(), _isPanelOwner: (req) => req.user.role === 'admin' && req.user.username.toLowerCase() === String(env.PANEL_OWNER || '').toLowerCase() };
+  vm.createContext(c3); vm.runInContext(S.slice(i, j) + '\nthis._ownerOnly = _ownerOnly;', c3);
+  const call = (user, pin) => { let out = { next: false, code: 200 }; const req = { user, get: (h) => (h === 'x-staff-pin' ? pin : null) }; const res = { status(cd) { out.code = cd; return this; }, json(b) { out.body = b; return this; } }; c3._ownerOnly(req, res, () => { out.next = true; }); return out; };
+  await caso('sección Staff: sólo el dueño, sólo con la clave de AWS, y se traba tras 6 fallos', async () => {
+    const own = { role: 'admin', username: 'Iginte1000' };
+    assert.strictEqual(call(own, 'x').code, 403, 'sin PANEL_OWNER no abre');
+    env.PANEL_OWNER = 'iginte1000';
+    assert.strictEqual(call(own, 'x').body.code, 'STAFF_PIN_MISSING', 'sin clave en AWS no abre');
+    env.STAFF_SECTION_PIN = 'clave-sec';
+    assert.ok(call(own, 'clave-sec').next, 'dueño + clave ⇒ entra');
+    assert.strictEqual(call({ role: 'admin', username: 'otro' }, 'clave-sec').code, 403, 'otro admin con la clave ⇒ no');
+    for (let k = 0; k < 6; k++) assert.strictEqual(call(own, 'mal').code, 401);
+    assert.strictEqual(call(own, 'clave-sec').code, 429, 'trabada');
+  });
+  console.log(`\n${ok}/14 casos OK (con la sección Staff)`);
+})();

@@ -1421,7 +1421,18 @@ app.post('/api/admnuevo/:action', async (req, res) => {
 });
 // #1120 (owner): sección "👑 Staff" del panel, SÓLO para el dueño (PANEL_OWNER configurado en AWS). Misma lógica que /admnuevo pero con la sesión del panel.
 // Sin PANEL_OWNER en AWS no abre para nadie (si no, cualquier admin sería "dueño"). El dueño no se puede tocar a sí mismo (rol/bloqueo/borrar).
-function _ownerOnly(req, res, next) { if (!_panelOwner() || !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel (PANEL_OWNER en AWS).' }); next(); }
+// #1121 (owner): además pide la clave de la sección (`STAFF_SECTION_PIN`, SÓLO en AWS: el repo es público). 6 fallos = 15 min trabada.
+const _ownerPinFails = { n: 0, until: 0 };
+function _ownerOnly(req, res, next) {
+  if (!_panelOwner() || !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel (PANEL_OWNER en AWS).' });
+  const pin = String(process.env.STAFF_SECTION_PIN || '');
+  if (!pin) return res.status(403).json({ error: 'Falta cargar STAFF_SECTION_PIN en AWS.', code: 'STAFF_PIN_MISSING' });
+  if (_ownerPinFails.n >= 6 && Date.now() < _ownerPinFails.until) return res.status(429).json({ error: 'Demasiados intentos. Esperá 15 minutos.' });
+  const got = String(req.get('x-staff-pin') || '');
+  const eq = crypto.timingSafeEqual(crypto.createHash('sha256').update(got).digest(), crypto.createHash('sha256').update(pin).digest());
+  if (!eq) { if (Date.now() > _ownerPinFails.until) _ownerPinFails.n = 0; _ownerPinFails.n++; _ownerPinFails.until = Date.now() + 15 * 60000; return res.status(401).json({ error: 'Clave de la sección incorrecta.', code: 'STAFF_PIN_BAD' }); }
+  _ownerPinFails.n = 0; next();
+}
 app.get('/api/admin/owner/staff', authMiddleware, _ownerOnly, async (req, res) => {
   try { const staff = await User.find({ role: { $in: ADMIN_ROLES } }).select('id username role isActive isBlocked lastLogin staffMustChangePw').sort({ role: 1, username: 1 }).lean();
     res.json({ owner: _panelOwner(), staff }); } catch (e) { res.status(500).json({ error: e.message }); }

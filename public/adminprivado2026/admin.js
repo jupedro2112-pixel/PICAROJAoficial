@@ -11577,11 +11577,17 @@ function _staffPwGate() {
 }
 // #1120: sección 👑 Staff (sólo el dueño, PANEL_OWNER en AWS). Rutas /api/admin/owner/staff*.
 const OS_ROL = { admin: 'Admin general', depositor: 'Agente de cargas', withdrawer: 'Agente de retiros', comunidad: 'Comunidad', publisher_admin: 'Publicista' };
+let _osPin = ''; // #1121: clave de la sección (sólo en memoria; al recargar la vuelve a pedir)
+function _osFetch(url, opts) {
+    if (!_osPin) { const p = prompt('Clave de la sección Staff:'); if (!p) return Promise.reject(new Error('Falta la clave de la sección.')); _osPin = p; }
+    opts = Object.assign({}, opts || {}); opts.headers = Object.assign({}, opts.headers || {}, { 'x-staff-pin': _osPin });
+    return authFetch(url, opts).then((r) => { if (r.status === 401 || r.status === 429) _osPin = ''; return r; });
+}
 function _osEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';'); }
 async function loadOwnerStaff() {
     const box = document.getElementById('ownerStaffList'); if (!box) return;
     try {
-        const r = await authFetch('/api/admin/owner/staff'); const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error');
+        const r = await _osFetch('/api/admin/owner/staff'); const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error');
         const me = String((currentAdmin && currentAdmin.username) || '').toLowerCase();
         box.innerHTML = (d.staff || []).map((u) => {
             const mine = String(u.username).toLowerCase() === me;
@@ -11606,7 +11612,7 @@ async function ownerStaffAct(action, id, extra) {
     if (action === 'kick-all' && !confirm('¿Cerrar la sesión de TODO el staff (menos la tuya)?')) return;
     if (action === 'role' && body.role === 'user' && !confirm('¿Sacarle el rol? Deja de ser staff y no puede entrar más.')) { loadOwnerStaff(); return; }
     try {
-        const r = await authFetch('/api/admin/owner/staff/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const r = await _osFetch('/api/admin/owner/staff/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error');
         showToast('✅ Listo' + (d.n != null ? ' (' + d.n + ')' : ''), 'success'); loadOwnerStaff();
     } catch (e) { showToast('❌ ' + e.message, 'error'); loadOwnerStaff(); }
@@ -11614,7 +11620,7 @@ async function ownerStaffAct(action, id, extra) {
 async function ownerStaffCreate() {
     const u = document.getElementById('osNewUser'), p = document.getElementById('osNewPass'), ro = document.getElementById('osNewRole');
     try {
-        const r = await authFetch('/api/admin/owner/staff/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.value.trim(), password: p.value, role: ro.value }) });
+        const r = await _osFetch('/api/admin/owner/staff/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.value.trim(), password: p.value, role: ro.value }) });
         const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error');
         showToast('✅ Cuenta creada', 'success'); u.value = ''; p.value = ''; loadOwnerStaff();
     } catch (e) { showToast('❌ ' + e.message, 'error'); }

@@ -14645,3 +14645,8 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Sólo la ve y la usa el dueño (`PANEL_OWNER` en AWS; `isPanelOwner` en login y `/api/admin/me`; rutas `/api/admin/owner/staff*` con `_ownerOnly`, sin PANEL_OWNER
   no abre para nadie). Cambiar rol, SACAR el rol (pasa a 'user' desactivado), bloquear, activar, cerrar sesión, cambiar clave, borrar, crear y cerrar sesión de
   todo el staff. El dueño no se toca a sí mismo. Registro `Config['ownerStaffLog']`. Panel v307.
+
+## #1121 — 2026-11-11 · "👑 Staff 🔒" abajo de todo y con clave propia
+- El ítem del menú pasó al final (después de Bot de comprobantes). Las rutas `/api/admin/owner/staff*` piden además `x-staff-pin` = `STAFF_SECTION_PIN`
+  (SÓLO en AWS; el owner la dictó, pero el repo es público: va como variable). Sin la variable no abre; 6 fallos = 15 min. El panel la pide al entrar y la
+  guarda sólo en memoria. Panel v308. Test `scripts/test-security-1117.js` (14).
