@@ -29,6 +29,11 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1098. Bot de comprobantes: estructura 3 Publicidad en el plan (2026-11-11)
+- **Owner:** Publicidad (@Bajadasasuncionbot, el mismo de Ganamos): BAJADAS PUBLICIDAD con ,83 → 3P 2G RACAFU ,83, "funciona igual que Ganamos pero son sumas
+  independientes" (lun–vie 13 h). Cada grupo que manda ya tiene su suma y su cierre; en el grupo 2 llegan los dos cierres y /cotizado cotiza los pendientes juntos.
+- Agregada a `RB_PLAN` sin subir `v` (una estructura nueva se aplica sola; subir `v` re-aplicaría todas).
+
 ### 1097. Bot de comprobantes: Fichas y Ganamos se configuran SOLAS al subir (2026-11-11) — panel v298
 - **Owner:** "¿eso no lo hacés vos? quiero que hagas todo vos así cuando subo el archivo tenemos todo".
 - `RB_PLAN` (server.js) con lo acordado: **Fichas** (@fichasnuevobot): 12 que mandan (STOCK 1GIROX ICE, 1GIROX ANANA / BUFFALO / JOKER / GOLDEN / TOKIO / BOSTON /

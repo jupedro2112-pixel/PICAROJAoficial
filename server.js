@@ -32297,8 +32297,10 @@ const RB_PLAN = { v: 1, structs: [
     senders: ['STOCK 1GIROX ICE', '1GIROX ANANA', '1GIROX BUFFALO', '1GIROX JOKER', '1GIROX GOLDEN', '1GIROX TOKIO', '1GIROX BOSTON', '1GIROX PARADISE', '1GIROX LAS VEGAS', '1GIROX SHANGAI', '1GIROX VIP PLATINIUM', '1GIROX ORO'],
     rules: [{ cents: '99', to: '4f RACAFU ,99' }, { cents: '43', to: 'Pagos Hammy y Fabri ,43' }] },
   { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [],
-    senders: ['BAJADAS GANAMOS'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] }
-] };
+    senders: ['BAJADAS GANAMOS'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] },
+  { name: 'Publicidad', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [], // #1098: igual que Ganamos, suma aparte
+    senders: ['BAJADAS PUBLICIDAD'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] }
+] }; // un plan NUEVO se aplica solo (applied[nombre] vacío); subir `v` re-aplica TODOS (pisa cambios hechos a mano)
 const _rbNorm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 function _rbFindGroup(c, title, botId) {
   const n = _rbNorm(title); const gs = c.groups || []; const has = (g) => !botId || (g.bots || []).map(String).includes(String(botId));
