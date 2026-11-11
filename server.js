@@ -1409,6 +1409,7 @@ app.post('/api/admnuevo/:action', async (req, res) => {
       await _rescueLog(req, 'crear', { username, role }); return res.json({ success: true, id: nu.id });
     }
     const t = await staffById();
+    if (['off', 'del', 'role'].includes(action) && _panelOwner() && String(t.username).toLowerCase() === _panelOwner()) return res.status(403).json({ error: 'Es la cuenta del dueño (PANEL_OWNER): no se bloquea, borra ni cambia de rol.' }); // #1119
     if (action === 'kick') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 } }); await _rescueLog(req, 'cerrar_sesion', { username: t.username }); return res.json({ success: true }); }
     if (action === 'off') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: { isActive: false, isBlocked: true, blockReason: 'Bloqueado desde rescate', fcmTokens: [], fcmToken: null } }); await _rescueLog(req, 'bloquear', { username: t.username }); return res.json({ success: true }); }
     if (action === 'on') { await User.updateOne({ id: t.id }, { $set: { isActive: true, isBlocked: false, blockReason: null } }); await _rescueLog(req, 'activar', { username: t.username }); return res.json({ success: true }); }
@@ -14017,6 +14018,34 @@ async function initializeData() {
       console.warn('🚨 [lockdown #1117] sesiones cerradas: ' + staff.length + ' · desactivados: ' + off.length + ' · queda: ' + (owner ? owner.username : 'NADIE (KEEP no encontrado: sólo se cerraron sesiones)'));
     }
   } catch (e) { console.error('[lockdown #1117] ' + e.message); }
+  // #1119 (owner: "el admin principal configurado en AWS que siempre tenga acceso"): al arrancar y cada 2 min, la cuenta de PANEL_OWNER queda SIEMPRE admin,
+  // activa, desbloqueada y sin clave temporal; con PANEL_OWNER_PASS (10+, sólo en AWS) su clave vuelve a ser ésa si alguien se la cambió (y se cierran
+  // las sesiones que la tenían). Nadie más que el dueño puede tocarlo desde el panel (_isPanelOwner); esto deshace lo que se haga por fuera (base, Render).
+  { let _ogBusy = false; const _ownerGuardTick = async () => {
+      if (_ogBusy) return; _ogBusy = true;
+      try {
+        const o = _panelOwner(); if (!o || !/^[a-z0-9._-]{3,40}$/.test(o)) return;
+        const u = await User.findOne({ username: new RegExp('^' + o.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id username role isActive isBlocked staffMustChangePw password').lean();
+        const pass = String(process.env.PANEL_OWNER_PASS || '');
+        if (!u) {
+          if (pass.length >= 10) { await User.create({ id: uuidv4(), username: String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP).trim(), password: pass, role: 'admin', accountNumber: generateAccountNumber(), balance: 0, isActive: true, isBlocked: false, phoneVerified: false, phoneVerificationPending: false, referralCode: generateReferralCode(), acquisitionSource: 'manual', createdAt: new Date() }); console.warn('🚨 [owner-guard #1119] cuenta del dueño CREADA: ' + o); }
+          return;
+        }
+        const set = {}; const fixed = [];
+        if (u.role !== 'admin') { set.role = 'admin'; fixed.push('rol ' + u.role + '→admin'); }
+        if (u.isActive === false) { set.isActive = true; fixed.push('activada'); }
+        if (u.isBlocked === true) { set.isBlocked = false; set.blockReason = null; fixed.push('desbloqueada'); }
+        if (u.staffMustChangePw === true && pass.length >= 10) { set.staffMustChangePw = false; fixed.push('sin clave temporal'); }
+        let inc = null;
+        if (pass.length >= 10 && !(await bcrypt.compare(pass, String(u.password || '')))) { set.password = await bcrypt.hash(pass, 12); set.passwordChangedAt = new Date(); set.mustChangePassword = false; set.staffMustChangePw = false; inc = { tokenVersion: 1 }; fixed.push('clave restaurada a la de AWS'); }
+        if (!fixed.length) return;
+        await User.updateOne({ id: u.id }, Object.assign({ $set: set }, inc ? { $inc: inc } : {}));
+        console.warn('🚨 [owner-guard #1119] ' + u.username + ': ' + fixed.join(', '));
+        try { const l = (await getConfig('ownerGuardLog', null)) || []; l.unshift({ at: new Date().toISOString(), fixed }); await Config.set('ownerGuardLog', l.slice(0, 200), 'owner-guard#1119'); } catch (_) {}
+      } catch (e) { console.error('[owner-guard #1119] ' + e.message); } finally { _ogBusy = false; }
+    };
+    await _ownerGuardTick(); setInterval(_ownerGuardTick, 2 * 60 * 1000);
+  }
   // #386 → #413: el seed del admin "iginte1000" se ELIMINÓ (ya corrió; el repo es público y no puede contener hashes).
   // La clave se rotó desde el panel (#413). En una base nueva el admin inicial sale de ADMIN_USERNAME/ADMIN_PASSWORD.
   // #812 (owner 2026-10-22): "el bono siempre rollover x5" ⇒ one-shot: rollover global de regalos en 5 (bonos de carga, fueguito, etc.).

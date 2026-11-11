@@ -89,6 +89,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `PANEL_OWNER`: sólo el dueño toca roles / cuentas de staff / claves del panel (`_isPanelOwner`; una ruta NUEVA que toque staff o permisos lo usa). El ROL se lee de
   la BASE (authMiddleware y socket), nunca del token. Las respuestas firman con el nombre de TURNO; la cuenta real está en `metadata.agent`.
   `STAFF_LOCKDOWN_TEMP` = clave temporal del staff con cambio obligatorio (`staffMustChangePw`). Test `scripts/test-security-1117.js`.
+- **DUEÑO SIEMPRE ADENTRO #1119:** `_ownerGuardTick` restaura cada 2 min la cuenta de `PANEL_OWNER` (admin, activa, clave `PANEL_OWNER_PASS` de AWS). No sacarlo.
 - **RESCATE #1118:** `/admnuevo` (env `ADMIN_RESCUE_USER` / `ADMIN_RESCUE_PASS`, nunca en el código) maneja cuentas de STAFF sin el panel; registro `Config['adminRescueLog']`.
 - **SEGURIDAD #1053:** link de acceso de un depositor sólo para clientes SIN cargas; push masivas / plantillas sólo admin (agentes: `/send` a uno);
   login por código SMS sólo `role:'user'`; "asd123" en cuenta con cargas ⇒ `DEFAULT_PASSWORD_REVOKED`; bono que tipea el agente pasa por `_capGift`; el bono de

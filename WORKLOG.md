@@ -14635,3 +14635,8 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - `GET /admnuevo` (`src/pages/admnuevo.html`) + `POST /api/admnuevo/:action` (list, kick-all, create, kick, off, on, pw, role, del). Sólo cuentas de STAFF
   (`ADMIN_ROLES`); jugadores nunca. Usuario/clave SÓLO por env de AWS: `ADMIN_RESCUE_USER` (default adminfabri) y `ADMIN_RESCUE_PASS` (sin ella, 404). El owner
   pidió la clave escrita en el código: NO (repo público); va en AWS. Freno: 5 fallos/IP = 30 min, 15 fallos/hora = cerrada 1 h. Registro en `Config['adminRescueLog']`.
+
+## #1119 — 2026-11-11 · El dueño configurado en AWS SIEMPRE tiene acceso
+- `_ownerGuardTick` (arranque + cada 2 min): la cuenta de `PANEL_OWNER` (o `STAFF_LOCKDOWN_KEEP`) vuelve a quedar admin, activa, desbloqueada y sin clave temporal;
+  con `PANEL_OWNER_PASS` (10+, sólo en AWS) la clave vuelve a ésa si alguien se la cambió (cierra sesiones) y, si la cuenta no existe, la crea. Registro `Config['ownerGuardLog']`.
+  /admnuevo no bloquea/borra/cambia de rol al dueño.
