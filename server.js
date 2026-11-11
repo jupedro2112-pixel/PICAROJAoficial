@@ -13909,8 +13909,15 @@ async function initializeData() {
         await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: Object.assign({ isActive: false, password: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10), fcmTokens: [], fcmToken: null }, test ? { role: 'user' } : {}) });
         off.push(u.username + ' (' + u.role + ')');
       }
+      let who = []; // #1117: QUIÉN respondió de verdad en las últimas 48 h (la firma "Martín/Sofía/Agustina" es el turno; metadata.agent = la cuenta real)
+      try { who = await Message.aggregate([{ $match: { timestamp: { $gte: new Date(Date.now() - 48 * 3600000) }, senderRole: { $ne: 'user' }, senderId: { $nin: ['support-bot', 'system'] } } },
+        { $group: { _id: { id: '$senderId', agent: '$metadata.agent', role: '$senderRole' }, n: { $sum: 1 }, first: { $min: '$timestamp' }, last: { $max: '$timestamp' }, to: { $addToSet: '$receiverId' } } },
+        { $project: { _id: 0, senderId: '$_id.id', agent: '$_id.agent', role: '$_id.role', n: 1, first: 1, last: 1, clientes: { $size: '$to' } } }, { $sort: { n: -1 } }, { $limit: 30 }]);
+        const ids = who.map((x) => x.senderId); const us = await User.find({ id: { $in: ids } }).select('id username role').lean(); for (const x of who) { const u = us.find((y) => y.id === x.senderId); x.cuenta = u ? u.username + ' (' + u.role + ')' : '(no existe: ' + x.senderId + ')'; }
+      } catch (e) { who = [{ error: e.message }]; }
+      console.warn('🚨 [lockdown #1117] quién respondió (48 h): ' + JSON.stringify(who.map((x) => [x.cuenta, x.n, x.clientes])));
       await Config.set('staffLockdownDone', lc, 'lockdown#1117');
-      await Config.set('staffLockdownLog', { at: new Date().toISOString(), kept: owner ? owner.username : null, newPass: !!(owner && np.length >= 10), disabled: off, sessionsClosed: staff.length }, 'lockdown#1117');
+      await Config.set('staffLockdownLog', { at: new Date().toISOString(), kept: owner ? owner.username : null, newPass: !!(owner && np.length >= 10), disabled: off, sessionsClosed: staff.length, quienRespondio48h: who }, 'lockdown#1117');
       console.warn('🚨 [lockdown #1117] sesiones cerradas: ' + staff.length + ' · desactivados: ' + off.length + ' · queda: ' + (owner ? owner.username : 'NADIE (KEEP no encontrado: sólo se cerraron sesiones)'));
     }
   } catch (e) { console.error('[lockdown #1117] ' + e.message); }
