@@ -170,7 +170,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
   { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); assert.ok(/#supportPanel:not\(\.sp-in-casino\) \.sp-actbar \{ display: none !important; \}/.test(C2) && !/^body:not\(\.sp-classic\) #supportPanel /m.test(C2), 'lo nuevo sólo en la burbuja; Soporte como antes'); }
   { const C3 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'), I3 = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
-    assert.ok(/body\.menus-one\.no-menu-full\.no-menu-basic\.no-menu-easy \.casino-topbar \.ct-multi \{ display: none !important; \}/.test(C3) && /class="casino-back ct-multi"/.test(H) && /id="ctTelegram"/.test(H), 'sólo Girox: sin Volver ni Menú, con Telegram');
+    assert.ok(/body\.menus-one\.no-menu-full\.no-menu-basic\.no-menu-easy \.casino-topbar \.ct-multi \{ display: none !important; \}/.test(C3) && /class="casino-back ct-multi"/.test(H) && /id="ctSms"/.test(H) && /id="waHeadTg"/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'index.html'), 'utf8')), 'sólo Girox: sin Volver ni Menú, con Verificar SMS arriba y Telegram en el chat (#1092)');
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
     assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');

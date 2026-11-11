@@ -29,6 +29,15 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1103. Repaso antes de subir (2026-11-11)
+- **Owner:** "repasamos todo por las dudas".
+- Plan de estructuras con candado (`_cronClaim('rbplan')`: dos instancias a la vez podían duplicar la estructura) y una estructura YA encendida no se apaga
+  si falta un grupo (queda como estaba y el panel avisa).
+- Lo automático de una vez por día/semana/mes (cierre 13 h, semanal, de mes, aviso de terminación) usa `_rbFlag` (`Config['rcptbotflags']`, propia) en vez
+  de `_rbOnce` (`rcptbotseen` guarda sólo 500 mensajes: con mucho movimiento la marca podía caerse y repetir el aviso fijado).
+- test-support-bot actualizado a #1092 (barra con Verificar SMS, Telegram en el chat). Corridos OK: vip-exports, rcptbot (5), rcptbot-flow (36),
+  telegram-admin (18), support-bot (18), payout-auto (8), security-1053 (9) + `node --check` de todo lo tocado.
+
 ### 1102. Bot de comprobantes: estructura 5 Sector 1 en el plan (2026-11-11)
 - Sector 1 (@Sectorunobot): BAJADAS S1 con ,33 → S1 Racafu ,33, "funciona como Ganamos" (cierre lun–vie 13 h, finde al lunes). Agregada a `RB_PLAN`.
 - Plan completo: Fichas · Ganamos · Publicidad · Cotizaciones · Sector 1.

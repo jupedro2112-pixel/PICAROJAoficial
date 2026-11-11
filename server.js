@@ -31994,6 +31994,13 @@ async function _rbOnce(chatId, msgId) {
   const r = await Config.collection.updateOne({ key: 'rcptbotseen', 'value.ids': { $ne: k } }, { $push: { 'value.ids': { $each: [k], $slice: -500 } } });
   return r.modifiedCount === 1;
 }
+// Repaso #1103: marca DURABLE para lo automático de una vez por día/semana/mes (cierres, avisos): `rcptbotseen` guarda sólo los últimos 500 mensajes
+// y con mucho movimiento una marca vieja podía caerse y el aviso salir dos veces. Clave propia, pocas entradas (≤ 400).
+async function _rbFlag(k) {
+  k = String(k); try { await Config.collection.updateOne({ key: 'rcptbotflags' }, { $setOnInsert: { key: 'rcptbotflags', value: { k: [] } } }, { upsert: true }); } catch (_) {}
+  const r = await Config.collection.updateOne({ key: 'rcptbotflags', 'value.k': { $ne: k } }, { $push: { 'value.k': { $each: [k], $slice: -400 } } });
+  return r.modifiedCount === 1;
+}
 const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const _rbMoney = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
 const _rbMoney2 = (n) => { const v = Number(n) || 0; return '$' + v.toLocaleString('es-AR', Number.isInteger(v) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }; // ,50 (no ,5): los centavos deciden el grupo
@@ -32316,14 +32323,14 @@ async function _rbDailyCloseTick() {
   const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
   // #1099 (owner, Cotizaciones: "suman de lunes a lunes; el lunes 00:00 se hace cierre semanal pendiente a cotizar y empieza de 0"): 'weekly'.
   if (dow === 1) for (const st of (c.structs || []).filter((x) => x && x.on && x.dailyClose === 'weekly')) {
-    if (!(await _rbOnce('wclose', st.id + '|' + dk))) continue; const cut0 = new Date(dk + 'T00:00:00-03:00');
+    if (!(await _rbFlag('wclose|' + st.id + '|' + dk))) continue; const cut0 = new Date(dk + 'T00:00:00-03:00');
     await _rbCloseBatch(c, (c.routes || []).filter((x) => x.structId === st.id), 'cierre semanal automático', cut0);
   }
   if (_tgArtHour(now) < 13) return;
   const cut = new Date(dk + 'T13:00:00-03:00');
   for (const st of (c.structs || []).filter((x) => x && x.on && (x.dailyClose === 'all' || x.dailyClose === 'weekdays'))) {
     if (st.dailyClose === 'weekdays' && (dow === 0 || dow === 6)) continue;
-    if (!(await _rbOnce('dclose', st.id + '|' + dk))) continue;
+    if (!(await _rbFlag('dclose|' + st.id + '|' + dk))) continue;
     await _rbCloseBatch(c, (c.routes || []).filter((x) => x.structId === st.id), 'automático 13 h', cut);
   }
 }
@@ -32359,6 +32366,7 @@ let _rbPlanAt = 0;
 async function _rbPlanTick(force) {
   if (!force && Date.now() - _rbPlanAt < 5 * 60000) return; _rbPlanAt = Date.now();
   const c0 = await _rbCfg(true); if (c0.onRender || !(c0.botsDec || []).some((b) => b.token)) return;
+  if (!(await _cronClaim('rbplan', 4 * 60000))) return; // repaso #1103: una sola instancia a la vez (dos a la vez duplicaban la estructura)
   const pd = ((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}; const applied = pd.applied || {};
   const todo = RB_PLAN.structs.filter((p) => applied[p.name] !== RB_PLAN.v); if (!todo.length) return;
   try { await _rbRepairGroups(true); } catch (_) {}
@@ -32374,7 +32382,7 @@ async function _rbPlanTick(force) {
     for (const o of (c.structs || []).filter((x) => x.on && x.id !== st.id)) for (const r of o.routes || []) if (routes.some((y) => y.from === String(r.from))) miss.push('"' + _rbTitle(c, r.from) + '" ya manda en la estructura "' + o.name + '" (encendida): apagala o sacale ese grupo');
     const ready = !miss.length && routes.length && rules.length && botId; const wasOn = !!(cur && cur.on);
     st.on = ready ? true : false;
-    await _rbStructPut(st);
+    if (ready || !wasOn) await _rbStructPut(st); // repaso #1103: una estructura que YA anda no se apaga por un grupo que falta: queda como estaba y avisa
     if (ready) {
       await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.applied.' + p.name]: RB_PLAN.v, ['value.report.' + p.name]: { ok: true, at: new Date(), routes: routes.length } } }, { upsert: true });
       if (!wasOn) { const c2 = await _rbCfg(true); for (const r of (c2.routes || []).filter((x) => x.structId === st.id)) await _rbSendMenus(c2, r, true).catch(() => {}); }
@@ -32802,7 +32810,7 @@ async function _rbTermTick() {
   for (const st of (c.structs || []).filter((x) => x && x.on && Array.isArray(x.termNotices) && x.termNotices.length)) {
     const hour = Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13; if (hr < hour) continue;
     const n = st.termNotices.find((x) => x.day === day); if (!n) continue;
-    if (!(await _rbOnce('term', st.id + '|' + ym + '|' + day))) continue;
+    if (!(await _rbFlag('term|' + st.id + '|' + ym + '|' + day))) continue;
     const next = _rbTermNext(st.termNotices, day);
     for (const r of (c.routes || []).filter((x) => x.structId === st.id)) {
       try {
@@ -32825,7 +32833,7 @@ async function _rbMonthCloseTick() {
   const pm = new Date(Date.UTC(nowArt.getUTCFullYear(), nowArt.getUTCMonth() - 1, 1)); const pYm = pm.toISOString().slice(0, 7); const p0 = new Date(pYm + '-01T00:00:00-03:00');
   const mesTxt = _RB_MES[pm.getUTCMonth()].toUpperCase() + ' ' + pm.getUTCFullYear();
   for (const st of (c.structs || []).filter((x) => x && x.on && x.monthlyClose)) {
-    if (!(await _rbOnce('mclose', st.id + '|' + ym))) continue;
+    if (!(await _rbFlag('mclose|' + st.id + '|' + ym))) continue;
     const col = {}; // #1101: el grupo 2 recibe UN solo cierre
     for (const r of (c.routes || []).filter((x) => x.structId === st.id)) {
       try {
