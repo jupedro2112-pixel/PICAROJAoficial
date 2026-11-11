@@ -81,7 +81,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const cfg = {}; const U = { findOne: (q) => ({ select: () => ({ lean: async () => rows.find((u) => q.username.test(u.username)) || null }) }), find: (q) => ({ select: () => ({ lean: async () => rows.filter((u) => q.$or[0].role.$in.includes(u.role) || q.$or[1].username.$in.includes(u.username)) }), lean: async () => [] }),
       updateOne: async (q, u) => { const x = rows.find((r) => r.id === q.id); if (u.$inc) x.tokenVersion += u.$inc.tokenVersion; Object.assign(x, u.$set || {}); } };
     const c2 = { User: U, Message: { aggregate: async () => [] }, Config: { set: async (k, v) => { cfg[k] = v; } }, getConfig: async (k) => cfg[k] || null,
-      bcrypt: { hash: async (p) => 'H(' + p + ')' }, crypto: require('crypto'), _sha: (v) => 'S(' + v + ')', ADMIN_ROLES: ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'], process: { env }, console: { warn() {}, log() {}, error: console.error }, JSON, Date, Object, String, Array };
+      bcrypt: { hash: async (p) => 'H(' + p + ')' }, tgChannel: { call: async (t, m, p) => { (global.TGSENT = global.TGSENT || []).push(p); return { ok: true }; } }, _tgCfg: async () => ({ token: 'T' }), crypto: require('crypto'), _sha: (v) => 'S(' + v + ')', ADMIN_ROLES: ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'], process: { env }, console: { warn() {}, log() {}, error: console.error }, JSON, Date, Object, String, Array };
     vm.createContext(c2); await vm.runInContext('(async () => {\n' + blk + '\n})()', c2); return cfg;
   };
   await caso('bloqueo con clave temporal: dueño con clave nueva, agentes con la temporal y obligados a cambiarla, prueba desactivada, jugador intacto', async () => {
@@ -107,5 +107,12 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const o = rows[0]; assert.ok(o.role === 'admin' && o.isActive === true && o.isBlocked === false && o.password === 'H(otra-clave-larga)' && !o.staffMustChangePw, JSON.stringify(o));
     assert.ok(rows.find((r) => r.id === 'b').password === 'H(tmp1)', 'el otro admin con la temporal');
   });
-  console.log(`\n${ok}/11 casos OK (con el bloqueo)`);
+  await caso('sin clave en AWS y con STAFF_LOCKDOWN_TG: la clave de un solo uso va SÓLO a ese chat y obliga a cambiarla', async () => {
+    const rows = mk(); global.TGSENT = [];
+    await runLock({ STAFF_LOCKDOWN: 'b5', STAFF_LOCKDOWN_KEEP: 'dueno1', STAFF_LOCKDOWN_TG: '123456789' }, rows);
+    const o = rows[0]; assert.ok(global.TGSENT.length === 1 && global.TGSENT[0].chat_id === '123456789' && /Clave de un solo uso: <code>([A-Za-z0-9]{8,})<\/code>/.test(global.TGSENT[0].text), JSON.stringify(global.TGSENT));
+    const otp = global.TGSENT[0].text.match(/Clave de un solo uso: <code>([A-Za-z0-9]+)/)[1];
+    assert.ok(o.password === 'H(' + otp + ')' && o.staffMustChangePw === true && o.role === 'admin' && o.isActive, JSON.stringify(o));
+  });
+  console.log(`\n${ok}/12 casos OK (con el bloqueo)`);
 })();

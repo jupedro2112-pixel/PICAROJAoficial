@@ -41,7 +41,8 @@
   código) ⇒ todo el staff menos el dueño queda ACTIVO con esa clave y `User.staffMustChangePw` ⇒ `authMiddleware` sólo deja `change-own-password` / logout
   (403 `STAFF_MUST_CHANGE_PW`), el socket lo rechaza y el panel abre "Creá tu clave nueva" sin poder cerrarlo (`_staffPwGate`); al cambiarla (distinta de la
   temporal) se cierran sus sesiones y vuelve a entrar con la nueva. El DUEÑO puede bloquear cualquier cuenta de staff (no la suya). El bloqueo busca al dueño por
-  USUARIO en toda la base y lo RESTAURA (admin, activo, desbloqueado, clave nueva) aunque el intruso le haya cambiado rol, estado o clave. Test `scripts/test-security-1117.js` (11).
+  USUARIO en toda la base y lo RESTAURA (admin, activo, desbloqueado, clave nueva) aunque el intruso le haya cambiado rol, estado o clave. Sin `STAFF_LOCKDOWN_PASS` y con `STAFF_LOCKDOWN_TG` (SU número de chat; `/miid` al bot del canal
+  en privado lo dice) le llega por Telegram una clave de UN SOLO USO y al entrar crea la suya. Test `scripts/test-security-1117.js` (12).
 - Arranque: con la variable de entorno `STAFF_LOCKDOWN=<código nuevo>` (corre UNA vez por código, `Config['staffLockdownDone']`): cierra las sesiones de TODO el
   staff (tokenVersion+1) y desactiva con clave al azar a todos menos `STAFF_LOCKDOWN_KEEP` (usuario admin del owner; `STAFF_LOCKDOWN_PASS` 10+ = su clave
   nueva). Las cuentas de prueba lalodj / lalodj499910 / diego576413 pasan a 'user' desactivadas. Sin KEEP válido sólo cierra sesiones. Registro en

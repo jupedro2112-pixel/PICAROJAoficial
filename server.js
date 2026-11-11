@@ -13925,11 +13925,20 @@ async function initializeData() {
       // El dueño se busca por USUARIO en toda la base (el intruso pudo bajarle el rol, desactivarlo, bloquearlo o cambiarle la clave): se RESTAURA.
       const owner = keep ? await User.findOne({ username: new RegExp('^' + keep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id username role').lean() : null;
       if (owner && !staff.some((u) => u.id === owner.id)) staff.push(owner);
-      const off = [];
+      const off = []; let lockTg = false;
       for (const u of staff) {
         if (owner && u.id === owner.id) {
           const set = Object.assign({ role: 'admin', isActive: true, isBlocked: false, blockReason: null, staffMustChangePw: false, mustChangePassword: false }, np.length >= 10 ? { password: await bcrypt.hash(np, 10) } : {});
-          await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: set }); continue;
+          // #1117 (owner: "mandá a Telegram y borrá la clave"): sin STAFF_LOCKDOWN_PASS y con STAFF_LOCKDOWN_TG (SU número de chat, puesto en AWS; nunca el grupo de
+          // reportes, que se vincula desde el panel) ⇒ clave de UN SOLO USO por Telegram + cambio obligatorio al entrar (queda sólo él sabiéndola).
+          const tgTo = String(process.env.STAFF_LOCKDOWN_TG || '').trim(); let tgSent = false;
+          if (np.length < 10 && /^-?\d{5,20}$/.test(tgTo)) {
+            const otp = crypto.randomBytes(9).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 12) + String(crypto.randomInt(10, 99));
+            let tok = null; try { tok = (await _tgCfg()).token; } catch (_) {}
+            const r = tok ? await tgChannel.call(tok, 'sendMessage', { chat_id: tgTo, text: '🔐 PICA ROJA · acceso al panel\nUsuario: <code>' + u.username + '</code>\nClave de un solo uso: <code>' + otp + '</code>\n\nAl entrar te pide crear tu clave nueva. Después BORRÁ este mensaje.', parse_mode: 'HTML' }) : { ok: false, error: 'sin bot de Telegram' };
+            if (r && r.ok) { set.password = await bcrypt.hash(otp, 10); set.staffMustChangePw = true; tgSent = true; } else console.error('[lockdown #1117] no se pudo mandar la clave por Telegram: ' + (r && r.error));
+          }
+          await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: set }); lockTg = tgSent; continue;
         }
         if (!owner) { await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 } }); continue; }
         const test = ['lalodj', 'lalodj499910', 'diego576413'].includes(String(u.username).toLowerCase());
@@ -13948,7 +13957,7 @@ async function initializeData() {
       const npin = String(process.env.STAFF_LOCKDOWN_PIN || '').trim(); let pins = false; // #1117: TODAS las claves del panel a una nueva (Datos, INICIO, bot de comprobantes, historial de números)
       if (/^\S{6,32}$/.test(npin)) { for (const k of ['datosIaPinHash', 'inicioPinHash', 'rcptBotPinHash', 'phoneLogPinHash']) await Config.set(k, _sha(npin), 'lockdown#1117'); pins = true; }
       await Config.set('staffLockdownDone', lc, 'lockdown#1117');
-      await Config.set('staffLockdownLog', { at: new Date().toISOString(), kept: owner ? owner.username : null, newPass: !!(owner && np.length >= 10), disabled: off, sessionsClosed: staff.length, quienRespondio48h: who, clavesDelPanel: pins }, 'lockdown#1117');
+      await Config.set('staffLockdownLog', { at: new Date().toISOString(), kept: owner ? owner.username : null, newPass: !!(owner && np.length >= 10), disabled: off, sessionsClosed: staff.length, quienRespondio48h: who, clavesDelPanel: pins, claveDuenoPorTelegram: lockTg }, 'lockdown#1117');
       console.warn('🚨 [lockdown #1117] sesiones cerradas: ' + staff.length + ' · desactivados: ' + off.length + ' · queda: ' + (owner ? owner.username : 'NADIE (KEEP no encontrado: sólo se cerraron sesiones)'));
     }
   } catch (e) { console.error('[lockdown #1117] ' + e.message); }
@@ -33619,6 +33628,9 @@ app.post('/api/telegram/webhook', async (req, res) => {
       await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id, text: tgChannel.popupText(u.callback_query.data.slice(3), stats, c.btn), show_alert: true });
     } else if (u.callback_query) {
       await tgChannel.call(c.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id });
+    } else if (u.message && u.message.chat && u.message.chat.type === 'private' && /^\/miid(@\w+)?$/i.test(String(u.message.text || '').trim())) {
+      // #1117: el dueño necesita SU número de chat para recibir la clave de un solo uso del bloqueo (STAFF_LOCKDOWN_TG). Cada uno ve sólo el suyo.
+      await tgChannel.call(c.token, 'sendMessage', { chat_id: u.message.chat.id, text: 'Tu número de chat es: <code>' + u.message.chat.id + '</code>', parse_mode: 'HTML' });
     } else if (u.message && u.message.chat && u.message.chat.type === 'private') {
       // #1044-e: botonera fija del bot. Un botón del menú ⇒ responde ese dato; cualquier otra cosa (/start…) ⇒ el panel + la botonera.
       const chatId = u.message.chat.id; const key = tgChannel.menuKey(u.message.text);
