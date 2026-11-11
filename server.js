@@ -13923,7 +13923,11 @@ async function initializeData() {
       const keep = String(process.env.STAFF_LOCKDOWN_KEEP || '').trim().toLowerCase(); const np = String(process.env.STAFF_LOCKDOWN_PASS || '');
       const staff = await User.find({ $or: [{ role: { $in: ADMIN_ROLES } }, { username: { $in: ['lalodj', 'lalodj499910', 'diego576413'] } }] }).select('id username role').lean();
       // El dueño se busca por USUARIO en toda la base (el intruso pudo bajarle el rol, desactivarlo, bloquearlo o cambiarle la clave): se RESTAURA.
-      const owner = keep ? await User.findOne({ username: new RegExp('^' + keep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id username role').lean() : null;
+      let owner = keep ? await User.findOne({ username: new RegExp('^' + keep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id username role').lean() : null;
+      if (!owner && keep && /^[a-z0-9._-]{4,30}$/.test(keep) && np.length >= 10) { // #1117 (owner: "quiero un admin general nuevo"): si el usuario de KEEP no existe, se CREA admin con la clave de AWS
+        const nu = await User.create({ id: uuidv4(), username: String(process.env.STAFF_LOCKDOWN_KEEP).trim(), password: np, role: 'admin', accountNumber: generateAccountNumber(), balance: 0, isActive: true, isBlocked: false, phoneVerified: false, phoneVerificationPending: false, referralCode: generateReferralCode(), acquisitionSource: 'manual', createdAt: new Date() });
+        owner = { id: nu.id, username: nu.username, role: 'admin' }; console.warn('🚨 [lockdown #1117] admin general NUEVO creado: ' + nu.username);
+      }
       if (owner && !staff.some((u) => u.id === owner.id)) staff.push(owner);
       const off = []; let lockTg = false;
       for (const u of staff) {

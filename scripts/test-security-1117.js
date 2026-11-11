@@ -78,10 +78,10 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     { id: 't', username: 'lalodj', role: 'admin', tokenVersion: 0, isActive: true },
     { id: 'p', username: 'jugador', role: 'user', tokenVersion: 0, isActive: true }];
   const runLock = async (env, rows) => {
-    const cfg = {}; const U = { findOne: (q) => ({ select: () => ({ lean: async () => rows.find((u) => q.username.test(u.username)) || null }) }), find: (q) => ({ select: () => ({ lean: async () => rows.filter((u) => q.$or[0].role.$in.includes(u.role) || q.$or[1].username.$in.includes(u.username)) }), lean: async () => [] }),
+    const cfg = {}; const U = { create: async (d) => { const x = Object.assign({ tokenVersion: 0 }, d, { password: 'H(' + d.password + ')' }); rows.push(x); return x; }, findOne: (q) => ({ select: () => ({ lean: async () => rows.find((u) => q.username.test(u.username)) || null }) }), find: (q) => ({ select: () => ({ lean: async () => rows.filter((u) => q.$or[0].role.$in.includes(u.role) || q.$or[1].username.$in.includes(u.username)) }), lean: async () => [] }),
       updateOne: async (q, u) => { const x = rows.find((r) => r.id === q.id); if (u.$inc) x.tokenVersion += u.$inc.tokenVersion; Object.assign(x, u.$set || {}); } };
     const c2 = { User: U, Message: { aggregate: async () => [] }, Config: { set: async (k, v) => { cfg[k] = v; } }, getConfig: async (k) => cfg[k] || null,
-      bcrypt: { hash: async (p) => 'H(' + p + ')' }, tgChannel: { call: async (t, m, p) => { (global.TGSENT = global.TGSENT || []).push(p); return { ok: true }; } }, _tgCfg: async () => ({ token: 'T' }), crypto: require('crypto'), _sha: (v) => 'S(' + v + ')', ADMIN_ROLES: ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'], process: { env }, console: { warn() {}, log() {}, error: console.error }, JSON, Date, Object, String, Array };
+      bcrypt: { hash: async (p) => 'H(' + p + ')' }, uuidv4: () => 'new-' + Math.random(), generateAccountNumber: () => 'AC', generateReferralCode: () => 'RC', tgChannel: { call: async (t, m, p) => { (global.TGSENT = global.TGSENT || []).push(p); return { ok: true }; } }, _tgCfg: async () => ({ token: 'T' }), crypto: require('crypto'), _sha: (v) => 'S(' + v + ')', ADMIN_ROLES: ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'], process: { env }, console: { warn() {}, log() {}, error: console.error }, JSON, Date, Object, String, Array };
     vm.createContext(c2); await vm.runInContext('(async () => {\n' + blk + '\n})()', c2); return cfg;
   };
   await caso('bloqueo con clave temporal: dueño con clave nueva, agentes con la temporal y obligados a cambiarla, prueba desactivada, jugador intacto', async () => {
@@ -114,5 +114,11 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const otp = global.TGSENT[0].text.match(/Clave de un solo uso: <code>([A-Za-z0-9]+)/)[1];
     assert.ok(o.password === 'H(' + otp + ')' && o.staffMustChangePw === true && o.role === 'admin' && o.isActive, JSON.stringify(o));
   });
-  console.log(`\n${ok}/12 casos OK (con el bloqueo)`);
+  await caso('KEEP con un usuario que NO existe + clave ⇒ se crea ese admin general nuevo y todos los demás quedan afuera', async () => {
+    const rows = mk(); await runLock({ STAFF_LOCKDOWN: 'b6', STAFF_LOCKDOWN_KEEP: 'Nuevo5000', STAFF_LOCKDOWN_PASS: 'clave-larga-nueva' }, rows);
+    const n = rows.find((r) => r.username === 'Nuevo5000'); assert.ok(n && n.role === 'admin' && n.isActive && n.password === 'H(clave-larga-nueva)', JSON.stringify(n));
+    assert.ok(rows.find((r) => r.id === 'o').isActive === false && rows.find((r) => r.id === 'b').isActive === false, 'los admins viejos afuera (sin clave temporal)');
+    assert.ok(rows.find((r) => r.id === 'p').tokenVersion === 0, 'jugador intacto');
+  });
+  console.log(`\n${ok}/13 casos OK (con el bloqueo)`);
 })();
