@@ -11,13 +11,13 @@ const src = [
   cut('const ADMIN_ROLES = ', /\];/), 'const isAdminRole = (role) => ADMIN_ROLES.includes(role);',
   cut('const PUBLISHER_ADMIN_ALLOWED_PATHS = [', /\n\];/), cut('const MUST_CHANGE_PASSWORD_ALLOWED_PATHS = [', /\n\];/),
   cut('const authMiddleware = async (req, res, next) => {', /\n};\n/),
-  cut('function _panelOwner()', /\n/), cut('function _isPanelOwner(req)', /\n/),
+  cut('function _panelOwnerTokens()', /\n/), cut('function _panelOwner()', /\n/), cut('function _isOwnerName(username)', /\n/), cut('function _isPanelOwner(req)', /\n/),
 ].join('\n');
 let users = {};
 const User = { findOne: (q) => ({ select: async () => (users[q.id] ? Object.assign({ save: async () => {} }, users[q.id]) : null) }), findById: () => ({ select: async () => null }), updateOne: async () => ({}) };
 const jwt = { verify: (t) => JSON.parse(t) };
 const ctx = { User, jwt, JWT_SECRET: 'x', logger: { info() {}, warn() {}, error() {}, debug() {} }, console, process: { env: {} }, String, Object, Array, JSON, Error, Date };
-vm.createContext(ctx); vm.runInContext(src + '\nthis.authMiddleware = authMiddleware; this._isPanelOwner = _isPanelOwner;', ctx);
+vm.createContext(ctx); vm.runInContext(src + '\nthis.authMiddleware = authMiddleware; this._isPanelOwner = _isPanelOwner; this._panelOwner = _panelOwner; this._isOwnerName = _isOwnerName;', ctx);
 const run = async (u, tok, url) => { users = { [u.id]: u }; let out = { next: false, code: 200, body: null }; const req = { headers: { authorization: 'Bearer ' + JSON.stringify(tok) }, header: () => null, get: () => null, cookies: {}, path: url, originalUrl: url, url };
   const res = { status(c) { out.code = c; return this; }, json(b) { out.body = b; return this; } };
   await ctx.authMiddleware(req, res, () => { out.next = true; out.req = req; }); return out; };
@@ -55,16 +55,28 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const r = await run(Object.assign({ id: 'p3', username: 'j', role: 'user', staffMustChangePw: true }, base), { userId: 'p3', role: 'user', tokenVersion: 0 }, '/api/balance');
     assert.ok(r.next);
   });
-  await caso('dueño del panel: sin PANEL_OWNER cualquier admin; con PANEL_OWNER sólo ése', async () => {
-    assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'otro' } }), true);
+  await caso('dueño del panel: sin PANEL_OWNER NADIE (falla cerrado, #1124); con PANEL_OWNER sólo ése', async () => {
+    assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'otro' } }), false, 'sin PANEL_OWNER nadie es dueño');
     ctx.process.env.PANEL_OWNER = 'Dueno1';
     assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'dueno1' } }), true);
     assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'otro' } }), false);
     assert.strictEqual(ctx._isPanelOwner({ user: { role: 'depositor', username: 'dueno1' } }), false, 'tiene que ser admin');
     delete ctx.process.env.PANEL_OWNER; ctx.process.env.STAFF_LOCKDOWN_KEEP = 'dueno1';
     assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'otro' } }), false, 'KEEP también sirve');
+    assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'dueno1' } }), true, 'KEEP es dueño');
+    delete ctx.process.env.STAFF_LOCKDOWN_KEEP;
   });
-  console.log(`\n${ok}/8 casos OK`);
+  await caso('#1130: PANEL_OWNER con VARIOS dueños (coma / espacio / punto y coma)', async () => {
+    ctx.process.env.PANEL_OWNER = 'Fabio, juan;Pedro';
+    for (const u of ['fabio', 'JUAN', 'pedro']) assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: u } }), true, u);
+    assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'fabio,juan' } }), false, 'la lista entera no es un usuario');
+    assert.strictEqual(ctx._isPanelOwner({ user: { role: 'admin', username: 'otro' } }), false);
+    assert.strictEqual(ctx._isPanelOwner({ user: { role: 'cajero', username: 'juan' } }), false, 'tiene que ser admin');
+    assert.strictEqual(ctx._panelOwner(), 'fabio', 'el principal es el primero');
+    assert.ok(ctx._isOwnerName('Pedro') && !ctx._isOwnerName('otro') && !ctx._isOwnerName(''));
+    delete ctx.process.env.PANEL_OWNER;
+  });
+  console.log(`\n${ok}/9 casos OK`);
 })();
 
 // ── el BLOQUEO de emergencia (bloque del arranque) con base simulada ──
@@ -81,7 +93,9 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const cfg = {}; const U = { create: async (d) => { const x = Object.assign({ tokenVersion: 0 }, d, { password: 'H(' + d.password + ')' }); rows.push(x); return x; }, findOne: (q) => ({ select: () => ({ lean: async () => rows.find((u) => q.username.test(u.username)) || null }) }), find: (q) => ({ select: () => ({ lean: async () => rows.filter((u) => q.$or[0].role.$in.includes(u.role) || q.$or[1].username.$in.includes(u.username)) }), lean: async () => [] }),
       updateOne: async (q, u) => { const x = rows.find((r) => r.id === q.id); if (u.$inc) x.tokenVersion += u.$inc.tokenVersion; Object.assign(x, u.$set || {}); } };
     const c2 = { User: U, Message: { aggregate: async () => [] }, Config: { set: async (k, v) => { cfg[k] = v; } }, getConfig: async (k) => cfg[k] || null,
-      bcrypt: { hash: async (p) => 'H(' + p + ')' }, uuidv4: () => 'new-' + Math.random(), generateAccountNumber: () => 'AC', generateReferralCode: () => 'RC', tgChannel: { call: async (t, m, p) => { (global.TGSENT = global.TGSENT || []).push(p); return { ok: true }; } }, _tgCfg: async () => ({ token: 'T' }), crypto: require('crypto'), _sha: (v) => 'S(' + v + ')', ADMIN_ROLES: ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'], process: { env }, console: { warn() {}, log() {}, error: console.error }, JSON, Date, Object, String, Array };
+      bcrypt: { hash: async (p) => 'H(' + p + ')' }, uuidv4: () => 'new-' + Math.random(), generateAccountNumber: () => 'AC', generateReferralCode: () => 'RC', tgChannel: { call: async (t, m, p) => { (global.TGSENT = global.TGSENT || []).push(p); return { ok: true }; } }, _tgCfg: async () => ({ token: 'T' }), crypto: require('crypto'), _sha: (v) => 'S(' + v + ')', ADMIN_ROLES: ['admin', 'depositor', 'withdrawer', 'cajero', 'publisher_admin', 'comunidad'], process: { env },
+      _cronClaim: async (name) => { const k = 'lock_' + name; if (cfg[k]) return false; cfg[k] = true; return true; },
+      _panelOwnerTokens: () => String(env.PANEL_OWNER || env.STAFF_LOCKDOWN_KEEP || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean).slice(0, 10), console: { warn() {}, log() {}, error: console.error }, JSON, Date, Object, String, Array };
     vm.createContext(c2); await vm.runInContext('(async () => {\n' + blk + '\n})()', c2); return cfg;
   };
   await caso('bloqueo con clave temporal: dueño con clave nueva, agentes con la temporal y obligados a cambiarla, prueba desactivada, jugador intacto', async () => {
@@ -120,7 +134,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(rows.find((r) => r.id === 'o').isActive === false && rows.find((r) => r.id === 'b').isActive === false, 'los admins viejos afuera (sin clave temporal)');
     assert.ok(rows.find((r) => r.id === 'p').tokenVersion === 0, 'jugador intacto');
   });
-  console.log(`\n${ok}/13 casos OK (con el bloqueo)`);
+  console.log(`\n${ok}/14 casos OK (con el bloqueo)`);
 })();
 
 // ── #1121: sección Staff del dueño con clave (STAFF_SECTION_PIN) ──
@@ -141,5 +155,5 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     for (let k = 0; k < 6; k++) assert.strictEqual(call(own, 'mal').code, 401);
     assert.strictEqual(call(own, 'clave-sec').code, 429, 'trabada');
   });
-  console.log(`\n${ok}/14 casos OK (con la sección Staff)`);
+  console.log(`\n${ok}/15 casos OK (con la sección Staff)`);
 })();

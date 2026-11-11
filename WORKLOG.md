@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1130)
+> **Última actualización: 2026-11-12** (#1131)
 
 ## Sesión 2026-11-09
 
@@ -14780,3 +14780,11 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   no existe); los demás manejan su clave desde el panel. 👑 Staff muestra los dueños. El lockdown #1117 sigue con un solo `STAFF_LOCKDOWN_KEEP`.
 - Verificado: `node --check`, `test-server-boot` OK, `test-security-1117` 8/14 (igual que antes). **Necesita deploy EB** (ya está en `fabio.zip`). En SSM:
   `PANEL_OWNER = usuario1,usuario2` (sin espacios raros; el primero es el principal de `PANEL_OWNER_PASS`).
+
+## #1131 — 2026-11-12 · `test-security-1117.js` al día (15/15)
+- El test seguía con las reglas de antes de #1124: esperaba que sin `PANEL_OWNER` cualquier admin fuera dueño (hoy falla cerrado: nadie) y el bloqueo de
+  emergencia no tenía `_cronClaim` en la base simulada. Arreglado + caso nuevo de #1130 (varios dueños con coma / espacio / punto y coma, el principal es el
+  primero, `_isOwnerName`). Sin cambios en el server.
+- Owner pidió limpiar todo lo del bot de comprobantes sin tocar la configuración: se hace con panel → Bot de comprobantes → 🧹 Empezar de cero (#1110) con
+  "Desde" = 48 h atrás, borrar mensajes + cuentas a $0 tildados y la presentación DESTILDADA (así no se reenvía nada hasta que se organice).
+
