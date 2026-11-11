@@ -29,6 +29,14 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1107. Bot de comprobantes: la bienvenida sale SÓLO en estructuras que andan perfecto (2026-11-11) — panel v303
+- **Owner:** "que se envíen las que funcionan perfecto; las que falta editar algo, que esperen que ajuste para confirmar".
+- `_rbWelcomeIfReady`: antes de mandar revisa en Telegram cada grupo de la estructura (`_rbStructHealth`: bot adentro; ADMINISTRADOR en los que mandan salvo
+  privacidad apagada). Algo mal ⇒ no manda NADA en esa estructura, queda `Config['rcptbotplan'].welcome[nombre].wait` (panel: "📣 Bienvenida EN ESPERA" con
+  qué arreglar) y `_rbWelcomeTick` reintenta cada 5 min; todo bien ⇒ sale. La marca por grupo se pone DESPUÉS de mandar (`_rbFlagHas` + `_rbFlag`).
+  Encender / plan aplicado también pasan por ahí; el botón 📣 del panel sigue forzando.
+- Tests: rcptbot-flow 43; los 29 del repo OK.
+
 ### 1106. Bot de comprobantes: BIENVENIDA en cada grupo + qué falló en la configuración automática (ID a mano) + repaso (2026-11-11) — panel v302
 - **Owner:** "armá un mensaje de bienvenida en cada grupo, presentación breve fijada y después el archivo con la explicación completa, para cada grupo
   correspondiente; lo del grupo 1 no hace falta explicar dónde va" · "detallame en el admin qué es lo que falló para configurar el ID manual" · "avisar que si

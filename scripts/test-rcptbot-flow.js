@@ -66,7 +66,7 @@ const RcptFwd = model(), RcptClose = model();
 // --- Telegram falso ---
 const sent = []; let msgId = 1000;
 const tgChannel = {
-  call: async (token, method, p) => { sent.push({ token, method, p }); if (method === 'getFile') return { ok: true, result: { file_path: 'x.jpg', file_size: 10 } }; if (method === 'getMe') return { ok: true, result: { id: Number(token.split(':')[0]), username: 'bot' + token.split(':')[0] } }; return { ok: true, result: { message_id: ++msgId } }; },
+  call: async (token, method, p) => { sent.push({ token, method, p }); if (method === 'getFile') return { ok: true, result: { file_path: 'x.jpg', file_size: 10 } }; if (method === 'getMe') return { ok: true, result: { id: Number(token.split(':')[0]), username: 'bot' + token.split(':')[0] } }; if (method === 'getChatMember') { const st = (global.TG_MEMBER || {})[String(p.chat_id)] || 'administrator'; return { ok: true, result: { status: st } }; } return { ok: true, result: { message_id: ++msgId } }; },
   sendMedia: async (token, kind, chat, media, extra) => { sent.push({ token, method: 'sendMedia:' + kind, p: Object.assign({ chat_id: chat }, extra) }); return { ok: true, result: { message_id: ++msgId } }; },
 };
 let aiAmount = 25000.99;
@@ -82,7 +82,7 @@ const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : 
   _tgArtHour: (d = new FakeDate()) => Number(new RealDate(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24,
   _sha: (v) => crypto.createHash('sha256').update(String(v)).digest('hex'), _pinLocked: () => false, _pinCheck: () => {},
   process: { env: {} }, setTimeout: () => 0, setInterval: () => 0, Date: FakeDate, Math, JSON, Object, Array, String, Number, Buffer, Set, Map, Promise, RegExp, Error, console };
-vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg; this._rbMonthCloseTick = _rbMonthCloseTick; this._rbWelcomeStruct = _rbWelcomeStruct; this._rbPlanGroup = _rbPlanGroup; this._rbPlanRun = _rbPlanRun; this.RB_PLAN = RB_PLAN;', ctx);
+vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg; this._rbMonthCloseTick = _rbMonthCloseTick; this._rbWelcomeStruct = _rbWelcomeStruct; this._rbPlanGroup = _rbPlanGroup; this._rbPlanRun = _rbPlanRun; this.RB_PLAN = RB_PLAN; this._rbWelcomeIfReady = _rbWelcomeIfReady;', ctx);
 // --- armado: 1 estructura, bot 111, grupo 1 (-1) manda; ,99 → -2 ; todo lo demás → -3 ---
 cfgDocs.push({ key: 'rcptbot', value: { bots: [{ id: '111', username: 'b111', tokenEnc: '111:TOKEN', secret: 'S' }], groups: [{ id: '-1', title: 'buffalobot', bots: ['111'] }, { id: '-2', title: 'asuncionbot', bots: ['111'] }, { id: '-3', title: 'fichasnuevobot', bots: ['111'] }],
   autoClose13: true, // #1089: el cierre de las 13 h sólo con este tilde (default apagado)
@@ -411,6 +411,19 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(sent.slice(n0).some((x) => String(x.p.chat_id) === '-700' && /BIENVENIDOS/.test(x.p.text || '')) && sent.slice(n0).some((x) => String(x.p.chat_id) === '-701' && /BIENVENIDOS/.test(x.p.text || '')), 'bienvenida en los 2 grupos');
     aiAmount = 20000.33; await hook(Object.assign(photo(800, -700), {})); // un comprobante real llega a S1 Racafu
     rc.groups = JSON.parse(keepG); rc.structs = JSON.parse(keepS); rc.bots = JSON.parse(keepB); await ctx._rbCfg(true);
+  });
+  await caso('bienvenida SÓLO si todo está bien: bot no admin en un grupo que manda ⇒ nada en espera; al arreglarlo sale', async () => {
+    const rc = cfgDocs[0].value; const keepG = JSON.stringify(rc.groups), keepS = JSON.stringify(rc.structs);
+    rc.groups.push({ id: '-800', title: 'G800', bots: ['111'] }, { id: '-801', title: 'G801', bots: ['111'] });
+    rc.structs = [{ id: 'W1', name: 'Wtest', on: true, botId: '111', routes: [{ from: '-800', rules: [{ cents: '99', to: '-801' }], otherTo: null }] }]; const c = await ctx._rbCfg(true);
+    global.TG_MEMBER = { '-800': 'member' }; const n0 = sent.length; let r = await ctx._rbWelcomeIfReady(c, c.structs[0]);
+    assert.ok(r.wait && /G800.*ADMINISTRADOR/.test(r.wait.join()), JSON.stringify(r)); assert.ok(!sent.slice(n0).some((x) => /BIENVENIDOS/.test(x.p.text || '')), 'no manda nada');
+    assert.ok(cfgDocs.find((d) => d.key === 'rcptbotplan').value.welcome.Wtest.wait.length === 1);
+    global.TG_MEMBER = { '-800': 'left' }; r = await ctx._rbWelcomeIfReady(c, c.structs[0]); assert.ok(/NO está en el grupo/.test(r.wait.join()), JSON.stringify(r));
+    global.TG_MEMBER = {}; r = await ctx._rbWelcomeIfReady(c, c.structs[0]); assert.ok(r.sent && r.sent.length === 2 && r.sent.every((x) => x.ok), JSON.stringify(r));
+    assert.ok(cfgDocs.find((d) => d.key === 'rcptbotplan').value.welcome.Wtest.sent);
+    const n1 = sent.length; r = await ctx._rbWelcomeIfReady(c, c.structs[0]); assert.ok(r.done && sent.length === n1, 'ya la tienen: ni revisa');
+    rc.groups = JSON.parse(keepG); rc.structs = JSON.parse(keepS); await ctx._rbCfg(true);
   });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });

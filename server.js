@@ -31996,6 +31996,7 @@ async function _rbOnce(chatId, msgId) {
 }
 // Repaso #1103: marca DURABLE para lo automático de una vez por día/semana/mes (cierres, avisos): `rcptbotseen` guarda sólo los últimos 500 mensajes
 // y con mucho movimiento una marca vieja podía caerse y el aviso salir dos veces. Clave propia, pocas entradas (≤ 400).
+async function _rbFlagHas(k) { const d = await Config.collection.findOne({ key: 'rcptbotflags' }); return !!(d && d.value && Array.isArray(d.value.k) && d.value.k.includes(String(k))); }
 async function _rbFlag(k) {
   k = String(k); try { await Config.collection.updateOne({ key: 'rcptbotflags' }, { $setOnInsert: { key: 'rcptbotflags', value: { k: [] } } }, { upsert: true }); } catch (_) {}
   const r = await Config.collection.updateOne({ key: 'rcptbotflags', 'value.k': { $ne: k } }, { $push: { 'value.k': { $each: [k], $slice: -400 } } });
@@ -32197,9 +32198,10 @@ async function _rbWelcome(c, chat, kind, botId) {
 async function _rbWelcomeStruct(c, st, force) {
   const rs = (c.routes || []).filter((r) => r.structId === st.id); const done = new Set(); const out = [];
   const one = async (chat, kind, botId) => {
-    const k = kind + '|' + chat; if (done.has(k)) return; done.add(k);
-    if (!force && !(await _rbFlag('welcome1106|' + chat + '|' + botId))) return;
+    const k = kind + '|' + chat; if (done.has(k)) return; done.add(k); const fk = 'welcome1106|' + chat + '|' + botId;
+    if (!force && (await _rbFlagHas(fk))) return; // ya la tiene
     const r = await _rbWelcome(c, chat, kind, botId).catch((e) => ({ ok: false, error: e.message })); out.push({ group: _rbTitle(c, chat), ok: !!(r && r.ok), error: r && !r.ok ? String(r.error || '') : '' });
+    if (r && r.ok) await _rbFlag(fk); // la marca va DESPUÉS de mandarla: si falla, se reintenta
   };
   for (const r of rs) await one(String(r.from), 'src', r.botId);
   for (const r of rs) for (const d of _rbDests(c, r)) if (d.to !== String(r.from)) await one(d.to, 'dst', r.botId);
@@ -32210,8 +32212,40 @@ async function _rbSendMenus(c, route, pin) { // compat (botón viejo "mandar men
   for (const d of _rbDests(c, route)) if (d.to !== String(route.from)) await _rbWelcome(c, d.to, 'dst', route.botId).catch(() => {});
   return r;
 }
-// al arrancar: la bienvenida nueva en los grupos de las estructuras encendidas que todavía no la tienen (una vez por grupo y bot)
-setTimeout(async () => { try { const c = await _rbCfg(true); if (c.onRender || !(await _cronClaim('rbwelcome', 15 * 60000))) return; for (const st of (c.structs || []).filter((x) => x && x.on)) await _rbWelcomeStruct(c, st, false); } catch (e) { logger.warn('[rcptbot] bienvenida ' + e.message); } }, 200000);
+// owner: "que se envíen las que funcionan perfecto; las que falta editar algo, que esperen que ajuste". Antes de la bienvenida se revisa CADA grupo de la
+// estructura en Telegram (bot adentro; administrador en los que mandan). Todo bien ⇒ sale; algo mal ⇒ NADA en esa estructura, queda en
+// Config['rcptbotplan'].welcome[nombre] = { wait:[…] } (el panel lo muestra) y se reintenta cada 5 min hasta que esté.
+async function _rbStructHealth(c, st) {
+  const bd = (c.botsDec || []).find((b) => String(b.id) === String(st.botId) && b.token); if (!bd) return ['el bot de la estructura no está cargado'];
+  const rs = (c.routes || []).filter((r) => r.structId === st.id); if (!rs.length) return ['no tiene grupos que manden'];
+  let me = null; try { me = await tgChannel.call(bd.token, 'getMe', {}); } catch (_) {} if (!(me && me.ok)) return ['Telegram no responde (se reintenta)'];
+  const readAll = !!me.result.can_read_all_group_messages; const out = []; const seen = new Set();
+  const chk = async (chat, src) => {
+    if (seen.has(chat)) return; seen.add(chat); let gm = null; try { gm = await tgChannel.call(bd.token, 'getChatMember', { chat_id: chat, user_id: Number(me.result.id) }); } catch (_) {}
+    const t = _rbTitle(c, chat); const stt = gm && gm.ok && gm.result ? gm.result.status : null;
+    if (!stt) out.push(`"${t}": no se pudo revisar (¿el bot está en el grupo?)`);
+    else if (stt === 'left' || stt === 'kicked') out.push(`"${t}": @${me.result.username} NO está en el grupo — agregalo${src ? ' como administrador' : ''}`);
+    else if (src && !readAll && stt !== 'administrator' && stt !== 'creator') out.push(`"${t}": @${me.result.username} no es ADMINISTRADOR (no ve las fotos)`);
+  };
+  for (const r of rs) await chk(String(r.from), true);
+  for (const r of rs) for (const d of _rbDests(c, r)) if (d.to !== String(r.from)) await chk(d.to, false);
+  return out;
+}
+async function _rbWelcomeIfReady(c, st) {
+  const rs = (c.routes || []).filter((r) => r.structId === st.id); const chats = new Set();
+  for (const r of rs) { chats.add(String(r.from) + '|' + r.botId); for (const d of _rbDests(c, r)) chats.add(d.to + '|' + r.botId); }
+  let all = chats.size > 0; for (const k of chats) if (!(await _rbFlagHas('welcome1106|' + k))) { all = false; break; }
+  if (all) return { done: true }; // ya la tienen todos: ni se revisa
+  const prob = await _rbStructHealth(c, st);
+  await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.welcome.' + st.name]: prob.length ? { wait: prob, at: new Date() } : { sent: true, at: new Date() } } }, { upsert: true });
+  if (prob.length) { logger.warn('[rcptbot] bienvenida de ' + st.name + ' en espera: ' + prob.join(' · ')); return { wait: prob }; }
+  return { sent: await _rbWelcomeStruct(c, st, false) };
+}
+async function _rbWelcomeTick() {
+  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token) || !(await _cronClaim('rbwelcome', 4 * 60000))) return;
+  for (const st of (c.structs || []).filter((x) => x && x.on)) { try { await _rbWelcomeIfReady(c, st); } catch (e) { logger.warn('[rcptbot] bienvenida ' + e.message); } }
+}
+setTimeout(() => { _rbWelcomeTick().catch(() => {}); setInterval(() => { _rbWelcomeTick().catch(() => {}); }, 5 * 60000); }, 200000);
 async function _rbSrcTotalTxt(c, route) {
   const out = [];
   for (const d of _rbDests(c, route)) { const s = await _rbOpenSum(route.from, d.to, route.structId); out.push(`→ ${_rbH(_rbTitle(c, d.to))}: <b>${_rbMoney(s.total)}</b> (${s.count})`); } // #1089: sin pendientes a cotizar/enviar (eso es del grupo 2)
@@ -32492,7 +32526,7 @@ async function _rbPlanRun() {
     if (ready || !wasOn) await _rbStructPut(st); // repaso #1103: una estructura que YA anda no se apaga por un grupo que falta: queda como estaba y avisa
     if (ready) {
       await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.applied.' + p.name]: RB_PLAN.v, ['value.report.' + p.name]: { ok: true, at: new Date(), routes: routes.length, warn: det.filter((x) => x.kind === 'warn') } } }, { upsert: true });
-      if (!wasOn) { const c2 = await _rbCfg(true); await _rbWelcomeStruct(c2, st, false).catch(() => {}); } // #1106: bienvenida una vez por grupo
+      if (!wasOn) { const c2 = await _rbCfg(true); await _rbWelcomeIfReady(c2, st).catch(() => {}); } // #1106: bienvenida sólo si todo está bien
       logger.info('[rcptbot] plan aplicado: ' + p.name + ' (' + routes.length + ' grupos que mandan)');
     } else {
       report[p.name] = { ok: false, at: new Date(), missing: [...new Set(miss)], detail: det, kept: wasOn }; // #1106
@@ -33138,8 +33172,8 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
     const groups = (c.groups || []).map((g) => ({ id: g.id, title: g.title, bots: (g.bots || []).map((id) => ((c.botsDec || []).find((b) => b.id === id) || {}).username || id) }));
-    const planRep = (((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}).report || {}; // #1097
-    res.json({ success: true, plan: planRep, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
+    const planDoc = ((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}; const planRep = planDoc.report || {}; const welcomeSt = planDoc.welcome || {}; // #1097 · #1106
+    res.json({ success: true, plan: planRep, welcome: welcomeSt, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/bot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar o reemplazar un bot (por su token)
@@ -33251,7 +33285,7 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
     await _rbStructPut(st);
-    if (turnedOn) { const c2 = await _rbCfg(true); await _rbWelcomeStruct(c2, st, false).catch(() => {}); } // #1106
+    if (turnedOn) { const c2 = await _rbCfg(true); await _rbWelcomeIfReady(c2, st).catch(() => {}); } // #1106: sólo si todo está bien
     res.json({ success: true, id: st.id });
   } catch (e) { res.status(e.http || 500).json({ error: e.message }); }
 });
