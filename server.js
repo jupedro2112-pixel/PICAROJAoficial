@@ -13922,11 +13922,13 @@ async function initializeData() {
     if (lc && (await getConfig('staffLockdownDone', null)) !== lc) {
       const keep = String(process.env.STAFF_LOCKDOWN_KEEP || '').trim().toLowerCase(); const np = String(process.env.STAFF_LOCKDOWN_PASS || '');
       const staff = await User.find({ $or: [{ role: { $in: ADMIN_ROLES } }, { username: { $in: ['lalodj', 'lalodj499910', 'diego576413'] } }] }).select('id username role').lean();
-      const owner = staff.find((u) => String(u.username).toLowerCase() === keep && u.role === 'admin');
+      // El dueño se busca por USUARIO en toda la base (el intruso pudo bajarle el rol, desactivarlo, bloquearlo o cambiarle la clave): se RESTAURA.
+      const owner = keep ? await User.findOne({ username: new RegExp('^' + keep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id username role').lean() : null;
+      if (owner && !staff.some((u) => u.id === owner.id)) staff.push(owner);
       const off = [];
       for (const u of staff) {
         if (owner && u.id === owner.id) {
-          const set = np.length >= 10 ? { password: await bcrypt.hash(np, 10), mustChangePassword: false } : {};
+          const set = Object.assign({ role: 'admin', isActive: true, isBlocked: false, blockReason: null, staffMustChangePw: false, mustChangePassword: false }, np.length >= 10 ? { password: await bcrypt.hash(np, 10) } : {});
           await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: set }); continue;
         }
         if (!owner) { await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 } }); continue; }

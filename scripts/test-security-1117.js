@@ -78,7 +78,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     { id: 't', username: 'lalodj', role: 'admin', tokenVersion: 0, isActive: true },
     { id: 'p', username: 'jugador', role: 'user', tokenVersion: 0, isActive: true }];
   const runLock = async (env, rows) => {
-    const cfg = {}; const U = { find: (q) => ({ select: () => ({ lean: async () => rows.filter((u) => q.$or[0].role.$in.includes(u.role) || q.$or[1].username.$in.includes(u.username)) }), lean: async () => [] }),
+    const cfg = {}; const U = { findOne: (q) => ({ select: () => ({ lean: async () => rows.find((u) => q.username.test(u.username)) || null }) }), find: (q) => ({ select: () => ({ lean: async () => rows.filter((u) => q.$or[0].role.$in.includes(u.role) || q.$or[1].username.$in.includes(u.username)) }), lean: async () => [] }),
       updateOne: async (q, u) => { const x = rows.find((r) => r.id === q.id); if (u.$inc) x.tokenVersion += u.$inc.tokenVersion; Object.assign(x, u.$set || {}); } };
     const c2 = { User: U, Message: { aggregate: async () => [] }, Config: { set: async (k, v) => { cfg[k] = v; } }, getConfig: async (k) => cfg[k] || null,
       bcrypt: { hash: async (p) => 'H(' + p + ')' }, crypto: require('crypto'), _sha: (v) => 'S(' + v + ')', ADMIN_ROLES: ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'], process: { env }, console: { warn() {}, log() {}, error: console.error }, JSON, Date, Object, String, Array };
@@ -101,5 +101,11 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(rows.every((r) => r.role === 'user' || (r.isActive && r.tokenVersion === 1)), 'nadie desactivado, sesiones cerradas');
     assert.ok(rows.find((r) => r.id === 'p').tokenVersion === 0);
   });
-  console.log(`\n${ok}/10 casos OK (con el bloqueo)`);
+  await caso('el intruso le bajó el rol, lo desactivó y bloqueó al dueño ⇒ el bloqueo lo RESTAURA (admin, activo, clave nueva)', async () => {
+    const rows = mk(); Object.assign(rows[0], { role: 'user', isActive: false, isBlocked: true, password: 'H(del-intruso)' });
+    await runLock({ STAFF_LOCKDOWN: 'b4', STAFF_LOCKDOWN_KEEP: 'DUENO1', STAFF_LOCKDOWN_PASS: 'otra-clave-larga', STAFF_LOCKDOWN_TEMP: 'tmp1' }, rows);
+    const o = rows[0]; assert.ok(o.role === 'admin' && o.isActive === true && o.isBlocked === false && o.password === 'H(otra-clave-larga)' && !o.staffMustChangePw, JSON.stringify(o));
+    assert.ok(rows.find((r) => r.id === 'b').password === 'H(tmp1)', 'el otro admin con la temporal');
+  });
+  console.log(`\n${ok}/11 casos OK (con el bloqueo)`);
 })();
