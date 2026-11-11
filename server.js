@@ -32166,20 +32166,52 @@ async function _rbSendDstHelp(c, toChat, botId, pin) {
 // #1079-o: GUÍA completa como archivo (.txt) — "los que envían" en el grupo que manda, "los que reciben" en el destino; fijada al arrancar y con /guia
 async function _rbSendGuide(c, chat, kind, botId, pin) {
   const G = require('./src/utils/rcptbotGuides'); let txt;
-  if (kind === 'src') { const route = (c.routes || []).find((r) => String(r.from) === String(chat) && (!botId || r.botId === botId)); if (!route) return null;
-    txt = G.src({ group: _rbTitle(c, chat), rules: (route.rules || []).map((x) => ({ cents: x.cents, to: _rbTitle(c, x.to) })), other: route.otherTo ? _rbTitle(c, route.otherTo) : null }); }
-  else { const rs = _rbDstRoutes(c, chat, botId); if (!rs.length) return null; txt = G.dst({ group: _rbTitle(c, chat), sources: [...new Set(rs.map((r) => _rbTitle(c, r.from)))] }); }
+  const ctx = _rbGroupCtx(c, chat, kind, botId); if (!ctx) return null; txt = kind === 'src' ? G.src(ctx) : G.dst(ctx); // #1106: según cómo está armada la estructura
   const b = _rbTokFor(c, String(chat), botId); if (!b) return null;
   const r = await tgChannel.sendMedia(b.token, 'document', String(chat), { buffer: Buffer.from(txt, 'utf8'), mime: 'text/plain', filename: kind === 'src' ? 'GUIA-LOS-QUE-ENVIAN.txt' : 'GUIA-LOS-QUE-RECIBEN.txt' }, { caption: kind === 'src' ? '📘 Guía para los que ENVÍAN comprobantes' : '📗 Guía para los que RECIBEN comprobantes' });
   if (pin) await _rbPin(c, String(chat), botId, r); return r;
 }
-// menú en TODOS los grupos de una ruta (el que manda + cada destino): primero la guía, después el menú (queda arriba)
-async function _rbSendMenus(c, route, pin) {
-  await _rbSendGuide(c, route.from, 'src', route.botId, pin).catch(() => {});
-  const r = await _rbSendHelp(c, route, pin);
-  for (const d of _rbDests(c, route)) if (d.to !== String(route.from)) { await _rbSendGuide(c, d.to, 'dst', route.botId, pin).catch(() => {}); await _rbSendDstHelp(c, d.to, route.botId, pin).catch(() => {}); }
+// #1106: cómo funciona un grupo según su estructura (para la bienvenida y la guía). Grupo 1 = su ruta; grupo 2 = las estructuras que mandan ahí.
+function _rbGroupCtx(c, chat, kind, botId) {
+  chat = String(chat); const sOf = (r) => (c.structs || []).find((x) => x && x.id === r.structId) || {};
+  if (kind === 'src') { const route = (c.routes || []).find((r) => String(r.from) === chat && (!botId || r.botId === botId)); if (!route) return null; const st = sOf(route);
+    return { group: _rbTitle(c, chat), close: st.dailyClose || '', monthly: !!st.monthlyClose, srcQuote: !!st.srcQuote, usdtCheck: !!st.usdtCheck }; }
+  const rs = _rbDstRoutes(c, chat, botId); if (!rs.length) return null; const sts = [...new Map(rs.map((r) => [r.structId, sOf(r)])).values()];
+  return { group: _rbTitle(c, chat), close: (sts[0] || {}).dailyClose || '', monthly: sts.some((x) => x.monthlyClose), usdtCheck: sts.some((x) => x.usdtCheck), fichas: _rbIsFichas(c, chat) };
+}
+const _RB_FICHAS_KB = { inline_keyboard: [[{ text: '📊 Ver suma del mes', callback_data: 'rbm:total' }], [{ text: '🎰 Completar fichas del mes anterior', callback_data: 'rbf:ask' }], [{ text: '📋 Comandos', callback_data: 'rbm:help' }], [{ text: '🏦 Ver CBU', callback_data: 'rbm:cbu' }, { text: '🔄 Nuevo CBU', callback_data: 'rbm:ncbu' }], [{ text: '⛔ Parar (no hay CBU)', callback_data: 'rbm:stop' }]] };
+// #1106 (owner): BIENVENIDA en cada grupo = presentación breve FIJADA y después el archivo con la explicación completa (sin fijar, queda justo abajo).
+async function _rbWelcome(c, chat, kind, botId) {
+  const G = require('./src/utils/rcptbotGuides'); const ctx = _rbGroupCtx(c, chat, kind, botId); if (!ctx) return { ok: false, error: 'el grupo no está en una estructura encendida' };
+  const route = kind === 'src' ? (c.routes || []).find((r) => String(r.from) === String(chat) && (!botId || r.botId === botId)) : null;
+  const kb = kind === 'src' ? _rbSrcKb(c, route) : ctx.fichas ? _RB_FICHAS_KB : _RB_DST_KB;
+  const r = await _rbSend(c, String(chat), kind === 'src' ? G.welcomeSrc(ctx) : G.welcomeDst(ctx), botId, { reply_markup: kb });
+  if (r && r.ok) {
+    await _rbPin(c, String(chat), botId, r).catch(() => {}); await _rbSendGuide(c, chat, kind, botId, false).catch(() => {});
+    // owner: "avisar que si empieza la suma de 0, sumar lo anterior con /anterior para que quede acomodado; en un último mensaje simple"
+    await _rbSend(c, String(chat), `📥 <b>La suma arranca de $0.</b>\nSi ya venían sumando, cargá lo anterior con <b>/anterior</b> y el monto (ej. <code>/anterior 13.686.199</code>) para que quede acomodado.`, botId).catch(() => {});
+  }
+  return r || { ok: false };
+}
+// todos los grupos de una estructura (cada uno UNA vez aunque reciba de varios). force=false ⇒ sólo los que todavía no tienen la bienvenida (#1106).
+async function _rbWelcomeStruct(c, st, force) {
+  const rs = (c.routes || []).filter((r) => r.structId === st.id); const done = new Set(); const out = [];
+  const one = async (chat, kind, botId) => {
+    const k = kind + '|' + chat; if (done.has(k)) return; done.add(k);
+    if (!force && !(await _rbFlag('welcome1106|' + chat + '|' + botId))) return;
+    const r = await _rbWelcome(c, chat, kind, botId).catch((e) => ({ ok: false, error: e.message })); out.push({ group: _rbTitle(c, chat), ok: !!(r && r.ok), error: r && !r.ok ? String(r.error || '') : '' });
+  };
+  for (const r of rs) await one(String(r.from), 'src', r.botId);
+  for (const r of rs) for (const d of _rbDests(c, r)) if (d.to !== String(r.from)) await one(d.to, 'dst', r.botId);
+  return out;
+}
+async function _rbSendMenus(c, route, pin) { // compat (botón viejo "mandar menú"): bienvenida en el grupo que manda y en sus destinos
+  const r = await _rbWelcome(c, route.from, 'src', route.botId);
+  for (const d of _rbDests(c, route)) if (d.to !== String(route.from)) await _rbWelcome(c, d.to, 'dst', route.botId).catch(() => {});
   return r;
 }
+// al arrancar: la bienvenida nueva en los grupos de las estructuras encendidas que todavía no la tienen (una vez por grupo y bot)
+setTimeout(async () => { try { const c = await _rbCfg(true); if (c.onRender || !(await _cronClaim('rbwelcome', 15 * 60000))) return; for (const st of (c.structs || []).filter((x) => x && x.on)) await _rbWelcomeStruct(c, st, false); } catch (e) { logger.warn('[rcptbot] bienvenida ' + e.message); } }, 200000);
 async function _rbSrcTotalTxt(c, route) {
   const out = [];
   for (const d of _rbDests(c, route)) { const s = await _rbOpenSum(route.from, d.to, route.structId); out.push(`→ ${_rbH(_rbTitle(c, d.to))}: <b>${_rbMoney(s.total)}</b> (${s.count})`); } // #1089: sin pendientes a cotizar/enviar (eso es del grupo 2)
@@ -32385,7 +32417,7 @@ setTimeout(() => { setInterval(() => { _rbDailyCloseTick().catch((e) => logger.w
 // estructura queda APAGADA con lo que se encontró y el panel muestra qué falta; se reintenta cada 5 min hasta encenderla. Lo ya aplicado no se pisa
 // (Config['rcptbotplan'].applied[nombre] = versión): si después la cambian a mano en el panel, queda como la dejaron. Sólo nombres de grupos (nada secreto).
 const RB_PLAN = { v: 1, structs: [
-  { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, fichasDests: ['Pagos Hammy y Fabri ,43'], // #1104: ,43 = grupo de FICHAS termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }],
+  { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, fichasDests: ['Pagos Hammy y Fabri ,43'], termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }], // #1104: ,43 = grupo de FICHAS
     senders: ['STOCK 1GIROX ICE', '1GIROX ANANA', '1GIROX BUFFALO', '1GIROX JOKER', '1GIROX GOLDEN', '1GIROX TOKIO', '1GIROX BOSTON', '1GIROX PARADISE', '1GIROX LAS VEGAS', '1GIROX SHANGAI', '1GIROX VIP PLATINIUM', '1GIROX ORO'],
     rules: [{ cents: '99', to: '4f RACAFU ,99' }, { cents: '43', to: 'Pagos Hammy y Fabri ,43' }] },
   { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [],
@@ -32399,6 +32431,21 @@ const RB_PLAN = { v: 1, structs: [
     senders: ['BAJADAS S1'], rules: [{ cents: '33', to: 'S1 Racafu ,33' }] }
 ] }; // un plan NUEVO se aplica solo (applied[nombre] vacío); subir `v` re-aplica TODOS (pisa cambios hechos a mano)
 const _rbNorm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+// #1106: diagnóstico de UN grupo del plan ⇒ { g } o { why, fix, cands } (lo que muestra el panel para fijar el ID a mano). pins = Config['rcptbotplan'].pins.
+function _rbPlanGroup(c, title, botId, botUser, pins, role) {
+  const pid = (pins || {})[_rbNorm(title)]; const gs = c.groups || []; const has = (g) => !botId || (g.bots || []).map(String).includes(String(botId));
+  const cand = (arr) => arr.slice(0, 6).map((g) => ({ id: String(g.id), title: g.title || '', bots: (g.bots || []).map((id) => ((c.bots || []).find((b) => String(b.id) === String(id)) || {}).username || id) }));
+  const howId = 'Para saber el ID: abrí el grupo en web.telegram.org, el número de la dirección es el ID (empieza con -), o reenviá un mensaje del grupo a @RawDataBot.';
+  const addBot = '@' + botUser + (role === 'src' ? ' como ADMINISTRADOR (si no, no ve las fotos)' : '');
+  if (pid) { const g = gs.find((x) => String(x.id) === String(pid)); if (g && has(g)) return { g };
+    return { why: g ? `El ID fijado (${pid}) es de "${g.title}", pero @${botUser} no está en ese grupo.` : `El ID fijado (${pid}) no lo ve ningún bot.`, fix: `Agregá ${addBot} al grupo y escribí /start ahí. Se reintenta solo cada 5 min.`, cands: cand(g ? [g] : []) }; }
+  const n = _rbNorm(title); const eq = gs.filter((g) => _rbNorm(g.title) === n); const inc = gs.filter((g) => { const t = _rbNorm(g.title); return t && t !== n && (t.includes(n) || n.includes(t)) && t.length >= 4; });
+  const pool = eq.length ? eq : inc; const poolB = pool.filter(has);
+  if (poolB.length === 1) return { g: poolB[0] };
+  if (poolB.length > 1) return { why: `Hay ${poolB.length} grupos con nombre parecido a "${title}": no adivino cuál es.`, fix: 'Pegá abajo el ID del correcto (o cambiale el nombre al que no es).', cands: cand(poolB) };
+  if (pool.length) return { why: `"${pool[0].title}" lo ve ${pool.length > 1 ? 'otro bot' : '@' + ((cand(pool)[0].bots || [])[0] || 'otro bot')}, pero @${botUser} no está ahí.`, fix: `Agregá ${addBot} al grupo y escribí /start. Si es otro grupo con el mismo nombre, pegá el ID.`, cands: cand(pool) };
+  return { why: `Ningún bot vio un grupo llamado "${title}". Puede ser que @${botUser} no esté en el grupo, que nadie haya escrito desde que lo agregaron, o que el grupo tenga otro nombre.`, fix: `Agregá ${addBot} al grupo y escribí /start ahí; si sigue sin aparecer, pegá el ID del grupo abajo. ${howId}`, cands: [] };
+}
 function _rbFindGroup(c, title, botId) {
   const n = _rbNorm(title); const gs = c.groups || []; const has = (g) => !botId || (g.bots || []).map(String).includes(String(botId));
   const eq = gs.filter((g) => _rbNorm(g.title) === n); const eqB = eq.filter(has);
@@ -32412,29 +32459,43 @@ async function _rbPlanTick(force) {
   if (!force && Date.now() - _rbPlanAt < 5 * 60000) return; _rbPlanAt = Date.now();
   const c0 = await _rbCfg(true); if (c0.onRender || !(c0.botsDec || []).some((b) => b.token)) return;
   if (!(await _cronClaim('rbplan', 4 * 60000))) return; // repaso #1103: una sola instancia a la vez (dos a la vez duplicaban la estructura)
-  const pd = ((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}; const applied = pd.applied || {};
+  try { await _rbPlanRun(); } finally { try { await Config.collection.updateOne({ key: 'cronlock_rbplan' }, { $set: { 'value.until': 0 } }); } catch (_) {} } // #1106: libera el candado al terminar (un ID fijado se aplica al toque)
+}
+async function _rbPlanRun() {
+  const pd = ((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}; const applied = pd.applied || {}; const pins = pd.pins || {};
   const todo = RB_PLAN.structs.filter((p) => applied[p.name] !== RB_PLAN.v); if (!todo.length) return;
   try { await _rbRepairGroups(true); } catch (_) {}
   const report = {};
   for (const p of todo) {
-    const c = await _rbCfg(true); const miss = [];
-    const bot = (c.bots || []).find((b) => String(b.username || '').toLowerCase() === p.bot.toLowerCase()); if (!bot) miss.push('bot @' + p.bot + ' (cargá su token en la estructura)');
-    const botId = bot ? String(bot.id) : null;
-    const rules = []; for (const r of p.rules) { const g = _rbFindGroup(c, r.to, botId); if (g) rules.push({ cents: r.cents, to: String(g.id) }); else miss.push('grupo que recibe "' + r.to + '"'); }
-    const fichasDests = []; for (const t of p.fichasDests || []) { const g = _rbFindGroup(c, t, botId); if (g) fichasDests.push(String(g.id)); else miss.push('grupo de fichas "' + t + '"'); } // #1104
-    const routes = []; for (const t of p.senders) { const g = _rbFindGroup(c, t, botId); if (g) { if (!routes.some((x) => x.from === String(g.id))) routes.push({ from: String(g.id), rules: rules.map((x) => Object.assign({}, x)), otherTo: null }); } else miss.push('grupo que manda "' + t + '"'); }
+    const c = await _rbCfg(true); const miss = []; const det = []; // #1106: det = detalle por grupo para el panel (qué falló y cómo arreglarlo)
+    const bot = (c.bots || []).find((b) => String(b.username || '').toLowerCase() === p.bot.toLowerCase());
+    if (!bot) { miss.push('bot @' + p.bot + ' (cargá su token en la estructura)'); det.push({ kind: 'bot', name: '@' + p.bot, why: `El bot @${p.bot} no está cargado.`, fix: 'Pegá su token (de @BotFather) en una estructura llamada "' + p.name + '" y guardá.' }); }
+    const botId = bot ? String(bot.id) : null; const bd = bot ? (c.botsDec || []).find((b) => String(b.id) === botId) : null;
+    const look = (t, role) => { if (!botId) return null; const d = _rbPlanGroup(c, t, botId, p.bot, pins, role); if (d.g) return d.g; miss.push((role === 'src' ? 'grupo que manda "' : role === 'fz' ? 'grupo de fichas "' : 'grupo que recibe "') + t + '"'); det.push(Object.assign({ kind: role, name: t }, d)); return null; };
+    const rules = []; for (const r of p.rules) { const g = look(r.to, 'dst'); if (g) rules.push({ cents: r.cents, to: String(g.id) }); }
+    const fichasDests = []; for (const t of p.fichasDests || []) { const g = look(t, 'fz'); if (g) fichasDests.push(String(g.id)); } // #1104
+    const routes = []; for (const t of p.senders) { const g = look(t, 'src'); if (g && !routes.some((x) => x.from === String(g.id))) routes.push({ from: String(g.id), rules: rules.map((x) => Object.assign({}, x)), otherTo: null }); }
+    if (bd && bd.token) { // #1106: en los grupos que MANDAN el bot tiene que ser administrador (si no, Telegram no le pasa las fotos) — aviso, no frena
+      let me = null; try { me = await tgChannel.call(bd.token, 'getMe', {}); } catch (_) {}
+      if (me && me.ok && !me.result.can_read_all_group_messages) for (const r of routes) {
+        let gm = null; try { gm = await tgChannel.call(bd.token, 'getChatMember', { chat_id: r.from, user_id: Number(botId) }); } catch (_) {}
+        const stt = gm && gm.ok && gm.result ? gm.result.status : null;
+        if (stt === 'left' || stt === 'kicked') { miss.push('@' + p.bot + ' no está en "' + _rbTitle(c, r.from) + '"'); det.push({ kind: 'src', name: _rbTitle(c, r.from), why: `@${p.bot} ya no está en el grupo (lo sacaron).`, fix: `Agregá @${p.bot} de nuevo como ADMINISTRADOR.`, cands: [{ id: r.from, title: _rbTitle(c, r.from), bots: [] }] }); }
+        else if (stt === 'member' || stt === 'restricted') det.push({ kind: 'warn', name: _rbTitle(c, r.from), why: `@${p.bot} está pero NO es administrador: no ve las fotos de los comprobantes.`, fix: 'En el grupo: Administrar ⇒ Administradores ⇒ agregá al bot.' });
+      }
+    }
     const cur = (c.structs || []).find((x) => _rbNorm(x.name) === _rbNorm(p.name));
-    const st = Object.assign({ id: uuidv4(), on: false }, cur || {}, { name: p.name, botId: botId || (cur && cur.botId) || null, routes, monthlyClose: !!p.monthlyClose, usdtCheck: !!p.usdtCheck, srcQuote: !!p.srcQuote, fichasDests, dailyClose: p.dailyClose || '', termHour: p.termHour, termNotices: p.termNotices.map((x) => Object.assign({}, x)) });
+    const st = Object.assign({ id: uuidv4(), on: false }, cur || {}, { name: p.name, botId: botId || (cur && cur.botId) || null, routes, monthlyClose: !!p.monthlyClose, usdtCheck: !!p.usdtCheck, srcQuote: !!p.srcQuote, fichasDests, dailyClose: p.dailyClose || '', termHour: p.termHour, termNotices: (p.termNotices || []).map((x) => Object.assign({}, x)) });
     for (const o of (c.structs || []).filter((x) => x.on && x.id !== st.id)) for (const r of o.routes || []) if (routes.some((y) => y.from === String(r.from))) miss.push('"' + _rbTitle(c, r.from) + '" ya manda en la estructura "' + o.name + '" (encendida): apagala o sacale ese grupo');
     const ready = !miss.length && routes.length && rules.length && botId; const wasOn = !!(cur && cur.on);
     st.on = ready ? true : false;
     if (ready || !wasOn) await _rbStructPut(st); // repaso #1103: una estructura que YA anda no se apaga por un grupo que falta: queda como estaba y avisa
     if (ready) {
-      await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.applied.' + p.name]: RB_PLAN.v, ['value.report.' + p.name]: { ok: true, at: new Date(), routes: routes.length } } }, { upsert: true });
-      if (!wasOn) { const c2 = await _rbCfg(true); for (const r of (c2.routes || []).filter((x) => x.structId === st.id)) await _rbSendMenus(c2, r, true).catch(() => {}); }
+      await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.applied.' + p.name]: RB_PLAN.v, ['value.report.' + p.name]: { ok: true, at: new Date(), routes: routes.length, warn: det.filter((x) => x.kind === 'warn') } } }, { upsert: true });
+      if (!wasOn) { const c2 = await _rbCfg(true); await _rbWelcomeStruct(c2, st, false).catch(() => {}); } // #1106: bienvenida una vez por grupo
       logger.info('[rcptbot] plan aplicado: ' + p.name + ' (' + routes.length + ' grupos que mandan)');
     } else {
-      report[p.name] = { ok: false, at: new Date(), missing: [...new Set(miss)] };
+      report[p.name] = { ok: false, at: new Date(), missing: [...new Set(miss)], detail: det, kept: wasOn }; // #1106
       await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.report.' + p.name]: report[p.name] } }, { upsert: true });
       logger.warn('[rcptbot] plan ' + p.name + ' incompleto: ' + report[p.name].missing.join(' · '));
     }
@@ -33110,6 +33171,19 @@ app.post('/api/admin/rcptbot/bot-remove', authMiddleware, adminMiddleware, _rbPi
 app.post('/api/admin/rcptbot/reconnect', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try { const c = await _rbCfg(true); const out = []; for (const b of c.botsDec || []) { if (!b.token) { out.push('@' + b.username + ': token ilegible, cargalo de nuevo'); continue; } let hv = 0; try { hv = await _rbHarvest(b); } catch (_) {} const w = await _rbSetWebhook(b); out.push('@' + b.username + ': ' + (w.ok ? 'ok' : w.error) + (hv ? ' · ' + hv + ' aviso(s) de grupos leídos' : '')); } res.json({ success: true, result: out.join(' · ') || 'no hay bots' }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
+app.post('/api/admin/rcptbot/plan-pin', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // #1106: fijar a mano el ID de un grupo del plan
+  try {
+    const b = req.body || {}; const name = String(b.name || '').slice(0, 120); let id = String(b.id || '').trim();
+    if (!name) return res.status(400).json({ error: 'Falta el grupo' }); if (!/^-?\d{5,16}$/.test(id)) return res.status(400).json({ error: 'El ID del grupo son números (ej. -1001234567890)' });
+    if (!id.startsWith('-')) id = '-' + id;
+    const c = await _rbCfg(true); const tries = [...new Set([id, id.startsWith('-100') ? id : '-100' + id.slice(1)])]; let real = null; let title = ''; const seenBy = [];
+    for (const bt of c.botsDec || []) { if (!bt.token) continue; for (const x of tries) { const r = await tgChannel.call(bt.token, 'getChat', { chat_id: x }); if (r.ok && /^(group|supergroup)$/.test(r.result.type)) { await _rbGroupSeen(r.result, bt.id); real = String(r.result.id); title = r.result.title || ''; seenBy.push(bt.username || bt.id); break; } } }
+    if (!real) return res.status(400).json({ success: false, error: 'Ningún bot cargado está en ese grupo (o el ID está mal). Agregá el bot al grupo primero y probá de nuevo.' });
+    await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.pins.' + _rbNorm(name)]: real } }, { upsert: true });
+    _rbMem.at = 0; _rbPlanAt = 0; _rbPlanTick(true).catch((e) => logger.warn('[rcptbot] plan ' + e.message));
+    res.json({ success: true, id: real, title, bots: seenBy });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 app.post('/api/admin/rcptbot/group-add', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar un grupo a mano por su ID (si no apareció solo)
   try {
     let id = String((req.body || {}).id || '').trim(); if (!/^-?\d{5,16}$/.test(id)) return res.status(400).json({ error: 'El ID del grupo son números (ej. -1001234567890)' });
@@ -33177,9 +33251,16 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
     await _rbStructPut(st);
-    if (turnedOn) { const c2 = await _rbCfg(true); for (const r of (c2.routes || []).filter((x) => x.structId === st.id)) await _rbSendMenus(c2, r, true).catch(() => {}); }
+    if (turnedOn) { const c2 = await _rbCfg(true); await _rbWelcomeStruct(c2, st, false).catch(() => {}); } // #1106
     res.json({ success: true, id: st.id });
   } catch (e) { res.status(e.http || 500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/welcome', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // #1106: reenviar la bienvenida a TODOS los grupos de una estructura
+  try {
+    const c = await _rbCfg(true); const st = (c.structs || []).find((x) => x && x.id === String((req.body || {}).id || ''));
+    if (!st) return res.status(404).json({ error: 'Estructura no encontrada' }); if (!st.on) return res.status(400).json({ error: 'Encendé la estructura primero' });
+    const out = await _rbWelcomeStruct(c, st, true); res.json({ success: true, sent: out });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/help', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try {

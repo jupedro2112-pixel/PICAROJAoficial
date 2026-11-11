@@ -29,6 +29,22 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1106. Bot de comprobantes: BIENVENIDA en cada grupo + qué falló en la configuración automática (ID a mano) + repaso (2026-11-11) — panel v302
+- **Owner:** "armá un mensaje de bienvenida en cada grupo, presentación breve fijada y después el archivo con la explicación completa, para cada grupo
+  correspondiente; lo del grupo 1 no hace falta explicar dónde va" · "detallame en el admin qué es lo que falló para configurar el ID manual" · "avisar que si
+  empieza la suma de 0, sumar lo anterior con /anterior; en un último mensaje simple" · "revisá que todo funcione, si falla reenvía todo mal".
+- `_rbWelcome(c, chat, kind, botId)`: presentación (`rcptbotGuides.welcomeSrc/welcomeDst`, según la estructura: tipo de cierre, cotización propia, control USDT,
+  grupo de FICHAS con su menú `_RB_FICHAS_KB`) FIJADA ⇒ archivo `src`/`dst` (reescritos: el del grupo 1 sin destinos, con corrección de montos) ⇒ "📥 La suma
+  arranca de $0 … /anterior". `_rbWelcomeStruct(c, st, force)` = cada grupo UNA vez (antes `_rbSendMenus` mandaba el menú al destino una vez por cada grupo
+  que manda: 12 veces en Fichas). Sin forzar ⇒ una vez por grupo y bot (`_rbFlag('welcome1106|…')`); al arrancar se manda sola a los grupos de las estructuras
+  encendidas; botón "📣 Mandar bienvenida a sus grupos" (`POST /api/admin/rcptbot/welcome`) la reenvía.
+- Configuración automática: `_rbPlanGroup` explica cada grupo que falta (no existe / el bot no está / varios parecidos / ID fijado que nadie ve) con los grupos
+  parecidos y su ID; en los que mandan revisa con `getChatMember` que el bot siga adentro y sea administrador (si no, aviso). Panel `rbPlanRepHtml`: motivo, arreglo,
+  "Usar éste" o pegar el ID ⇒ `POST /api/admin/rcptbot/plan-pin` (`Config['rcptbotplan'].pins[nombre normalizado]`) y se aplica al toque (candado liberado al terminar).
+- **Bug arreglado:** en `RB_PLAN` el comentario de #1104 había dejado comentados los `termNotices` de Fichas ⇒ el plan de Fichas tiraba error.
+- Tests: rcptbot-flow 42 (bienvenida, diagnóstico, plan con nombres reales, cotización propia del grupo 1, fichas, corrección); los 29 tests del repo OK
+  (comparado con 36d1f30: nada empeoró).
+
 ### 1105. Bot de comprobantes: corrección de monto que MUEVE de grupo + aviso de foto ilegible (2026-11-11)
 - **Owner:** "cuando falle un comprobante o hay un error de tipeo en el decimal, dejá ajustar al que envió la corrección así se envía donde tiene que ser y donde
   llega le llega aclarado qué pasó; si no leés un comprobante, pedirle por favor una foto bien legible y avisar que no fue sumado, que cuando envíe bien se sumará".

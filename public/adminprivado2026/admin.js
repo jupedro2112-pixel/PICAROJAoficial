@@ -6507,7 +6507,7 @@ async function loadRcptBot() {
         const j = await r.json(); if (!r.ok) { st.textContent = j.error || 'Error'; return; }
         _rb = { groups: j.groups || [], bots: j.bots || [], structs: (j.structs || []).map((x) => Object.assign({}, x, { routes: JSON.parse(JSON.stringify(x.routes || [])) })) };
         st.innerHTML = (j.onRender ? '⚠️ En Render los bots no se conectan (comparte la base). ' : '') + 'Lectura IA de montos: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? ' · <span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '') +
-            Object.entries(j.plan || {}).map(([n, x]) => '<div style="margin-top:6px;font-size:13px">' + (x.ok ? '✅ <b>' + escapeHtml(n) + '</b>: configurada sola y encendida (' + (x.routes || 0) + ' grupos que mandan)' : '⚠️ <b>' + escapeHtml(n) + '</b> (configuración automática): falta ' + (x.missing || []).map(escapeHtml).join(' · ') + ' — se reintenta cada 5 min') + '</div>').join(''); // #1097
+            Object.entries(j.plan || {}).map(([n, x]) => rbPlanRepHtml(n, x)).join(''); // #1097 · #1106 detalle
         rbRenderStructs();
         document.getElementById('rbGroups').innerHTML = _rbGroupsHtml(j);
         if (!_rbGrTimer) _rbGrTimer = setInterval(() => rbRefreshGroups(false), 20000);
@@ -6539,7 +6539,7 @@ function rbRenderStructs() {
             '<div style="margin-top:8px"><b>Circuito</b> <small style="color:var(--p-muted,#777)">(si un grupo siempre reenvía al mismo, sin terminaciones: elegilo en "Todo lo demás")</small></div>' + (routes || '<p style="margin:.3rem 0;font-size:13px;color:var(--p-muted,#777)">Todavía no hay grupos que manden.</p>') +
             rbMonthHtml(si, st) + rbTermHtml(si, st) +
             '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="rbAddRoute(' + si + ')">+ Grupo que manda</button> <button class="btn btn-primary btn-sm" onclick="rbSaveStruct(' + si + ')">💾 Guardar estructura</button> ' +
-            (st.on ? '<button class="btn btn-secondary btn-sm" onclick="rbOnOff(' + si + ',false)">⏸️ Apagar</button>' : '<button class="btn btn-primary btn-sm" onclick="rbOnOff(' + si + ',true)">▶️ Encender (que empiece)</button>') + ' <button class="btn btn-secondary btn-sm" onclick="rbDelStruct(' + si + ')">🗑️ Borrar estructura</button></div></details>';
+            (st.on ? '<button class="btn btn-secondary btn-sm" onclick="rbOnOff(' + si + ',false)">⏸️ Apagar</button>' : '<button class="btn btn-primary btn-sm" onclick="rbOnOff(' + si + ',true)">▶️ Encender (que empiece)</button>') + (st.on ? ' <button class="btn btn-secondary btn-sm" onclick="rbWelcome(' + si + ')" title="Presentación breve fijada + archivo con la explicación completa + aviso de /anterior, en cada grupo">📣 Mandar bienvenida a sus grupos</button>' : '') + ' <button class="btn btn-secondary btn-sm" onclick="rbDelStruct(' + si + ')">🗑️ Borrar estructura</button></div></details>';
     }).join('');
 }
 function rbToggle(id, open) { _rbOpen[id] = !!open; }
@@ -6599,6 +6599,33 @@ function rbCarrySave(si, i, n) {
 function rbCarryDel(id) { if (confirm('¿Quitar este monto?')) _rbPost('/api/admin/rcptbot/carry-remove', { id }, 'Quitado', true); }
 function rbAddRule(si, i) { const r = _rb && _rb.structs[si] && _rb.structs[si].routes[i]; if (!r) return; (r.rules = r.rules || []).push({ cents: '', to: '' }); rbRenderStructs(); }
 function rbDelRule(si, i, k) { const r = _rb && _rb.structs[si] && _rb.structs[si].routes[i]; if (!r) return; r.rules.splice(k, 1); rbRenderStructs(); }
+// #1106 (owner: "detallame en el admin qué es lo que falló para configurar el ID manual"): por cada grupo que no se encontró, el motivo, cómo arreglarlo,
+// los grupos parecidos (con su ID) y un campo para fijar el ID a mano.
+function rbPlanRepHtml(n, x) {
+    const box = (c, h) => '<div style="margin-top:8px;padding:10px 12px;border-radius:10px;border:1px solid ' + c + ';font-size:13px">' + h + '</div>';
+    const warns = (x.warn || []).concat((x.detail || []).filter((d) => d.kind === 'warn'));
+    const wh = warns.map((d) => '<div style="margin-top:4px">⚠️ <b>' + escapeHtml(d.name) + '</b>: ' + escapeHtml(d.why) + ' <small>' + escapeHtml(d.fix || '') + '</small></div>').join('');
+    if (x.ok) return box('var(--p-border,#ddd)', '✅ <b>' + escapeHtml(n) + '</b>: configurada sola y encendida (' + (x.routes || 0) + ' grupos que mandan)' + wh);
+    const kindTxt = { src: '📤 Grupo que manda', dst: '📥 Grupo que recibe', fz: '🎰 Grupo de fichas', bot: '🤖 Bot' };
+    const det = (x.detail || []).filter((d) => d.kind !== 'warn');
+    const items = det.length ? det.map((d, i) => {
+        const cands = (d.cands || []).map((g) => '<div style="font-size:12px;margin-left:8px">• ' + escapeHtml(g.title || '(sin nombre)') + ' · ID <code>' + escapeHtml(g.id) + '</code>' + ((g.bots || []).length ? ' · lo ve ' + g.bots.map((b) => '@' + escapeHtml(b)).join(', ') : '') + ' <button class="btn btn-secondary btn-sm" style="padding:2px 8px" onclick="rbPlanPin(' + escapeHtml(JSON.stringify(d.name)).replace(/"/g, '&quot;') + ',\'' + escapeHtml(g.id) + '\')">Usar éste</button></div>').join('');
+        const inId = 'rbPinIn_' + n.replace(/\W/g, '') + '_' + i;
+        return '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--p-border,#ddd)"><b>' + (kindTxt[d.kind] || '') + ': ' + escapeHtml(d.name) + '</b><br>❌ ' + escapeHtml(d.why || '') + '<br>🛠️ ' + escapeHtml(d.fix || '') + cands +
+            (d.kind !== 'bot' ? '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><input id="' + inId + '" placeholder="ID del grupo (ej. -1001234567890)" style="flex:1;min-width:200px;padding:6px 8px;border-radius:8px;border:1px solid var(--p-border,#ccc);background:var(--p-card,#fff);color:inherit"><button class="btn btn-primary btn-sm" onclick="rbPlanPin(' + escapeHtml(JSON.stringify(d.name)).replace(/"/g, '&quot;') + ',document.getElementById(\'' + inId + '\').value)">📌 Fijar este ID</button></div>' : '') + '</div>';
+    }).join('') : '<div>Falta: ' + (x.missing || []).map(escapeHtml).join(' · ') + '</div>';
+    return box('var(--p-red,#d9001f)', '⚠️ <b>' + escapeHtml(n) + '</b> (configuración automática) — ' + (x.kept ? 'ya estaba encendida: <b>sigue andando como estaba</b>' : '<b>apagada hasta completar</b>') + '; se reintenta sola cada 5 min.' + items + wh);
+}
+async function rbPlanPin(name, id) {
+    id = String(id || '').trim(); if (!id) { showToast('Escribí el ID del grupo (empieza con -)', 'error'); return; }
+    const j = await _rbPost('/api/admin/rcptbot/plan-pin', { name, id }, null, true); if (!j) return;
+    showToast('✅ "' + escapeHtml(name) + '" ⇒ ' + escapeHtml(j.title || j.id) + '. Aplicando la configuración…', 'success'); setTimeout(() => { try { loadRcptBot(); } catch (_) {} }, 6000);
+}
+async function rbWelcome(si) { // #1106
+    const st = _rb && _rb.structs[si]; if (!st) return; if (!confirm('¿Mandar la bienvenida (presentación fijada + archivo + aviso de /anterior) a TODOS los grupos de "' + st.name + '"?')) return;
+    const j = await _rbPost('/api/admin/rcptbot/welcome', { id: st.id }, null, true); if (!j) return;
+    const bad = (j.sent || []).filter((x) => !x.ok); showToast(bad.length ? '⚠️ Enviada a ' + ((j.sent || []).length - bad.length) + '; falló en: ' + bad.map((x) => escapeHtml(x.group + ' (' + x.error + ')')).join(', ') : '📣 Bienvenida enviada a ' + (j.sent || []).length + ' grupos', bad.length ? 'error' : 'success');
+}
 async function _rbPost(url, body, okMsg, noReload) {
     try { const r = await _rbFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok || j.success === false) { showToast(escapeHtml(j.error || 'Error'), 'error'); return null; } if (okMsg) showToast(okMsg, 'success'); if (!noReload) loadRcptBot(); return j; } catch (_) { showToast('Error de conexión', 'error'); return null; }
 }

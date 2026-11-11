@@ -2045,6 +2045,7 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
 - **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
 - **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
+- **Bot de comprobantes #1106:** bienvenida por grupo = `_rbWelcome` (fijada → archivo → /anterior), `_rbWelcomeStruct` (cada grupo una vez); textos en `src/utils/rcptbotGuides.js` (el del grupo 1 NO dice adónde va). Plan: `_rbPlanGroup` (diagnóstico) + `pins` (ID a mano, `/api/admin/rcptbot/plan-pin`).
 - **Bot de comprobantes #1104 (grupo de FICHAS):** `struct.fichasDests` ⇒ sin cierres salvo el de MES; `RcptClose.status` 'fichas' → 'fichasdone' al completar; arrastre en `Config['rcptbotfichas']` (escribir por campo).
 - **Bot de comprobantes #1103:** lo automático de una vez por período usa `_rbFlag` (Config['rcptbotflags']), NUNCA `_rbOnce` (lista de 500 mensajes, se cae).
 - **Bot de comprobantes #1101:** el GRUPO 2 es UNA cuenta (sin nombres de equipos: `_rbDstOpenAll`, `_rbDstPendLine`, `_rbDstCloseMsg`; cierres automáticos por

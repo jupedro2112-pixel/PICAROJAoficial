@@ -82,7 +82,7 @@ const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : 
   _tgArtHour: (d = new FakeDate()) => Number(new RealDate(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24,
   _sha: (v) => crypto.createHash('sha256').update(String(v)).digest('hex'), _pinLocked: () => false, _pinCheck: () => {},
   process: { env: {} }, setTimeout: () => 0, setInterval: () => 0, Date: FakeDate, Math, JSON, Object, Array, String, Number, Buffer, Set, Map, Promise, RegExp, Error, console };
-vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg; this._rbMonthCloseTick = _rbMonthCloseTick;', ctx);
+vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg; this._rbMonthCloseTick = _rbMonthCloseTick; this._rbWelcomeStruct = _rbWelcomeStruct; this._rbPlanGroup = _rbPlanGroup; this._rbPlanRun = _rbPlanRun; this.RB_PLAN = RB_PLAN;', ctx);
 // --- armado: 1 estructura, bot 111, grupo 1 (-1) manda; ,99 → -2 ; todo lo demás → -3 ---
 cfgDocs.push({ key: 'rcptbot', value: { bots: [{ id: '111', username: 'b111', tokenEnc: '111:TOKEN', secret: 'S' }], groups: [{ id: '-1', title: 'buffalobot', bots: ['111'] }, { id: '-2', title: 'asuncionbot', bots: ['111'] }, { id: '-3', title: 'fichasnuevobot', bots: ['111'] }],
   autoClose13: true, // #1089: el cierre de las 13 h sólo con este tilde (default apagado)
@@ -337,7 +337,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await hook(text(131, -2, '/guia')); const g2 = sent.filter((x) => x.method === 'sendMedia:document').slice(-1)[0]; assert.ok(g2 && g2.p.chat_id === '-2' && /RECIBEN/.test(g2.p.caption));
     const G = require(require('path').join(__dirname, '..', 'src/utils/rcptbotGuides'));
     const a = G.src({ group: 'G1', rules: [{ cents: '82', to: 'G2' }] }); const b = G.dst({ group: 'G2', sources: ['G1'] });
-    assert.ok(/termina en ,82  →  G2/.test(a) && /\/cierre 500\.000/.test(a) && /\/nuevocbu/.test(b) && /\/parar/.test(b) && /\/cotizado/.test(b));
+    assert.ok(!/→  G2/.test(a) && /CORREGIR UN MONTO/.test(a) && /\/cierre 500\.000/.test(a) && /\/nuevocbu/.test(b) && /\/parar/.test(b) && /\/cotizado/.test(b));
   });
   await caso('#1087 grupo que pasa a SUPERGRUPO (cambia de ID): estructura, lista y sumas abiertas pasan al ID nuevo', async () => {
     const refs = (id) => JSON.stringify(cfgDocs[0].value.structs).split('"' + id + '"').length - 1;
@@ -363,6 +363,54 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.strictEqual(cl[0].status, 'fichasdone');
     aiAmount = 4000.43; await hook(photo(404)); let c2 = last(-1009).p.caption || last(-1009).p.text; assert.ok(/falta \$5\.99/.test(c2), c2);
     aiAmount = 6000.43; await hook(photo(405)); c2 = last(-1009).p.caption || last(-1009).p.text; assert.ok(/pendiente cubierto/.test(c2), c2);
+  });
+  await caso('#1101 Cotizaciones: el grupo 1 cotiza y manda su foto APARTE; no toca el estado del grupo 2', async () => {
+    const st = cfgDocs[0].value.structs[0]; st.routes = [{ from: '-1', rules: [{ cents: '79', to: '-3' }], otherTo: null }]; st.fichasDests = []; st.srcQuote = true; st.monthlyClose = false; await ctx._rbCfg(true);
+    for (const x of RcptFwd.rows) if (x.status === 'open') x.status = 'closed';
+    NOW = new Date('2027-01-05T15:00:00Z'); aiAmount = 115000.79; await hook(photo(900)); aiAmount = 230000.79; await hook(photo(901));
+    await hook(text(902, -1, '/cierre')); const btn = last(-1).p.reply_markup && JSON.stringify(last(-1).p.reply_markup); if (/rbc/.test(btn || '')) { const d = last(-1).p.reply_markup.inline_keyboard[0][0].callback_data; await cbIn(-1, d); }
+    const cl = RcptClose.rows[RcptClose.rows.length - 1]; assert.ok(cl.srcStatus === 'pending' && cl.status === 'pending' && Math.abs(cl.total - 345001.58) < 0.01, JSON.stringify(cl));
+    await cbIn(-1, 'rbm:squote'); const ask = last(-1).p.text; assert.ok(/EQUIPO · COTIZAR/.test(ask) && /\$345\.002/.test(ask), ask);
+    const rq = (id, t, extra) => hook({ message: Object.assign({ message_id: id, chat: { id: -1, type: 'supergroup', title: 'buffalobot' }, from: { first_name: 'Ana' }, text: t, reply_to_message: { message_id: 5, from: { is_bot: true }, text: extra } }) });
+    await rq(903, '1150 0', ask); const q = last(-1).p.text; assert.ok(/COTIZADO/.test(q) && /A ENVIAR: 300,00 USDT/.test(q), q);
+    assert.ok(cl.srcStatus === 'quoted' && cl.status === 'pending', 'el grupo 2 sigue pendiente a cotizar');
+    await cbIn(-1, 'rbm:ssent'); const ask2 = last(-1).p.text; assert.ok(/EQUIPO · ENVIADO/.test(ask2), ask2);
+    const nFwd = RcptFwd.rows.length; await hook({ message: { message_id: 904, chat: { id: -1, type: 'supergroup', title: 'buffalobot' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'usdt' }], reply_to_message: { message_id: 6, from: { is_bot: true }, text: ask2 } } });
+    assert.strictEqual(RcptFwd.rows.length, nFwd, 'la foto de USDT NO se toma como comprobante'); assert.ok(cl.srcStatus === 'sent' && cl.status === 'pending', JSON.stringify(cl));
+    assert.ok(/VERIFICADO ENVIADO/.test(last(-1).p.text), last(-1).p.text); st.srcQuote = false; await ctx._rbCfg(true);
+  });
+  await caso('#1106 bienvenida: en cada grupo presentación FIJADA → archivo → aviso de /anterior; una sola vez sin forzar', async () => {
+    const c = await ctx._rbCfg(true); const st = c.structs[0]; const n0 = sent.length;
+    const out = await ctx._rbWelcomeStruct(c, st, false); const chats = [...new Set(out.map((x) => x.group))]; assert.ok(out.length >= 2 && out.every((x) => x.ok), JSON.stringify(out));
+    for (const r of c.routes.filter((x) => x.structId === st.id)) {
+      const seq = sent.slice(n0).filter((x) => String(x.p.chat_id) === String(r.from)).map((x) => x.method + ':' + String(x.p.text || x.p.caption || '').slice(0, 25));
+      assert.ok(/^sendMessage:👋 <b>BIENVENIDOS/.test(seq[0]) && /^pinChatMessage/.test(seq[1]) && /^sendMedia:document/.test(seq[2]) && /^sendMessage:📥 <b>La suma arranca/.test(seq[3]), JSON.stringify(seq));
+      const w = sent.slice(n0).find((x) => String(x.p.chat_id) === String(r.from) && /BIENVENIDOS/.test(x.p.text || '')).p.text; assert.ok(!/asuncionbot|fichasnuevobot|→/.test(w), 'el grupo 1 no dice adónde va: ' + w);
+    }
+    const n1 = sent.length; await ctx._rbWelcomeStruct(c, st, false); assert.strictEqual(sent.length, n1, 'sin forzar no se repite');
+    await ctx._rbWelcomeStruct(c, st, true); assert.ok(sent.length > n1, 'forzado (botón del panel) sí');
+  });
+  await caso('#1106 diagnóstico del plan: no existe / bot que no está / parecidos / ID fijado', async () => {
+    const c = { bots: [{ id: '1', username: 'b1' }, { id: '2', username: 'b2' }], groups: [{ id: '-10', title: 'BAJADAS JOKER', bots: ['2'] }, { id: '-11', title: 'BAJADAS S1', bots: ['1'] }, { id: '-12', title: 'BAJADAS S1 viejo', bots: ['1'] }, { id: '-13', title: 'x BAJADAS S1', bots: ['1'] }] };
+    let d = ctx._rbPlanGroup(c, 'BAJADAS PORTO', '1', 'b1', {}, 'src'); assert.ok(!d.g && /Ningún bot vio/.test(d.why) && /ADMINISTRADOR/.test(d.fix) && /ID/.test(d.fix), JSON.stringify(d));
+    d = ctx._rbPlanGroup(c, 'BAJADAS JOKER', '1', 'b1', {}, 'src'); assert.ok(!d.g && /@b1 no está/.test(d.why) && d.cands[0].id === '-10', JSON.stringify(d));
+    d = ctx._rbPlanGroup(c, 'BAJADAS S1', '1', 'b1', {}, 'src'); assert.strictEqual(d.g && d.g.id, '-11', 'el nombre exacto gana');
+    d = ctx._rbPlanGroup(c, 'S1', '1', 'b1', {}, 'dst'); assert.ok(!d.g && /3 grupos con nombre parecido/.test(d.why) && d.cands.length === 3, JSON.stringify(d));
+    d = ctx._rbPlanGroup(c, 'S1', '1', 'b1', { s1: '-13' }, 'dst'); assert.strictEqual(d.g && d.g.id, '-13', 'ID fijado a mano');
+  });
+  await caso('#1106 plan: con los nombres reales arma Sector 1 encendida (BAJADAS S1 → ,33) y explica qué falta en las demás', async () => {
+    const rc = cfgDocs[0].value; const keepG = JSON.stringify(rc.groups), keepS = JSON.stringify(rc.structs), keepB = JSON.stringify(rc.bots);
+    rc.bots.push({ id: '777', username: 'Sectorunobot', tokenEnc: '777:TOKEN', secret: 'S7' });
+    rc.groups.push({ id: '-700', title: 'BAJADAS S1', bots: ['777'] }, { id: '-701', title: 'S1 Racafu ,33', bots: ['777'] });
+    await ctx._rbCfg(true); const n0 = sent.length; await ctx._rbPlanRun();
+    const st = rc.structs.find((x) => x.name === 'Sector 1'); assert.ok(st && st.on && st.botId === '777' && st.dailyClose === 'weekdays', JSON.stringify(st));
+    assert.strictEqual(JSON.stringify(st.routes.map((r) => [r.from, r.rules])), JSON.stringify([['-700', [{ cents: '33', to: '-701' }]]]));
+    const rep = cfgDocs.find((d) => d.key === 'rcptbotplan').value; assert.ok(rep.applied['Sector 1'] === ctx.RB_PLAN.v && rep.report['Sector 1'].ok, JSON.stringify(rep.report['Sector 1']));
+    const f = rep.report.Fichas; assert.ok(f && !f.ok && f.detail.some((d) => d.kind === 'bot' && /fichasnuevobot/.test(d.why)), JSON.stringify(f));
+    assert.ok(!rc.structs.find((x) => x.name === 'Fichas' && x.on), 'lo incompleto queda apagado');
+    assert.ok(sent.slice(n0).some((x) => String(x.p.chat_id) === '-700' && /BIENVENIDOS/.test(x.p.text || '')) && sent.slice(n0).some((x) => String(x.p.chat_id) === '-701' && /BIENVENIDOS/.test(x.p.text || '')), 'bienvenida en los 2 grupos');
+    aiAmount = 20000.33; await hook(Object.assign(photo(800, -700), {})); // un comprobante real llega a S1 Racafu
+    rc.groups = JSON.parse(keepG); rc.structs = JSON.parse(keepS); rc.bots = JSON.parse(keepB); await ctx._rbCfg(true);
   });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
