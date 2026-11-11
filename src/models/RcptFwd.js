@@ -51,6 +51,8 @@ const rcptCloseSchema = new mongoose.Schema({
   by: { type: String, default: '' },
   // #1079: cada cierre (13 h) queda PENDIENTE A COTIZAR hasta que en el panel le ponen la cotización
   status: { type: String, default: 'pending', index: true }, // pending (a cotizar) | quoted (/cotizado en el destino) | sent (/enviado: ya no está pendiente)
+  // #1104 grupo de FICHAS (fichasDests): 'fichas' (cierre de mes esperando que el agente complete las fichas del mes anterior) | 'fichasdone'
+  fichas: { type: Number, default: null }, fichasDiff: { type: Number, default: null }, fichasCarryIn: { type: Number, default: null }, fichasMonth: { type: String, default: '' },
   sentBy: { type: String, default: '' },
   sentAt: { type: Date, default: null },
   quoteRate: { type: Number, default: null },

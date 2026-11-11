@@ -12,6 +12,7 @@ function match(doc, f) {
     if (c && typeof c === 'object' && !(c instanceof Date) && !Array.isArray(c)) {
       if ('$ne' in c) { if (Array.isArray(v) ? v.includes(c.$ne) : v === c.$ne) return false; }
       if ('$in' in c) { if (!c.$in.includes(v)) return false; }
+      if ('$nin' in c) { if (c.$nin.includes(v)) return false; }
       if ('$gte' in c) { if (!(v >= c.$gte)) return false; }
       continue;
     }
@@ -40,7 +41,7 @@ function model() {
     find: (f) => { const r = rows.filter((x) => match(x, f || {})); const q = { sort: () => q, limit: (n) => { q._n = n; return q; }, select: () => q, lean: async () => r.slice(0, q._n || r.length) }; return q; },
     findOneAndUpdate: async (f, u) => { const x = rows.find((y) => match(y, f)); if (!x) return null; Object.assign(x, u.$set); return x; },
     updateOne: async (f, u) => { const x = rows.find((y) => match(y, f)); if (x) Object.assign(x, u.$set); return { matchedCount: x ? 1 : 0 }; },
-    updateMany: async (f, u) => { for (const x of rows.filter((y) => match(y, f))) Object.assign(x, u.$set); return {}; },
+    updateMany: async (f, u) => { const r = rows.filter((y) => match(y, f)); for (const x of r) Object.assign(x, u.$set); return { modifiedCount: r.length, matchedCount: r.length }; },
     countDocuments: async (f) => rows.filter((x) => match(x, f)).length,
     aggregate: async (pipe) => { const m = rows.filter((x) => match(x, pipe[0].$match)); const g = pipe[1].$group; const by = {};
       for (const x of m) { const k = g._id === null ? 'null' : x[g._id.slice(1)]; const o = by[k] = by[k] || { _id: g._id === null ? null : k, total: 0, count: 0, first: null, toTitle: null };
@@ -81,7 +82,7 @@ const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : 
   _tgArtHour: (d = new FakeDate()) => Number(new RealDate(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24,
   _sha: (v) => crypto.createHash('sha256').update(String(v)).digest('hex'), _pinLocked: () => false, _pinCheck: () => {},
   process: { env: {} }, setTimeout: () => 0, setInterval: () => 0, Date: FakeDate, Math, JSON, Object, Array, String, Number, Buffer, Set, Map, Promise, RegExp, Error, console };
-vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg;', ctx);
+vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg; this._rbMonthCloseTick = _rbMonthCloseTick;', ctx);
 // --- armado: 1 estructura, bot 111, grupo 1 (-1) manda; ,99 → -2 ; todo lo demás → -3 ---
 cfgDocs.push({ key: 'rcptbot', value: { bots: [{ id: '111', username: 'b111', tokenEnc: '111:TOKEN', secret: 'S' }], groups: [{ id: '-1', title: 'buffalobot', bots: ['111'] }, { id: '-2', title: 'asuncionbot', bots: ['111'] }, { id: '-3', title: 'fichasnuevobot', bots: ['111'] }],
   autoClose13: true, // #1089: el cierre de las 13 h sólo con este tilde (default apagado)
@@ -337,6 +338,21 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.strictEqual(RcptFwd.rows.filter((x) => x.toChat === '-1009' && x.status === 'open').length, open2);
     await hook({ message: { message_id: 2, chat: { id: -2, type: 'group', title: 'asuncionbot' }, from: { first_name: 'Ana' }, migrate_to_chat_id: -1009 } }); // el aviso del grupo viejo no lo hace dos veces
     assert.strictEqual(cfgDocs[0].value.groups.filter((g) => g.id === '-1009').length, 1);
+  });
+  await caso('#1104 grupo de FICHAS: sin cierres en el mes; día 1 cierra, /fichas resta y la diferencia arranca la cuenta nueva', async () => {
+    const st = cfgDocs[0].value.structs[0]; st.routes = [{ from: '-1', rules: [{ cents: '43', to: '-1009' }], otherTo: null }]; st.fichasDests = ['-1009']; st.monthlyClose = true; await ctx._rbCfg(true);
+    for (const x of RcptFwd.rows) if (x.toChat === '-1009' && x.status === 'open') x.status = 'closed';
+    NOW = new Date('2026-12-15T15:00:00Z'); aiAmount = 100000.43; await hook(photo(400)); aiAmount = 50000.43; await hook(photo(401));
+    const cap = (last(-1009).p.caption || last(-1009).p.text || ''); assert.ok(/Suma del mes: <b>\$150\.001<\/b>/.test(cap) && !/COTIZAR/.test(cap), cap);
+    const n0 = RcptClose.rows.length; NOW = new Date('2026-12-16T16:05:00Z'); await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, n0, 'sin cierre de 13 h ' + JSON.stringify(RcptClose.rows.slice(n0)));
+    await hook(text(402, -1, '/cierre')); assert.strictEqual(RcptClose.rows.length, n0, 'sin cierre a mano');
+    NOW = new Date('2027-01-01T03:05:00Z'); await ctx._rbMonthCloseTick(); const cl = RcptClose.rows.slice(n0).filter((x) => x.toChat === '-1009');
+    assert.ok(cl.length === 1 && cl[0].status === 'fichas' && cl[0].fichasMonth === 'diciembre 2026', JSON.stringify(cl));
+    assert.ok(sent.some((x) => String(x.p.chat_id) === '-1009' && /CIERRE DE DICIEMBRE 2026/.test(x.p.text || '')), 'mensaje de cierre');
+    await hook(text(403, -1009, '/fichas 160.000')); const t = last(-1009).p.text; assert.ok(/FICHAS DICIEMBRE 2026 · COMPLETADO/.test(t) && /Diferencia: <b>−\$9\.999/.test(t) && /arranca en/.test(t), t);
+    assert.strictEqual(cl[0].status, 'fichasdone');
+    aiAmount = 4000.43; await hook(photo(404)); let c2 = last(-1009).p.caption || last(-1009).p.text; assert.ok(/falta \$5\.99/.test(c2), c2);
+    aiAmount = 6000.43; await hook(photo(405)); c2 = last(-1009).p.caption || last(-1009).p.text; assert.ok(/pendiente cubierto/.test(c2), c2);
   });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });

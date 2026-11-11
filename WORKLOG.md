@@ -29,6 +29,16 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1104. Bot de comprobantes: GRUPO DE FICHAS (Pagos Hammy y Fabri ,43) (2026-11-11) — panel v301
+- **Owner:** "el grupo ,43 no tiene cierres, sólo suma todo el mes las fichas; el día 1 se hace cierre y el agente completa 'fichas mes anterior', ingresa el
+  monto y con lo que ya sumó el mes lo resta; si quedó negativo o positivo queda pendiente y la suma empieza con ese pendiente hasta dejarlo en 0; dejamos
+  detalle con el mes y el monto completado".
+- Estructura con `fichasDests` (panel: tildes "🎰 Grupos de FICHAS"; plan: Fichas ⇒ 'Pagos Hammy y Fabri ,43'). Esos grupos NO entran en /cierre, cierre parcial ni
+  13 h (`_rbClose` los excluye salvo `opts.monthly`); el día 1 el cierre de mes los deja `status:'fichas'` (`fichasMonth`) con botón 🎰 (`rbf:ask` ⇒ force_reply
+  `_RB_F_MARK`) o `/fichas <monto>` ⇒ `_rbFichasApply`: diferencia = pendiente anterior + suma − fichas ⇒ `Config['rcptbotfichas'][grupo].carry` (por campo),
+  cierre `fichasdone` y mensaje FIJADO "📌 FICHAS <MES> · COMPLETADO". Caption / Ver suma del grupo: suma del mes + pendiente (`_rbFichasTxt`: "falta $X" / "cubierto").
+- Test nuevo en test-rcptbot-flow (37 OK).
+
 ### 1103. Repaso antes de subir (2026-11-11)
 - **Owner:** "repasamos todo por las dudas".
 - Plan de estructuras con candado (`_cronClaim('rbplan')`: dos instancias a la vez podían duplicar la estructura) y una estructura YA encendida no se apaga

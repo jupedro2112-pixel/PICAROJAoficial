@@ -32050,6 +32050,41 @@ async function _rbPendTxt(fromChat, toChat, structId, exceptId) {
 }
 // #1101 (owner: "el grupo 2 recibe de diferentes grupos pero suma 1 cuenta; cuando cotiza, cotiza el total de todos; no tiene que saber que son muchos"):
 // en el grupo 2 todo va como UNA cuenta: suma abierta y pendientes de TODO lo que llega a ese grupo, sin nombres de equipos.
+// #1104 GRUPO DE FICHAS (owner: "el grupo ,43 no tiene cierres: suma todo el mes las fichas; el día 1 se cierra y el agente completa 'fichas mes anterior';
+// con lo sumado lo resta; si queda negativo o positivo queda pendiente y la suma empieza con ese pendiente hasta dejarlo en 0; dejamos el detalle con el mes y
+// el monto completado"). Estructura con `fichasDests` (ids de grupos que reciben): sin cierres a mano ni de 13 h (sólo el de MES), sin cotizar.
+// Arrastre en Config['rcptbotfichas'].value[<grupo>] = { carry, month, at, by } (escrito POR CAMPO).
+const _rbMoneyS = (n) => (Number(n) < 0 ? '−' + _rbMoney(-Number(n)) : _rbMoney(n)); // #1104: negativo legible (−$9.999)
+function _rbIsFichas(c, toChat) { return (c.structs || []).some((st) => st && st.on && (st.fichasDests || []).map(String).includes(String(toChat))); }
+async function _rbFichasState(toChat) { const d = ((await Config.collection.findOne({ key: 'rcptbotfichas' })) || {}).value || {}; return d[String(toChat)] || { carry: 0 }; }
+async function _rbFichasTxt(toChat) {
+  const o = await _rbDstOpenAll(toChat); const st = await _rbFichasState(toChat); const carry = Math.round((Number(st.carry) || 0) * 100) / 100;
+  const wait = await _rbM().RcptClose.countDocuments({ toChat: String(toChat), status: 'fichas' });
+  let t = `📅 Suma del mes: <b>${_rbMoney(o.total)}</b> (${o.count})`;
+  if (carry) { const tot = carry + o.total; t += `\n↪️ Pendiente ${_rbH(st.month || 'anterior')}: <b>${_rbMoneyS(carry)}</b> · Total: <b>${_rbMoneyS(tot)}</b>` + (carry < 0 ? (tot >= 0 ? ' ✅ pendiente cubierto' : ` · falta ${_rbMoney(-tot)} para llegar a 0`) : ''); }
+  if (wait) t += '\n⏳ Falta completar las <b>FICHAS DEL MES ANTERIOR</b> (botón 🎰 o /fichas monto).';
+  return t;
+}
+const _RB_F_MARK = '🎰 FICHAS DEL MES ANTERIOR';
+async function _rbFichasAsk(c, toChat, botId) {
+  const list = await _rbM().RcptClose.find({ toChat: String(toChat), status: 'fichas' }).lean(); if (!list.length) return false;
+  const sum = list.reduce((a, x) => a + (Number(x.total) || 0), 0); const st = await _rbFichasState(toChat); const carry = Number(st.carry) || 0; const mes = list[0].fichasMonth || 'el mes anterior';
+  await _rbSend(c, toChat, `${_RB_F_MARK} · ${_rbH(mes)}\nSuma del mes: <b>${_rbMoney(sum)}</b>${carry ? ` · pendiente anterior ${_rbMoneyS(carry)} ⇒ total <b>${_rbMoneyS(carry + sum)}</b>` : ''}\n<b>Respondé este mensaje con el monto de FICHAS</b> de ${_rbH(mes)} (ej. 12.500.000).`, botId, { reply_markup: { force_reply: true, input_field_placeholder: '12.500.000' } });
+  return true;
+}
+async function _rbFichasApply(c, toChat, fichas, by, botId, replyTo) {
+  const rt = replyTo ? { reply_to_message_id: replyTo, allow_sending_without_reply: true } : {};
+  const list = await _rbM().RcptClose.find({ toChat: String(toChat), status: 'fichas' }).sort({ createdAt: 1 }).lean();
+  if (!list.length) { await _rbSend(c, toChat, 'No hay ningún mes esperando las fichas.', botId, rt); return; }
+  const st = await _rbFichasState(toChat); const carryIn = Math.round((Number(st.carry) || 0) * 100) / 100;
+  const sum = Math.round(list.reduce((a, x) => a + (Number(x.total) || 0), 0) * 100) / 100; const tot = Math.round((carryIn + sum) * 100) / 100;
+  const diff = Math.round((tot - fichas) * 100) / 100; const mes = list[0].fichasMonth || 'mes anterior';
+  const u = await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) }, status: 'fichas' }, { $set: { status: 'fichasdone', fichas, fichasDiff: diff, fichasCarryIn: carryIn, sentBy: String(by || '').slice(0, 60), sentAt: new Date() } });
+  if (!u.modifiedCount) return; // otro lo completó al mismo tiempo
+  await Config.collection.updateOne({ key: 'rcptbotfichas' }, { $set: { ['value.' + String(toChat)]: { carry: diff, month: mes, at: new Date(), by: String(by || '').slice(0, 60), fichas, sum, carryIn } } }, { upsert: true });
+  const r = await _rbSend(c, toChat, `📌 <b>FICHAS ${_rbH(String(mes).toUpperCase())} · COMPLETADO</b>${by ? ' · ' + _rbH(by) : ''}\n🎰 Fichas: <b>${_rbMoney(fichas)}</b>\n💰 Suma del mes: <b>${_rbMoney(sum)}</b>${carryIn ? ` + pendiente anterior ${_rbMoneyS(carryIn)} = <b>${_rbMoneyS(tot)}</b>` : ''}\n➖ Diferencia: <b>${_rbMoneyS(diff)}</b>${diff === 0 ? ' ✅ en 0' : diff < 0 ? ' (queda PENDIENTE: lo que entra lo va cubriendo hasta 0)' : ' (queda A FAVOR)'}\n🆕 La cuenta nueva arranca en <b>${_rbMoneyS(diff)}</b>.`, botId, rt);
+  await _rbPin(c, toChat, botId, r);
+}
 async function _rbDstOpenAll(toChat, structIds) {
   const q = { toChat: String(toChat), status: 'open' }; if (structIds && structIds.length) q.structId = { $in: structIds };
   const a = await _rbM().RcptFwd.aggregate([{ $match: q }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
@@ -32153,6 +32188,7 @@ async function _rbSrcTotalTxt(c, route) {
 }
 async function _rbDstTotalTxt(c, toChat, routes) { // #1101: una sola cuenta (sin separar por equipos)
   const sids = [...new Set(routes.map((r) => r.structId))]; const o = await _rbDstOpenAll(toChat, sids); const pl = await _rbDstPendLine(toChat, sids);
+  if (_rbIsFichas(c, toChat)) return `📊 <b>SUMA ACTUALIZADA</b> · ${_rbH(_rbTitle(c, toChat))}\n` + await _rbFichasTxt(toChat); // #1104
   return `📊 <b>SUMA ACTUALIZADA</b> · ${_rbH(_rbTitle(c, toChat))}\nDesde el último cierre: <b>${_rbMoney(o.total)}</b> (${o.count})` + (pl || '\n✅ Sin cierres pendientes.');
 }
 async function _rbSendHelp(c, route, pin) {
@@ -32196,10 +32232,10 @@ async function _rbRoute(c, rec, amount, from, opts = {}) {
   if (!dst) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply('⚠️ Ningún bot cargado está en ' + _rbH(toTitle) + ': agregalo a ese grupo. No se reenvió.'); return; }
   const set = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: 'hold' }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });
   if (!set) return; // ya se reenvió (otra instancia / otro bot)
-  const s = await _rbDstOpenAll(to); const pend = await _rbDstPendLine(to); // #1101: una sola cuenta en el grupo 2
+  const fz = _rbIsFichas(c, to); const s = await _rbDstOpenAll(to); const pend = fz ? '\n' + await _rbFichasTxt(to) : await _rbDstPendLine(to); // #1101: una sola cuenta · #1104: grupo de fichas
   const wrong = opts.forceTo && _rbPickTo(route, amount) !== to; // eligieron el grupo a mano: los centavos no coincidían
   const warnTxt = wrong ? `\n⚠️ <b>El cliente se equivocó con el decimal</b> (terminó en ,${_rbCents(amount)}), pero va a este grupo.` : '';
-  const cap = `🧾 <b>${_rbMoney2(amount)}</b>${warnTxt}${opts.movedFrom ? '\n↪️ Movido desde ' + _rbH(opts.movedFrom) : ''}\n${_rbSumTxt(s)}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '');
+  const cap = fz ? `🧾 <b>${_rbMoney2(amount)}</b>${warnTxt}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '') : `🧾 <b>${_rbMoney2(amount)}</b>${warnTxt}${opts.movedFrom ? '\n↪️ Movido desde ' + _rbH(opts.movedFrom) : ''}\n${_rbSumTxt(s)}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '');
   let cp;
   if (dst.id === String(rec.srcBot)) cp = await tgChannel.call(dst.token, 'copyMessage', { chat_id: to, from_chat_id: rec.fromChat, message_id: rec.srcMsgId, caption: cap, parse_mode: 'HTML', reply_markup: _rbKb() });
   else { // otro bot: se baja con el que lo recibió y lo sube el del destino
@@ -32251,7 +32287,13 @@ async function _rbOnReceipt(c, bot, m, file, route) {
 // #1079-j (owner: "en el grupo 1 una barra /cierre para que sume de 0, pero que se anote qué monto se cierra, el total o el que sea; si es menor queda
 // pendiente en la suma el restante"). opts.to + opts.amount = cierre PARCIAL de un destino: se cierran sus comprobantes, el cierre lleva SÓLO ese monto y el
 // resto vuelve a la suma como un registro 'resto' (abierto, entra en el próximo cierre; no cuenta otra vez en el total del mes).
+function _rbPrevMonthLabel(d) { const a = new Date(new Date(d).getTime() - 3 * 3600000 - 12 * 3600000); return _RB_MES[a.getUTCMonth()] + ' ' + a.getUTCFullYear(); } // #1104: el día 1 ⇒ el mes que terminó
 async function _rbDstCloseMsg(c, toChat, g) { // #1101: cierre en el grupo 2 como UNA cuenta
+  if (g.fichas) { // #1104: grupo de FICHAS ⇒ cierre del mes y botón para completar las fichas
+    const st = await _rbFichasState(toChat); const carry = Number(st.carry) || 0; const mes = _rbPrevMonthLabel(new Date());
+    await _rbSend(c, toChat, `🔒 <b>CIERRE DE ${_rbH(mes.toUpperCase())}</b>${g.struct ? ' · ' + _rbH(g.struct) : ''}\nSuma del mes: <b>${_rbMoney2(g.total)}</b> (${g.count} comprobante${g.count === 1 ? '' : 's'})${carry ? `\nPendiente anterior: ${_rbMoneyS(carry)} ⇒ total <b>${_rbMoneyS(carry + g.total)}</b>` : ''}\n👉 Completá las <b>FICHAS DE ${_rbH(mes.toUpperCase())}</b>: tocá el botón y escribí el monto. El bot resta y deja la diferencia pendiente.\n🆕 La suma nueva ya empezó.`, g.bot, { reply_markup: { inline_keyboard: [[{ text: '🎰 Completar fichas del mes anterior', callback_data: 'rbf:ask' }]] } });
+    return;
+  }
   const now = new Date(); const p = await _rbPendSum({ toChat: String(toChat), status: { $in: ['pending', 'quoted'] } });
   await _rbSend(c, toChat, `🔒 <b>CIERRE ${_rbDT(now)}</b>${g.struct ? ' · ' + _rbH(g.struct) : ''}\nCerrado: <b>${_rbMoney2(g.total)}</b> (${g.count} comprobante${g.count === 1 ? '' : 's'})${g.extra ? ' · ' + g.extra : ''}\n⏳ <b>PENDIENTE A COTIZAR: ${_rbMoney(p.pending.total)}</b>` + (p.quoted.n ? `\n📤 Pendiente a enviar: <b>${_rbMoney(p.quoted.total)}</b>` : '') + `\n${g.newSum || '🆕 Suma nueva: <b>$0</b>'}\n\nCuando esté cotizado: /cotizado · cuando se envíe: /enviado`, g.bot, { reply_markup: _rbKb() });
 }
@@ -32263,7 +32305,9 @@ async function _rbCloseBatch(c, routes, by, before) { // #1101: cierres automát
 async function _rbClose(c, route, by, opts = {}) {
   const fromChat = String(route.from); const structId = route.structId || null; const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
   const srcQ = !!((c.structs || []).find((x) => x && x.id === structId) || {}).srcQuote; // #1101: cotización propia del grupo 1
-  const q = { fromChat, status: 'open' }; if (structId) q.structId = structId; if (opts.to) q.toChat = String(opts.to); if (opts.before) q.createdAt = { $lt: opts.before }; // #1095: cierre de mes ⇒ sólo lo del mes cerrado
+  const fichasSet = new Set((((c.structs || []).find((x) => x && x.id === structId) || {}).fichasDests || []).map(String)); // #1104
+  if (fichasSet.size && !opts.monthly) { if (opts.to && fichasSet.has(String(opts.to))) return { ok: false, why: 'ese grupo es de FICHAS: cierra sólo el día 1 del mes' }; }
+  const q = { fromChat, status: 'open' }; if (structId) q.structId = structId; if (opts.to) q.toChat = String(opts.to); else if (fichasSet.size && !opts.monthly) q.toChat = { $nin: [...fichasSet] }; if (opts.before) q.createdAt = { $lt: opts.before }; // #1095: cierre de mes ⇒ sólo lo del mes cerrado · #1104: el grupo de fichas sólo cierra el día 1
   let part = null, reqAmt = null;
   if (opts.amount != null) {
     const cur = await _rbOpenSum(fromChat, opts.to, structId); const a = Math.round(Number(opts.amount) * 100) / 100; const tot = Math.round(cur.total * 100) / 100;
@@ -32288,12 +32332,12 @@ async function _rbClose(c, route, by, opts = {}) {
       await _rbM().RcptFwd.create({ id: uuidv4(), fromChat, fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), srcMsgId: -(Math.floor(Math.random() * 1e12) + 1e6), structId, amount: part.rest, amountFrom: 'resto', sender: 'resto del cierre', status: 'open' });
       r.total = part.amount;
     }
-    await _rbM().RcptClose.create({ id: cid, batchId: closeId, fromChat, fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), structId, structName: route.structName || '', periodFrom: r.first, count: r.count, total: r.total, partialOf: part ? part.of : null, by: String(by || '').slice(0, 60), status: 'pending', srcStatus: srcQ ? 'pending' : null });
+    await _rbM().RcptClose.create({ id: cid, batchId: closeId, fromChat, fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), structId, structName: route.structName || '', periodFrom: r.first, count: r.count, total: r.total, partialOf: part ? part.of : null, by: String(by || '').slice(0, 60), status: fichasSet.has(String(r._id)) ? 'fichas' : 'pending', fichasMonth: fichasSet.has(String(r._id)) ? _rbPrevMonthLabel(now) : '', srcStatus: srcQ ? 'pending' : null });
     const det = `del ${_rbDT(r.first)} al ${_rbDT(now)} · ${r.count} comprobante${r.count === 1 ? '' : 's'}` + (part ? ` · cierre PARCIAL de ${_rbMoney2(part.of)}` : '');
     const newSum = part ? `🔁 Queda sumando el resto: <b>${_rbMoney2(part.rest)}</b>` : '🆕 Suma nueva: <b>$0</b>';
     // #1101: el grupo 2 ve UNA cuenta. Cierres automáticos de varios equipos (opts.collect) ⇒ un solo mensaje al final (_rbDstCloseMsg).
-    if (opts.collect) { const k = String(r._id); const g = opts.collect[k] || (opts.collect[k] = { total: 0, count: 0, bot: pre, struct: route.structName || '' }); g.total += Number(r.total) || 0; g.count += Number(r.count) || 0; }
-    else await _rbDstCloseMsg(c, String(r._id), { total: r.total, count: r.count, bot: pre, struct: route.structName || '', extra: part ? `cierre PARCIAL de ${_rbMoney2(part.of)}` : '', newSum });
+    if (opts.collect) { const k = String(r._id); const g = opts.collect[k] || (opts.collect[k] = { total: 0, count: 0, bot: pre, struct: route.structName || '', fichas: fichasSet.has(k) }); g.total += Number(r.total) || 0; g.count += Number(r.count) || 0; }
+    else await _rbDstCloseMsg(c, String(r._id), { fichas: fichasSet.has(String(r._id)), total: r.total, count: r.count, bot: pre, struct: route.structName || '', extra: part ? `cierre PARCIAL de ${_rbMoney2(part.of)}` : '', newSum });
     lines.push(`→ ${_rbH(r.toTitle)}: cerrado <b>${_rbMoney2(r.total)}</b> (${r.count} comp.)` + (part ? `\n🔁 Queda sumando: <b>${_rbMoney2(part.rest)}</b>` : '')); // #1089: el detalle (pendiente a cotizar, fechas) va sólo al grupo 2
   }
   await _rbSend(c, fromChat, `🔒 <b>CIERRE ${_rbDT(now)}</b>${route.structName ? ' · ' + _rbH(route.structName) : ''}\n${lines.join('\n')}\n${part ? '' : '🆕 Suma nueva: <b>$0</b>\n'}${_rbMonthTxt(await _rbMonthSum(fromChat, structId))}${srcQ ? await _rbSrcPendLine(fromChat, structId) : ''}`, pre, { reply_markup: srcQ ? _rbSrcKb(c, route) : _rbKb() });
@@ -32340,7 +32384,7 @@ setTimeout(() => { setInterval(() => { _rbDailyCloseTick().catch((e) => logger.w
 // estructura queda APAGADA con lo que se encontró y el panel muestra qué falta; se reintenta cada 5 min hasta encenderla. Lo ya aplicado no se pisa
 // (Config['rcptbotplan'].applied[nombre] = versión): si después la cambian a mano en el panel, queda como la dejaron. Sólo nombres de grupos (nada secreto).
 const RB_PLAN = { v: 1, structs: [
-  { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }],
+  { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, fichasDests: ['Pagos Hammy y Fabri ,43'], // #1104: ,43 = grupo de FICHAS termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }],
     senders: ['STOCK 1GIROX ICE', '1GIROX ANANA', '1GIROX BUFFALO', '1GIROX JOKER', '1GIROX GOLDEN', '1GIROX TOKIO', '1GIROX BOSTON', '1GIROX PARADISE', '1GIROX LAS VEGAS', '1GIROX SHANGAI', '1GIROX VIP PLATINIUM', '1GIROX ORO'],
     rules: [{ cents: '99', to: '4f RACAFU ,99' }, { cents: '43', to: 'Pagos Hammy y Fabri ,43' }] },
   { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [],
@@ -32376,9 +32420,10 @@ async function _rbPlanTick(force) {
     const bot = (c.bots || []).find((b) => String(b.username || '').toLowerCase() === p.bot.toLowerCase()); if (!bot) miss.push('bot @' + p.bot + ' (cargá su token en la estructura)');
     const botId = bot ? String(bot.id) : null;
     const rules = []; for (const r of p.rules) { const g = _rbFindGroup(c, r.to, botId); if (g) rules.push({ cents: r.cents, to: String(g.id) }); else miss.push('grupo que recibe "' + r.to + '"'); }
+    const fichasDests = []; for (const t of p.fichasDests || []) { const g = _rbFindGroup(c, t, botId); if (g) fichasDests.push(String(g.id)); else miss.push('grupo de fichas "' + t + '"'); } // #1104
     const routes = []; for (const t of p.senders) { const g = _rbFindGroup(c, t, botId); if (g) { if (!routes.some((x) => x.from === String(g.id))) routes.push({ from: String(g.id), rules: rules.map((x) => Object.assign({}, x)), otherTo: null }); } else miss.push('grupo que manda "' + t + '"'); }
     const cur = (c.structs || []).find((x) => _rbNorm(x.name) === _rbNorm(p.name));
-    const st = Object.assign({ id: uuidv4(), on: false }, cur || {}, { name: p.name, botId: botId || (cur && cur.botId) || null, routes, monthlyClose: !!p.monthlyClose, usdtCheck: !!p.usdtCheck, srcQuote: !!p.srcQuote, dailyClose: p.dailyClose || '', termHour: p.termHour, termNotices: p.termNotices.map((x) => Object.assign({}, x)) });
+    const st = Object.assign({ id: uuidv4(), on: false }, cur || {}, { name: p.name, botId: botId || (cur && cur.botId) || null, routes, monthlyClose: !!p.monthlyClose, usdtCheck: !!p.usdtCheck, srcQuote: !!p.srcQuote, fichasDests, dailyClose: p.dailyClose || '', termHour: p.termHour, termNotices: p.termNotices.map((x) => Object.assign({}, x)) });
     for (const o of (c.structs || []).filter((x) => x.on && x.id !== st.id)) for (const r of o.routes || []) if (routes.some((y) => y.from === String(r.from))) miss.push('"' + _rbTitle(c, r.from) + '" ya manda en la estructura "' + o.name + '" (encendida): apagala o sacale ese grupo');
     const ready = !miss.length && routes.length && rules.length && botId; const wasOn = !!(cur && cur.on);
     st.on = ready ? true : false;
@@ -32558,6 +32603,7 @@ async function _rbSrcTotalShort(c, route) {
 async function _rbDstTotalShort(c, toChat, routes) { // #1101: una sola cuenta
   const sids = [...new Set(routes.map((r) => r.structId))]; const o = await _rbDstOpenAll(toChat, sids);
   const p = await _rbPendSum({ toChat: String(toChat), status: { $in: ['pending', 'quoted'] }, structId: { $in: sids } });
+  if (_rbIsFichas(c, toChat)) return '📊 SUMA ACTUALIZADA\n' + String(await _rbFichasTxt(toChat)).replace(/<[^>]+>/g, ''); // #1104
   return '📊 SUMA ACTUALIZADA\nSuma: ' + _rbMoney(o.total) + ' (' + o.count + ')' + (p.pending.n ? '\n⏳ A cotizar: ' + _rbMoney(p.pending.total) : '') + (p.quoted.n ? '\n📤 A enviar: ' + _rbMoney(p.quoted.total) : '') + (!p.pending.n && !p.quoted.n ? '\n✅ Sin pendientes' : '');
 }
 function _rbCbuShort(c, routes) {
@@ -32837,7 +32883,7 @@ async function _rbMonthCloseTick() {
     const col = {}; // #1101: el grupo 2 recibe UN solo cierre
     for (const r of (c.routes || []).filter((x) => x.structId === st.id)) {
       try {
-        const cl = await _rbClose(c, r, 'cierre de mes automático', { before: m0, collect: col });
+        const cl = await _rbClose(c, r, 'cierre de mes automático', { before: m0, collect: col, monthly: true });
         const a = await _rbM().RcptFwd.aggregate([{ $match: { fromChat: String(r.from), structId: st.id, status: { $in: ['open', 'closed'] }, createdAt: { $gte: p0, $lt: m0 }, amountFrom: { $ne: 'resto' } } }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
         const t = a[0] || { total: 0, count: 0 };
         const sent = await _rbSend(c, String(r.from), `📌 <b>TOTAL DE ${mesTxt}</b>${st.name ? ' · ' + _rbH(st.name) : ''}\n💰 <b>${_rbMoney2(t.total)}</b> (${t.count} comprobante${t.count === 1 ? '' : 's'})${cl && cl.ok ? '' : '\n(no había nada abierto para cerrar)'}\n🆕 Desde hoy la suma empieza de <b>$0</b>.`, r.botId);
@@ -32891,6 +32937,15 @@ async function _rbOnMessage(c, bot, m) {
       if (!_rbFileOf(m)) { if (text && (await _rbOnce(fromChat, m.message_id))) await _rbSend(c, fromChat, 'Mandá la <b>FOTO</b> del envío de los USDT respondiendo el mensaje 📸 ENVIADO.', bot.id, { reply_to_message_id: m.message_id }); return; }
       if (await _rbOnce(fromChat, m.message_id)) await _rbSrcSentPhoto(c, route, m, by, bot.id); return; // nunca se toma como comprobante
     }
+  }
+  if (!route && dstR.length && _rbIsFichas(c, fromChat)) { // #1104: FICHAS del mes anterior (respuesta al botón o /fichas monto)
+    const fm = text.match(/^\/fichas(?:@\w+)?\s+(.+)$/i); const isRep = m.reply_to_message && m.reply_to_message.from && m.reply_to_message.from.is_bot && String(m.reply_to_message.text || '').startsWith(_RB_F_MARK);
+    if (fm || (isRep && text)) {
+      if (!(await _rbOnce(fromChat, m.message_id))) return; const n = _rbParseAmount(fm ? fm[1] : text, 1e11);
+      if (!(n >= 0) || n === null) { await _rbSend(c, fromChat, 'No entendí el monto. Ej.: <b>/fichas 12.500.000</b>', bot.id, { reply_to_message_id: m.message_id }); return; }
+      await _rbFichasApply(c, fromChat, n, by, bot.id, m.message_id); return;
+    }
+    if (/^\/fichas(@\w+)?$/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) { if (!(await _rbFichasAsk(c, fromChat, bot.id))) await _rbSend(c, fromChat, 'No hay ningún mes esperando las fichas.', bot.id); } return; }
   }
   if (!route && dstR.length && m.reply_to_message && m.reply_to_message.from && m.reply_to_message.from.is_bot) {
     const rtx = String(m.reply_to_message.text || ''); const sids = [...new Set(dstR.map((r) => r.structId))];
@@ -32955,6 +33010,7 @@ app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
     if (u.callback_query && u.callback_query.message && u.callback_query.message.chat) _rbGroupSeen(u.callback_query.message.chat, bot.id).catch(() => {}); // #1093
     if (u.callback_query && String(u.callback_query.data || '').startsWith('rbs:')) { await _rbSentOkCb(await _rbCfg(), bot, u.callback_query); return; } // #1099
     if (u.callback_query && String(u.callback_query.data || '').startsWith('rbt:')) { await _rbSrcSentOkCb(await _rbCfg(), bot, u.callback_query); return; } // #1101
+    if (u.callback_query && String(u.callback_query.data || '') === 'rbf:ask') { const cq = u.callback_query; const ch = cq.message && cq.message.chat ? String(cq.message.chat.id) : ''; await tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: cq.id }); if (ch && (await _rbOnce(ch, 'cb' + cq.id)) && !(await _rbFichasAsk(await _rbCfg(), ch, bot.id))) await _rbSend(await _rbCfg(), ch, 'No hay ningún mes esperando las fichas.', bot.id); return; } // #1104
     if (u.callback_query) { const cfg = await _rbCfg(); if (String(u.callback_query.data || '').startsWith('rbc:')) await _rbCbuCb(cfg, bot, u.callback_query); else if (String(u.callback_query.data || '').startsWith('rbm:')) await _rbMenuCb(cfg, bot, u.callback_query); else await _rbOnCallback(cfg, bot, u.callback_query); return; } // #1079-f/i
     const m = u.message; if (!m || !m.chat) return;
     if (m.migrate_to_chat_id) { await _rbGroupMigrate(m.chat.id, { id: m.migrate_to_chat_id, type: 'supergroup', title: m.chat.title }, bot.id); return; } // #1087
@@ -33008,7 +33064,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
         routes.push(Object.assign({}, r, { cbuItems, cbuStops, sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
-      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose, dailyClose: st.dailyClose || '', usdtCheck: !!st.usdtCheck, srcQuote: !!st.srcQuote }); // #1094 / #1095 / #1096 / #1099 / #1101
+      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose, dailyClose: st.dailyClose || '', usdtCheck: !!st.usdtCheck, srcQuote: !!st.srcQuote, fichasDests: st.fichasDests || [] }); // #1094 / #1095 / #1096 / #1099 / #1101 / #1104
     }
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
@@ -33108,6 +33164,7 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
     if (typeof b.monthlyClose === 'boolean') st.monthlyClose = b.monthlyClose; // #1095
     if (typeof b.usdtCheck === 'boolean') st.usdtCheck = b.usdtCheck; // #1099
     if (typeof b.srcQuote === 'boolean') st.srcQuote = b.srcQuote; // #1101
+    if (Array.isArray(b.fichasDests)) st.fichasDests = [...new Set(b.fichasDests.map(String).filter((x) => /^-?\d{3,20}$/.test(x)))].slice(0, 10); // #1104
     if (b.dailyClose != null) { const v = String(b.dailyClose); if (!['', 'all', 'weekdays', 'weekly'].includes(v)) return res.status(400).json({ error: 'Cierre de 13 h inválido' }); st.dailyClose = v; } // #1096
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
