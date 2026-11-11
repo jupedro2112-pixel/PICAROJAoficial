@@ -13887,6 +13887,33 @@ async function initializeData() {
     const r = await User.updateOne({ username: { $in: ['lalodj', 'lalodj499910', 'diego576413'] } }, { $set: { role: 'admin', isActive: true, isBlocked: false } }); // #476/#506: usuarios de prueba (sólo entorno de prueba)
     if (r && (r.modifiedCount || r.nModified)) console.log('✅ Usuario de prueba lalodj con acceso admin (#296)');
   } catch (e) { if (!e.skip) console.warn('[startup] tester lalodj:', e.message); }
+  // #1117 🚨 BLOQUEO DE EMERGENCIA DEL PANEL (owner 2026-11-11: "me entraron al panel, ¿cómo saco a toda la gente?"). Se activa FUERA del panel (variables
+  // de entorno de AWS, que el intruso no ve): STAFF_LOCKDOWN = un código nuevo cualquiera (cada código corre UNA vez). Hace: a TODO el staff le cierra
+  // las sesiones (tokenVersion+1); a todos MENOS a STAFF_LOCKDOWN_KEEP (el usuario del owner) los desactiva y les pone una clave al azar; las cuentas de
+  // prueba (lalodj…) pasan a 'user' desactivadas. Si viene STAFF_LOCKDOWN_PASS (10+ caracteres), es la clave nueva del owner. Si KEEP no existe o no es
+  // admin, sólo cierra sesiones (nadie queda afuera para siempre). Después, el owner reactiva a cada agente con clave nueva desde el panel.
+  try {
+    const lc = String(process.env.STAFF_LOCKDOWN || '').trim();
+    if (lc && (await getConfig('staffLockdownDone', null)) !== lc) {
+      const keep = String(process.env.STAFF_LOCKDOWN_KEEP || '').trim().toLowerCase(); const np = String(process.env.STAFF_LOCKDOWN_PASS || '');
+      const staff = await User.find({ $or: [{ role: { $in: ADMIN_ROLES } }, { username: { $in: ['lalodj', 'lalodj499910', 'diego576413'] } }] }).select('id username role').lean();
+      const owner = staff.find((u) => String(u.username).toLowerCase() === keep && u.role === 'admin');
+      const off = [];
+      for (const u of staff) {
+        if (owner && u.id === owner.id) {
+          const set = np.length >= 10 ? { password: await bcrypt.hash(np, 10), mustChangePassword: false } : {};
+          await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: set }); continue;
+        }
+        if (!owner) { await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 } }); continue; }
+        const test = ['lalodj', 'lalodj499910', 'diego576413'].includes(String(u.username).toLowerCase());
+        await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: Object.assign({ isActive: false, password: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10), fcmTokens: [], fcmToken: null }, test ? { role: 'user' } : {}) });
+        off.push(u.username + ' (' + u.role + ')');
+      }
+      await Config.set('staffLockdownDone', lc, 'lockdown#1117');
+      await Config.set('staffLockdownLog', { at: new Date().toISOString(), kept: owner ? owner.username : null, newPass: !!(owner && np.length >= 10), disabled: off, sessionsClosed: staff.length }, 'lockdown#1117');
+      console.warn('🚨 [lockdown #1117] sesiones cerradas: ' + staff.length + ' · desactivados: ' + off.length + ' · queda: ' + (owner ? owner.username : 'NADIE (KEEP no encontrado: sólo se cerraron sesiones)'));
+    }
+  } catch (e) { console.error('[lockdown #1117] ' + e.message); }
   // #386 → #413: el seed del admin "iginte1000" se ELIMINÓ (ya corrió; el repo es público y no puede contener hashes).
   // La clave se rotó desde el panel (#413). En una base nueva el admin inicial sale de ADMIN_USERNAME/ADMIN_PASSWORD.
   // #812 (owner 2026-10-22): "el bono siempre rollover x5" ⇒ one-shot: rollover global de regalos en 5 (bonos de carga, fueguito, etc.).

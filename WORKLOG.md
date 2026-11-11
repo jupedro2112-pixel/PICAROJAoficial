@@ -29,6 +29,13 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1117. 🚨 BLOQUEO DE EMERGENCIA DEL PANEL (2026-11-11)
+- **Owner:** "me entraron al panel… me hackearon, ¿cómo saco a toda la gente?… está contestando a todos los usuarios".
+- Arranque: con la variable de entorno `STAFF_LOCKDOWN=<código nuevo>` (corre UNA vez por código, `Config['staffLockdownDone']`): cierra las sesiones de TODO el
+  staff (tokenVersion+1) y desactiva con clave al azar a todos menos `STAFF_LOCKDOWN_KEEP` (usuario admin del owner; `STAFF_LOCKDOWN_PASS` 10+ = su clave
+  nueva). Las cuentas de prueba lalodj / lalodj499910 / diego576413 pasan a 'user' desactivadas. Sin KEEP válido sólo cierra sesiones. Registro en
+  `Config['staffLockdownLog']`. Se activa FUERA del panel (AWS) para que el intruso no pueda frenarlo.
+
 ### 1116. Bot de comprobantes: /anular deshace un /anterior o /restar (2026-11-11)
 - **Owner (captura 1B RACAFU ,82):** /anterior cargados a las 01:40 con la versión vieja (sumaban en los DOS grupos) y un /restar nuevo sólo restaría en el
   grupo 2. `_rbAnular`: respondiendo el aviso del bot "SUMADO LO ANTERIOR: +$X" / "RESTADO: −$X", busca ese ajuste (monto, grupo, ± 3 min de la hora del
