@@ -32003,8 +32003,8 @@ async function _rbFlag(k) {
   return r.modifiedCount === 1;
 }
 const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const _rbMoney = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
-const _rbMoney2 = (n) => { const v = Number(n) || 0; return '$' + v.toLocaleString('es-AR', Number.isInteger(v) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }; // ,50 (no ,5): los centavos deciden el grupo
+const _rbMoney = (n) => { const v = Math.round(Number(n) || 0); return (v < 0 ? '−$' : '$') + Math.abs(v).toLocaleString('es-AR'); }; // #1113: negativo = a favor (−$X)
+const _rbMoney2 = (n) => { const v0 = Number(n) || 0; if (v0 < 0) return '−' + _rbMoney2(-v0); const v = v0; return '$' + v.toLocaleString('es-AR', Number.isInteger(v) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }; // ,50 (no ,5): los centavos deciden el grupo
 function _rbParseAmount(txt, max = 100000000) { // max: un comprobante; los comandos (/anterior, /cierre, panel) aceptan sumas grandes
   const ms = String(txt || '').match(/\d[\d.,]*/g); if (!ms) return null; let best = null;
   for (const raw of ms) {
@@ -32851,29 +32851,19 @@ async function _rbCarryCmd(c, bot, m, fromChat, text, by, sign = 1) {
   const cmdName = sign < 0 ? 'restar' : 'anterior'; const amt = _rbParseAmount((text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || '', 1e11);
   const mine = (c.routes || []).filter((x) => x.botId === bot.id);
   if (!(amt > 0)) { await _rbSend(c, fromChat, `Escribí el monto: <b>/${sign > 0 ? 'suma' : cmdName} 13.686.199</b> (con centavos si tiene, ej. 13.686.199,82).`, bot.id); return; }
-  if (sign > 0) { // #1108: /suma (/anterior) queda SÓLO en el grupo donde se escribe
+  if (sign) { // #1108: /suma (/anterior) queda SÓLO en el grupo donde se escribe · #1113: /restar también (owner: "acomodar cosas viejas, si debían o estaban a favor")
+    const head = sign < 0 ? `➖ <b>RESTADO</b>: −${_rbMoney2(amt)}` : `📥 <b>SUMADO LO ANTERIOR</b>: +${_rbMoney2(amt)}`;
     const base = -(Math.floor(Math.random() * 1e12) + 1e6); const src1 = mine.find((r) => String(r.from) === fromChat);
     if (src1) {
-      await _rbM().RcptFwd.create({ id: uuidv4(), fromChat, fromTitle: _rbTitle(c, fromChat), toChat: '', toTitle: '', srcMsgId: base, structId: src1.structId, amount: amt, amountFrom: 'arrastre1', sender: 'telegram · ' + (by || ''), status: 'srconly' });
-      await _rbSend(c, fromChat, `📥 <b>SUMADO LO ANTERIOR</b>: +${_rbMoney2(amt)}${by ? ' · ' + _rbH(by) : ''}\n<i>Sólo en la cuenta de este grupo (no pasa al grupo que recibe). Lo nuevo que se reenvía sigue sumando normal.</i>${await _rbSrcOnlyLine(fromChat, src1.structId)}\n${_rbMonthTxt(await _rbMonthSum(fromChat, src1.structId))}`, bot.id, { reply_markup: _rbKb() });
+      await _rbM().RcptFwd.create({ id: uuidv4(), fromChat, fromTitle: _rbTitle(c, fromChat), toChat: '', toTitle: '', srcMsgId: base, structId: src1.structId, amount: sign * amt, amountFrom: sign < 0 ? 'ajuste1' : 'arrastre1', sender: 'telegram · ' + (by || ''), status: 'srconly' });
+      await _rbSend(c, fromChat, `${head}${by ? ' · ' + _rbH(by) : ''}\n<i>Sólo en la cuenta de este grupo (no pasa al grupo que recibe). Lo nuevo que se reenvía sigue sumando normal.</i>${await _rbSrcOnlyLine(fromChat, src1.structId)}\n${_rbMonthTxt(await _rbMonthSum(fromChat, src1.structId))}`, bot.id, { reply_markup: _rbKb() });
       return;
     }
     const dr = mine.filter((r) => _rbDests(c, r).some((d) => d.to === fromChat)); if (!dr.length) return;
-    await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: '', fromTitle: 'anterior del grupo', toChat: fromChat, toTitle: _rbTitle(c, fromChat), srcMsgId: base, structId: dr[0].structId, amount: amt, amountFrom: 'arrastre2', sender: 'telegram · ' + (by || ''), status: 'open' });
-    await _rbSend(c, fromChat, `📥 <b>SUMADO LO ANTERIOR</b>: +${_rbMoney2(amt)}${by ? ' · ' + _rbH(by) : ''}\n<i>Sólo en la cuenta de este grupo (no aparece en los grupos que mandan). Lo nuevo que llega sigue sumando normal.</i>\n` + (await _rbDstTotalTxt(c, fromChat, dr)), bot.id, { reply_markup: _rbKb() });
+    await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: '', fromTitle: 'anterior del grupo', toChat: fromChat, toTitle: _rbTitle(c, fromChat), srcMsgId: base, structId: dr[0].structId, amount: sign * amt, amountFrom: sign < 0 ? 'ajuste2' : 'arrastre2', sender: 'telegram · ' + (by || ''), status: 'open' });
+    await _rbSend(c, fromChat, `${head}${by ? ' · ' + _rbH(by) : ''}\n<i>Sólo en la cuenta de este grupo (no aparece en los grupos que mandan). Lo nuevo que llega sigue sumando normal.</i>\n` + (await _rbDstTotalTxt(c, fromChat, dr)), bot.id, { reply_markup: _rbKb() });
     return;
   }
-  let pair = null; const asSrc = mine.filter((r) => String(r.from) === fromChat);
-  if (asSrc.length) { const ds = _rbDests(c, asSrc[0]); if (ds.length === 1) pair = { route: asSrc[0], to: ds[0].to }; else { await _rbSend(c, fromChat, `Este grupo manda a ${ds.length} grupos: escribí <b>/${cmdName} ${_rbH(text.split(/\s+/).slice(1).join(' '))}</b> en el grupo de DESTINO que corresponda (o cargalo en el panel → 📥).`, bot.id); return; } }
-  else { const asDst = mine.filter((r) => _rbDests(c, r).some((d) => d.to === fromChat)); if (asDst.length === 1) pair = { route: asDst[0], to: fromChat }; else if (asDst.length > 1) { await _rbSend(c, fromChat, `A este grupo le mandan varios grupos: escribí /${cmdName} en el grupo que MANDA.`, bot.id); return; } }
-  if (!pair) return;
-  const r = pair.route; const base = -(Math.floor(Math.random() * 1e12) + 1e6);
-  await _rbM().RcptFwd.create({ id: uuidv4(), fromChat: String(r.from), fromTitle: _rbTitle(c, r.from), toChat: pair.to, toTitle: _rbTitle(c, pair.to), srcMsgId: base, structId: r.structId, amount: sign * amt, amountFrom: sign < 0 ? 'ajuste' : 'arrastre', sender: 'telegram · ' + (by || ''), status: 'open' });
-  const s2 = await _rbOpenSum(r.from, pair.to, r.structId);
-  const msg = (sign < 0 ? `➖ <b>RESTADO</b>: −${_rbMoney2(amt)}` : `📥 <b>SUMADO LO ANTERIOR</b>: +${_rbMoney2(amt)}`) + `${by ? ' · ' + _rbH(by) : ''}\n${_rbH(_rbTitle(c, r.from))} → ${_rbH(_rbTitle(c, pair.to))}\n${_rbSumTxt(s2)}`;
-  // #1084 (owner): lo del grupo 1 se avisa con detalle al 2; lo que hace el grupo 2 (el de cierres) queda SÓLO en el 2.
-  if (asSrc.length) await _rbSend(c, String(r.from), msg + '\n' + _rbMonthTxt(await _rbMonthSum(r.from, r.structId)), r.botId, { reply_markup: _rbKb() });
-  if (pair.to !== String(r.from)) await _rbSend(c, pair.to, msg, r.botId, { reply_markup: _rbKb() });
 }
 // #1079-m: /anular respondiendo un comprobante (la foto o la respuesta del bot en el grupo que manda, o el reenviado en el destino) ⇒ sale de la suma
 // ── #1079-n CBU DE BAJADA (owner: "configurar de tal fecha a tal fecha se envía a tal CBU con terminación tal y cambia automático; si el grupo 2 manda

@@ -29,6 +29,11 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1113. Bot de comprobantes: /restar también SÓLO en el grupo donde se escribe (2026-11-11)
+- **Owner:** "estoy acomodando cosas viejas, necesito sumar o restar como estaban de plata (si debían o estaban a favor) sin pasar al otro grupo, en el 1 y en el 2".
+  `_rbCarryCmd`: `/restar` usa el mismo camino que `/suma` con monto negativo (grupo 1 ⇒ `srconly` 'ajuste1'; grupo 2 ⇒ `fromChat ''` 'ajuste2'). Se eliminó el
+  `/restar` viejo que cruzaba al otro grupo. `_rbMoney`/`_rbMoney2` muestran negativos como −$X (a favor). Test rcptbot-flow 49.
+
 ### 1112. Bot de comprobantes: /anterior no contestaba con varios bots en el grupo (2026-11-11)
 - **Owner:** "/anterior 12.613.986 en 4f RACAFU ,99 no hizo nada" (bots ya administradores). Causa: con VARIOS bots nuestros en el grupo, todos reciben el
   comando y `_rbOnce` (chat+mensaje) lo reserva para el PRIMERO; `/suma` y `/restar` no chequeaban que el bot tuviera ese grupo en su estructura ⇒ un bot ajeno

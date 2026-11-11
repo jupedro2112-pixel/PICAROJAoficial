@@ -442,6 +442,14 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const out = sent.slice(n).filter((x) => String(x.p.chat_id) === '-3' && /SUMADO LO ANTERIOR/.test(x.p.text || '')); assert.strictEqual(out.length, 1, 'una sola respuesta');
     rc.structs.pop(); rc.groups.pop(); await ctx._rbCfg(true);
   });
+  await caso('#1113 /restar SÓLO en el grupo donde se escribe (grupo 1 y grupo 2), puede quedar a favor (negativo)', async () => {
+    const snap = () => JSON.stringify(RcptFwd.rows.filter((x) => x.status === 'open' && x.fromChat === '-1').map((x) => x.amount));
+    const s0 = snap(); const n = sent.length;
+    await hook(text(996, -1, '/restar 50.000')); assert.ok(/RESTADO<\/b>: −\$50\.000/.test(last(-1).p.text) && /Sólo en la cuenta de este grupo/.test(last(-1).p.text), last(-1).p.text);
+    assert.strictEqual(snap(), s0, 'no toca lo reenviado al grupo 2'); assert.ok(!sent.slice(n).some((x) => ['-2', '-3'].includes(String(x.p.chat_id))), 'el grupo 2 no se entera');
+    const n2 = sent.length; await hook(text(997, -3, '/restar 99.999.999')); const t = last(-3).p.text; assert.ok(/RESTADO<\/b>: −\$99\.999\.999/.test(t) && /−\$/.test(t.split('\n').slice(2).join('\n')), t);
+    assert.ok(!sent.slice(n2).some((x) => String(x.p.chat_id) === '-1'), 'el grupo 1 no se entera');
+  });
   await caso('#1110 empezar de cero: borra SÓLO lo del bot desde la hora, desfija lo del bot, cuentas a $0, presentación de nuevo', async () => {
     const since = NOW.getTime() - 3600000; const chat = '-3'; const msgs = {}; // id ⇒ { mine, date }
     for (let i = 1; i <= 30; i++) msgs[i] = { mine: i % 3 !== 0, date: (i <= 10 ? since - 60000 : since + i * 1000) / 1000 };
