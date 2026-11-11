@@ -143,6 +143,8 @@ const userSchema = new mongoose.Schema({
     default: false,
     index: true
   },
+  // #1117 (intrusión): STAFF con clave TEMPORAL del bloqueo de emergencia ⇒ el panel no deja hacer nada hasta que la cambie (queda privada).
+  staffMustChangePw: { type: Boolean, default: false },
   // #401: SOPORTE — el cliente sólo ve los mensajes de soporte desde esta fecha (su "sesión" actual). La pone el cron
   // de cierre automático (6 h sin respuesta del cliente tras una respuesta nuestra): para él el chat arranca de cero;
   // el panel sigue viendo TODO el historial. null = nunca se cerró.

@@ -37,6 +37,10 @@
   mensaje (sesión cerrada / desactivado ⇒ desconectado). DUEÑO DEL PANEL (`PANEL_OWNER` o `STAFF_LOCKDOWN_KEEP`, `_isPanelOwner`): sólo él cambia roles, crea /
   borra / edita / bloquea / resetea clave / link de acceso de cuentas de STAFF y cambia las claves del panel; con jugadores todo igual. Revisado: un jugador no
   puede entrar al panel (registro siempre 'user', roles sólo por admin) y el historial público no tiene claves reales (sólo textos de ejemplo).
+- **Clave temporal (owner: "cambiá todo a una clave y que al entrar cada agente la cambie, que quede privada"):** `STAFF_LOCKDOWN_TEMP` (en AWS, nunca en el
+  código) ⇒ todo el staff menos el dueño queda ACTIVO con esa clave y `User.staffMustChangePw` ⇒ `authMiddleware` sólo deja `change-own-password` / logout
+  (403 `STAFF_MUST_CHANGE_PW`), el socket lo rechaza y el panel abre "Creá tu clave nueva" sin poder cerrarlo (`_staffPwGate`); al cambiarla (distinta de la
+  temporal) se cierran sus sesiones y vuelve a entrar con la nueva. El DUEÑO puede bloquear cualquier cuenta de staff (no la suya). Test `scripts/test-security-1117.js` (10).
 - Arranque: con la variable de entorno `STAFF_LOCKDOWN=<código nuevo>` (corre UNA vez por código, `Config['staffLockdownDone']`): cierra las sesiones de TODO el
   staff (tokenVersion+1) y desactiva con clave al azar a todos menos `STAFF_LOCKDOWN_KEEP` (usuario admin del owner; `STAFF_LOCKDOWN_PASS` 10+ = su clave
   nueva). Las cuentas de prueba lalodj / lalodj499910 / diego576413 pasan a 'user' desactivadas. Sin KEEP válido sólo cierra sesiones. Registro en

@@ -4574,7 +4574,7 @@ const authMiddleware = async (req, res, next) => {
     // Solo los campos que este middleware usa (corre en CADA request; hidratar
     // el doc completo con fcmTokens/tagHistory/etc. era costo puro).
     // ⚠️ Si un chequeo futuro necesita otro campo del user: agregarlo acá.
-    const AUTH_USER_FIELDS = 'id username role isActive isBlocked blockReason tokenVersion mustChangePassword';
+    const AUTH_USER_FIELDS = 'id username role isActive isBlocked blockReason tokenVersion mustChangePassword staffMustChangePw';
     let user = await User.findOne({ id: decoded.userId }).select(AUTH_USER_FIELDS);
 
     if (!user) {
@@ -4627,6 +4627,12 @@ const authMiddleware = async (req, res, next) => {
           code: 'PUBLISHER_ADMIN_FORBIDDEN'
         });
       }
+    }
+
+    // #1117: staff con la clave TEMPORAL del bloqueo ⇒ sólo puede cambiar su clave (y salir). Los jugadores no tienen este campo.
+    if (user.staffMustChangePw === true && user.role !== 'user') {
+      const pth = String(req.originalUrl || req.path || '').split('?')[0].replace(/\/+$/, '');
+      if (!['/api/admin/change-own-password', '/api/auth/admin-logout', '/api/auth/logout'].includes(pth)) return res.status(403).json({ error: 'Tenés que cambiar tu clave temporal antes de seguir.', code: 'STAFF_MUST_CHANGE_PW' });
     }
 
     // Enforce mandatory password change server-side.
@@ -6520,6 +6526,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       // SSO que quedó a medias). El acceso al casino ahora va por
       // POST /api/platform/session, que pide un link de un solo uso en el momento.
       user: {
+        staffMustChangePw: userObj.role !== 'user' && !!(((await User.findOne({ id: userId }).select('staffMustChangePw').lean()) || {}).staffMustChangePw), // #1117
         id: userId,
         username: userObj.username,
         email: userObj.email,
@@ -6707,6 +6714,7 @@ app.get('/api/admin/me', async (req, res) => {
         phoneVerified: user.phoneVerified || false,
         role: user.role,
         balance: user.balance,
+        staffMustChangePw: user.role !== 'user' && user.staffMustChangePw === true, // #1117
         needsPasswordChange: !user.passwordChangedAt,
         // Sólo se llena para role='publisher_admin'. El front lo usa para mostrar
         // qué publicista(s) representa la cuenta y para filtrar el mini-dashboard.
@@ -12414,7 +12422,7 @@ io.on('connection', (socket) => {
       if (!sockUser) {
         try { sockUser = await User.findById(decoded.userId); } catch (e) { /* _id inválido */ }
       }
-      if (!sockUser || sockUser.isActive === false || sockUser.isBlocked === true) {
+      if (!sockUser || sockUser.isActive === false || sockUser.isBlocked === true || (sockUser.staffMustChangePw === true && sockUser.role !== 'user')) { // #1117: + clave temporal sin cambiar
         socket.emit('authenticated', { success: false, error: 'Sesión no válida' });
         return;
       }
@@ -12538,8 +12546,8 @@ io.on('connection', (socket) => {
       // Determinar el receptor correcto
       const isAdminRole = ['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role);
       if (isAdminRole) { // #1117 (seguridad): un socket de staff YA conectado se revalida en cada mensaje (sesión cerrada / desactivado / rol bajado ⇒ afuera)
-        const su = await User.findOne({ id: socket.userId }).select('role isActive isBlocked tokenVersion').lean();
-        if (!su || su.isActive === false || su.isBlocked === true || (su.tokenVersion ?? 0) !== (socket.tokenVersion ?? 0) || !['admin', 'depositor', 'withdrawer', 'comunidad'].includes(su.role)) {
+        const su = await User.findOne({ id: socket.userId }).select('role isActive isBlocked tokenVersion staffMustChangePw').lean();
+        if (!su || su.isActive === false || su.isBlocked === true || su.staffMustChangePw === true || (su.tokenVersion ?? 0) !== (socket.tokenVersion ?? 0) || !['admin', 'depositor', 'withdrawer', 'comunidad'].includes(su.role)) {
           logger.warn(`[authz] socket de ${socket.username} rechazado (sesión cerrada / desactivado / rol)`); socket.emit('authenticated', { success: false, error: 'Sesión expirada' }); socket.disconnect(true); return;
         }
       }
@@ -13923,6 +13931,8 @@ async function initializeData() {
         }
         if (!owner) { await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 } }); continue; }
         const test = ['lalodj', 'lalodj499910', 'diego576413'].includes(String(u.username).toLowerCase());
+        const tmp = String(process.env.STAFF_LOCKDOWN_TEMP || ''); // #1117 (owner): clave TEMPORAL para todo el staff; al entrar cada uno la cambia (queda privada)
+        if (!test && tmp.length >= 4) { await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: { password: await bcrypt.hash(tmp, 10), staffMustChangePw: true, isActive: true, fcmTokens: [], fcmToken: null } }); off.push(u.username + ' (' + u.role + ', clave temporal)'); continue; }
         await User.updateOne({ id: u.id }, { $inc: { tokenVersion: 1 }, $set: Object.assign({ isActive: false, password: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10), fcmTokens: [], fcmToken: null }, test ? { role: 'user' } : {}) });
         off.push(u.username + ' (' + u.role + ')');
       }
@@ -21475,13 +21485,17 @@ app.post('/api/admin/change-own-password', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'La contraseña actual es incorrecta' });
     }
 
+    if (newPassword === currentPassword || (process.env.STAFF_LOCKDOWN_TEMP && newPassword === String(process.env.STAFF_LOCKDOWN_TEMP))) return res.status(400).json({ error: 'La clave nueva tiene que ser distinta de la temporal.' }); // #1117
     admin.password = newPassword;
     admin.passwordChangedAt = new Date();
     admin.mustChangePassword = false;
+    const _wasTemp = admin.staffMustChangePw === true;
+    admin.staffMustChangePw = false; // #1117: ya la cambió: queda privada
+    if (_wasTemp) admin.tokenVersion = (admin.tokenVersion || 0) + 1; // #1117: SÓLO al dejar la temporal: cierra toda sesión abierta con ella (vuelve a entrar con la nueva)
     await admin.save();
 
     logger.info(`Admin ${admin.username} cambió su propia contraseña`);
-    res.json({ success: true, message: 'Contraseña cambiada correctamente' });
+    res.json({ success: true, message: 'Contraseña cambiada correctamente', relogin: _wasTemp });
   } catch (error) {
     console.error('Error cambiando contraseña de admin:', error);
     res.status(500).json({ error: 'Error del servidor' });
@@ -21763,8 +21777,8 @@ app.post('/api/admin/users/:id/block', authMiddleware, adminMiddleware, async (r
     const user = await User.findOne({ id });
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado.' });
 
-    if (isAdminRole(user.role)) {
-      return res.status(403).json({ error: 'No se pueden bloquear cuentas administrativas.' });
+    if (isAdminRole(user.role) || user.role === 'publisher_admin') { // #1117 (owner): el DUEÑO del panel (PANEL_OWNER) sí puede bloquear a cualquier cuenta de staff (no a sí mismo)
+      if (!(_panelOwner() && _isPanelOwner(req)) || user.id === req.user.userId) return res.status(403).json({ error: _panelOwner() ? 'Sólo el dueño del panel bloquea cuentas de staff (y no la suya).' : 'No se pueden bloquear cuentas administrativas.' });
     }
 
     // #993: mismo camino que el antifraude automático (cierra la sesión en vivo y frena sus retiros pendientes)

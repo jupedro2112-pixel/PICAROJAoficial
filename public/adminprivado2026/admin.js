@@ -414,6 +414,7 @@ async function handleLogin(e) {
             
             // Configurar UI según el rol
             setupRoleBasedUI();
+            if (_staffPwGate()) return; // #1117: clave temporal ⇒ primero la cambia
             
             // Verificar si necesita cambiar contraseña
             if (data.user.needsPasswordChange) {
@@ -496,6 +497,7 @@ async function checkAdminSession(_try) {
             currentToken = data.token || null;
             currentAdmin = data.user;
             setupRoleBasedUI();
+            if (_staffPwGate()) return; // #1117: clave temporal ⇒ primero la cambia
             showApp();
             // publisher_admin: vista limitada — no carga socket / chats /
             // stats globales / comandos. setupRoleBasedUI ya disparó sus
@@ -11558,6 +11560,19 @@ window.loadReferralRate = loadReferralRate; window.saveReferralRate = saveReferr
 // ============================================
 // CAMBIAR CONTRASEÑA PROPIA DEL ADMIN
 // ============================================
+// #1117 (owner tras la intrusión): el staff entra con la clave TEMPORAL y tiene que crear la suya antes de usar el panel (el servidor rechaza
+// todo lo demás con STAFF_MUST_CHANGE_PW). La ventana no se puede cerrar; al cambiarla se vuelve a entrar con la clave nueva.
+let _staffPwForced = false;
+function _staffPwGate() {
+    if (!(currentAdmin && currentAdmin.staffMustChangePw)) return false;
+    _staffPwForced = true;
+    showChangeOwnPasswordModal();
+    const m = document.getElementById('changeOwnPasswordModal'); if (!m) return true;
+    m.onclick = null; m.querySelectorAll('.close-modal').forEach(function (b) { b.style.display = 'none'; });
+    const h = m.querySelector('h3'); if (h) h.textContent = '🔑 Creá tu clave nueva';
+    if (!document.getElementById('staffPwNote')) { const n = document.createElement('p'); n.id = 'staffPwNote'; n.style.cssText = 'margin:0 0 .75rem;font-size:13px;line-height:1.45'; n.innerHTML = 'Entraste con la <b>clave temporal</b>. En "Contraseña actual" poné la temporal y creá una <b>clave nueva</b> (mínimo 6 caracteres) que <b>sólo sepas vos</b>. Después volvés a entrar con la nueva.'; const b = m.querySelector('.modal-body'); if (b) b.insertBefore(n, b.firstChild); }
+    return true;
+}
 function showChangeOwnPasswordModal() {
     document.getElementById('ownCurrentPassword').value = '';
     document.getElementById('ownNewPassword').value = '';
@@ -11598,6 +11613,7 @@ async function handleChangeOwnPassword() {
         if (!response.ok) throw new Error(data.error || 'Error al cambiar contraseña');
         showToast('✅ Contraseña cambiada correctamente', 'success');
         hideModal('changeOwnPasswordModal');
+        if (data.relogin || _staffPwForced) { _staffPwForced = false; showToast('✅ Listo: entrá con tu clave nueva', 'success'); setTimeout(function () { handleLogout(); }, 800); } // #1117
     } catch (error) {
         showToast(error.message || 'Error al cambiar contraseña', 'error');
     } finally {

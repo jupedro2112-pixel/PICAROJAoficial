@@ -88,6 +88,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   usuario del dueño, `STAFF_LOCKDOWN_PASS`, `STAFF_LOCKDOWN_PIN`): cierra sesiones de TODO el staff y desactiva a todos menos al dueño (jugadores intactos).
   `PANEL_OWNER`: sólo el dueño toca roles / cuentas de staff / claves del panel (`_isPanelOwner`; una ruta NUEVA que toque staff o permisos lo usa). El ROL se lee de
   la BASE (authMiddleware y socket), nunca del token. Las respuestas firman con el nombre de TURNO; la cuenta real está en `metadata.agent`.
+  `STAFF_LOCKDOWN_TEMP` = clave temporal del staff con cambio obligatorio (`staffMustChangePw`). Test `scripts/test-security-1117.js`.
 - **SEGURIDAD #1053:** link de acceso de un depositor sólo para clientes SIN cargas; push masivas / plantillas sólo admin (agentes: `/send` a uno);
   login por código SMS sólo `role:'user'`; "asd123" en cuenta con cargas ⇒ `DEFAULT_PASSWORD_REVOKED`; bono que tipea el agente pasa por `_capGift`; el bono de
   1ª carga se reserva con `_reserveFirstDepositBonus` (un camino NUEVO de bono de 1ª carga tiene que usarla). Test `scripts/test-security-1053.js`.
