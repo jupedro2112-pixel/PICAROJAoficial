@@ -6506,7 +6506,8 @@ async function loadRcptBot() {
         if (r.status === 428 || r.status === 423 || r.status === 429) { if (!(await _rbPinFlow(r))) { st.textContent = '🔒 Protegido con clave: tocá 🔄 para ingresarla.'; return; } r = await _rbFetch('/api/admin/rcptbot'); if (r.status === 423) { sessionStorage.removeItem('rcptbot_pin'); st.textContent = '🔒 Clave incorrecta: tocá 🔄.'; return; } }
         const j = await r.json(); if (!r.ok) { st.textContent = j.error || 'Error'; return; }
         _rb = { groups: j.groups || [], bots: j.bots || [], structs: (j.structs || []).map((x) => Object.assign({}, x, { routes: JSON.parse(JSON.stringify(x.routes || [])) })) };
-        st.innerHTML = (j.onRender ? '⚠️ En Render los bots no se conectan (comparte la base). ' : '') + 'Lectura IA de montos: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? ' · <span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '');
+        st.innerHTML = (j.onRender ? '⚠️ En Render los bots no se conectan (comparte la base). ' : '') + 'Lectura IA de montos: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? ' · <span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '') +
+            Object.entries(j.plan || {}).map(([n, x]) => '<div style="margin-top:6px;font-size:13px">' + (x.ok ? '✅ <b>' + escapeHtml(n) + '</b>: configurada sola y encendida (' + (x.routes || 0) + ' grupos que mandan)' : '⚠️ <b>' + escapeHtml(n) + '</b> (configuración automática): falta ' + (x.missing || []).map(escapeHtml).join(' · ') + ' — se reintenta cada 5 min') + '</div>').join(''); // #1097
         rbRenderStructs();
         document.getElementById('rbGroups').innerHTML = _rbGroupsHtml(j);
         if (!_rbGrTimer) _rbGrTimer = setInterval(() => rbRefreshGroups(false), 20000);

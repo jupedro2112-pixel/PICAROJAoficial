@@ -32288,6 +32288,58 @@ async function _rbDailyCloseTick() {
   }
 }
 setTimeout(() => { setInterval(() => { _rbDailyCloseTick().catch((e) => logger.warn('[rcptbot] cierre 13 h ' + e.message)); }, 60000); }, 105000);
+// #1097 (owner: "quiero que hagas todo vos así cuando subo el archivo tenemos todo"): PLAN de estructuras armado en la charla, se aplica SOLO al subir.
+// Grupos por NOMBRE (entre los que el bot ya detectó; normalizado: sin mayúsculas, espacios ni símbolos) y bot por @usuario. Si falta un grupo o el bot, la
+// estructura queda APAGADA con lo que se encontró y el panel muestra qué falta; se reintenta cada 5 min hasta encenderla. Lo ya aplicado no se pisa
+// (Config['rcptbotplan'].applied[nombre] = versión): si después la cambian a mano en el panel, queda como la dejaron. Sólo nombres de grupos (nada secreto).
+const RB_PLAN = { v: 1, structs: [
+  { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }],
+    senders: ['STOCK 1GIROX ICE', '1GIROX ANANA', '1GIROX BUFFALO', '1GIROX JOKER', '1GIROX GOLDEN', '1GIROX TOKIO', '1GIROX BOSTON', '1GIROX PARADISE', '1GIROX LAS VEGAS', '1GIROX SHANGAI', '1GIROX VIP PLATINIUM', '1GIROX ORO'],
+    rules: [{ cents: '99', to: '4f RACAFU ,99' }, { cents: '43', to: 'Pagos Hammy y Fabri ,43' }] },
+  { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [],
+    senders: ['BAJADAS GANAMOS'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] }
+] };
+const _rbNorm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+function _rbFindGroup(c, title, botId) {
+  const n = _rbNorm(title); const gs = c.groups || []; const has = (g) => !botId || (g.bots || []).map(String).includes(String(botId));
+  const eq = gs.filter((g) => _rbNorm(g.title) === n); const eqB = eq.filter(has);
+  if (eqB.length === 1 || (eqB.length === 0 && eq.length === 1)) return eqB[0] || eq[0];
+  const inc = gs.filter((g) => { const t = _rbNorm(g.title); return t && (t.includes(n) || n.includes(t)) && t.length >= 4; }); const incB = inc.filter(has);
+  if (incB.length === 1) return incB[0]; if (!incB.length && inc.length === 1) return inc[0];
+  return null; // ninguno o varios parecidos: mejor no adivinar
+}
+let _rbPlanAt = 0;
+async function _rbPlanTick(force) {
+  if (!force && Date.now() - _rbPlanAt < 5 * 60000) return; _rbPlanAt = Date.now();
+  const c0 = await _rbCfg(true); if (c0.onRender || !(c0.botsDec || []).some((b) => b.token)) return;
+  const pd = ((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}; const applied = pd.applied || {};
+  const todo = RB_PLAN.structs.filter((p) => applied[p.name] !== RB_PLAN.v); if (!todo.length) return;
+  try { await _rbRepairGroups(true); } catch (_) {}
+  const report = {};
+  for (const p of todo) {
+    const c = await _rbCfg(true); const miss = [];
+    const bot = (c.bots || []).find((b) => String(b.username || '').toLowerCase() === p.bot.toLowerCase()); if (!bot) miss.push('bot @' + p.bot + ' (cargá su token en la estructura)');
+    const botId = bot ? String(bot.id) : null;
+    const rules = []; for (const r of p.rules) { const g = _rbFindGroup(c, r.to, botId); if (g) rules.push({ cents: r.cents, to: String(g.id) }); else miss.push('grupo que recibe "' + r.to + '"'); }
+    const routes = []; for (const t of p.senders) { const g = _rbFindGroup(c, t, botId); if (g) { if (!routes.some((x) => x.from === String(g.id))) routes.push({ from: String(g.id), rules: rules.map((x) => Object.assign({}, x)), otherTo: null }); } else miss.push('grupo que manda "' + t + '"'); }
+    const cur = (c.structs || []).find((x) => _rbNorm(x.name) === _rbNorm(p.name));
+    const st = Object.assign({ id: uuidv4(), on: false }, cur || {}, { name: p.name, botId: botId || (cur && cur.botId) || null, routes, monthlyClose: !!p.monthlyClose, dailyClose: p.dailyClose || '', termHour: p.termHour, termNotices: p.termNotices.map((x) => Object.assign({}, x)) });
+    for (const o of (c.structs || []).filter((x) => x.on && x.id !== st.id)) for (const r of o.routes || []) if (routes.some((y) => y.from === String(r.from))) miss.push('"' + _rbTitle(c, r.from) + '" ya manda en la estructura "' + o.name + '" (encendida): apagala o sacale ese grupo');
+    const ready = !miss.length && routes.length && rules.length && botId; const wasOn = !!(cur && cur.on);
+    st.on = ready ? true : false;
+    await _rbStructPut(st);
+    if (ready) {
+      await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.applied.' + p.name]: RB_PLAN.v, ['value.report.' + p.name]: { ok: true, at: new Date(), routes: routes.length } } }, { upsert: true });
+      if (!wasOn) { const c2 = await _rbCfg(true); for (const r of (c2.routes || []).filter((x) => x.structId === st.id)) await _rbSendMenus(c2, r, true).catch(() => {}); }
+      logger.info('[rcptbot] plan aplicado: ' + p.name + ' (' + routes.length + ' grupos que mandan)');
+    } else {
+      report[p.name] = { ok: false, at: new Date(), missing: [...new Set(miss)] };
+      await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.report.' + p.name]: report[p.name] } }, { upsert: true });
+      logger.warn('[rcptbot] plan ' + p.name + ' incompleto: ' + report[p.name].missing.join(' · '));
+    }
+  }
+}
+setTimeout(() => { _rbPlanTick(true).catch((e) => logger.warn('[rcptbot] plan ' + e.message)); setInterval(() => { _rbPlanTick(false).catch((e) => logger.warn('[rcptbot] plan ' + e.message)); }, 60000); }, 120000);
 // #1085: cotizar con precio del USDT y comisión ⇒ USDT a enviar = pesos ÷ precio − comisión %. Enviar = foto del envío ⇒ VERIFICADO ENVIADO.
 const _rbUsdt = (n) => (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const _RB_Q_MARK = '💱 COTIZAR'; const _RB_S_MARK = '📸 ENVIADO';
@@ -32795,7 +32847,8 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
     const groups = (c.groups || []).map((g) => ({ id: g.id, title: g.title, bots: (g.bots || []).map((id) => ((c.botsDec || []).find((b) => b.id === id) || {}).username || id) }));
-    res.json({ success: true, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
+    const planRep = (((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}).report || {}; // #1097
+    res.json({ success: true, plan: planRep, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/bot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar o reemplazar un bot (por su token)

@@ -29,6 +29,17 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1097. Bot de comprobantes: Fichas y Ganamos se configuran SOLAS al subir (2026-11-11) — panel v298
+- **Owner:** "¿eso no lo hacés vos? quiero que hagas todo vos así cuando subo el archivo tenemos todo".
+- `RB_PLAN` (server.js) con lo acordado: **Fichas** (@fichasnuevobot): 12 que mandan (STOCK 1GIROX ICE, 1GIROX ANANA / BUFFALO / JOKER / GOLDEN / TOKIO / BOSTON /
+  PARADISE / LAS VEGAS / SHANGAI / VIP PLATINIUM / ORO) con ,99 → 4f RACAFU ,99 y ,43 → Pagos Hammy y Fabri ,43, "todo lo demás" vacío, cierre de MES, aviso de
+  cambio de terminación día 5 (,99) y día 20 (,43) a las 13 h. **Ganamos** (@Bajadasasuncionbot): BAJADAS GANAMOS con ,83 → 3P 2G RACAFU ,83, cierre 13 h de
+  lunes a viernes (finde al lunes). La ruta vieja BAJADAS BUFFALO → 1B RACAFU ,82 de Fichas se descarta (owner: "eso no va").
+- `_rbPlanTick` (2 min después de arrancar y cada 5 min hasta terminar): revisa grupos, busca cada grupo por NOMBRE normalizado (`_rbFindGroup`, prefiere los
+  que tienen el bot; ambiguo ⇒ no adivina) y el bot por @usuario; completo ⇒ guarda la estructura ENCENDIDA y manda los menús; incompleto ⇒ la guarda
+  APAGADA con lo encontrado y el panel muestra qué falta (`Config['rcptbotplan'].report`). Aplicada una vez (`applied[nombre] = v`) no se vuelve a pisar.
+- Para cambiar el plan en el futuro: editar `RB_PLAN` y subir `v` (vuelve a aplicar todas).
+
 ### 1096. Bot de comprobantes: cierre automático de las 13 h POR ESTRUCTURA (2026-11-11) — panel v297
 - **Owner (estructura 2 Ganamos: manda BAJADAS GANAMOS → 3P 2G RACAFU ,83, siempre ,83, bot @Bajadasasuncionbot):** "en el grupo 1 hacemos suma tipo el
   cierre del grupo 2, de 13 a 13 h".

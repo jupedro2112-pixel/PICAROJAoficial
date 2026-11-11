@@ -2045,6 +2045,8 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
 - **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
 - **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
+- **Bot de comprobantes #1097 (plan en código):** `RB_PLAN` + `_rbPlanTick` aplican estructuras por NOMBRE de grupo/bot una vez (`Config['rcptbotplan']`); incompleta ⇒
+  apagada + reporte en el panel, reintento cada 5 min. Cambiar el plan ⇒ subir `RB_PLAN.v` (si no, no se re-aplica). No corre en Render.
 - **Bot de comprobantes #1096 (cierre 13 h por estructura):** `structs[].dailyClose` ('all' | 'weekdays' | '') ⇒ `_rbDailyCloseTick` cierra lo de antes de las 13:00
   (una vez por estructura/día). No usar el `autoClose13` global (cierra TODAS las estructuras).
 - **Bot de comprobantes #1095 (cierre de mes):** `structs[].monthlyClose` ⇒ `_rbMonthCloseTick` el día 1 (ART) cierra lo abierto ANTES de las 00:00 (`_rbClose` acepta
