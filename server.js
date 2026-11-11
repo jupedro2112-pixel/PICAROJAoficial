@@ -32274,6 +32274,20 @@ async function _rbCloseTick() {
   for (const r of c.routes) { try { await _rbClose(c, r, 'automático 13 h'); } catch (e) { logger.warn('[rcptbot] cierre ' + e.message); } }
 }
 setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('[rcptbot] cierre ' + e.message)); }, 60000); }, 75000);
+// #1096 (owner, estructura Ganamos: "en el grupo 1 hacemos suma tipo el cierre del grupo 2, de 13 a 13 h"): cierre automático de las 13 h POR ESTRUCTURA
+// (`dailyClose`: 'all' = todos los días · 'weekdays' = lunes a viernes, el finde se junta en el del lunes · '' = a mano). Cierra lo que entró ANTES de las
+// 13:00 en punto (lo que llega después es del cierre siguiente). Una vez por estructura/día (_rbOnce). Grupo 1: sumas · grupo 2: pendiente a cotizar.
+async function _rbDailyCloseTick() {
+  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
+  const now = new Date(); if (_tgArtHour(now) < 13) return; const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+  const cut = new Date(dk + 'T13:00:00-03:00');
+  for (const st of (c.structs || []).filter((x) => x && x.on && (x.dailyClose === 'all' || x.dailyClose === 'weekdays'))) {
+    if (st.dailyClose === 'weekdays' && (dow === 0 || dow === 6)) continue;
+    if (!(await _rbOnce('dclose', st.id + '|' + dk))) continue;
+    for (const r of (c.routes || []).filter((x) => x.structId === st.id)) { try { await _rbClose(c, r, 'automático 13 h', { before: cut }); } catch (e) { logger.warn('[rcptbot] cierre 13 h ' + e.message); } }
+  }
+}
+setTimeout(() => { setInterval(() => { _rbDailyCloseTick().catch((e) => logger.warn('[rcptbot] cierre 13 h ' + e.message)); }, 60000); }, 105000);
 // #1085: cotizar con precio del USDT y comisión ⇒ USDT a enviar = pesos ÷ precio − comisión %. Enviar = foto del envío ⇒ VERIFICADO ENVIADO.
 const _rbUsdt = (n) => (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const _RB_Q_MARK = '💱 COTIZAR'; const _RB_S_MARK = '📸 ENVIADO';
@@ -32776,7 +32790,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
         routes.push(Object.assign({}, r, { cbuItems, cbuStops, sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
-      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose }); // #1094 / #1095
+      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose, dailyClose: st.dailyClose || '' }); // #1094 / #1095 / #1096
     }
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
@@ -32873,6 +32887,7 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
       st.termNotices = out.sort((p, q) => p.day - q.day);
     }
     if (typeof b.monthlyClose === 'boolean') st.monthlyClose = b.monthlyClose; // #1095
+    if (b.dailyClose != null) { const v = String(b.dailyClose); if (!['', 'all', 'weekdays'].includes(v)) return res.status(400).json({ error: 'Cierre de 13 h inválido' }); st.dailyClose = v; } // #1096
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
     await _rbStructPut(st);

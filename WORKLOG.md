@@ -29,6 +29,13 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1096. Bot de comprobantes: cierre automático de las 13 h POR ESTRUCTURA (2026-11-11) — panel v297
+- **Owner (estructura 2 Ganamos: manda BAJADAS GANAMOS → 3P 2G RACAFU ,83, siempre ,83, bot @Bajadasasuncionbot):** "en el grupo 1 hacemos suma tipo el
+  cierre del grupo 2, de 13 a 13 h".
+- `structs[].dailyClose`: '' (a mano) · 'all' (todos los días 13:00) · 'weekdays' (lun–vie, el finde se junta el lunes). `_rbDailyCloseTick` cierra con
+  `_rbClose(…, { before: hoy 13:00 })`, una vez por estructura/día (`_rbOnce('dclose', …)`). El viejo `autoClose13` global sigue apagado (#1089).
+- Panel: selector "🔒 Cierre automático de las 13 h" en cada estructura (arriba del cierre de mes).
+
 ### 1095. Bot de comprobantes: CIERRE DE MES automático por estructura (2026-11-11) — panel v296
 - **Owner (Fichas):** "en este grupo vamos a sumar comprobante por comprobante hasta el cierre de mes, último día de mes incluido; después empieza de 0 y
   deja el mes anterior arriba la suma".
