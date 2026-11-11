@@ -29,6 +29,10 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1100. Bot de comprobantes: estructura 4 Cotizaciones en el plan (2026-11-11)
+- Cotizaciones (@Cotizacionbuffabot): los 8 BAJADAS (PARADISE, JOKER, PORTO, JACK, BOSTON, TOKIO/ANANA, VIP/PLATINIUM, LAS VEGAS) con ,79 → 5C RACAFU ,79; cierre
+  SEMANAL lunes 00:00; control de la foto de USDT encendido. Agregada a `RB_PLAN` (se aplica sola, sin subir `v`).
+
 ### 1099. Bot de comprobantes: cierre SEMANAL y control de la FOTO de USDT (2026-11-11) — panel v299
 - **Owner (estructura 4 Cotizaciones, @Cotizacionbuffabot; mandan BAJADAS PARADISE / JOKER / PORTO / JACK / BOSTON / TOKIO/ANANA / VIP/PLATINIUM / LAS VEGAS):**
   "suman de lunes a lunes; el lunes 00:00 cierre semanal pendiente a cotizar y empieza de 0; el grupo 2 funciona igual (cotiza un agente: precio del USDT +

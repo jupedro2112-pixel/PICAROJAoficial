@@ -32305,7 +32305,10 @@ const RB_PLAN = { v: 1, structs: [
   { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [],
     senders: ['BAJADAS GANAMOS'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] },
   { name: 'Publicidad', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [], // #1098: igual que Ganamos, suma aparte
-    senders: ['BAJADAS PUBLICIDAD'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] }
+    senders: ['BAJADAS PUBLICIDAD'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] },
+  { name: 'Cotizaciones', bot: 'Cotizacionbuffabot', dailyClose: 'weekly', monthlyClose: false, usdtCheck: true, termHour: 13, termNotices: [], // #1100: semanal + foto USDT
+    senders: ['BAJADAS PARADISE', 'BAJADAS JOKER', 'BAJADAS PORTO', 'BAJADAS JACK', 'BAJADAS BOSTON', 'BAJADAS TOKIO/ANANA', 'BAJADAS VIP/PLATINIUM', 'BAJADAS LAS VEGAS'],
+    rules: [{ cents: '79', to: '5C RACAFU ,79' }] }
 ] }; // un plan NUEVO se aplica solo (applied[nombre] vacío); subir `v` re-aplica TODOS (pisa cambios hechos a mano)
 const _rbNorm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 function _rbFindGroup(c, title, botId) {
@@ -32331,7 +32334,7 @@ async function _rbPlanTick(force) {
     const rules = []; for (const r of p.rules) { const g = _rbFindGroup(c, r.to, botId); if (g) rules.push({ cents: r.cents, to: String(g.id) }); else miss.push('grupo que recibe "' + r.to + '"'); }
     const routes = []; for (const t of p.senders) { const g = _rbFindGroup(c, t, botId); if (g) { if (!routes.some((x) => x.from === String(g.id))) routes.push({ from: String(g.id), rules: rules.map((x) => Object.assign({}, x)), otherTo: null }); } else miss.push('grupo que manda "' + t + '"'); }
     const cur = (c.structs || []).find((x) => _rbNorm(x.name) === _rbNorm(p.name));
-    const st = Object.assign({ id: uuidv4(), on: false }, cur || {}, { name: p.name, botId: botId || (cur && cur.botId) || null, routes, monthlyClose: !!p.monthlyClose, dailyClose: p.dailyClose || '', termHour: p.termHour, termNotices: p.termNotices.map((x) => Object.assign({}, x)) });
+    const st = Object.assign({ id: uuidv4(), on: false }, cur || {}, { name: p.name, botId: botId || (cur && cur.botId) || null, routes, monthlyClose: !!p.monthlyClose, usdtCheck: !!p.usdtCheck, dailyClose: p.dailyClose || '', termHour: p.termHour, termNotices: p.termNotices.map((x) => Object.assign({}, x)) });
     for (const o of (c.structs || []).filter((x) => x.on && x.id !== st.id)) for (const r of o.routes || []) if (routes.some((y) => y.from === String(r.from))) miss.push('"' + _rbTitle(c, r.from) + '" ya manda en la estructura "' + o.name + '" (encendida): apagala o sacale ese grupo');
     const ready = !miss.length && routes.length && rules.length && botId; const wasOn = !!(cur && cur.on);
     st.on = ready ? true : false;
