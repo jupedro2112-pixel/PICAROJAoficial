@@ -14650,3 +14650,8 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - El ítem del menú pasó al final (después de Bot de comprobantes). Las rutas `/api/admin/owner/staff*` piden además `x-staff-pin` = `STAFF_SECTION_PIN`
   (SÓLO en AWS; el owner la dictó, pero el repo es público: va como variable). Sin la variable no abre; 6 fallos = 15 min. El panel la pide al entrar y la
   guarda sólo en memoria. Panel v308. Test `scripts/test-security-1117.js` (14).
+
+## #1122 — 2026-11-11 · ARREGLO: el deploy de #1117–#1121 no arrancaba (100% 5xx en EB)
+- Las rutas `/api/admin/owner/staff*` (#1120) estaban ANTES de `const authMiddleware` ⇒ "Cannot access 'authMiddleware' before initialization" al cargar
+  server.js. Se movieron después de `_isPanelOwner`. **Trampa:** una ruta nueva con `authMiddleware` va DESPUÉS de su definición (~L4555); antes sólo rutas
+  sin middleware de sesión. Verificación nueva: cargar server.js con módulos simulados (scratchpad `boot.js`) además de `node --check`.
