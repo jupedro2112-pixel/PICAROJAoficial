@@ -29,6 +29,11 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1111. Bot de comprobantes: el ,43 de Fichas va a "Pago fichas GIROX ,43" (2026-11-11)
+- **Owner:** "cambiar el grupo de fichas donde envía por ése; el otro queda anulado". `RB_PLAN` v2: ,43 y `fichasDests` ⇒ "Pago fichas GIROX ,43" (sale de "Pagos Hammy
+  y Fabri ,43"). El plan se vuelve a aplicar solo al subir (versión nueva); si @fichasnuevobot todavía no está en el grupo nuevo, la estructura sigue como estaba y
+  el panel lo marca. La bienvenida ahora también sale para un grupo NUEVO de una estructura que ya andaba (cada grupo una sola vez).
+
 ### 1110. Bot de comprobantes: 🧹 EMPEZAR DE CERO (2026-11-11)
 - **Owner:** "borrar lo que habló el bot en los grupos después de subir, que el grupo siga normal porque hay cosas importantes; desfijar todo; reiniciar la
   presentación; empezar las cuentas de 0" · "no toque nada que no sea del bot".

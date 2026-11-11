@@ -32493,10 +32493,10 @@ setTimeout(() => { setInterval(() => { _rbDailyCloseTick().catch((e) => logger.w
 // Grupos por NOMBRE (entre los que el bot ya detectó; normalizado: sin mayúsculas, espacios ni símbolos) y bot por @usuario. Si falta un grupo o el bot, la
 // estructura queda APAGADA con lo que se encontró y el panel muestra qué falta; se reintenta cada 5 min hasta encenderla. Lo ya aplicado no se pisa
 // (Config['rcptbotplan'].applied[nombre] = versión): si después la cambian a mano en el panel, queda como la dejaron. Sólo nombres de grupos (nada secreto).
-const RB_PLAN = { v: 1, structs: [
-  { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, fichasDests: ['Pagos Hammy y Fabri ,43'], termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }], // #1104: ,43 = grupo de FICHAS
+const RB_PLAN = { v: 2, structs: [ // v2 (#1111): ,43 de Fichas pasa a "Pago fichas GIROX ,43" (owner; el de Hammy y Fabri queda anulado)
+  { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, fichasDests: ['Pago fichas GIROX ,43'], termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }], // #1104: ,43 = grupo de FICHAS
     senders: ['STOCK 1GIROX ICE', '1GIROX ANANA', '1GIROX BUFFALO', '1GIROX JOKER', '1GIROX GOLDEN', '1GIROX TOKIO', '1GIROX BOSTON', '1GIROX PARADISE', '1GIROX LAS VEGAS', '1GIROX SHANGAI', '1GIROX VIP PLATINIUM', '1GIROX ORO'],
-    rules: [{ cents: '99', to: '4f RACAFU ,99' }, { cents: '43', to: 'Pagos Hammy y Fabri ,43' }] },
+    rules: [{ cents: '99', to: '4f RACAFU ,99' }, { cents: '43', to: 'Pago fichas GIROX ,43' }] },
   { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [],
     senders: ['BAJADAS GANAMOS'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] },
   { name: 'Publicidad', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [], // #1098: igual que Ganamos, suma aparte
@@ -32569,7 +32569,7 @@ async function _rbPlanRun() {
     if (ready || !wasOn) await _rbStructPut(st); // repaso #1103: una estructura que YA anda no se apaga por un grupo que falta: queda como estaba y avisa
     if (ready) {
       await Config.collection.updateOne({ key: 'rcptbotplan' }, { $set: { ['value.applied.' + p.name]: RB_PLAN.v, ['value.report.' + p.name]: { ok: true, at: new Date(), routes: routes.length, warn: det.filter((x) => x.kind === 'warn') } } }, { upsert: true });
-      if (!wasOn) { const c2 = await _rbCfg(true); await _rbWelcomeIfReady(c2, st).catch(() => {}); } // #1106: bienvenida sólo si todo está bien
+      { const c2 = await _rbCfg(true); await _rbWelcomeIfReady(c2, st).catch(() => {}); } // #1106: bienvenida sólo si todo está bien · #1111: también a un grupo nuevo de una estructura que ya andaba (cada grupo la recibe una vez)
       logger.info('[rcptbot] plan aplicado: ' + p.name + ' (' + routes.length + ' grupos que mandan)');
     } else {
       report[p.name] = { ok: false, at: new Date(), missing: [...new Set(miss)], detail: det, kept: wasOn }; // #1106
