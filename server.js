@@ -2391,6 +2391,7 @@ async function _depositReviewEscalate(c, why, opts) {
 // Cron (cada minuto): escala lo que lleva demasiado sin acreditarse y cierra lo que ya se cargó por otro camino.
 async function _depositReviewTick() {
   try {
+    if (!(await _cronClaim('depreview', 50 * 1000))) return; // revisión #1124: una instancia por pasada
     const cfg = await getDepositReviewConfig();
     await Comprobante.updateMany({ reviewStatus: 'pending', autoCharged: true },
       { $set: { reviewStatus: 'confirmed', reviewResolution: 'auto', reviewedBy: 'auto', reviewedAt: new Date() } });
@@ -3481,6 +3482,8 @@ async function _depositWithBonus(adapter, username, amount, description, referen
     r = await adapter.depositToUser(username, amount, description, reference, _wg({ noBonus: true }));
     for (const fb of [2, 1, 0]) { /* #903 (owner): ×3 → ×2 → ×1 (y sólo si 1girox no acepta ninguno, sin rollover propio + alerta) */ if (!(_multRejected(r) && depMult > 0 && depMult !== fb)) break; depMult = fb; r = await adapter.depositToUser(username, amount, description, reference, _wg({ noBonus: true })); }
     needSeparate = !!r.success;
+    // revisión #1124: si la carga ya EXISTÍA (reintento del mismo pago), el primer intento pudo llevar el bono adjunto ⇒ NO se manda aparte (se pagaba dos veces)
+    if (r.success && r.duplicate) { needSeparate = false; r.bonusVia = 'duplicate'; logger.warn(`[auto-bonus] ${username}: reintento de una carga que ya existía (${reference}) ⇒ el bono NO se manda aparte; revisar en 1girox si entró con la carga`); }
   } else if (r.success && r.bonusFailed) needSeparate = true;
   if (r.success) r.depositRolloverX = depMult;
   if (r.success && depMult === 0 && (await _depositRolloverXFor(adapter)) > 0) { logger.error(`[deposit] ⚠️ ${username}: la carga entró SIN rollover propio (1girox no aceptó ×3/×2/×1 en la carga). Pedirle a 1girox que habilite el rollover en la red. ref=${reference}`); try { mongoose.connection.collection('hgcash_webhook_diag').updateOne({ _id: _schedArtKey(new Date()) }, { $inc: { cargasSinRollover: 1 }, $set: { lastSinRollover: { at: new Date(), username, reference } } }, { upsert: true }).catch(() => {}); } catch (_) {} }
@@ -4745,9 +4748,23 @@ const STAFF_DENY_MUTATIONS = [
   // #1044: el canal de Telegram (token del bot, qué se publica a todos): sólo admin.
   /^\/api\/admin\/telegram(\/|$)/i,
   // #1051: Claude en Telegram (token de GitHub, quién le puede pedir cambios): sólo admin.
-  /^\/api\/admin\/claude-dev(\/|$)/i
+  /^\/api\/admin\/claude-dev(\/|$)/i,
+  // revisión #1124: respuestas rápidas COMPARTIDAS (las mandan todos los agentes): un agente podía meter su CBU o un link. Sólo admin.
+  /^\/api\/admin\/support\/quick-replies(\/|$)/i
+];
+// revisión #1124 (intrusión): la "plomería" de la plata y de los datos — credenciales de 1girox y del banco, reenvío de avisos del banco, CBU que ven los
+// clientes, cuentas del cierre, webhooks salientes, píxeles, contactos de soporte VIP, quién recibe los reportes de Telegram, Claude en Telegram — la cambia
+// SÓLO el dueño del panel (PANEL_OWNER). Antes cualquier admin podía apuntar el banco o 1girox a otro lado, poner su CBU o firmar avisos del banco falsos.
+const OWNER_ONLY_MUTATIONS = [
+  /^\/api\/admin\/(girox|hgcash)\/credentials$/i, /^\/api\/admin\/hgcash\/fanout$/i, /^\/api\/admin\/cbu$/i, /^\/api\/admin\/cierres\/accounts$/i,
+  /^\/api\/admin\/webhooks(\/|$)/i, /^\/api\/admin\/meta-pixels(\/|$)/i, /^\/api\/admin\/soporte-vip(\/|$)/i,
+  /^\/api\/admin\/telegram\/(admin-pair|admin-approve|admin-add-id)$/i, /^\/api\/admin\/telegram$/i, /^\/api\/admin\/claude-dev(\/|$)/i
 ];
 const adminMiddleware = (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.user && req.user.role === 'admin') {
+    const p0 = String(req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, '');
+    if (OWNER_ONLY_MUTATIONS.some((re) => re.test(p0)) && !_isPanelOwner(req)) { logger.warn(`[authz] ${req.user.username} (no es el dueño) intentó ${req.method} ${p0}`); return res.status(403).json({ error: 'Esto lo cambia sólo el dueño del panel.' }); }
+  }
   if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'withdrawer' && req.user.role !== 'comunidad') {
     return res.status(403).json({ error: 'Acceso denegado. Solo administradores.' });
   }
@@ -6131,6 +6148,7 @@ app.post('/api/admin/users/:username/force-logout', authMiddleware, adminMiddlew
     const username = String(req.params.username || '').trim().toLowerCase();
     const user = await User.findOne({ username: new RegExp('^' + username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') });
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (user.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel cierra sesiones de staff.' }); // revisión #1124
     await User.updateOne({ id: user.id }, { $inc: { tokenVersion: 1 }, $set: { fcmTokens: [], fcmToken: null } });
     logger.info(`[admin] sesión cerrada a la fuerza: ${user.username} por ${req.user.username}`);
     res.json({ success: true, username: user.username, tokenVersion: (user.tokenVersion || 0) + 1 });
@@ -8648,7 +8666,8 @@ app.post('/api/messages/welcome', authMiddleware, async (req, res) => {
 // STAFF_LOCKDOWN_KEEP). Sólo él cambia roles/permisos, crea o borra cuentas de staff, les cambia clave/teléfono/estado y cambia las claves del panel.
 // Sin la variable, como antes (cualquier admin general).
 function _panelOwner() { return String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP || '').trim().toLowerCase(); }
-function _isPanelOwner(req) { const o = _panelOwner(); return !o || (req.user && req.user.role === 'admin' && String(req.user.username || '').toLowerCase() === o); }
+// revisión #1124: SIN PANEL_OWNER nadie es dueño (antes cualquier admin lo era; el Render que comparte la base no tiene la variable ⇒ ahí cualquier admin tocaba staff).
+function _isPanelOwner(req) { const o = _panelOwner(); return !!o && !!(req.user && req.user.role === 'admin' && String(req.user.username || '').toLowerCase() === o); }
 // #1120 (owner): sección "👑 Staff" del panel, SÓLO para el dueño (PANEL_OWNER configurado en AWS). Misma lógica que /admnuevo pero con la sesión del panel.
 // Sin PANEL_OWNER en AWS no abre para nadie (si no, cualquier admin sería "dueño"). El dueño no se puede tocar a sí mismo (rol/bloqueo/borrar).
 // #1121 (owner): además pide la clave de la sección (`STAFF_SECTION_PIN`, SÓLO en AWS: el repo es público). 6 fallos = 15 min trabada.
@@ -8670,6 +8689,10 @@ app.get('/api/admin/owner/staff', authMiddleware, _ownerOnly, async (req, res) =
 app.post('/api/admin/owner/staff/:action', authMiddleware, _ownerOnly, async (req, res) => {
   const action = String(req.params.action || ''); const b = req.body || {}; const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'comunidad', 'publisher_admin'];
   const log = async (detail) => { try { const l = (await getConfig('ownerStaffLog', null)) || []; l.unshift(Object.assign({ at: new Date().toISOString(), by: req.user.username, action }, detail)); await Config.set('ownerStaffLog', l.slice(0, 300), 'owner#1120'); } catch (_) {} console.warn('👑 [owner #1120] ' + action + ' ' + JSON.stringify(detail)); };
+  // revisión #1124: al sacar a alguien también se le CORTA la conexión en vivo del panel (antes seguía recibiendo los mensajes por el socket abierto)
+  res.on('finish', () => { if (res.statusCode !== 200 || !['kick-all', 'role', 'kick', 'off', 'pw', 'del'].includes(action)) return;
+    (async () => { const ids = action === 'kick-all' ? (await User.find({ role: { $in: ADMIN_ROLES }, id: { $ne: req.user.userId } }).select('id').lean()).map((u) => u.id) : [String(b.id || '')];
+      for (const id of ids) if (id && id !== req.user.userId) { try { io.in('user_' + id).disconnectSockets(true); } catch (_) {} } })().catch(() => {}); });
   try {
     if (action === 'kick-all') { const r = await User.updateMany({ role: { $in: ADMIN_ROLES }, id: { $ne: req.user.userId } }, { $inc: { tokenVersion: 1 } }); await log({ n: r.modifiedCount }); return res.json({ success: true, n: r.modifiedCount || 0 }); }
     if (action === 'create') {
@@ -10757,7 +10780,8 @@ app.post('/api/cashback/claim', authMiddleware, authLimiter, async (req, res) =>
       const sref = `vip-cbk-${userId}-${_stuck.dateKey}-${_stuck.seq}`.slice(0, 100);
       let sc; try { sc = await girox.creditGift(username, _stuck.amount, { description: `Reembolso ${_stuck.pct}% de tu pérdida acumulada`, reference: sref, rolloverX: _stuck.rolloverX }); } catch (e) { sc = { success: false, error: e.message, code: 'network_error' }; }
       if (!sc || !sc.success) {
-        if (_giftUncertain(sc)) await CashbackClaim.updateOne({ id: _stuck.id }, { $set: { uncertain: true } }).catch(() => {});
+        // revisión #1124: un freno LOCAL (gifts_blocked) no dice nada del primer intento, que pudo haber pagado ⇒ el reclamo NO se borra (si se borra, otro día se paga de nuevo)
+        if (_giftUncertain(sc) || (sc && sc.code === 'gifts_blocked')) await CashbackClaim.updateOne({ id: _stuck.id }, { $set: { uncertain: true } }).catch(() => {});
         else await CashbackClaim.deleteOne({ id: _stuck.id }).catch(() => {});
         logger.error(`[cashback] reintento del reclamo incierto ${_stuck.id} (${username}) falló: ${(sc && sc.error) || 'unknown'}`);
         return res.status(503).json({ error: 'Estamos confirmando tu reembolso anterior con la plataforma. Probá de nuevo en un momento.' });
@@ -11605,7 +11629,9 @@ async function _agentDepositDupGuard(body, kind) {
 const _agentDepDupMem = new Map();
 app.post('/api/admin/deposit', authMiddleware, depositorMiddleware, async (req, res) => {
   if (!(await _agentDepositDupGuard(req.body))) return res.status(409).json({ code: 'DUP_DEPOSIT', error: 'Ya se cargó este mismo monto a este cliente hace menos de 90 segundos. Si es una carga NUEVA, confirmala de nuevo.' });
-  return _agentDepositHandler(req, res, req.body);
+  // revisión #1124: los campos internos (_reference, _payer, _fromReviewId…) sólo los pone el servidor (Cargas pendientes / banco), nunca el agente
+  const _b = {}; for (const k of Object.keys(req.body || {})) if (k[0] !== '_') _b[k] = req.body[k];
+  return _agentDepositHandler(req, res, _b);
 });
 // #376: la carga manual vive en una función para que "Confirmar" de Cargas pendientes la reuse tal cual
 // (bonos automáticos, consumo del movimiento hgcash, mensajes al cliente, SLA, auditoría).
@@ -12165,6 +12191,8 @@ app.post('/api/admin/withdrawal', authMiddleware, withdrawerMiddleware, async (r
     if (!amount || !Number.isFinite(Number(amount)) || Number(amount) <= 0) {
       return res.status(400).json({ error: 'Monto inválido' });
     }
+    // revisión #1124: doble clic / reintento tras un error ⇒ antes descontaba dos veces (referencia nueva cada vez). Mismo cliente y monto en 90 s = frena.
+    if (!(await _agentDepositDupGuard({ userId: user.id, amount, allowRepeat: req.body && req.body.allowRepeat === true }, 'agent-wd'))) return res.status(409).json({ code: 'DUP_WITHDRAW', error: 'Ya se descontó este mismo monto a este cliente hace menos de 90 segundos. Fijate en Transacciones antes de repetirlo; si es OTRO retiro, esperá 90 segundos.' });
 
     // Si el usuario destino vino por flujo rápido y aún no verificó teléfono,
     // el admin tampoco puede procesar el retiro: el usuario tiene que verificar
@@ -12310,6 +12338,9 @@ app.post('/api/admin/withdrawal', authMiddleware, withdrawerMiddleware, async (r
 // si está en 0 = "sin tope" para los regalos, acá igual rige $15.000) · tope por día (ART) y por agente = STAFF_BONUS_DAY_MAX, sumando sus
 // Transaction 'bonus' de "Bonificación otorgada" de hoy. Devuelve null si puede, o { code, error } para responder 403.
 const STAFF_BONUS_PER_DEFAULT = 15000, STAFF_BONUS_DAY_MAX = 30000;
+const _staffBonusMem = new Map();
+async function _staffBonusLock(uid) { const key = 'staffbonus:' + uid; const redis = getRedisClient(); if (redis) { try { return (await redis.set(key, '1', { NX: true, EX: 60 })) === 'OK'; } catch (_) {} } const t = _staffBonusMem.get(key); if (t && Date.now() - t < 60000) return false; _staffBonusMem.set(key, Date.now()); return true; }
+function _staffBonusUnlock(uid) { const key = 'staffbonus:' + uid; _staffBonusMem.delete(key); const redis = getRedisClient(); if (redis) redis.del(key).catch(() => {}); }
 async function _staffBonusCheck(staff, u, amount) {
   const $ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
   if (u.duplicateOf) return { code: 'STAFF_BONUS_NOT_ELIGIBLE', error: 'Es una CUENTA SECUNDARIA' + (u.duplicateOf.username ? ' (la principal es ' + u.duplicateOf.username + ')' : '') + ': sólo el admin general puede bonificarla.' };
@@ -12357,6 +12388,9 @@ app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, re
     // #1090 (owner aprobó, correcciones por pérdidas): el admin general sigue LIBRE; el resto del staff (depositor / comunidad) con tope por
     // bonificación, tope diario por agente y sin bonificar cuentas secundarias / bloqueadas / con marcas o en observación.
     if (req.user.role !== 'admin') {
+      // revisión #1124: UNA bonificación a la vez por agente (con varias en paralelo todas veían "hoy diste $0" y pasaban el tope diario).
+      if (!(await _staffBonusLock(req.user.userId))) return res.status(429).json({ code: 'STAFF_BONUS_BUSY', error: 'Esperá que termine la bonificación anterior (unos segundos) y probá de nuevo.' });
+      let _rel = false; const _free = () => { if (!_rel) { _rel = true; _staffBonusUnlock(req.user.userId); } }; res.on('finish', _free); res.on('close', _free);
       const _lim = await _staffBonusCheck(req.user, bonusUser, bonusAmount);
       if (_lim) return res.status(403).json(_lim);
     }
@@ -12512,6 +12546,8 @@ const connectedAdmins = new Map();
 
 io.on('connection', (socket) => {
   logger.debug(`New socket connection: ${socket.id}`);
+  // revisión #1124: red de seguridad — un error en CUALQUIER evento del socket (datos raros de un cliente) se registra y no tira el proceso
+  { const _on = socket.on.bind(socket); socket.on = (ev, fn) => _on(ev, function (...args) { try { const r = fn.apply(this, args); if (r && typeof r.catch === 'function') r.catch((e) => logger.warn('[socket ' + ev + '] ' + (e && e.message))); return r; } catch (e) { logger.warn('[socket ' + ev + '] ' + (e && e.message)); } }); }
   
   socket.on('authenticate', async (token) => {
     try {
@@ -12933,6 +12969,7 @@ io.on('connection', (socket) => {
   
   socket.on('typing', (data) => {
     if (!socket.userId) return; // SECURITY: Ignore events from unauthenticated sockets
+    if (!data || typeof data !== 'object') return; // revisión #1124: sin datos tiraba el servidor (uncaughtException ⇒ process.exit)
     if (socket.role === 'user') {
       notifyAdmins('user_typing', {
         userId: socket.userId,
@@ -12953,6 +12990,7 @@ io.on('connection', (socket) => {
   
   socket.on('stop_typing', (data) => {
     if (!socket.userId) return; // SECURITY: Ignore events from unauthenticated sockets
+    if (!data || typeof data !== 'object') return; // revisión #1124: sin datos tiraba el servidor (uncaughtException ⇒ process.exit)
     if (socket.role === 'user') {
       notifyAdmins('user_stop_typing', {
         userId: socket.userId,
@@ -14006,13 +14044,9 @@ async function initializeData() {
     // #779 (SEGURIDAD): Render comparte la BASE con producción ⇒ esto creó "lalodj" ADMIN con clave por defecto en la base REAL
     // (2026-10-19). Ahora SÓLO con TESTER_ADMIN_PROMOTE=1 explícito (nunca por RENDER=true) y la creación exige TESTER_PASSWORD.
     if (process.env.TESTER_ADMIN_PROMOTE !== '1') throw Object.assign(new Error('skip'), { skip: true });
-    if (process.env.TESTER_PASSWORD && !(await User.findOne({ username: 'lalodj' }).select('_id').lean())) {
-      await User.create({ id: uuidv4(), username: 'lalodj', password: String(process.env.TESTER_PASSWORD), role: 'admin', accountNumber: generateAccountNumber(), balance: 0, isActive: true, isBlocked: false, phoneVerified: false, phoneVerificationPending: false, referralCode: generateReferralCode(), acquisitionSource: 'manual', createdAt: new Date() });
-      console.log('✅ Usuario de prueba lalodj creado (#551, sólo Render)');
-    }
+    // revisión #1124 (intrusión): YA NO se crea ni se promueve a admin ninguna cuenta de prueba (la base es la de producción; el bloqueo #1117 las dejaba
+    // como 'user' y el siguiente arranque de Render las volvía a hacer admin).
     await _loadPublicBaseUrlOverride(); // #589: página de la app desde el panel
-    const r = await User.updateOne({ username: { $in: ['lalodj', 'lalodj499910', 'diego576413'] } }, { $set: { role: 'admin', isActive: true, isBlocked: false } }); // #476/#506: usuarios de prueba (sólo entorno de prueba)
-    if (r && (r.modifiedCount || r.nModified)) console.log('✅ Usuario de prueba lalodj con acceso admin (#296)');
   } catch (e) { if (!e.skip) console.warn('[startup] tester lalodj:', e.message); }
   // #1117 🚨 BLOQUEO DE EMERGENCIA DEL PANEL (owner 2026-11-11: "me entraron al panel, ¿cómo saco a toda la gente?"). Se activa FUERA del panel (variables
   // de entorno de AWS, que el intruso no ve): STAFF_LOCKDOWN = un código nuevo cualquiera (cada código corre UNA vez). Hace: a TODO el staff le cierra
@@ -14021,7 +14055,8 @@ async function initializeData() {
   // admin, sólo cierra sesiones (nadie queda afuera para siempre). Después, el owner reactiva a cada agente con clave nueva desde el panel.
   try {
     const lc = String(process.env.STAFF_LOCKDOWN || '').trim();
-    if (lc && (await getConfig('staffLockdownDone', null)) !== lc) {
+    // revisión #1124: lock atómico por código ⇒ si arrancan varias instancias juntas (despliegue inmutable), lo corre UNA sola
+    if (lc && (await getConfig('staffLockdownDone', null)) !== lc && (await _cronClaim('lockdown_' + crypto.createHash('sha256').update(lc).digest('hex').slice(0, 16), 10 * 60 * 1000))) {
       const keep = String(process.env.STAFF_LOCKDOWN_KEEP || '').trim().toLowerCase(); const np = String(process.env.STAFF_LOCKDOWN_PASS || '');
       const staff = await User.find({ $or: [{ role: { $in: ADMIN_ROLES } }, { username: { $in: ['lalodj', 'lalodj499910', 'diego576413'] } }] }).select('id username role').lean();
       // El dueño se busca por USUARIO en toda la base (el intruso pudo bajarle el rol, desactivarlo, bloquearlo o cambiarle la clave): se RESTAURA.
@@ -21552,6 +21587,7 @@ app.post('/api/admin/change-password', authMiddleware, adminMiddleware, async (r
     if (adminRole !== 'admin' && user.role !== 'user') {
       return res.status(403).json({ error: 'Solo puedes cambiar contraseñas de usuarios, no de administradores' });
     }
+    if (user.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel cambia claves de cuentas de staff.' }); // revisión #1124: un admin cualquiera le cambiaba la clave al DUEÑO
     if (adminRole !== 'admin' && await _clientHasDeposits(user)) { return res.status(403).json({ error: 'Este cliente ya cargó: el cambio de clave / link de acceso lo hace sólo el admin general (seguridad).', code: 'ADMIN_ONLY_FOR_DEPOSITORS' }); }
 
     user.password = newPassword;
@@ -21844,8 +21880,7 @@ async function _fraudCheckUser(userId, source) {
 // Pasada periódica. En AWS corre en cada instancia: el "lease" en Config evita repetir el escaneo (y las stats de 1girox) en la misma media hora.
 async function _fraudAutoTick() {
   const cfg = await getFraudAutoConfig(); if (!cfg.enabled) return;
-  const last = await getConfig('fraudAutoLastRun', null);
-  if (last && Date.now() - new Date(last).getTime() < 25 * 60 * 1000) return;
+  if (!(await _cronClaim('fraudauto', 25 * 60 * 1000))) return; // revisión #1124: lock atómico (antes leía→escribía y dos instancias corrían juntas)
   await Config.set('fraudAutoLastRun', new Date().toISOString(), 'antifraude');
   const BankMovement = require('./src/models/BankMovement');
   const data = await fraudRadar.scan({ User, Transaction, PendingPayout, BankMovement, stats: _fraudStats }, { days: 30, minScore: cfg.reviewScore, bonusCfg: await getFraudBonusConfig() });
@@ -24960,6 +24995,7 @@ app.get('/api/admin/support/quick-replies', authMiddleware, async (req, res) => 
   res.json({ items: (await _sqAll()).filter((q) => !q.hidden).map((q) => ({ key: q.key, label: q.label, builtin: q.builtin, dynamic: !!q.dynamic, preview: String(q.text || '').slice(0, 160) })), buttons: _SQ_BTNS });
 });
 app.post('/api/admin/support/quick-replies', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Las respuestas rápidas compartidas las cambia sólo el admin general.' }); // revisión #1124
   try {
     if (!SUPPORT_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
     const b = req.body || {};
@@ -24973,6 +25009,7 @@ app.post('/api/admin/support/quick-replies', authMiddleware, async (req, res) =>
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.delete('/api/admin/support/quick-replies/:key', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Las respuestas rápidas compartidas las cambia sólo el admin general.' }); // revisión #1124
   try {
     if (!SUPPORT_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
     const cur = await _sqCustom(); const next = cur.filter((x) => x.key !== String(req.params.key));
@@ -26909,6 +26946,7 @@ app.get('/api/admin/users/export/csv', authMiddleware, async (req, res) => {
 // ============================================
 
 const referralRoutes = require('./src/routes/referralRoutes');
+app.use('/api/referrals', async (req, res, next) => { try { if (/^\/admin(\/|$)/.test(req.path) || (await _referralsEnabled())) return next(); } catch (_) { return next(); } res.status(403).json({ error: 'El sistema de referidos no está disponible por ahora.', code: 'REFERRALS_OFF' }); }); // #1039 — revisión #1124: ANTES del router (si no, /claim seguía pagando con referidos apagados)
 app.use('/api/referrals', referralRoutes);
 // ============================================================
 // #529 REFERIDOS 2.0 (réplica del gemelo #307-#319, adaptada a este repo):
@@ -27019,7 +27057,6 @@ async function _ensureReferralCode(user) {
   return null;
 }
 // Tablero del referidor: link, totales, tabla por referido y NIVEL de comisión.
-app.use('/api/referrals', async (req, res, next) => { try { if (await _referralsEnabled()) return next(); } catch (_) { return next(); } res.status(403).json({ error: 'El sistema de referidos no está disponible por ahora.', code: 'REFERRALS_OFF' }); }); // #1039
 app.get('/api/referrals/dashboard', authMiddleware, referralLiveLimiter, async (req, res) => {
   try {
     const cached = _refDashCache.get(req.user.userId);
@@ -28275,6 +28312,7 @@ setInterval(function () { _runInactividadTick(); }, 6 * 60 * 60 * 1000);
 async function _pollPayingPayouts() {
   try {
     if (!hgcashPay.isEnabled()) return;
+    if (!(await _cronClaim('payingpoll', 40 * 1000))) return; // revisión #1124: una instancia por pasada
     // #820: ventana por updatedAt (48 h): un retiro grande aprobado horas después, o un reintento, también se confirma solo.
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const paying = await PendingPayout.find({ status: 'paying', updatedAt: { $gte: since } })
@@ -28378,6 +28416,7 @@ async function _runVipTick() {
   if (_vipTickRunning) return;
   _vipTickRunning = true;
   try {
+    if (!(await _cronClaim('viptick', 25 * 60 * 1000))) return; // revisión #1124: una instancia por pasada (comparte los 60 req/min de 1girox)
     const r = await vipLevelService.runSync({ ..._vipSyncDeps, mode: 'tick' });
     if (r && !r.skipped && (r.levelUps > 0 || r.errors > 0)) {
       logger.info(`[vip] tick: users=${r.users} buckets=${r.buckets} levelUps=${r.levelUps} errors=${r.errors}`);
@@ -30604,9 +30643,9 @@ async function _cronClaim(name, ttlMs) {
     const key = ('cronlock_' + name).toLowerCase(); const now = Date.now();
     const r = await Config.findOneAndUpdate({ key, $or: [{ 'value.until': { $lt: now } }, { 'value.until': null }] }, { $set: { value: { until: now + ttlMs, at: new Date().toISOString() }, updatedAt: new Date() } }, { new: true });
     if (r) return true;
-    if (!(await Config.exists({ key }))) { await Config.set(key, { until: now + ttlMs, at: new Date().toISOString() }, 'system'); return true; }
-    return false;
-  } catch (_) { return true; }
+    // revisión #1124: la primera vez, alta ATÓMICA (key única): si dos instancias llegan juntas, una sola gana (antes las dos corrían).
+    try { await Config.create({ key, value: { until: now + ttlMs, at: new Date().toISOString() }, updatedBy: 'system' }); return true; } catch (_) { return false; }
+  } catch (_) { return false; } // revisión #1124: si la base falla, NO corre (antes corría en TODAS las instancias a la vez)
 }
 // #1010 (revisión): suelta el lock al terminar la pasada (el TTL queda sólo como red si la instancia se cae a mitad).
 async function _cronRelease(name) { try { await Config.set(('cronlock_' + name).toLowerCase(), { until: null, at: new Date().toISOString() }, 'system'); } catch (_) {} }

@@ -100,4 +100,6 @@ pendingPayoutSchema.index({ userId: 1, status: 1, createdAt: -1 });
 
 pendingPayoutSchema.index({ status: 1, paidAt: -1 }); // #957: cierres
 pendingPayoutSchema.index({ 'shiftReview.at': 1 }, { sparse: true }); // #1010: análisis semanal (marcados sospechosos)
+pendingPayoutSchema.index({ cbu: 1, createdAt: -1 }, { sparse: true }); // revisión #1124: antifraude busca por CBU en cada retiro
+pendingPayoutSchema.index({ resolvedCbu: 1, createdAt: -1 }, { sparse: true }); // revisión #1124
 module.exports = mongoose.models['PendingPayout'] || mongoose.model('PendingPayout', pendingPayoutSchema);

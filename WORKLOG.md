@@ -14661,3 +14661,30 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   el recuadro de los datos más chico y el chat más chico así se ve la página de fondo". pin.css (bloque #1123, al final): burbuja 400×620 ⇒ 360×530;
   barra de escribir con fondo del chat, caja blanca redonda, enviar verde (la cabecera negra de #1092 queda); `#spBankMsg` más chico.
   home.js `casinoSupport`: con el chat nuevo y el casino abierto, Soporte abre la BURBUJA (ya no sale del casino a pantalla completa).
+
+## #1124 — 2026-11-11/12 · Revisión nocturna 2 (6 revisores, sólo lo verificado y seguro) — app v720, panel v309
+- Owner: "revisá de punta a punta como ayer pero más todavía… avanzá con lo que más puedas, me voy a dormir". Informe para el owner: REVISION-NOCHE-2.pdf (fuera del repo).
+- **Bot de comprobantes:** misma foto mandada dos veces mientras la IA lee ⇒ se suma una vez (cuenta `hold` de 15 min, gana la más vieja); `_rbRoute` no vuelve atrás uno
+  reenviado (filtro `status:'hold'`); `_rbParseAmount`: n° de operación largo no gana a un monto con separador/$, "20.800.000.50"; `/fichas 0`. Canal: el secreto del webhook se relee como mucho cada 30 s.
+- **Bot de soporte:** Haiku 5.5 NO admite `fallbacks` (daba 400 en CADA respuesta) ⇒ fallbacks + header beta sólo para modelos que no son Haiku. El cliente no puede escribir "[aviso automático]".
+- **Seguridad (intrusión #1117):**
+  - `POST /api/admin/change-password` y `force-logout`: sobre cuentas de STAFF sólo el dueño (un admin cualquiera le cambiaba la clave al dueño).
+  - `_isPanelOwner` falla CERRADO: sin `PANEL_OWNER` nadie es dueño (antes todos; el Render que comparte la base no tiene la variable).
+  - Ya NO se crean/promueven a admin las cuentas de prueba (lalodj…) con `TESTER_ADMIN_PROMOTE` (deshacía el bloqueo en la base real).
+  - `OWNER_ONLY_MUTATIONS` (en `adminMiddleware`): credenciales de 1girox/hgcash, fanout, CBU, cuentas del cierre, webhooks, píxeles, soporte VIP, vínculo del grupo de
+    reportes de Telegram, `/api/admin/telegram`, claude-dev ⇒ sólo el dueño. Ruta NUEVA que toque plata/datos de esa clase ⇒ sumarla ahí.
+  - `src/middlewares/auth.js` (rutas de referidos): cuenta borrada ⇒ 401, base caída ⇒ 503 (antes dejaba pasar), staff con clave temporal no opera, rol desde la BASE.
+  - Referidos apagados: el freno va ANTES del router (`/claim` seguía pagando); `/admin/*` sigue para el panel.
+  - Sacar staff desde 👑 Staff corta también el socket en vivo (`disconnectSockets`). Respuestas rápidas compartidas: sólo admin.
+  - Carga manual: se descartan los campos `_*` que mande el agente (`_reference`, `_payer`, `_fromReviewId` los pone sólo el servidor).
+- **Plata:** retiro manual del panel con freno de 90 s (`DUP_WITHDRAW`); Bonificación de agentes UNA a la vez por agente (`_staffBonusLock`, el tope diario se pasaba
+  en paralelo); carga reintentada que ya existía ⇒ el bono NO se manda aparte (se pagaba dos veces); `_giftBlocked` falla cerrado; reclamo acumulativo incierto no se borra por `gifts_blocked`.
+- **Servidor:** `typing`/`stop_typing` sin datos tiraban el proceso ⇒ guard + red de seguridad en TODOS los eventos del socket. `_cronClaim` falla cerrado y el primer alta es atómica
+  (`Config.create`); locks nuevos: viptick, fraudauto (antes leer→escribir), depreview, payingpoll y el bloqueo de emergencia (una instancia por código). Índices: PendingPayout cbu /
+  resolvedCbu, AppSession lastPingAt.
+- **Front:** panel Gastos tenía el mismo id que Visitantes de Soporte (`gastosList`); "💬 Ver chat" de Pagos a confirmar/Retiros frenados no hacía nada (⇒ `openChatFromDelay`);
+  la ruleta se abre ADENTRO del casino; la hoja chica del sorteo "Anotate" va al sorteo EN VIVO. (La tarjeta cruzada de sorteos NO se puso: el test dice que se sacó a propósito.)
+- Tests actualizados: support-bot (Haiku sin fallbacks, Soporte abre la burbuja #1123), loss-fixes-1090 (lock), sorteos-server (mock `Config.create`). 32/32 + arranque OK.
+- **Propuestas sin tocar (decisión del owner, en el PDF):** `STAFF_LOCKDOWN_TEMP` da la MISMA clave a todo el staff (no usarla); depositor puede cargar fichas sin transferencia
+  (frenar retiros de quien tiene cargas manuales sin movimiento del banco); `/admnuevo` con clave de 4+ y bloqueo global; arrastre de bono (#1040) con carreras; reembolso semanal/acumulativo
+  que puede pagar dos veces la misma pérdida; NotifBatch con 20k destinatarios; caché de `/api/sorteos`; auditar lo que el intruso pudo dejar (Telegram, webhooks, CBU, keys).

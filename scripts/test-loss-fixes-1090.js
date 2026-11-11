@@ -63,7 +63,7 @@ const old = (min) => new Date(Date.now() - min * 60000);
   });
   await caso('Bonificación: la ruta deja libre al admin general (el chequeo es sólo para role !== admin) y el aviso DUP_BONUS sigue antes', () => {
     const i = S.indexOf("app.post('/api/admin/bonus'"); const body = S.slice(i, i + 3000);
-    assert.ok(/if \(req\.user\.role !== 'admin'\) \{\s*const _lim = await _staffBonusCheck/.test(body)); assert.ok(body.indexOf('DUP_BONUS') < body.indexOf('_staffBonusCheck('));
+    assert.ok(/if \(req\.user\.role !== 'admin'\) \{[\s\S]{0,900}_staffBonusLock\(req\.user\.userId\)[\s\S]{0,600}const _lim = await _staffBonusCheck/.test(body), 'agente: una bonificación a la vez (#1124) + tope'); assert.ok(body.indexOf('DUP_BONUS') < body.indexOf('_staffBonusCheck('));
   });
   await caso('Historias: con bono pública (miércoles/admin) y regalo al azar = regalo semanal; bienvenida día 5/15/30 NO', () => {
     assert.ok(ST._storyNeedsTrust({ bonusPct: 100, audienceUserId: null })); assert.ok(ST._storyNeedsTrust({ autoKind: 'regalo_azar', audienceUserId: 'u1', bonusPct: 30 }));

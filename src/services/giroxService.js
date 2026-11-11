@@ -277,7 +277,8 @@ function setPublisherOwnedCheck(fn) { _publisherOwned = typeof fn === 'function'
 // Excepciones con `opts.noGiftGuard`: devoluciones de plata propia (retiro rechazado) y la Bonificación MANUAL del panel.
 let _giftGuard = null;
 function setGiftGuard(fn) { _giftGuard = typeof fn === 'function' ? fn : null; }
-async function _giftBlocked(username) { try { return (_giftGuard && await _giftGuard(String(username))) || null; } catch (_) { return null; } }
+// revisión #1124: si el chequeo falla (base ocupada) NO se regala (antes las secundarias recibían regalos justo en ese momento); el cliente reintenta.
+async function _giftBlocked(username) { try { return (_giftGuard && await _giftGuard(String(username))) || null; } catch (_) { return 'no se pudo verificar la cuenta, probá de nuevo'; } }
 function _giftBlockedResult(why) { return { success: false, error: 'Cuenta secundaria: sin regalos (' + why + ')', code: 'gifts_blocked', httpStatus: null }; }
 async function _isPublisherOwned(username) { try { return !!(_publisherOwned && await _publisherOwned(String(username))); } catch (_) { return false; } }
 async function _resolveKeyFor(username) {

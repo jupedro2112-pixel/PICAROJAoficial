@@ -160,6 +160,8 @@
     function open() {
         const modal = document.getElementById('rouletteModal');
         if (!modal) return;
+        // revisión #1124: con Girox abierto (arranque por defecto) la ruleta quedaba DETRÁS del casino (push "tu giro está listo", historias…)
+        try { if (window.VIP && VIP.home && typeof VIP.home.modalIntoCasino === 'function') VIP.home.modalIntoCasino('rouletteModal'); } catch (_) {}
         if (!_state) { loadStatus(); }
         _renderModal();
         modal.style.display = 'flex';

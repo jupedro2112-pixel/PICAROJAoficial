@@ -7156,7 +7156,7 @@ async function cajaDelete(id) {
 // resumen de hoy en la barra al entrar al Chat completo
 document.addEventListener('DOMContentLoaded', function () { setTimeout(function () { try { if (document.getElementById('cajaBar')) authFetch('/api/admin/caja-movimientos?days=1').then(function (r) { return r.json(); }).then(function (j) { const hoy = j.hoy || {}; const tb = document.getElementById('cajaBarToday'); if (tb) tb.textContent = hoy.n ? ('Hoy: ' + hoy.n + ' anotado(s) · ⬇️ ' + _cajaMoney(hoy.ingresos) + ' · ⬆️ ' + _cajaMoney(hoy.egresos)) : ''; }).catch(function () {}); } catch (_) {} }, 4000); });
 async function loadGastos() {
-    const l = document.getElementById('gsList'), t = document.getElementById('gsTotals'); if (!l) return;
+    const l = document.getElementById('gastosList'), t = document.getElementById('gsTotals'); if (!l) return;
     l.innerHTML = '<div class="dia-note">Cargando…</div>';
     try {
         const r = await authFetch('/api/admin/gastos?days=30'); const j = await r.json(); if (!r.ok) { l.innerHTML = '<div style="color:#ff8080;">' + escapeHtml(j.error || 'Error') + '</div>'; return; }
@@ -7382,13 +7382,13 @@ async function loadPayReview() {
                 (rk.fraudNotes && rk.fraudNotes.length ? '<div style="color:#888;font-size:11px;">' + rk.fraudNotes.map(function (n) { return escapeHtml(n.note || ''); }).join(' · ') + '</div>' : '') +
                 (p.status === 'paying' ? '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><span style="background:#2a6df0;color:#fff;border-radius:9px;padding:2px 8px;font-size:11px;">⏳ En proceso en el banco</span>' +
                     '<button type="button" class="btn-primary btn-small" onclick="payReviewSync(\'' + p.id + '\')">🔄 Consultar al banco</button>' +
-                    '<button type="button" class="btn-secondary btn-small" onclick="try{viewUserChat(\'' + p.userId + '\')}catch(e){showSection(\'chats\')}">💬 Ver chat</button></div></div>' :
+                    '<button type="button" class="btn-secondary btn-small" onclick="openChatFromDelay(\'' + p.userId + '\')">💬 Ver chat</button></div></div>' :
                 '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">' +
                 '<button type="button" class="btn-primary btn-small" onclick="payReviewApprove(\'' + p.id + '\')">✅ Confirmar y pagar</button>' +
                 '<button type="button" class="btn-secondary btn-small" onclick="payReviewOtherBank(\'' + p.id + '\')" title="Ya hiciste la transferencia A MANO (mismo banco porque falló la API, una cuenta secundaria u otro banco): descuenta las fichas y lo marca pagado; te pregunta desde dónde salió">🏦 Ya lo pagué a mano</button>' + // #904
                 '<button type="button" class="btn-secondary btn-small" onclick="payReviewReject(\'' + p.id + '\')" style="color:#ff8080;">⛔ Rechazar</button>' +
                 '<button type="button" class="btn-secondary btn-small" onclick="payReviewRejectBlock(\'' + p.id + '\')" style="color:#fff;background:#b3001b;border-color:#b3001b;" title="Rechaza el retiro y bloquea la cuenta (cierra la sesión). Queda en el historial con tu usuario y el motivo.">🚫 Rechazar y bloquear</button>' + // #996
-                '<button type="button" class="btn-secondary btn-small" onclick="try{viewUserChat(\'' + p.userId + '\')}catch(e){showSection(\'chats\')}">💬 Ver chat</button>' +
+                '<button type="button" class="btn-secondary btn-small" onclick="openChatFromDelay(\'' + p.userId + '\')">💬 Ver chat</button>' +
                 '</div></div>');
         };
         box.innerHTML = _prItems.map(_prItemHtml).join('');

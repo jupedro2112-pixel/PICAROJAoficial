@@ -1744,6 +1744,9 @@ ranking (`_sorteoWinners(key, pk, excludeUserId)`). Requisito teléfono = 10 dí
   el retiro ≥ minArs a ≤ hours de un regalo (`fraudRadar.GIFT_TX`).
 
 ### Revisión de seguridad #995 (2026-11-01)
+- **Sólo el DUEÑO (#1124, `OWNER_ONLY_MUTATIONS`):** dentro de `adminMiddleware`, para role admin que no es `PANEL_OWNER`: POST/DELETE de credenciales de 1girox y hgcash,
+  fanout, CBU, `cierres/accounts`, webhooks salientes, píxeles, soporte VIP, vínculo del grupo de Telegram, `/api/admin/telegram`, claude-dev ⇒ 403. `_isPanelOwner` falla cerrado.
+  Cambiar clave / cerrar sesión de una cuenta de STAFF también es sólo del dueño. `_cronClaim` falla cerrado (base caída ⇒ el cron no corre) y el primer lock es `Config.create` atómico.
 - **Lista de mutaciones de sólo-admin (`STAFF_DENY_MUTATIONS`):** `adminMiddleware` compara la ruta SIN las barras del final (Express no es
   estricto: `/api/users/<id>/` llega al mismo handler y una regla con `$` no la veía). Una regla nueva puede terminar en `$` tranquila.
   `soporte-vip` y `community` (contactos y links que ven todos los clientes) son sólo del admin general.

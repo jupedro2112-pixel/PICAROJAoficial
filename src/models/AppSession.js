@@ -16,5 +16,6 @@ const schema = new mongoose.Schema({
   chat: { type: String, default: null }                      // #1042-y: new | classic (chat de Soporte)
 });
 schema.index({ userId: 1, lastPingAt: -1 });
+schema.index({ lastPingAt: -1 }); // revisión #1124: INICIO / Datos IA cuentan sesiones recientes sin userId
 schema.index({ startedAt: 1 }, { expireAfterSeconds: 180 * 24 * 3600 });
 module.exports = mongoose.models['AppSession'] || mongoose.model('AppSession', schema);

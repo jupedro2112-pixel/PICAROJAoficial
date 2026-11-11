@@ -153,9 +153,14 @@ const authenticate = async (req, res, next) => {
     }
 
     // Check tokenVersion for session revocation
+    let _dbRole = null;
     { // #956: siempre (un token viejo sin tokenVersion cuenta como 0)
       try {
-        const user = await User.findOne({ id: decoded.userId }).select('tokenVersion isActive isBlocked').lean();
+        const user = await User.findOne({ id: decoded.userId }).select('tokenVersion isActive isBlocked role staffMustChangePw').lean();
+        // revisión #1124 (intrusión): cuenta BORRADA ⇒ 401 (antes pasaba) · staff con clave temporal ⇒ no opera · el rol sale de la BASE, no del token.
+        if (!user) return next(new AppError('Sesión inválida.', 401, ErrorCodes.AUTH_UNAUTHORIZED));
+        if (user.staffMustChangePw === true && user.role !== 'user') return next(new AppError('Tenés que cambiar tu clave temporal.', 403, ErrorCodes.AUTH_UNAUTHORIZED));
+        _dbRole = user.role;
         // #413 (seguridad): igual que el authMiddleware de server.js — un bloqueado/inactivo no opera (ej. cobrar referidos).
         if (user && (user.isActive === false || user.isBlocked === true)) {
           return next(new AppError('Cuenta bloqueada o inactiva.', 403, ErrorCodes.AUTH_UNAUTHORIZED));
@@ -169,12 +174,13 @@ const authenticate = async (req, res, next) => {
         }
       } catch (dbErr) {
         logger.error('Error verificando tokenVersion:', dbErr.message);
-        // Allow request if DB check fails (best-effort)
+        // revisión #1124: si la base no responde NO se deja pasar (antes sí: "best-effort") ⇒ 503, el cliente reintenta.
+        return next(new AppError('Servicio ocupado, probá de nuevo en un momento.', 503, ErrorCodes.AUTH_UNAUTHORIZED));
       }
     }
 
-    // Adjuntar usuario al request
-    req.user = decoded;
+    // Adjuntar usuario al request (con el rol de la BASE)
+    req.user = Object.assign({}, decoded, _dbRole ? { role: _dbRole } : {});
     req.token = token;
 
     next();
