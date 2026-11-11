@@ -6508,6 +6508,7 @@ async function loadRcptBot() {
         _rb = { groups: j.groups || [], bots: j.bots || [], structs: (j.structs || []).map((x) => Object.assign({}, x, { routes: JSON.parse(JSON.stringify(x.routes || [])) })) };
         st.innerHTML = (j.onRender ? '⚠️ En Render los bots no se conectan (comparte la base). ' : '') + 'Lectura IA de montos: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? ' · <span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '') +
             Object.entries(j.plan || {}).map(([n, x]) => rbPlanRepHtml(n, x)).join('') + // #1097 · #1106 detalle
+            rbCleanHtml(j) + // #1110
             Object.entries(j.welcome || {}).filter(([, w]) => w && w.wait).map(([n, w]) => '<div style="margin-top:8px;padding:10px 12px;border-radius:10px;border:1px solid var(--p-red,#d9001f);font-size:13px">📣 <b>Bienvenida de ' + escapeHtml(n) + ' EN ESPERA</b> (no se mandó a ningún grupo): arreglá esto en Telegram y sale sola en 5 min.' + w.wait.map((t) => '<div style="margin-top:4px">• ' + escapeHtml(t) + '</div>').join('') + '</div>').join('');
         rbRenderStructs();
         document.getElementById('rbGroups').innerHTML = _rbGroupsHtml(j);
@@ -6621,6 +6622,35 @@ async function rbPlanPin(name, id) {
     id = String(id || '').trim(); if (!id) { showToast('Escribí el ID del grupo (empieza con -)', 'error'); return; }
     const j = await _rbPost('/api/admin/rcptbot/plan-pin', { name, id }, null, true); if (!j) return;
     showToast('✅ "' + escapeHtml(name) + '" ⇒ ' + escapeHtml(j.title || j.id) + '. Aplicando la configuración…', 'success'); setTimeout(() => { try { loadRcptBot(); } catch (_) {} }, 6000);
+}
+// #1110 (owner): EMPEZAR DE CERO — borra SÓLO los mensajes del bot desde una hora (los de la gente no se tocan), desfija lo del bot, cuentas a $0, presentación de nuevo.
+function rbCleanHtml(j) {
+    const c = j.clean; const pad = (n) => String(n).padStart(2, '0'); const d = new Date(j.cleanSince || Date.now() - 6 * 3600000);
+    const loc = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    let stTxt = '';
+    if (c) {
+        const del = (c.groups || []).reduce((a, g) => a + (g.deleted || 0), 0); const unp = (c.groups || []).reduce((a, g) => a + (g.unpinned || 0), 0);
+        stTxt = '<div style="margin-top:8px;font-size:12.5px">' + (c.running ? '⏳ <b>En curso</b> (' + escapeHtml(c.step || '') + ')…' : '✅ <b>Última limpieza</b> ' + escapeHtml(new Date(c.finishedAt || c.startedAt).toLocaleString('es-AR'))) +
+            ' · 🗑️ ' + del + ' mensajes del bot borrados · 📌 ' + unp + ' desfijados' + (c.reset ? ' · 🧮 cuentas a $0 (' + c.reset.comprobantes + ' comprobantes, ' + c.reset.cierres + ' cierres archivados)' : '') +
+            (c.error ? '<br>❌ ' + escapeHtml(c.error) : '') + (c.groups || []).filter((g) => g.error).map((g) => '<br>⚠️ ' + escapeHtml(g.group) + ': ' + escapeHtml(g.error)).join('') +
+            (c.welcome || []).filter((w) => w.wait).map((w) => '<br>📣 ' + escapeHtml(w.struct) + ': presentación EN ESPERA (' + escapeHtml((w.wait || []).join(' · ')) + ')').join('') + '</div>';
+    }
+    return '<details style="margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--p-border,#ddd);font-size:13px"' + (c && c.running ? ' open' : '') + '><summary style="cursor:pointer"><b>🧹 Empezar de cero</b> (borrar lo que habló el bot, cuentas a $0, presentación nueva)</summary>' +
+        '<div style="margin-top:8px">Borra <b>sólo los mensajes que mandó el bot</b> desde la hora que elijas (los de la gente <b>no se tocan</b>: Telegram no deja que el bot edite mensajes ajenos). Máximo 48 h para atrás.</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px"><label>Desde <input type="datetime-local" id="rbCleanSince" value="' + loc + '" style="padding:5px 8px;border-radius:8px;border:1px solid var(--p-border,#ccc);background:var(--p-card,#fff);color:inherit"></label></div>' +
+        '<label style="display:block;margin-top:6px"><input type="checkbox" id="rbCleanMsgs" checked> 🗑️ Borrar los mensajes del bot desde esa hora y desfijar lo del bot</label>' +
+        '<label style="display:block;margin-top:4px"><input type="checkbox" id="rbCleanReset" checked> 🧮 Cuentas a $0 en TODOS los grupos (sumas, cierres, pendientes, /suma, fichas; queda archivado en la base)</label>' +
+        '<label style="display:block;margin-top:4px"><input type="checkbox" id="rbCleanWelcome" checked> 📣 Mandar la presentación de nuevo (fijada + archivo + /suma)</label>' +
+        '<button class="btn btn-primary btn-sm" style="margin-top:8px"' + (c && c.running ? ' disabled' : '') + ' onclick="rbClean()">🧹 Empezar de cero</button>' + stTxt + '</details>';
+}
+async function rbClean() {
+    const v = (id) => document.getElementById(id); const since = v('rbCleanSince').value; if (!since) { showToast('Elegí desde qué hora', 'error'); return; }
+    const msgs = v('rbCleanMsgs').checked, reset = v('rbCleanReset').checked, welcome = v('rbCleanWelcome').checked;
+    const what = [msgs ? 'borrar los mensajes del BOT desde ' + new Date(since).toLocaleString('es-AR') : '', reset ? 'poner TODAS las cuentas en $0' : '', welcome ? 'mandar la presentación de nuevo' : ''].filter(Boolean).join(', ');
+    if (!what) { showToast('Tildá al menos una opción', 'error'); return; }
+    const ok = prompt('Vas a: ' + what + '.\nNo se puede deshacer. Escribí BORRAR para confirmar:'); if (ok !== 'BORRAR') return;
+    const j = await _rbPost('/api/admin/rcptbot/clean', { since: new Date(since).toISOString(), msgs, reset, welcome, confirm: 'BORRAR' }, '🧹 Arrancó: tarda unos minutos (se ve el avance acá)', true); if (!j) return;
+    let n = 0; const t = setInterval(() => { try { loadRcptBot(); } catch (_) {} if (++n > 60) clearInterval(t); }, 10000);
 }
 async function rbWelcome(si) { // #1106
     const st = _rb && _rb.structs[si]; if (!st) return; if (!confirm('¿Mandar la bienvenida (presentación fijada + archivo + aviso de /anterior) a TODOS los grupos de "' + st.name + '"?')) return;

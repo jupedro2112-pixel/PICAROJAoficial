@@ -29,6 +29,16 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1110. Bot de comprobantes: 🧹 EMPEZAR DE CERO (2026-11-11)
+- **Owner:** "borrar lo que habló el bot en los grupos después de subir, que el grupo siga normal porque hay cosas importantes; desfijar todo; reiniciar la
+  presentación; empezar las cuentas de 0" · "no toque nada que no sea del bot".
+- Panel → Bot de comprobantes → "🧹 Empezar de cero" (sólo admin, clave del bot, escribir BORRAR). `POST /api/admin/rcptbot/clean` ⇒ `_rbCleanRun` en segundo
+  plano (estado en `Config['rcptbotclean']`): (1) por grupo y bot, `_rbCleanChat` manda un aviso (id = tope) y va para atrás con `editMessageReplyMarkup`: SÓLO anda
+  en mensajes del propio bot ⇒ los borra si son desde la hora elegida; al primero suyo de antes le deja el teclado vacío y para (tope 2500 ids; Telegram borra
+  hasta 48 h). Los mensajes de la gente NUNCA se tocan. Después desfija los fijados del bot. (2) `_rbResetAccounts`: RcptFwd/RcptClose vivos ⇒ `status:'reset'`
+  (archivados, fuera de toda suma) + arrastre de fichas vacío. (3) presentación de nuevo (borra las marcas `welcome1106|*` y `_rbWelcomeIfReady`).
+- Test rcptbot-flow 46.
+
 ### 1109. Bot de comprobantes: LECTURA DEL MONTO a prueba de errores (2026-11-11)
 - **Owner (con fotos):** "detectó mal el número, necesito que lea bien el número grande de la transferencia": $447.116⁹⁹ se leyó $447,12 (la IA devolvía
   447.116 como número ⇒ punto de miles tomado como coma) y $281.142,99 como $28.142,99 (foto girada, Haiku 4.5 se comió un dígito).

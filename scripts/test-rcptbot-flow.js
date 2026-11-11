@@ -66,7 +66,7 @@ const RcptFwd = model(), RcptClose = model();
 // --- Telegram falso ---
 const sent = []; let msgId = 1000;
 const tgChannel = {
-  call: async (token, method, p) => { sent.push({ token, method, p }); if (method === 'getFile') return { ok: true, result: { file_path: 'x.jpg', file_size: 10 } }; if (method === 'getMe') return { ok: true, result: { id: Number(token.split(':')[0]), username: 'bot' + token.split(':')[0] } }; if (method === 'getChatMember') { const st = (global.TG_MEMBER || {})[String(p.chat_id)] || 'administrator'; return { ok: true, result: { status: st } }; } return { ok: true, result: { message_id: ++msgId } }; },
+  call: async (token, method, p) => { sent.push({ token, method, p }); if (global.TG_EXTRA) { const x = global.TG_EXTRA(token, method, p); if (x) return x; } if (method === 'getFile') return { ok: true, result: { file_path: 'x.jpg', file_size: 10 } }; if (method === 'getMe') return { ok: true, result: { id: Number(token.split(':')[0]), username: 'bot' + token.split(':')[0] } }; if (method === 'getChatMember') { const st = (global.TG_MEMBER || {})[String(p.chat_id)] || 'administrator'; return { ok: true, result: { status: st } }; } return { ok: true, result: { message_id: ++msgId } }; },
   sendMedia: async (token, kind, chat, media, extra) => { sent.push({ token, method: 'sendMedia:' + kind, p: Object.assign({ chat_id: chat }, extra) }); return { ok: true, result: { message_id: ++msgId } }; },
 };
 let aiAmount = 25000.99;
@@ -77,12 +77,12 @@ const RealDate = Date; class FakeDate extends RealDate { constructor(...a) { if 
 const routes = {}; const app = { get: (p, ...h) => { routes['GET ' + p] = h[h.length - 1]; }, post: (p, ...h) => { routes['POST ' + p] = h[h.length - 1]; } };
 const SCHED_ART_OFFSET_MS = 3 * 3600000;
 const ctx = { require: (p) => (p.endsWith('RcptFwd') ? { RcptFwd, RcptClose } : p === 'axios' ? { get: async () => ({ data: Buffer.from('img') }) } : p.startsWith('./') ? require(require('path').join(__dirname, '..', p)) : require(p)),
-  Config, app, authMiddleware: 1, adminMiddleware: 1, tgChannel, comprobanteAi, crypto, uuidv4: () => crypto.randomUUID(), logger: { info() {}, warn: (m) => console.log('WARN', m) },
+  Config, app, _cronClaim: async () => true, authMiddleware: 1, adminMiddleware: 1, tgChannel, comprobanteAi, crypto, uuidv4: () => crypto.randomUUID(), logger: { info() {}, warn: (m) => console.log('WARN', m) },
   _credDecrypt: (x) => x, _credEncrypt: (x) => x, _tgCfg: async () => ({ token: 'CANAL' }), _tgWebhookBase: () => 'https://picaroja.com', getConfig: async () => null,
   _schedArtKey: (d) => new RealDate(new RealDate(d).getTime() - SCHED_ART_OFFSET_MS).toISOString().slice(0, 10),
   _tgArtHour: (d = new FakeDate()) => Number(new RealDate(d).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })) % 24,
   _sha: (v) => crypto.createHash('sha256').update(String(v)).digest('hex'), _pinLocked: () => false, _pinCheck: () => {},
-  process: { env: {} }, setTimeout: () => 0, setInterval: () => 0, Date: FakeDate, Math, JSON, Object, Array, String, Number, Buffer, Set, Map, Promise, RegExp, Error, console };
+  process: { env: {} }, setTimeout: (f, ms) => { if (ms <= 2000) setImmediate(f); return 0; }, setInterval: () => 0, Date: FakeDate, Math, JSON, Object, Array, String, Number, Buffer, Set, Map, Promise, RegExp, Error, console };
 vm.createContext(ctx); vm.runInContext(blk + '; this._RB_SRC_KB = _RB_SRC_KB; this._RB_DST_KB = _RB_DST_KB; this._rbCloseTick = _rbCloseTick; this._rbCbuTick = _rbCbuTick; this._rbCfg = _rbCfg; this._rbMonthCloseTick = _rbMonthCloseTick; this._rbWelcomeStruct = _rbWelcomeStruct; this._rbPlanGroup = _rbPlanGroup; this._rbPlanRun = _rbPlanRun; this.RB_PLAN = RB_PLAN; this._rbWelcomeIfReady = _rbWelcomeIfReady;', ctx);
 // --- armado: 1 estructura, bot 111, grupo 1 (-1) manda; ,99 → -2 ; todo lo demás → -3 ---
 cfgDocs.push({ key: 'rcptbot', value: { bots: [{ id: '111', username: 'b111', tokenEnc: '111:TOKEN', secret: 'S' }], groups: [{ id: '-1', title: 'buffalobot', bots: ['111'] }, { id: '-2', title: 'asuncionbot', bots: ['111'] }, { id: '-3', title: 'fichasnuevobot', bots: ['111'] }],
@@ -427,6 +427,30 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(cfgDocs.find((d) => d.key === 'rcptbotplan').value.welcome.Wtest.sent);
     const n1 = sent.length; r = await ctx._rbWelcomeIfReady(c, c.structs[0]); assert.ok(r.done && sent.length === n1, 'ya la tienen: ni revisa');
     rc.groups = JSON.parse(keepG); rc.structs = JSON.parse(keepS); await ctx._rbCfg(true);
+  });
+  await caso('#1110 empezar de cero: borra SÓLO lo del bot desde la hora, desfija lo del bot, cuentas a $0, presentación de nuevo', async () => {
+    const since = NOW.getTime() - 3600000; const chat = '-3'; const msgs = {}; // id ⇒ { mine, date }
+    for (let i = 1; i <= 30; i++) msgs[i] = { mine: i % 3 !== 0, date: (i <= 10 ? since - 60000 : since + i * 1000) / 1000 };
+    let pinned = [25, 7]; const del = [];
+    global.TG_EXTRA = (tok, m, p) => { if (String(p.chat_id) !== chat) return null;
+      if (m === 'sendMessage' && /Ordenando/.test(p.text)) { msgs[31] = { mine: true, date: NOW.getTime() / 1000 }; return { ok: true, result: { message_id: 31 } }; }
+      if (m === 'editMessageReplyMarkup') { const x = msgs[p.message_id]; return x && x.mine ? { ok: true, result: { message_id: p.message_id, date: x.date } } : { ok: false, error: "message can't be edited" }; }
+      if (m === 'deleteMessage') { del.push(p.message_id); delete msgs[p.message_id]; pinned = pinned.filter((x) => x !== p.message_id); return { ok: true }; }
+      if (m === 'getChat') { const id = pinned[0]; return { ok: true, result: id ? { pinned_message: { message_id: id, from: { id: msgs[id] && msgs[id].mine ? Number(tok.split(':')[0]) : 1 } } } : {} }; }
+      if (m === 'unpinChatMessage') { pinned = pinned.filter((x) => x !== p.message_id); return { ok: true }; }
+      return null; };
+    const call = async (body) => { let out = null, code = 200; await routes['POST /api/admin/rcptbot/clean']({ body, user: { username: 'admin', role: 'admin' } }, { status(c) { code = c; return this; }, json(j) { out = j; } }); return { code, out }; };
+    assert.strictEqual((await call({ since: new Date(since).toISOString(), msgs: true })).code, 400, 'sin BORRAR no arranca');
+    assert.ok(RcptFwd.rows.some((x) => ['open', 'closed', 'srconly'].includes(x.status)));
+    const r = await call({ since: new Date(since).toISOString(), msgs: true, reset: true, welcome: true, confirm: 'BORRAR' }); assert.ok(r.out && r.out.success, JSON.stringify(r));
+    for (let i = 0; i < 150; i++) { const st = (cfgDocs.find((d) => d.key === 'rcptbotclean') || {}).value; if (st && !st.running) break; await new Promise((q) => setTimeout(q, 50)); }
+    const st = cfgDocs.find((d) => d.key === 'rcptbotclean').value; assert.ok(!st.running && !st.error, JSON.stringify(st));
+    assert.ok(del.every((id) => id > 10 && id % 3 !== 0) && del.includes(31) && del.includes(11), 'sólo lo del bot desde la hora: ' + del);
+    for (let i = 1; i <= 30; i++) if (i % 3 === 0 || i <= 10) assert.ok(msgs[i], 'quedó ' + i + ' (de la gente o de antes)');
+    assert.deepStrictEqual(pinned, [], 'desfijados los del bot'); // el 7 era del bot (fijado viejo) también se desfija
+    assert.ok(!RcptFwd.rows.some((x) => ['open', 'closed', 'hold', 'srconly', 'srcclosed'].includes(x.status)), 'cuentas a $0');
+    assert.ok(st.reset && st.reset.comprobantes > 0 && Array.isArray(st.welcome), JSON.stringify(st.reset));
+    global.TG_EXTRA = null;
   });
   await caso('#1109 las dos lecturas no coinciden ⇒ NO se suma; botón "✅ Es $X" lo reenvía aclarado', async () => {
     const st = cfgDocs[0].value.structs[0]; st.on = true; st.routes = [{ from: '-1', rules: [{ cents: '99', to: '-3' }], otherTo: null }]; st.srcQuote = false; await ctx._rbCfg(true);

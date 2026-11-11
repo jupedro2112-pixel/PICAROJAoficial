@@ -33237,7 +33237,9 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
     const groups = (c.groups || []).map((g) => ({ id: g.id, title: g.title, bots: (g.bots || []).map((id) => ((c.botsDec || []).find((b) => b.id === id) || {}).username || id) }));
     const planDoc = ((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}; const planRep = planDoc.report || {}; const welcomeSt = planDoc.welcome || {}; // #1097 · #1106
-    res.json({ success: true, plan: planRep, welcome: welcomeSt, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
+    const cleanSt = ((await Config.collection.findOne({ key: 'rcptbotclean' })) || {}).value || null; // #1110
+    const tms = Object.values(planRep).concat(Object.values(welcomeSt)).map((x) => x && x.at && new Date(x.at).getTime()).filter((x) => x > Date.now() - 47 * 3600000); const cleanSince = new Date((tms.length ? Math.min(...tms) : Date.now() - 6 * 3600000) - 10 * 60000);
+    res.json({ success: true, plan: planRep, welcome: welcomeSt, clean: cleanSt, cleanSince, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/bot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar o reemplazar un bot (por su token)
@@ -33352,6 +33354,78 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
     if (turnedOn) { const c2 = await _rbCfg(true); await _rbWelcomeIfReady(c2, st).catch(() => {}); } // #1106: sólo si todo está bien
     res.json({ success: true, id: st.id });
   } catch (e) { res.status(e.http || 500).json({ error: e.message }); }
+});
+// #1110 (owner: "borrar lo que habló el bot en los grupos después de subir, que el grupo siga normal porque hay cosas importantes; desfijar todo; reiniciar la
+// presentación; empezar las cuentas de 0"). EMPEZAR DE CERO:
+// 1) mensajes: Telegram no lista mensajes ⇒ el bot manda un aviso (su id = el último), y va para atrás probando cada id con editMessageReplyMarkup: SÓLO
+//    funciona sobre mensajes del propio bot (los de la gente dan error y no se tocan). Los suyos desde `since` se borran; al primero suyo anterior a `since`
+//    le devuelve el teclado vacío y para. Tope `maxScan` ids por grupo. 2) desfija los fijados del bot (getChat ⇒ pinned_message del bot ⇒ unpin).
+// 3) cuentas a $0: RcptFwd/RcptClose vivos ⇒ status 'reset' (quedan archivados, fuera de toda suma) + arrastre de fichas a 0. 4) presentación de nuevo.
+const _rbSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function _rbTg(token, method, p) { for (let i = 0; i < 4; i++) { const r = await tgChannel.call(token, method, p); if (!r.ok && r.retryAfter) { await _rbSleep((Number(r.retryAfter) + 1) * 1000); continue; } return r; } return { ok: false, error: 'demasiados reintentos' }; }
+async function _rbCleanChat(bot, chat, sinceMs, maxScan) {
+  const out = { deleted: 0, unpinned: 0, scanned: 0, error: '' };
+  const probe = await _rbTg(bot.token, 'sendMessage', { chat_id: chat, text: '🧹 Ordenando el grupo…', disable_notification: true });
+  if (!probe.ok) { out.error = String(probe.error || '').slice(0, 120); return out; }
+  const top = probe.result.message_id; const dummy = { inline_keyboard: [[{ text: '·', callback_data: 'rbx' }]] };
+  for (let id = top; id > 0 && out.scanned < maxScan; id--) {
+    out.scanned++;
+    const r = await _rbTg(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: id, reply_markup: dummy });
+    if (r.ok) {
+      const at = Number(r.result && r.result.date) * 1000;
+      if (at && at < sinceMs) { await _rbTg(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: id, reply_markup: { inline_keyboard: [] } }); break; } // ya es de antes: se para
+      const d = await _rbTg(bot.token, 'deleteMessage', { chat_id: chat, message_id: id }); if (d.ok) out.deleted++;
+    }
+    await _rbSleep(60);
+  }
+  for (let i = 0; i < 40; i++) { // desfijar lo del bot (mientras el de arriba sea suyo)
+    const g = await _rbTg(bot.token, 'getChat', { chat_id: chat }); const pm = g.ok && g.result && g.result.pinned_message;
+    if (!pm || !pm.from || String(pm.from.id) !== String(bot.id)) break;
+    const u = await _rbTg(bot.token, 'unpinChatMessage', { chat_id: chat, message_id: pm.message_id }); if (!u.ok) break; out.unpinned++;
+  }
+  return out;
+}
+async function _rbResetAccounts(by) {
+  const now = new Date(); const tag = { resetAt: now, resetBy: String(by || '').slice(0, 60) };
+  const f = await _rbM().RcptFwd.updateMany({ status: { $in: ['open', 'closed', 'hold', 'srconly', 'srcclosed', 'dup'] } }, { $set: Object.assign({ status: 'reset' }, tag) });
+  const cl = await _rbM().RcptClose.updateMany({ status: { $in: ['pending', 'quoted', 'sent', 'fichas', 'fichasdone'] } }, { $set: Object.assign({ status: 'reset', srcStatus: null }, tag) });
+  await Config.collection.updateOne({ key: 'rcptbotfichas' }, { $set: { value: {} } }, { upsert: true });
+  return { comprobantes: f.modifiedCount || 0, cierres: cl.modifiedCount || 0 };
+}
+async function _rbCleanRun(opts, by) {
+  const st = { running: true, startedAt: new Date(), since: new Date(opts.since), by, groups: [], step: 'mensajes' }; const save = () => Config.collection.updateOne({ key: 'rcptbotclean' }, { $set: { value: st } }, { upsert: true });
+  await save();
+  try {
+    const c = await _rbCfg(true);
+    if (opts.msgs) {
+      for (const g of c.groups || []) {
+        for (const bid of g.bots || []) { const b = (c.botsDec || []).find((x) => String(x.id) === String(bid) && x.token); if (!b) continue;
+          const r = await _rbCleanChat(b, String(g.id), st.since.getTime(), opts.maxScan).catch((e) => ({ error: e.message }));
+          st.groups.push(Object.assign({ group: g.title || g.id, bot: b.username || b.id }, r)); await save(); }
+      }
+    }
+    if (opts.reset) { st.step = 'cuentas'; await save(); st.reset = await _rbResetAccounts(by); }
+    if (opts.welcome) {
+      st.step = 'presentación'; await save();
+      await Config.collection.updateOne({ key: 'rcptbotflags' }, { $pull: { 'value.k': { $regex: '^welcome1106\\|' } } }); // la presentación vuelve a salir
+      const c2 = await _rbCfg(true); st.welcome = [];
+      for (const x of (c2.structs || []).filter((y) => y && y.on)) { const r = await _rbWelcomeIfReady(c2, x).catch((e) => ({ wait: [e.message] })); st.welcome.push({ struct: x.name, ok: !!r.sent, wait: r.wait || null }); }
+    }
+    st.step = 'listo';
+  } catch (e) { st.error = e.message; logger.warn('[rcptbot] empezar de cero ' + e.message); }
+  st.running = false; st.finishedAt = new Date(); await save();
+}
+app.post('/api/admin/rcptbot/clean', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo admin' });
+    const b = req.body || {}; if (String(b.confirm || '') !== 'BORRAR') return res.status(400).json({ error: 'Escribí BORRAR para confirmar' });
+    const since = new Date(b.since); if (isNaN(since.getTime())) return res.status(400).json({ error: 'Fecha y hora inválidas' });
+    if (Date.now() - since.getTime() > 48 * 3600000 && b.msgs) return res.status(400).json({ error: 'Telegram sólo deja borrar mensajes de las últimas 48 h' });
+    const cur = ((await Config.collection.findOne({ key: 'rcptbotclean' })) || {}).value; if (cur && cur.running && Date.now() - new Date(cur.startedAt).getTime() < 3 * 3600000) return res.status(409).json({ error: 'Ya hay una limpieza en curso' });
+    if (!(await _cronClaim('rbclean', 3 * 60000))) return res.status(409).json({ error: 'Ya hay una limpieza arrancando' });
+    _rbCleanRun({ since, msgs: !!b.msgs, reset: !!b.reset, welcome: !!b.welcome, maxScan: Math.min(5000, Math.max(100, Number(b.maxScan) || 2500)) }, req.user.username).catch(() => {});
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/welcome', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // #1106: reenviar la bienvenida a TODOS los grupos de una estructura
   try {
