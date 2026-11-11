@@ -32225,7 +32225,7 @@ async function _rbSend(c, chatId, text, prefer, extra) {
 async function _rbRoute(c, rec, amount, from, opts = {}) {
   const route = (c.routes || []).find((x) => String(x.from) === rec.fromChat && (!rec.structId || x.structId === rec.structId));
   const reply = (text, kb) => _rbSend(c, rec.fromChat, text, rec.srcBot, Object.assign({ reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true }, kb ? { reply_markup: kb } : {}));
-  if (!(Number(amount) > 0)) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ No pude leer el monto. <b>Respondé esta foto con el monto con centavos</b> (ej. 25000,99) y lo reenvío.'); return; }
+  if (!(Number(amount) > 0)) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ <b>NO SE PUDO LEER EL COMPROBANTE</b>: <b>no se sumó ni se reenvió</b>.\n📸 Por favor mandá una <b>foto bien legible</b> (completa, sin cortes ni reflejos, que se vea el monto con los centavos). Cuando llegue bien, se suma.\n✏️ O respondé esta foto con el monto con centavos (ej. 25000,99).'); return; } // #1105 (owner)
   const to = opts.forceTo ? (_rbDests(c, route).some((d) => d.to === String(opts.forceTo)) ? String(opts.forceTo) : null) : (route && _rbPickTo(route, amount));
   if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`❌ <b>TERMINACIÓN MAL</b>: ${_rbMoney2(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó.${_rbOtherGroupTxt(c, route, amount)}\n⚠️ Prestá atención a los centavos:\n${_rbRulesList(c, route || {})}\n👇 Si el cliente se equivocó con el decimal, <b>elegí a qué grupo va</b>. Si el monto está mal, respondé esta foto con el correcto (con centavos).`, route ? _rbPickKb(c, route, rec.id) : undefined); return; }
   const toTitle = _rbTitle(c, to); const dst = _rbTokFor(c, to, (route && route.botId) || rec.srcBot);
@@ -32234,8 +32234,9 @@ async function _rbRoute(c, rec, amount, from, opts = {}) {
   if (!set) return; // ya se reenvió (otra instancia / otro bot)
   const fz = _rbIsFichas(c, to); const s = await _rbDstOpenAll(to); const pend = fz ? '\n' + await _rbFichasTxt(to) : await _rbDstPendLine(to); // #1101: una sola cuenta · #1104: grupo de fichas
   const wrong = opts.forceTo && _rbPickTo(route, amount) !== to; // eligieron el grupo a mano: los centavos no coincidían
-  const warnTxt = wrong ? `\n⚠️ <b>El cliente se equivocó con el decimal</b> (terminó en ,${_rbCents(amount)}), pero va a este grupo.` : '';
-  const cap = fz ? `🧾 <b>${_rbMoney2(amount)}</b>${warnTxt}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '') : `🧾 <b>${_rbMoney2(amount)}</b>${warnTxt}${opts.movedFrom ? '\n↪️ Movido desde ' + _rbH(opts.movedFrom) : ''}\n${_rbSumTxt(s)}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '');
+  const fixTxt = from === 'corregido' ? `\n✏️ <b>MONTO CORREGIDO</b> por ${_rbH(opts.fixBy || rec.sender || 'el que envió')}: ` + (Number(opts.was) > 0 ? `la foto decía ${_rbMoney2(opts.was)}${_rbCents(opts.was) !== _rbCents(amount) ? ' (decimal mal)' : ''}` : 'la foto no se pudo leer') + (opts.movedFrom ? ` · se sacó de ${_rbH(opts.movedFrom)}` : '') : ''; // #1105
+  const warnTxt = (wrong ? `\n⚠️ <b>El cliente se equivocó con el decimal</b> (terminó en ,${_rbCents(amount)}), pero va a este grupo.` : '') + fixTxt;
+  const cap = fz ? `🧾 <b>${_rbMoney2(amount)}</b>${warnTxt}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '') : `🧾 <b>${_rbMoney2(amount)}</b>${warnTxt}${opts.movedFrom && from !== 'corregido' ? '\n↪️ Movido desde ' + _rbH(opts.movedFrom) : ''}\n${_rbSumTxt(s)}${pend}` + (rec.caption ? '\n' + _rbH(String(rec.caption).slice(0, 400)) : '');
   let cp;
   if (dst.id === String(rec.srcBot)) cp = await tgChannel.call(dst.token, 'copyMessage', { chat_id: to, from_chat_id: rec.fromChat, message_id: rec.srcMsgId, caption: cap, parse_mode: 'HTML', reply_markup: _rbKb() });
   else { // otro bot: se baja con el que lo recibió y lo sube el del destino
@@ -32972,12 +32973,19 @@ async function _rbOnMessage(c, bot, m) {
   if (/^\/total(@\w+)?$/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSend(c, fromChat, await _rbSrcTotalTxt(c, route), bot.id, { reply_markup: _rbKb() }); return; }
   if (text && m.reply_to_message) { // corrige el monto respondiendo la foto (o la respuesta del bot)
     if (!/^[\s$\d.,]+$/.test(text)) return; const n = _rbParseAmount(text); if (!n) return; const rid = m.reply_to_message.message_id;
-    const rec = await _rbM().RcptFwd.findOne({ fromChat, structId: route.structId, status: { $in: ['hold', 'open'] }, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] }).lean(); if (!rec) return;
+    const rec = await _rbM().RcptFwd.findOne({ fromChat, structId: route.structId, status: { $in: ['hold', 'open', 'closed'] }, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] }).lean(); if (!rec) return;
     if (!(await _rbOnce(fromChat, m.message_id))) return;
-    if (rec.status === 'hold') { await _rbRoute(c, rec, n, 'corregido'); return; }
-    if (_rbPickTo(route, n) !== rec.toChat) { await _rbSend(c, fromChat, 'Ese monto va a OTRO grupo (por los centavos). Mandá el comprobante de nuevo; éste queda como está.', bot.id, { reply_to_message_id: m.message_id }); return; }
-    await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'open' }, { $set: { amount: n, amountFrom: 'corregido' } });
-    if (rec.toChat && rec.fwdMsgId) await _rbSend(c, rec.toChat, '✏️ Monto corregido: ' + _rbMoney2(n), rec.srcBot, { reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true });
+    if (rec.status === 'closed') { await _rbSend(c, fromChat, 'Ese comprobante ya entró en un cierre: no se puede corregir. Usá /restar o /anterior para ajustar la suma.', bot.id, { reply_to_message_id: m.message_id }); return; }
+    if (rec.status === 'hold') { await _rbRoute(c, rec, n, 'corregido', { was: rec.amount, fixBy: by }); return; }
+    if (_rbPickTo(route, n) !== rec.toChat) { // #1105 (owner): la corrección lo MUEVE al grupo que corresponde y los dos grupos ven qué pasó
+      const to2 = _rbPickTo(route, n); if (!to2) { await _rbSend(c, fromChat, `❌ ${_rbMoney2(n)} termina en <b>,${_rbCents(n)}</b> y no hay grupo para esos centavos. Revisá el monto; el comprobante queda como estaba.`, bot.id, { reply_to_message_id: m.message_id }); return; }
+      const was1 = rec.amount; const back = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: 'open', toChat: rec.toChat }, { $set: { status: 'hold' } }, { new: true }); if (!back) return;
+      const oldTitle = rec.toTitle || _rbTitle(c, rec.toChat);
+      await _rbSend(c, rec.toChat, `❌ <b>ANULADO · MONTO CORREGIDO</b>${by ? ' por ' + _rbH(by) : ''}: era ${_rbMoney2(was1)} y el monto real es <b>${_rbMoney2(n)}</b> (termina en ,${_rbCents(n)}): <b>no era de este grupo</b>. Se descontó de esta suma.\n${_rbSumTxt(await _rbDstOpenAll(rec.toChat))}`, rec.srcBot, rec.fwdMsgId ? { reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true } : undefined);
+      await _rbRoute(c, Object.assign({}, rec, { status: 'hold' }), n, 'corregido', { was: was1, fixBy: by, movedFrom: oldTitle }); return;
+    }
+    const was0 = rec.amount; await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'open' }, { $set: { amount: n, amountFrom: 'corregido' } });
+    if (rec.toChat && rec.fwdMsgId) await _rbSend(c, rec.toChat, `✏️ <b>MONTO CORREGIDO</b>${by ? ' por ' + _rbH(by) : ''}: era ${_rbMoney2(was0)} ⇒ <b>${_rbMoney2(n)}</b>. La suma ya está ajustada.\n${_rbSumTxt(await _rbDstOpenAll(rec.toChat))}`, rec.srcBot, { reply_to_message_id: rec.fwdMsgId, allow_sending_without_reply: true }); // #1105
     const s = await _rbOpenSum(fromChat, rec.toChat, route.structId);
     await _rbSend(c, fromChat, `✏️ Monto: <b>${_rbMoney2(n)}</b>\n${_rbSumTxt(s)}\n${_rbMonthTxt(await _rbMonthSum(fromChat, route.structId))}`, bot.id, { reply_to_message_id: m.message_id });
     return;

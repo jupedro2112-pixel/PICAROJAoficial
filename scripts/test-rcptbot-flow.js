@@ -105,7 +105,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(/Acumulado: <b>\$10\.000<\/b> \(1 comprobante\)/.test(last(-1).p.text) && /Total de noviembre \(sin corte\): <b>\$35\.001<\/b> \(2 comp\.\)/.test(last(-1).p.text), last(-1).p.text);
   });
   await caso('sin monto ⇒ queda esperando; respondiendo con el monto se reenvía', async () => {
-    aiAmount = null; await hook(photo(3)); assert.ok(/No pude leer el monto/.test(last(-1).p.text));
+    aiAmount = null; await hook(photo(3)); const t0 = last(-1).p.text; assert.ok(/NO SE PUDO LEER/.test(t0) && /no se sumó/.test(t0) && /foto bien legible/.test(t0), t0); // #1105
     await hook(text(4, -1, '5000,99', 3)); assert.ok(/REENVIADO<\/b> a asuncionbot · <b>\$5\.000,99<\/b> \(monto escrito\)/.test(last(-1).p.text) && /\$30\.002<\/b> \(2 comprobantes\)/.test(last(-1).p.text), last(-1).p.text);
   });
   await caso('/total muestra cada destino y el mes', async () => { await hook(text(5, -1, '/total')); const t = last(-1).p.text; assert.ok(/asuncionbot: <b>\$30\.002<\/b> \(2\)/.test(t) && /fichasnuevobot: <b>\$10\.000<\/b> \(1\)/.test(t) && /Total de noviembre/.test(t), t); });
@@ -266,6 +266,16 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const kb = last(-1).p.reply_markup.inline_keyboard; assert.ok(kb.length === 1 && /,99 → asuncionbot/.test(kb[0][0].text), JSON.stringify(kb));
     await hook({ message: { message_id: 71, chat: { id: -4, type: 'supergroup', title: 'grupo43' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'f71' }] } });
     assert.ok(sent.filter((x) => x.method === 'copyMessage').slice(-1)[0].p.chat_id === '-3' && /REENVIADO<\/b> a fichasnuevobot/.test(last(-4).p.text), last(-4).p.text);
+  });
+  await caso('#1105 corregir el monto de uno YA reenviado con otro decimal ⇒ se mueve; los dos grupos ven qué pasó', async () => {
+    const st = cfgDocs[0].value.structs[0]; const keep = JSON.stringify(st.routes);
+    st.routes[0] = { from: '-1', rules: [{ cents: '99', to: '-2' }, { cents: '43', to: '-3' }], otherTo: null }; await ctx._rbCfg(true);
+    aiAmount = 1500.99; await hook(photo(72)); const rec = RcptFwd.rows.find((x) => x.srcMsgId === 72); assert.strictEqual(rec.toChat, '-2');
+    await hook(text(73, -1, '1500,43', 72)); assert.strictEqual(rec.toChat, '-3'); assert.strictEqual(rec.amount, 1500.43);
+    const an = sent.filter((x) => String(x.p.chat_id) === '-2').slice(-1)[0].p.text; assert.ok(/ANULADO · MONTO CORREGIDO/.test(an) && /no era de este grupo/.test(an), an);
+    const cp = sent.filter((x) => x.method === 'copyMessage' && String(x.p.chat_id) === '-3').slice(-1)[0].p.caption; assert.ok(/MONTO CORREGIDO<\/b> por Ana: la foto decía \$1\.500,99 \(decimal mal\)/.test(cp) && /se sacó de asuncionbot/.test(cp), cp);
+    await hook(text(74, -1, '1600,43', 72)); assert.strictEqual(rec.amount, 1600.43); assert.ok(/MONTO CORREGIDO<\/b> por Ana: era \$1\.500,43 ⇒ <b>\$1\.600,43/.test(last(-3).p.text), last(-3).p.text);
+    rec.status = 'closed'; st.routes = JSON.parse(keep); await ctx._rbCfg(true);
   });
   const photoU = (id, uid, chat = -1) => ({ message: { message_id: id, chat: { id: chat, type: 'supergroup', title: 'buffalobot' }, from: { first_name: 'Ana' }, photo: [{ file_id: 'f' + id, file_unique_id: uid }] } });
   const openSum = (to) => RcptFwd.rows.filter((x) => x.toChat === to && x.status === 'open').reduce((a, x) => a + x.amount, 0);

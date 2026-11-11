@@ -29,6 +29,15 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1105. Bot de comprobantes: corrección de monto que MUEVE de grupo + aviso de foto ilegible (2026-11-11)
+- **Owner:** "cuando falle un comprobante o hay un error de tipeo en el decimal, dejá ajustar al que envió la corrección así se envía donde tiene que ser y donde
+  llega le llega aclarado qué pasó; si no leés un comprobante, pedirle por favor una foto bien legible y avisar que no fue sumado, que cuando envíe bien se sumará".
+- Responder la foto (o la respuesta del bot) con el monto: si es de OTRO grupo por los centavos ya no pide reenviar: lo saca del grupo viejo ("❌ ANULADO · MONTO
+  CORREGIDO … no era de este grupo, se descontó") y lo reenvía al correcto con "✏️ MONTO CORREGIDO por <quien>: la foto decía $X (decimal mal) · se sacó de <grupo>".
+  Mismo grupo ⇒ "✏️ MONTO CORREGIDO: era $X ⇒ $Y" en el destino. Ya cerrado ⇒ avisa que use /restar o /anterior. Foto ilegible ⇒ "NO SE PUDO LEER… no se sumó;
+  mandá una foto bien legible" (o responder con el monto).
+- Test nuevo en test-rcptbot-flow (38 OK).
+
 ### 1104. Bot de comprobantes: GRUPO DE FICHAS (Pagos Hammy y Fabri ,43) (2026-11-11) — panel v301
 - **Owner:** "el grupo ,43 no tiene cierres, sólo suma todo el mes las fichas; el día 1 se hace cierre y el agente completa 'fichas mes anterior', ingresa el
   monto y con lo que ya sumó el mes lo resta; si quedó negativo o positivo queda pendiente y la suma empieza con ese pendiente hasta dejarlo en 0; dejamos
