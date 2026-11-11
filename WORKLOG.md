@@ -29,6 +29,10 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1102. Bot de comprobantes: estructura 5 Sector 1 en el plan (2026-11-11)
+- Sector 1 (@Sectorunobot): BAJADAS S1 con ,33 → S1 Racafu ,33, "funciona como Ganamos" (cierre lun–vie 13 h, finde al lunes). Agregada a `RB_PLAN`.
+- Plan completo: Fichas · Ganamos · Publicidad · Cotizaciones · Sector 1.
+
 ### 1101. Bot de comprobantes: el GRUPO 2 es UNA cuenta + COTIZACIÓN PROPIA del grupo 1 (Cotizaciones) (2026-11-11) — panel v300
 - **Owner:** "el grupo 2 recibe de diferentes grupos pero suma 1 cuenta; cuando cotiza, cotiza el total de todos los grupos que enviaron; no tiene que saber
   que son muchos (o 1)" · "en Cotizaciones hay un cierre de cotización de grupo 2 y de grupo 1 de manera independiente" · "en el grupo 1 cada suma es independiente".

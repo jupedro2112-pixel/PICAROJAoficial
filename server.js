@@ -32342,7 +32342,9 @@ const RB_PLAN = { v: 1, structs: [
     senders: ['BAJADAS PUBLICIDAD'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] },
   { name: 'Cotizaciones', bot: 'Cotizacionbuffabot', dailyClose: 'weekly', monthlyClose: false, usdtCheck: true, srcQuote: true, termHour: 13, termNotices: [], // #1100: semanal + foto USDT
     senders: ['BAJADAS PARADISE', 'BAJADAS JOKER', 'BAJADAS PORTO', 'BAJADAS JACK', 'BAJADAS BOSTON', 'BAJADAS TOKIO/ANANA', 'BAJADAS VIP/PLATINIUM', 'BAJADAS LAS VEGAS'],
-    rules: [{ cents: '79', to: '5C RACAFU ,79' }] }
+    rules: [{ cents: '79', to: '5C RACAFU ,79' }] },
+  { name: 'Sector 1', bot: 'Sectorunobot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [], // #1102: igual que Ganamos
+    senders: ['BAJADAS S1'], rules: [{ cents: '33', to: 'S1 Racafu ,33' }] }
 ] }; // un plan NUEVO se aplica solo (applied[nombre] vacío); subir `v` re-aplica TODOS (pisa cambios hechos a mano)
 const _rbNorm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
 function _rbFindGroup(c, title, botId) {
