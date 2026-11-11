@@ -32860,7 +32860,7 @@ async function _rbWelcomeIfReady(c, st) {
   return { sent: await _rbWelcomeStruct(c, st, false) };
 }
 async function _rbWelcomeTick() {
-  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token) || !(await _cronClaim('rbwelcome', 4 * 60000))) return;
+  const c = await _rbCfg(true); if (c.paused || c.onRender || !(c.botsDec || []).some((b) => b.token) || !(await _cronClaim('rbwelcome', 4 * 60000))) return;
   for (const st of (c.structs || []).filter((x) => x && x.on)) { try { await _rbWelcomeIfReady(c, st); } catch (e) { logger.warn('[rcptbot] bienvenida ' + e.message); } }
 }
 setTimeout(() => { _rbWelcomeTick().catch(() => {}); setInterval(() => { _rbWelcomeTick().catch(() => {}); }, 5 * 60000); }, 200000);
@@ -33070,7 +33070,7 @@ async function _rbClose(c, route, by, opts = {}) {
 }
 // Cron: lunes a viernes desde las 13:00 (ART), una vez por día entre instancias. Sábado y domingo no cierra ⇒ el lunes junta todo desde el viernes 13 h.
 async function _rbCloseTick() {
-  const c = await _rbCfg(); if (!(c.botsDec || []).some((b) => b.token) || !(c.routes || []).length) return;
+  const c = await _rbCfg(); if (c.paused || !(c.botsDec || []).some((b) => b.token) || !(c.routes || []).length) return;
   // #1089 (owner 2026-11-10: "hacer cierre cuando completen un monto" ⇒ "sólo a mano"): el cierre de las 13 h queda APAGADO salvo
   // Config['rcptbot'].autoClose13 === true. El grupo que manda cierra con /cierre o /cierre <monto>.
   if (c.autoClose13 !== true) return;
@@ -33085,7 +33085,7 @@ setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('
 // (`dailyClose`: 'all' = todos los días · 'weekdays' = lunes a viernes, el finde se junta en el del lunes · '' = a mano). Cierra lo que entró ANTES de las
 // 13:00 en punto (lo que llega después es del cierre siguiente). Una vez por estructura/día (_rbOnce). Grupo 1: sumas · grupo 2: pendiente a cotizar.
 async function _rbDailyCloseTick() {
-  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
+  const c = await _rbCfg(true); if (c.paused || c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
   if ((await Config.collection.updateOne({ key: 'rcptbot', 'value.noAutoClose1129': { $ne: true } }, { $set: { 'value.noAutoClose1129': true } })).modifiedCount === 1) { // marca permanente (no _rbFlag: esa lista guarda 400 y se cae) // #1129 (owner: "que el cierre no sea automático más de cada grupo"): UNA vez, todo a cierre A MANO (la frase "Cierre de día!"); desde el panel se puede volver a encender
     const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const sts = ((d.value || {}).structs || []); const set = {};
     sts.forEach((st, i) => { if (st && st.dailyClose) set[`value.structs.${i}.dailyClose`] = ''; for (const to of Object.keys((st && st.destCfg) || {})) if (st.destCfg[to] && st.destCfg[to].close) set[`value.structs.${i}.destCfg.${to}.close`] = ''; });
@@ -33170,7 +33170,7 @@ function _rbFindGroup(c, title, botId) {
 let _rbPlanAt = 0;
 async function _rbPlanTick(force) {
   if (!force && Date.now() - _rbPlanAt < 5 * 60000) return; _rbPlanAt = Date.now();
-  const c0 = await _rbCfg(true); if (c0.onRender || !(c0.botsDec || []).some((b) => b.token)) return;
+  const c0 = await _rbCfg(true); if (c0.paused || c0.onRender || !(c0.botsDec || []).some((b) => b.token)) return;
   if (!(await _cronClaim('rbplan', 4 * 60000))) return; // repaso #1103: una sola instancia a la vez (dos a la vez duplicaban la estructura)
   try { await _rbPlanRun(); } finally { try { await Config.collection.updateOne({ key: 'cronlock_rbplan' }, { $set: { 'value.until': 0 } }); } catch (_) {} } // #1106: libera el candado al terminar (un ID fijado se aplica al toque)
 }
@@ -33603,7 +33603,7 @@ async function _rbCbuStop(c, dstR, chat, by, botId) {
 }
 // cron: activa los programados y, si un CBU vence sin otro, avisa "sin CBU"
 async function _rbCbuTick() {
-  const c = await _rbCfg(true); if (!(c.botsDec || []).some((b) => b.token)) return; const now = Date.now();
+  const c = await _rbCfg(true); if (c.paused || !(c.botsDec || []).some((b) => b.token)) return; const now = Date.now();
   const items = Object.values(c.cbu.items || {}).filter(Boolean);
   for (const x of items.filter((y) => y.status === 'scheduled' && new Date(y.since).getTime() <= now)) {
     const cl = await Config.collection.updateOne({ key: 'rcptbotcbu', ['value.items.' + x.id + '.status']: 'scheduled' }, { $set: { ['value.items.' + x.id + '.status']: 'activating' } }); if (cl.modifiedCount !== 1) continue;
@@ -33631,7 +33631,7 @@ function _rbTermMsg(n, next, nowArt, hour, dest) {
     '\n⚠️ Cambiá la terminación en tus envíos.';
 }
 async function _rbTermTick() {
-  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
+  const c = await _rbCfg(true); if (c.paused || c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
   const nowArt = new Date(Date.now() - 3 * 3600000); const day = nowArt.getUTCDate(), hr = nowArt.getUTCHours(); const ym = nowArt.toISOString().slice(0, 7);
   for (const st of (c.structs || []).filter((x) => x && x.on && Array.isArray(x.termNotices) && x.termNotices.length)) {
     const hour = Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13; if (hr < hour) continue;
@@ -33653,7 +33653,7 @@ setTimeout(() => { setInterval(() => { _rbTermTick().catch((e) => logger.warn('[
 // empieza de 0 y deja el mes anterior arriba la suma"). Estructura con `monthlyClose`: el día 1 desde las 00:00 (ART), una vez por estructura/mes, cierra
 // lo abierto de ANTES del día 1 (lo que entra después de las 00:00 ya es del mes nuevo), y en cada grupo que manda fija "📌 TOTAL DE <MES>".
 async function _rbMonthCloseTick() {
-  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
+  const c = await _rbCfg(true); if (c.paused || c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
   const nowArt = new Date(Date.now() - 3 * 3600000); if (nowArt.getUTCDate() !== 1) return;
   const ym = nowArt.toISOString().slice(0, 7); const m0 = new Date(ym + '-01T00:00:00-03:00');
   const pm = new Date(Date.UTC(nowArt.getUTCFullYear(), nowArt.getUTCMonth() - 1, 1)); const pYm = pm.toISOString().slice(0, 7); const p0 = new Date(pYm + '-01T00:00:00-03:00');
@@ -33828,6 +33828,10 @@ app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
       else if (/^(left|kicked)$/.test(String(st))) await _rbGroupSeen(u.my_chat_member.chat, bot.id, true);
       return;
     }
+    if (c.paused) { // #1132: bot APAGADO desde el panel (🛑 Borrar todo y apagar) ⇒ no contesta, no suma, no reenvía, botones viejos sin efecto
+      if (u.callback_query) await tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: u.callback_query.id, text: '⏸️ El bot está apagado por ahora.', show_alert: true }).catch(() => {});
+      return;
+    }
     if (u.callback_query && u.callback_query.message && u.callback_query.message.chat) _rbGroupSeen(u.callback_query.message.chat, bot.id).catch(() => {}); // #1093
     if (u.callback_query && String(u.callback_query.data || '').startsWith('rbs:')) { await _rbSentOkCb(await _rbCfg(), bot, u.callback_query); return; } // #1099
     if (u.callback_query && /^rba:/.test(String(u.callback_query.data || ''))) { // #1109: elegir el monto cuando la lectura dudó
@@ -33903,7 +33907,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
     const planDoc = ((await Config.collection.findOne({ key: 'rcptbotplan' })) || {}).value || {}; const planRep = planDoc.report || {}; const welcomeSt = planDoc.welcome || {}; // #1097 · #1106
     const cleanSt = ((await Config.collection.findOne({ key: 'rcptbotclean' })) || {}).value || null; // #1110
     const tms = Object.values(planRep).concat(Object.values(welcomeSt)).map((x) => x && x.at && new Date(x.at).getTime()).filter((x) => x > Date.now() - 47 * 3600000); const cleanSince = new Date((tms.length ? Math.min(...tms) : Date.now() - 6 * 3600000) - 10 * 60000);
-    res.json({ success: true, plan: planRep, welcome: welcomeSt, clean: cleanSt, cleanSince, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
+    res.json({ success: true, paused: !!c.paused, pausedInfo: c.pausedInfo || null, plan: planRep, welcome: welcomeSt, clean: cleanSt, cleanSince, onRender: !!c.onRender, bots, groups, structs, closes, recent, repaired: _rbRepairLast, lastError: c.lastError || null, lastErrorAt: c.lastErrorAt || null, aiOn: !!(comprobanteAi.isEnabled && comprobanteAi.isEnabled()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/rcptbot/bot', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => { // agregar o reemplazar un bot (por su token)
@@ -34030,7 +34034,7 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
     await _rbStructPut(st);
-    if (turnedOn) { const c2 = await _rbCfg(true); await _rbWelcomeIfReady(c2, st).catch(() => {}); } // #1106: sólo si todo está bien
+    if (turnedOn && !c.paused) { const c2 = await _rbCfg(true); await _rbWelcomeIfReady(c2, st).catch(() => {}); } // #1106: sólo si todo está bien · #1132: apagado ⇒ nada
     res.json({ success: true, id: st.id });
   } catch (e) { res.status(e.http || 500).json({ error: e.message }); }
 });
@@ -34146,6 +34150,31 @@ app.post('/api/admin/rcptbot/clean', authMiddleware, adminMiddleware, _rbPinGate
     const cur = ((await Config.collection.findOne({ key: 'rcptbotclean' })) || {}).value; if (cur && cur.running && Date.now() - new Date(cur.startedAt).getTime() < 3 * 3600000) return res.status(409).json({ error: 'Ya hay una limpieza en curso' });
     if (!(await _cronClaim('rbclean', 3 * 60000))) return res.status(409).json({ error: 'Ya hay una limpieza arrancando' });
     _rbCleanRun({ since, msgs: !!b.msgs, reset: !!b.reset, welcome: !!b.welcome, maxScan: Math.min(5000, Math.max(100, Number(b.maxScan) || 2500)) }, req.user.username).catch(() => {});
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// #1132 (owner: "quiero que sea un botón y se borre todo, sólo lo del bot, dejar todo inhabilitado"): 🛑 BORRAR TODO Y APAGAR = interruptor general
+// `Config['rcptbot'].paused` (el webhook no contesta ni suma; ningún automático corre: bienvenida, cierres, plan, CBU, terminación, mes) + TODAS las
+// estructuras apagadas (la configuración queda: grupos, reglas, terminaciones, CBU) + "Empezar de cero" de 48 h (mensajes de los bots y fijados) con
+// cuentas a $0 y SIN presentación. "▶️ Volver a encender" saca el interruptor; las estructuras quedan apagadas para prenderlas de a una.
+app.post('/api/admin/rcptbot/wipe-off', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo admin' });
+    if (String((req.body || {}).confirm || '') !== 'BORRAR') return res.status(400).json({ error: 'Escribí BORRAR para confirmar' });
+    const cur = ((await Config.collection.findOne({ key: 'rcptbotclean' })) || {}).value; if (cur && cur.running && Date.now() - new Date(cur.startedAt).getTime() < 3 * 3600000) return res.status(409).json({ error: 'Ya hay una limpieza en curso' });
+    if (!(await _cronClaim('rbclean', 3 * 60000))) return res.status(409).json({ error: 'Ya hay una limpieza arrancando' });
+    const c = await _rbCfg(true); const wasOn = (c.structs || []).filter((x) => x && x.on).map((x) => x.name || x.id);
+    await _rbSet({ paused: true, pausedInfo: { at: new Date(), by: req.user.username, wasOn } });
+    if ((c.structs || []).length) { await Config.collection.updateOne({ key: 'rcptbot' }, { $set: { 'value.structs.$[].on': false } }); _rbMem.at = 0; try { Config._cache && Config._cache.clear(); } catch (_) {} }
+    logger.warn('[rcptbot] 🛑 borrar todo y apagar por ' + req.user.username + ' (estaban encendidas: ' + (wasOn.join(', ') || 'ninguna') + ')');
+    _rbCleanRun({ since: new Date(Date.now() - 48 * 3600000 + 5 * 60000), msgs: true, reset: true, welcome: false, maxScan: 5000 }, req.user.username).catch(() => {});
+    res.json({ success: true, wasOn });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/rcptbot/resume', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo admin' });
+    await _rbSet({ paused: false, pausedInfo: null }); logger.info('[rcptbot] ▶️ encendido de nuevo por ' + req.user.username);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

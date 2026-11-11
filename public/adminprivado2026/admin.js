@@ -6580,6 +6580,7 @@ async function loadRcptBot() {
         _rb = { groups: j.groups || [], bots: j.bots || [], structs: (j.structs || []).map((x) => Object.assign({}, x, { routes: JSON.parse(JSON.stringify(x.routes || [])) })) };
         st.innerHTML = (j.onRender ? '⚠️ En Render los bots no se conectan (comparte la base). ' : '') + 'Lectura IA de montos: ' + (j.aiOn ? '✅' : '❌ (sin IA: toma el número que escriban)') + (j.lastError ? ' · <span style="color:var(--p-red,#d9001f)">' + escapeHtml(j.lastError) + ' (' + _rbD(j.lastErrorAt) + ')</span>' : '') +
             Object.entries(j.plan || {}).map(([n, x]) => rbPlanRepHtml(n, x)).join('') + // #1097 · #1106 detalle
+            rbWipeHtml(j) + // #1132
             rbCleanHtml(j) + // #1110
             Object.entries(j.welcome || {}).filter(([, w]) => w && w.wait).map(([n, w]) => '<div style="margin-top:8px;padding:10px 12px;border-radius:10px;border:1px solid var(--p-red,#d9001f);font-size:13px">📣 <b>Bienvenida de ' + escapeHtml(n) + ' EN ESPERA</b> (no se mandó a ningún grupo): arreglá esto en Telegram y sale sola en 5 min.' + w.wait.map((t) => '<div style="margin-top:4px">• ' + escapeHtml(t) + '</div>').join('') + '</div>').join('');
         rbRenderStructs();
@@ -6696,6 +6697,33 @@ async function rbPlanPin(name, id) {
     showToast('✅ "' + escapeHtml(name) + '" ⇒ ' + escapeHtml(j.title || j.id) + '. Aplicando la configuración…', 'success'); setTimeout(() => { try { loadRcptBot(); } catch (_) {} }, 6000);
 }
 // #1110 (owner): EMPEZAR DE CERO — borra SÓLO los mensajes del bot desde una hora (los de la gente no se tocan), desfija lo del bot, cuentas a $0, presentación de nuevo.
+function rbWipeHtml(j) { // #1132: un solo botón ⇒ borrar todo lo de los bots + cuentas a $0 + TODO apagado
+    const c = j.clean; const run = !!(c && c.running);
+    if (j.paused) {
+        const pi = j.pausedInfo || {};
+        return '<div style="margin-top:10px;padding:12px 14px;border-radius:10px;border:2px solid var(--p-red,#d9001f);font-size:13px">' +
+            '<b>⏸️ BOT APAGADO</b>' + (pi.at ? ' desde ' + escapeHtml(new Date(pi.at).toLocaleString('es-AR')) : '') + (pi.by ? ' · ' + escapeHtml(pi.by) : '') +
+            '<div style="margin-top:6px">Los bots no contestan, no suman ni reenvían y no corre nada automático. Todas las estructuras quedaron apagadas (la configuración sigue guardada).' +
+            ((pi.wasOn || []).length ? ' Estaban encendidas: <b>' + (pi.wasOn || []).map(escapeHtml).join(', ') + '</b>.' : '') + '</div>' +
+            (run ? '<div style="margin-top:6px">⏳ <b>Borrando los mensajes de los bots…</b> (' + escapeHtml(c.step || '') + ') — puede tardar varios minutos.</div>' : '') +
+            '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="rbResume()">▶️ Volver a encender el bot</button>' +
+            '<div style="margin-top:4px;font-size:12px;opacity:.8">Al encender, las estructuras siguen APAGADAS: prendé cada una cuando la tengas organizada.</div></div>';
+    }
+    return '<div style="margin-top:10px;padding:12px 14px;border-radius:10px;border:1px solid var(--p-red,#d9001f);font-size:13px">' +
+        '<b>🛑 Borrar todo y apagar</b><div style="margin-top:6px">En un toque: borra <b>todo lo que escribieron los bots</b> en todos los grupos (últimas 48 h, límite de Telegram) y desfija lo suyo; ' +
+        'pone <b>todas las cuentas en $0</b> (queda archivado); <b>apaga todas las estructuras</b> y deja el bot <b>sin funcionar</b> hasta que lo vuelvas a encender. ' +
+        'Lo de la gente no se toca y la configuración (grupos, reglas, terminaciones, CBU) queda guardada. No manda presentación.</div>' +
+        '<button class="btn btn-sm" style="margin-top:8px;background:var(--p-red,#d9001f);color:#fff;border:0"' + (run ? ' disabled' : '') + ' onclick="rbWipeOff()">🛑 Borrar todo y apagar</button></div>';
+}
+async function rbWipeOff() {
+    const ok = prompt('Se borra TODO lo que escribieron los bots (48 h), las cuentas quedan en $0 y el bot queda APAGADO con todas las estructuras apagadas.\nNo se puede deshacer. Escribí BORRAR para confirmar:'); if (ok !== 'BORRAR') return;
+    const j = await _rbPost('/api/admin/rcptbot/wipe-off', { confirm: 'BORRAR' }, '🛑 Bot apagado · borrando los mensajes (tarda unos minutos, se ve acá)', false); if (!j) return;
+    let n = 0; const t = setInterval(() => { try { loadRcptBot(); } catch (_) {} if (++n > 90) clearInterval(t); }, 10000);
+}
+async function rbResume() {
+    if (!confirm('¿Volver a encender el bot? Las estructuras siguen apagadas: las prendés de a una.')) return;
+    await _rbPost('/api/admin/rcptbot/resume', {}, '▶️ Bot encendido (estructuras apagadas)', false);
+}
 function rbCleanHtml(j) {
     const c = j.clean; const pad = (n) => String(n).padStart(2, '0'); const d = new Date(j.cleanSince || Date.now() - 6 * 3600000);
     const loc = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());

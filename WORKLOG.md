@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1131)
+> **Última actualización: 2026-11-12** (#1132)
 
 ## Sesión 2026-11-09
 
@@ -14785,6 +14785,18 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - El test seguía con las reglas de antes de #1124: esperaba que sin `PANEL_OWNER` cualquier admin fuera dueño (hoy falla cerrado: nadie) y el bloqueo de
   emergencia no tenía `_cronClaim` en la base simulada. Arreglado + caso nuevo de #1130 (varios dueños con coma / espacio / punto y coma, el principal es el
   primero, `_isOwnerName`). Sin cambios en el server.
-- Owner pidió limpiar todo lo del bot de comprobantes sin tocar la configuración: se hace con panel → Bot de comprobantes → 🧹 Empezar de cero (#1110) con
-  "Desde" = 48 h atrás, borrar mensajes + cuentas a $0 tildados y la presentación DESTILDADA (así no se reenvía nada hasta que se organice).
+
+## #1132 — 2026-11-12 · Bot de comprobantes: 🛑 BORRAR TODO Y APAGAR (un botón) + ▶️ Volver a encender — panel v313
+- Owner: "quiero limpiar todo lo del bot, dejar todo como está pero anular todo y que se borre todo lo que usaron los bots en el grupo… se me hizo un quilombo
+  y después organizo de 0" · "quiero que sea un botón, se borre todo, sólo lo del bot, dejar todo inhabilitado".
+- Panel → Bot de comprobantes → tarjeta roja **🛑 Borrar todo y apagar** (sólo admin, clave del bot, escribir BORRAR) ⇒ `POST /api/admin/rcptbot/wipe-off`:
+  (1) interruptor general `Config['rcptbot'].paused` (+ `pausedInfo {at, by, wasOn}`); (2) TODAS las estructuras `on:false` (`value.structs.$[].on`; grupos, reglas,
+  terminaciones, destCfg y CBU quedan guardados); (3) `_rbCleanRun` de 48 h con mensajes + cuentas a $0 y SIN presentación (borra sólo lo de los bots, incluidos
+  los reenvíos hechos a mano con los botones; lo de la gente no se toca).
+- Con `paused`: el webhook sólo registra grupos (my_chat_member); mensajes y comandos se ignoran y un botón viejo contesta "⏸️ El bot está apagado por ahora".
+  No corre ningún automático (`_rbWelcomeTick`, `_rbCloseTick`, `_rbDailyCloseTick`, `_rbPlanTick`, `_rbCbuTick`, `_rbTermTick`, `_rbMonthCloseTick`) y prender
+  una estructura no manda la bienvenida. Otra instancia de EB puede tardar hasta 30 s en verlo (caché de `_rbCfg`).
+- **▶️ Volver a encender** (`POST /api/admin/rcptbot/resume`) saca el interruptor; las estructuras siguen apagadas para prenderlas de a una.
+- Tests: `test-rcptbot-flow` 52 (caso nuevo del bot apagado), `test-rcptbot` 5/5, `test-server-boot` OK. **Necesita deploy EB.**
+  PROBAR: tocar 🛑 ⇒ cartel "⏸️ BOT APAGADO" con el avance; en los grupos desaparecen los mensajes de los bots de las últimas 48 h; una foto nueva no se suma.
 

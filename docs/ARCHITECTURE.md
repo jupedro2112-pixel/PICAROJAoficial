@@ -2064,6 +2064,9 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   todos los que le mandan). En el grupo 2 un mensaje que es SÓLO el precio del USDT (100–100000, `_rbDstFee` = feePct) cotiza lo pendiente: `_rbQuote` muestra
   fecha · pendiente · − margen % = total · total / precio = USDT (entero hacia abajo) · "foto por ese monto exacto"; una FOTO con algo `quoted` va directo a
   `_rbSentPhoto` (sin responder al bot). Los comandos y botones viejos siguen funcionando. Estado nuevo `done` en las listas de estados vivos (reset, /restart).
+- **Bot de comprobantes #1132 (🛑 Borrar todo y apagar):** `Config['rcptbot'].paused` = interruptor GENERAL. Todo camino nuevo del bot (webhook, tick, envío
+  automático) tiene que salir con `c.paused` (hoy: webhook salvo my_chat_member, los 7 ticks y la bienvenida al prender una estructura). `wipe-off` apaga además
+  todas las estructuras y corre `_rbCleanRun` (48 h, cuentas a $0, sin presentación); `resume` sólo saca el interruptor.
 - **Bot de comprobantes #1127 (`/restart` por grupo):** `_rbRestartCmd` = el "Empezar de cero" de UN grupo desde Telegram: sólo administradores del grupo
   (`_rbIsGroupAdmin`: getChatMember creator/administrator o admin anónimo que escribe como el grupo) y con confirmación (`/restart si`). Archiva RcptFwd/RcptClose
   vivos de ese chat (fromChat o toChat ⇒ `status:'reset'`, también lo compartido con su par), borra el arrastre de fichas del grupo (`$unset` por campo), borra

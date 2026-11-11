@@ -517,6 +517,14 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const g1 = sent.filter((x) => String(x.p.chat_id) === '-1' && /CIERRE/.test(x.p.text || '')).slice(-1)[0].p.text; assert.ok(/Anterior de este grupo: cerrado <b>\$2\.000\.000/.test(g1) && !/1\.000\.000/.test(g1), g1);
     const g2 = sent.filter((x) => String(x.p.chat_id) === '-3' && /CIERRE/.test(x.p.text || '')).slice(-1)[0].p.text; assert.ok(/\$1\.010\.000,99/.test(g2) && !/2\.000\.000/.test(g2), g2);
   });
+  await caso('#1132 bot APAGADO (🛑 Borrar todo y apagar): no suma ni reenvía; un botón viejo sólo avisa', async () => {
+    cfgDocs[0].value.paused = true; await ctx._rbCfg(true); const n = sent.length; const nf = RcptFwd.rows.length; aiAmount = 7777.99;
+    await hook(photo(1320)); await hook(text(1321, -1, '/total'));
+    assert.strictEqual(sent.length, n, JSON.stringify(sent.slice(n))); assert.strictEqual(RcptFwd.rows.length, nf, 'no se guardó nada');
+    await hook({ update_id: 1322, callback_query: { id: 'cq1322', from: { id: 9 }, data: 'rbm:help', message: { message_id: 5, chat: { id: -1, type: 'supergroup' } } } });
+    const added = sent.slice(n); assert.ok(added.length === 1 && added[0].method === 'answerCallbackQuery' && /apagado/.test(added[0].p.text), JSON.stringify(added));
+    cfgDocs[0].value.paused = false; await ctx._rbCfg(true);
+  });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });
   console.log(`\n${ok} casos OK`);
