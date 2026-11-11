@@ -2,6 +2,9 @@
 const fs = require('fs'); const vm = require('vm'); const assert = require('assert'); const crypto = require('crypto');
 const S = fs.readFileSync(require('path').join(__dirname, '..', 'server.js'), 'utf8');
 const blk = S.slice(S.indexOf('// ── #1079 BOT DE COMPROBANTES'), S.indexOf("app.post('/api/telegram/webhook', async (req, res) => {"));
+// #1114: los campos `required` del modelo real (Mongoose rechaza '' en un String required): la base simulada los exige igual
+const _MSRC = require('fs').readFileSync(require('path').join(__dirname, '..', 'src/models/RcptFwd.js'), 'utf8'); const _reqOf = (t) => [...new Set([...t.matchAll(/(\w+): \{ type: \w+, required: true/g)].map((x) => x[1]))];
+const _REQ_FWD = _reqOf(_MSRC.slice(0, _MSRC.indexOf('rcptCloseSchema'))), _REQ_CLOSE = _reqOf(_MSRC.slice(_MSRC.indexOf('const rcptCloseSchema')));
 // --- base falsa ---
 const get = (o, p) => p.split('.').reduce((v, k) => (v == null ? undefined : v[k]), o);
 const setp = (o, p, v) => { const ks = p.split('.'); let x = o; for (const k of ks.slice(0, -1)) { if (x[k] == null) x[k] = {}; x = x[k]; } x[ks[ks.length - 1]] = v; };
@@ -32,11 +35,11 @@ const Config = { _cache: new Map(), collection: {
     for (const [k, v] of Object.entries(u.$push || {})) { let arr = (get(d, k) || []).slice(); if (v && v.$each) { arr = arr.concat(v.$each); if (v.$slice) arr = arr.slice(v.$slice); } else arr.push(v); setp(d, k, arr); }
     return { modifiedCount: 1, matchedCount: 1 };
   } } };
-function model() {
+function model(_REQ) {
   const rows = [];
   const M = {
     rows,
-    create: async (d) => { if (d.fromChat && d.srcMsgId != null && !('total' in d) && rows.some((x) => x.fromChat === d.fromChat && x.srcMsgId === d.srcMsgId)) { const e = new Error('dup'); e.code = 11000; throw e; } const x = Object.assign({ createdAt: new Date(NOW.getTime() + rows.length) }, d); rows.push(x); return Object.assign({ toObject: () => Object.assign({}, x) }, x); },
+    create: async (d) => { for (const f of _REQ) if (d[f] === undefined || d[f] === null || d[f] === '') throw new Error('validation: ' + f + ' is required (como Mongoose)'); if (d.fromChat && d.srcMsgId != null && !('total' in d) && rows.some((x) => x.fromChat === d.fromChat && x.srcMsgId === d.srcMsgId)) { const e = new Error('dup'); e.code = 11000; throw e; } const x = Object.assign({ createdAt: new Date(NOW.getTime() + rows.length) }, d); rows.push(x); return Object.assign({ toObject: () => Object.assign({}, x) }, x); },
     findOne: (f) => ({ lean: async () => rows.find((x) => match(x, f)) || null }),
     find: (f) => { const r = rows.filter((x) => match(x, f || {})); const q = { sort: () => q, limit: (n) => { q._n = n; return q; }, select: () => q, lean: async () => r.slice(0, q._n || r.length) }; return q; },
     findOneAndUpdate: async (f, u) => { const x = rows.find((y) => match(y, f)); if (!x) return null; Object.assign(x, u.$set); return x; },
@@ -62,7 +65,7 @@ function model() {
   M.collection = { updateMany: async (f, u) => { for (const x of rows.filter((y) => match(y, f))) { if (Array.isArray(u)) for (const st of u) { const vals = {}; for (const [k, e] of Object.entries(st.$set || {})) vals[k] = ev(x, e); Object.assign(x, vals); } else Object.assign(x, u.$set); } return {}; } };
   return M;
 }
-const RcptFwd = model(), RcptClose = model();
+const RcptFwd = model(_REQ_FWD), RcptClose = model(_REQ_CLOSE);
 // --- Telegram falso ---
 const sent = []; let msgId = 1000;
 const tgChannel = {

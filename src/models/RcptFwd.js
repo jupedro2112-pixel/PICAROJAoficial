@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 // hay varias instancias, el índice evita reenviar dos veces.
 const rcptFwdSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
-  fromChat: { type: String, required: true, index: true },
+  fromChat: { type: String, default: '', index: true }, // #1114: '' = lo anterior cargado con /suma o /restar en el grupo 2 (antes required ⇒ la base lo rechazaba y el bot no contestaba)
   fromTitle: { type: String, default: '' },
   toChat: { type: String, default: null },
   toTitle: { type: String, default: '' },
@@ -37,7 +37,7 @@ const RcptFwd = mongoose.models.RcptFwd || mongoose.model('RcptFwd', rcptFwdSche
 
 const rcptCloseSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
-  fromChat: { type: String, required: true, index: true },
+  fromChat: { type: String, default: '', index: true }, // #1114: '' = lo anterior cargado con /suma o /restar en el grupo 2 (antes required ⇒ la base lo rechazaba y el bot no contestaba)
   fromTitle: { type: String, default: '' },
   toChat: { type: String, default: null },
   toTitle: { type: String, default: '' },

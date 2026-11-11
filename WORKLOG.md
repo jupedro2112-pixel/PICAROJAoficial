@@ -29,6 +29,12 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1114. Bot de comprobantes: /suma en el GRUPO 2 no contestaba — la base lo rechazaba (2026-11-11)
+- **Owner (captura):** `/anterior 15.013.343` y `/sumar` en 4f RACAFU ,99 sin respuesta; el grupo 1 andaba. Causa REAL: lo anterior del grupo 2 se guarda con
+  `fromChat ''` y el modelo tenía `fromChat: required` ⇒ Mongoose rechaza '' ⇒ excepción ⇒ el bot callado (el grupo 1 usa `toChat ''`, que no es required).
+  Los tests no lo vieron porque la base simulada no validaba. Arreglo: `fromChat` sin required (default '') en RcptFwd y RcptClose; la base simulada del
+  test ahora exige los `required` del modelo real (sin el arreglo, 7 casos fallan). Lo que se escribió antes NO quedó guardado: hay que volver a mandarlo.
+
 ### 1113. Bot de comprobantes: /restar también SÓLO en el grupo donde se escribe (2026-11-11)
 - **Owner:** "estoy acomodando cosas viejas, necesito sumar o restar como estaban de plata (si debían o estaban a favor) sin pasar al otro grupo, en el 1 y en el 2".
   `_rbCarryCmd`: `/restar` usa el mismo camino que `/suma` con monto negativo (grupo 1 ⇒ `srconly` 'ajuste1'; grupo 2 ⇒ `fromChat ''` 'ajuste2'). Se eliminó el
