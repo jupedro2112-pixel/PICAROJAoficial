@@ -114,19 +114,19 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 0, '#1089: sin autoClose13 NO cierra solo a las 13 h');
     rc.autoClose13 = true; await ctx._rbCfg(true);
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 2);
-    const d2 = last(-2).p.text; assert.ok(/CIERRE/.test(d2) && /PENDIENTE A COTIZAR: \$30\.001,98/.test(d2) && /Suma nueva: <b>\$0<\/b>/.test(d2) && (d2.match(/PENDIENTE A COTIZAR/g) || []).length === 1, d2);
+    const d2 = last(-2).p.text; assert.ok(/CIERRE/.test(d2) && /Cerrado: <b>\$30\.001,98<\/b>/.test(d2) && /PENDIENTE A COTIZAR: \$30\.002/.test(d2) && /Suma nueva: <b>\$0<\/b>/.test(d2) && !/buffalobot|De:/.test(d2), d2); // #1101: el grupo 2 ve UNA cuenta
     const s1 = last(-1).p.text; assert.ok(/asuncionbot: cerrado <b>\$30\.001,98<\/b> \(2 comp\.\)/.test(s1) && !/PENDIENTE/.test(s1) && /Suma nueva/.test(s1) && /Total de noviembre \(sin corte\): <b>\$40\.002/.test(s1), s1);
     await ctx._rbCloseTick(); assert.strictEqual(RcptClose.rows.length, 2, 'no cierra dos veces el mismo día');
   });
   await caso('comprobante nuevo después del cierre: suma desde $0 y muestra el pendiente anterior', async () => {
     aiAmount = 1000.99; await hook(photo(6)); const t = last(-1).p.text;
     assert.ok(/Acumulado: <b>\$1\.001<\/b> \(1 comprobante\)/.test(t) && !/PENDIENTE/.test(t) && /Total de noviembre \(sin corte\): <b>\$41\.003/.test(t), t); // #1089: el grupo 1 ve sólo la suma
-    const d = last(-2).p; const dc = d.caption || d.text || ''; assert.ok(/PENDIENTE A COTIZAR<\/b>: <b>\$30\.002<\/b> · 2 comp\./.test(dc), dc); // el detalle va al grupo 2
+    const d = last(-2).p; const dc = d.caption || d.text || ''; assert.ok(/PENDIENTE A COTIZAR<\/b>: <b>\$30\.002<\/b>/.test(dc) && !/De:|buffalobot/.test(dc), dc); // #1101: el pendiente va al grupo 2, sin nombres de equipos
   });
   await caso('/cotizado en el destino ⇒ cotizado, pendiente a enviar', async () => {
     await hook(text(7, -2, '/cotizado 1150')); assert.ok(/COTIZADO/.test(last(-2).p.text) && /PENDIENTE A ENVIAR/.test(last(-2).p.text));
     assert.strictEqual(RcptClose.rows.find((x) => x.toChat === '-2').status, 'quoted');
-    aiAmount = 2000.99; await hook(photo(8)); assert.ok(!/PENDIENTE/.test(last(-1).p.text), last(-1).p.text); const d8 = last(-2).p; const dc8 = d8.caption || d8.text || ''; assert.ok(/COTIZADO \(USDT \$1\.150\) · <b>PENDIENTE A ENVIAR<\/b>: <b>\$30\.002/.test(dc8), dc8);
+    aiAmount = 2000.99; await hook(photo(8)); assert.ok(!/PENDIENTE/.test(last(-1).p.text), last(-1).p.text); const d8 = last(-2).p; const dc8 = d8.caption || d8.text || ''; assert.ok(/PENDIENTE A ENVIAR<\/b>: <b>\$30\.002/.test(dc8), dc8);
   });
   await caso('/enviado ⇒ el pendiente se va', async () => {
     await hook(text(9, -2, '/enviado')); assert.strictEqual(RcptClose.rows.find((x) => x.toChat === '-2').status, 'sent');
@@ -189,7 +189,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
   await caso('menú: /ayuda en el DESTINO explica los comandos con botones; /total del destino con pendientes', async () => {
     await hook(text(50, -2, '/ayuda')); const h = last(-2); assert.ok(/GRUPO DE DESTINO/.test(h.p.text) && /\/cotizado/.test(h.p.text) && /\/enviado/.test(h.p.text) && /CÓMO SIGUE/.test(h.p.text), h.p.text);
     assert.strictEqual(JSON.stringify(h.p.reply_markup.inline_keyboard.map((r) => r[0].callback_data)), JSON.stringify(['rbm:total', 'rbm:quote', 'rbm:sent', 'rbm:help', 'rbm:cbu', 'rbm:stop']));
-    await hook(text(51, -2, '/total')); assert.ok(/SUMA ACTUALIZADA/.test(last(-2).p.text) && /De buffalobot: <b>/.test(last(-2).p.text), last(-2).p.text);
+    await hook(text(51, -2, '/total')); assert.ok(/SUMA ACTUALIZADA/.test(last(-2).p.text) && /Desde el último cierre: <b>/.test(last(-2).p.text) && !/De buffalobot/.test(last(-2).p.text), last(-2).p.text); // #1101
     await hook(text(52, -1, '/ayuda')); const g = last(-1); assert.ok(/\/cierre 500\.000/.test(g.p.text) && /\/anterior/.test(g.p.text) && g.p.reply_markup.inline_keyboard.length === 4, g.p.text);
   });
   const cbIn = (chat, data, mid = 6000) => hook({ callback_query: { id: 'q' + Math.random(), data, from: { first_name: 'Ana' }, message: { message_id: mid, chat: { id: chat, type: 'supergroup', title: 'x' } } } });
@@ -202,7 +202,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await cbIn(-1, btn.callback_data);
     const cl = RcptClose.rows[RcptClose.rows.length - 1]; assert.ok(cl.toChat === '-3' && cl.total === 500000 && Math.abs(cl.partialOf - before) < 0.01, JSON.stringify(cl));
     assert.ok(Math.abs(tot('-3') - (before - 500000)) < 0.01, 'resto ' + tot('-3'));
-    assert.ok(/PENDIENTE A COTIZAR: \$500\.000<\/b>/.test(last(-3).p.text) && /Queda sumando el resto/.test(last(-3).p.text), last(-3).p.text);
+    assert.ok(/Cerrado: <b>\$500\.000<\/b>/.test(last(-3).p.text) && /PENDIENTE A COTIZAR/.test(last(-3).p.text) && /Queda sumando el resto/.test(last(-3).p.text), last(-3).p.text); // #1101
     await hook(text(54, -1, '/total')); const t = last(-1).p.text; const monthNow = (t.match(/Total de \w+ \(sin corte\): <b>([^<]+)/) || [])[1];
     assert.strictEqual(monthNow, monthBefore, 'el resto no duplica el total del mes'); 
   });

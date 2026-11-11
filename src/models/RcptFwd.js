@@ -63,7 +63,13 @@ const rcptCloseSchema = new mongoose.Schema({
   sentPhoto: { type: String, default: '' },
   sentManual: { type: Boolean, default: false }, // #1099: foto de USDT que no coincidía / no se leía y el agente confirmó a mano (A VERIFICAR)
   sentReadUsdt: { type: Number, default: null }, // #1099: USDT que leyó el bot en la foto
-  sentTry: { type: String, default: null } // #1099: intento de envío esperando el ✅ OK a mano
+  sentTry: { type: String, default: null }, // #1099: intento de envío esperando el ✅ OK a mano
+  // #1101 (owner, Cotizaciones): el GRUPO 1 (cada equipo) tiene su PROPIA cotización, independiente de la del grupo 2:
+  srcStatus: { type: String, default: null }, // null (no aplica) | pending (a cotizar) | quoted (a enviar) | sent
+  srcQuoteRate: { type: Number, default: null }, srcQuoteFeePct: { type: Number, default: null }, srcQuoteUsdt: { type: Number, default: null },
+  srcQuotedBy: { type: String, default: '' }, srcQuotedAt: { type: Date, default: null },
+  srcSentBy: { type: String, default: '' }, srcSentAt: { type: Date, default: null }, srcSentPhoto: { type: String, default: '' },
+  srcSentManual: { type: Boolean, default: false }, srcSentReadUsdt: { type: Number, default: null }, srcSentTry: { type: String, default: null }
 }, { timestamps: true });
 const RcptClose = mongoose.models.RcptClose || mongoose.model('RcptClose', rcptCloseSchema);
 module.exports = { RcptFwd, RcptClose };

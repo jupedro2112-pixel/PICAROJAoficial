@@ -29,6 +29,18 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1101. Bot de comprobantes: el GRUPO 2 es UNA cuenta + COTIZACIÓN PROPIA del grupo 1 (Cotizaciones) (2026-11-11) — panel v300
+- **Owner:** "el grupo 2 recibe de diferentes grupos pero suma 1 cuenta; cuando cotiza, cotiza el total de todos los grupos que enviaron; no tiene que saber
+  que son muchos (o 1)" · "en Cotizaciones hay un cierre de cotización de grupo 2 y de grupo 1 de manera independiente" · "en el grupo 1 cada suma es independiente".
+- **Grupo 2 (TODAS las estructuras):** comprobante reenviado sin "De: equipo" y con el acumulado de TODO lo que llega a ese grupo (`_rbDstOpenAll`) + pendientes
+  totales (`_rbDstPendLine`); /total y "Ver suma" una sola línea; cotizado / enviado sin detalle por equipo; cierres automáticos (13 h, semanal, mes) llegan en
+  UN mensaje por grupo 2 (`_rbCloseBatch` / `opts.collect` ⇒ `_rbDstCloseMsg`: cerrado ahora + pendiente a cotizar total). Ya cotizaba todo junto.
+- **Grupo 1 con `srcQuote` (tilde "💱 Cotización propia de cada grupo que manda"; Cotizaciones lo trae en el plan):** cada cierre nace con `srcStatus:'pending'`
+  (independiente de `status`, que es el del grupo 2). El menú del equipo suma 💱 Cotizar / ✅ Enviado (`rbm:squote` / `rbm:ssent` ⇒ marcas `_RB_SQ_MARK` /
+  `_RB_SS_MARK` con force_reply) ⇒ `_rbSrcQuote` (mismo cálculo) y `_rbSrcSentPhoto` (control de USDT si `usdtCheck`; no coincide ⇒ botón `rbt:<id>` ⇒
+  `_rbSrcSentOkCb`, A VERIFICAR). La respuesta con foto se atiende ANTES que los comprobantes (nunca se suma como comprobante).
+- Tests del flujo actualizados al formato nuevo del grupo 2 (36 OK).
+
 ### 1100. Bot de comprobantes: estructura 4 Cotizaciones en el plan (2026-11-11)
 - Cotizaciones (@Cotizacionbuffabot): los 8 BAJADAS (PARADISE, JOKER, PORTO, JACK, BOSTON, TOKIO/ANANA, VIP/PLATINIUM, LAS VEGAS) con ,79 → 5C RACAFU ,79; cierre
   SEMANAL lunes 00:00; control de la foto de USDT encendido. Agregada a `RB_PLAN` (se aplica sola, sin subir `v`).
