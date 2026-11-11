@@ -91,6 +91,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `STAFF_LOCKDOWN_TEMP` = clave temporal del staff con cambio obligatorio (`staffMustChangePw`). Test `scripts/test-security-1117.js`.
 - **SÓLO EL DUEÑO #1124:** `_isPanelOwner` falla CERRADO (sin `PANEL_OWNER` nadie es dueño); `OWNER_ONLY_MUTATIONS` (adminMiddleware) = credenciales de 1girox/hgcash, CBU, cuentas,
   webhooks, píxeles, Telegram, claude-dev: una ruta NUEVA de esa clase va ahí. Cuentas de prueba ya no se promueven a admin. `_cronClaim` falla cerrado. Eventos del socket con try/catch global.
+- **🛡️ AUDITORÍA DEL STAFF #1125 (réplica BUFFALOGIROX #245/#246):** todo ingreso, cambio de clave y escritura en `/api/*` de una cuenta de staff queda en `StaffAudit`
+  (permanente) con IP REAL (`_reqIp`, a prueba de `x-forwarded-for`/`cf-connecting-ip` falsos) + huella del dispositivo (`X-Device-Id`/`X-Device-Fp` del panel). Panel → 🛡️
+  Seguridad (sólo el dueño). Avisos al grupo privado de Telegram. Un camino NUEVO que cambie una clave llama `_auditPasswordChange(req, target, via)`; una ruta nueva que
+  reciba un secreto con nombre raro lo suma a `_AUDIT_SECRET_RX` (si no, queda en el registro). Detalle: ARCHITECTURE "#1125".
 - **DUEÑO SIEMPRE ADENTRO #1119:** `_ownerGuardTick` restaura cada 2 min la cuenta de `PANEL_OWNER` (admin, activa, clave `PANEL_OWNER_PASS` de AWS). No sacarlo.
 - **RESCATE #1118:** `/admnuevo` (env `ADMIN_RESCUE_USER` / `ADMIN_RESCUE_PASS`, nunca en el código) maneja cuentas de STAFF sin el panel; registro `Config['adminRescueLog']`.
 - **SEGURIDAD #1053:** link de acceso de un depositor sólo para clientes SIN cargas; push masivas / plantillas sólo admin (agentes: `/send` a uno);

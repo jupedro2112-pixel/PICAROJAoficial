@@ -2109,3 +2109,23 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   webhook TRANSACTION_REQUEST con externalID `gasto-` también lo resuelve. Nunca re-envía el pago. Mientras está 'paying': no se puede borrar y un pago
   igual (mismo CBU + monto) da 409 `GASTO_IN_PROCESS`. (Un cash-out aceptado con estado PENDING sigue quedando 'paid' como antes.)
 - Test `scripts/test-loss-fixes-1090.js` (+ casos #1090 en `test-caja-movimientos.js`).
+
+## 🛡️ Seguridad interna del staff: auditoría con IP real + dispositivo (#1125, 2026-11-12; réplica #245/#246 de BUFFALOGIROX)
+- **`StaffAudit`** (`src/models/StaffAudit.js`, permanente): `action` login | login_failed | password_change | password_change_denied | session_revoke | staff_disable |
+  staff_enable | security_denied | api; actor (id/username/role), target, `ip` + `ipChain` + `userAgent`, `deviceId` + `fp`, method/path/status, `details` (body saneado).
+- **Quién escribe:** `_staffAudit(req, action, {actor, target, status, details})` (fire-and-forget, nunca tira). `_staffAuditMiddleware` (global, `app.use` justo después
+  de definirse, ~L1000) registra toda escritura en `/api/*` de una cuenta de staff al `finish` (GET/HEAD/OPTIONS no; saltea `_AUDIT_SKIP_PATHS`). `_auditStaffLogin`
+  en el login por clave; `_auditPasswordChange(req, target, via)` en todos los caminos que cambian una clave (panel, propia, 👑 Staff, /admnuevo).
+- **IP real:** `_reqIpInfo(req)` → `{ip, via}`: cadena XFF + socket de derecha a izquierda, saltea privadas (`_PRIVATE_NETS`), `cf-connecting-ip` sólo si el salto es
+  de Cloudflare (`_CF_NETS`). Es independiente de `app.set('trust proxy')` / `req.ip` (#959). Un chequeo nuevo que necesite la IP del staff usa `_reqIp(req)`.
+- **Dispositivo:** headers `X-Device-Id` / `X-Device-Fp` que pone `setupDeviceFingerprint` (admin.js, envuelve `window.fetch`; CORS los admite). `_reqDevice` valida formato.
+- **Alertas:** `_staffSecurityAlert(lines)` ⇒ `_tgCfg().adminChats` vía `_tgAdminSend` (grupo privado #1046). Nunca el canal público (#1055).
+- **Rutas (sólo dueño, `_secOnly` = `_isPanelOwner` + fila `security_denied`; también en `OWNER_ONLY_MUTATIONS`):** `GET /api/admin/security/audit` (filtros actor/ip/
+  device/action/target/onlyMoney/days/page, completa `targetUsername` desde `User`), `GET /api/admin/security/staff` (staff con último ingreso/IPs/dispositivos 30 d +
+  último cambio de clave; `sharedIps`; `sharedDevices` agrupados por conjunto de cuentas con `byId`), `POST …/staff/:id/revoke` (tokenVersion+1 + corta socket),
+  `POST …/staff/:id/active {active}` (desactivar = isActive false + isBlocked + tokenVersion+1 + socket; nunca a uno mismo).
+- **Panel:** sección `securitySection` (`loadSecuritySection`, `loadSecurityShared(badgeOnly)`, `loadSecurityAudit(page)`, `secFilter*`, `secRevoke`, `secToggleActive`),
+  ítem `navSecurity` visible sólo con `currentAdmin.isPanelOwner`; `switchSection('security')` rebota a los demás.
+- **Trampas:** `ipChain`/`details` pueden traer datos del cliente final (nombres, montos) — la sección es sólo del dueño por eso. Un endpoint de escritura NUEVO que
+  reciba claves con un nombre raro (que no matchee `_AUDIT_SECRET_RX`: pass|token|secret|apikey|key$|otp|code$|pin|cookie|authorization) tiene que sumarlo a esa regex o
+  la clave queda en el registro. El registro arranca vacío en el deploy: no hay IPs de antes.

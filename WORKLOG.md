@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-10**
+> **Última actualización: 2026-11-12**
 
 ## Sesión 2026-11-09
 
@@ -14688,3 +14688,39 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - **Propuestas sin tocar (decisión del owner, en el PDF):** `STAFF_LOCKDOWN_TEMP` da la MISMA clave a todo el staff (no usarla); depositor puede cargar fichas sin transferencia
   (frenar retiros de quien tiene cargas manuales sin movimiento del banco); `/admnuevo` con clave de 4+ y bloqueo global; arrastre de bono (#1040) con carreras; reembolso semanal/acumulativo
   que puede pagar dos veces la misma pérdida; NotifBatch con 20k destinatarios; caché de `/api/sorteos`; auditar lo que el intruso pudo dejar (Telegram, webhooks, CBU, keys).
+
+## #1125 — 2026-11-12 · 🛡️ SEGURIDAD del staff con IP real + huella del dispositivo (réplica de BUFFALOGIROX #245/#245b/#245c/#246) — panel v310
+- **Owner:** "¿podés replicar lo último que hicimos en BUFFALOGIROX en cuanto a seguridad, poner IP registro y demás, para PICAROJAoficial?".
+  Lo que BUFFALO cerró en #245 (tomar cuentas de staff por SMS / PUT phone / cambio de clave sin la actual / claves sólo del admin general) acá YA estaba
+  cerrado por #1053 / #1117 / #1124: lo que faltaba era el REGISTRO con IP y dispositivo, las alertas y la sección del panel. Eso es lo que se replicó.
+- **Modelo `StaffAudit` (`src/models/StaffAudit.js`, permanente, sin TTL):** una fila por ingreso de staff (y los fallidos con usuario de staff), cambio de clave
+  (quién → a quién, por qué camino), sesiones cerradas, cuentas desactivadas/activadas, intentos de ver Seguridad sin ser el dueño, y TODA escritura en `/api/*`
+  de una cuenta de staff (`_staffAuditMiddleware`, `res.on('finish')`; body saneado por `_auditSafeBody`: claves/tokens/pin/códigos ⇒ `***`). Nunca GET.
+- **IP REAL a prueba de encabezados falsos (`_reqIpInfo` / `_reqIp`):** la cadena `x-forwarded-for` + socket se recorre de DERECHA a IZQUIERDA salteando IPs
+  internas (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, 100.64/10); `cf-connecting-ip` vale SÓLO si el salto es de un rango publicado de Cloudflare.
+  `ipChain` guarda la cadena cruda + `via` (directo | cloudflare | cloudflare_sin_header | interna). Probado en frío (6/6): IP inventada a la izquierda y `cf-connecting-ip`
+  forjado se ignoran. NO reemplaza a `req.ip` (#959 `trustedProxy`) en el resto del server: es sólo para el registro.
+- **Huella del dispositivo:** el panel (`setupDeviceFingerprint`, arriba de admin.js) envuelve `fetch` y manda en toda llamada a `/api/` `X-Device-Id` (id al azar en
+  `localStorage.vipAdminDeviceId`; aguanta VPN; incógnito lo reinicia) y `X-Device-Fp` (hash cyrb53 de pantalla, DPR, zona horaria, idiomas, plataforma, núcleos,
+  memoria, toques, placa de video WebGL y un dibujo en canvas: igual con VPN y casi siempre en incógnito). CORS `allowedHeaders` los suma. `_reqDevice` sólo acepta
+  `[A-Za-z0-9_-]{6,40}`.
+- **Ingreso de staff (`_auditStaffLogin`, en el login por clave):** marca `newIp` (esa cuenta nunca entró desde ahí), `sharedWith` (otras cuentas de staff que entraron
+  desde esa IP en 30 d) y `sameDeviceAs` (mismo id de navegador o misma huella que otra cuenta en 30 d). Cualquiera de las tres ⇒ aviso.
+- **Avisos por Telegram (`_staffSecurityAlert`):** van al GRUPO PRIVADO de reportes (#1046, `telegramBot.adminChats`; nunca al canal público): clave de staff
+  cambiada (panel, propia, 👑 Staff del dueño), ingreso desde IP nueva / compartida, MISMO DISPOSITIVO en dos cuentas, cuenta desactivada desde Seguridad. Sin bot o
+  sin grupo vinculado no manda nada (y no frena nada).
+- **Enganches:** login OK y clave incorrecta de staff (`/api/auth/login`), `/api/admin/change-password` (también el 403 de "sólo el dueño" queda como `password_change_denied`),
+  `/api/admin/change-own-password` ('propia'), `/api/admin/owner/staff/pw` ('staff-dueño'), `/admnuevo` pw (actor 'rescate /admnuevo'), `force-logout` de staff.
+- **Panel → 🛡️ Seguridad (sólo el DUEÑO = `PANEL_OWNER`, `_isPanelOwner`; ítem `navSecurity` antes de 👑 Staff; badge = IPs + dispositivos compartidos):**
+  bloque rojo "MISMO DISPOSITIVO usado por varias cuentas" (mismo navegador = casi seguro / misma huella), IPs compartidas, tabla del staff (último ingreso/IP, ingresos
+  30 d, IPs y dispositivos de 30 d, último cambio de clave con quién e IP, ⏳ si sigue con la clave temporal, 📜 ✂️ cerrar sesiones, ⛔/✅ desactivar con doble toque) y
+  registro filtrable por quién / IP / dispositivo / sobre quién / tipo (incluye "💰 sólo plata") / días, paginado de 100. Tocar una IP o un 📱 filtra el registro.
+  Rutas `GET /api/admin/security/audit|staff`, `POST /api/admin/security/staff/:id/revoke|active` con `_secOnly` (otro admin ⇒ 403 + fila `security_denied`); además en
+  `OWNER_ONLY_MUTATIONS`. Colores con tokens `--p-*` (no los grises de BUFFALO).
+- ⚠️ **Lo de ANTES del deploy no tiene IP en la base** (arranca a contar desde que sube). Para rastrear lo pasado: logs de nginx de EB. Con VPN se ve la IP de la VPN;
+  lo que identifica a la persona es el DISPOSITIVO + horarios + qué cuentas usó. PCs idénticas de una oficina pueden dar la misma HUELLA (no el mismo id).
+- Verificado: `node --check` de server.js / admin.js / modelo / admin-sw, `test-server-boot` (carga OK), `test-vip-exports` OK, `test-security-1053` 9/9, ids del
+  index.html sin duplicados, `_reqIpInfo` 6/6 en frío. `test-security-1117` da 8/14 IGUAL que antes de este cambio (las 6 fallas son de #1124: el test no conoce
+  `_cronClaim` ni el `_isPanelOwner` cerrado — pendiente de actualizar el test, no es un bug del server). **Necesita deploy EB.**
+  PROBAR: entrar como dueño → 🛡️ Seguridad abre y muestra tu ingreso con IP; entrar con un agente desde la misma PC → aparece la IP compartida y el 🚨 mismo
+  dispositivo + llega el Telegram al grupo de reportes; un admin que no es el dueño no ve el ítem y, si fuerza la ruta, queda como "🚫 Quiso ver Seguridad".
