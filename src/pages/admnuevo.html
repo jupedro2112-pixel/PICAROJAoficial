@@ -20,7 +20,7 @@ button{padding:11px 14px;border:0;border-radius:10px;background:var(--red);color
 <button id="bAll">Cerrar todas las sesiones</button></div>
 <div class="c"><h2>➕ Crear administrador</h2>
 <input id="nu" placeholder="Usuario nuevo"><input id="np" type="password" placeholder="Clave (mínimo 10)">
-<select id="nr"><option value="admin">Admin general</option><option value="depositor">Agente de cargas</option><option value="withdrawer">Agente de retiros</option><option value="comunidad">Comunidad</option></select>
+<select id="nr"><option value="admin">Admin general</option><option value="depositor">Agente de cargas</option><option value="withdrawer">Agente de retiros</option><option value="cajero">Cajero (cargas + retiros)</option><option value="comunidad">Comunidad</option></select>
 <button class="g" id="bNew">Crear</button></div>
 <div class="c"><h2>👥 Staff</h2><button class="s" id="bRef">Actualizar</button><div id="list"></div></div>
 <div class="c"><button class="s" id="bOut">Salir</button></div>
@@ -31,7 +31,7 @@ var U='',P='';var $=function(i){return document.getElementById(i)};
 function msg(t,ok){var m=$('msg');m.textContent=t;m.style.display='block';m.style.background=ok?'#dcfce7':'#fee2e2';m.style.color=ok?'#14532d':'#7f1d1d';clearTimeout(msg.t);msg.t=setTimeout(function(){m.style.display='none'},6000)}
 function api(path,body){return fetch('/api/admnuevo/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Rescue-User':U,'X-Rescue-Pass':P},body:JSON.stringify(body||{})}).then(function(r){return r.json().catch(function(){return{error:'Error '+r.status}}).then(function(j){if(!r.ok)throw new Error(j.error||('Error '+r.status));return j})})}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
-var ROL={admin:'Admin general',depositor:'Agente de cargas',withdrawer:'Agente de retiros',publisher_admin:'Publicista',comunidad:'Comunidad'};
+var ROL={admin:'Admin general',depositor:'Agente de cargas',withdrawer:'Agente de retiros',cajero:'Cajero (cargas + retiros)',publisher_admin:'Publicista',comunidad:'Comunidad'};
 function load(){return api('list').then(function(j){var h='';j.staff.forEach(function(u){var st=u.isBlocked?'⛔ bloqueado':(u.isActive===false?'⏸️ desactivado':'✅ activo');
 h+='<div class="u"><b>'+esc(u.username)+'</b> · '+esc(ROL[u.role]||u.role)+' · '+st+(u.staffMustChangePw?' · clave temporal':'')+'<div class="m">Último ingreso: '+esc(u.lastLogin?new Date(u.lastLogin).toLocaleString('es-AR'):'—')+'</div><div class="row">'+
 '<button class="s" data-a="kick" data-id="'+esc(u.id)+'">Cerrar sesión</button>'+

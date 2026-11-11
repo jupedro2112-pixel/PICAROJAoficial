@@ -168,8 +168,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `Config['firstDepositBonusPct']` (50%, panel) si no hay otro bono pendiente. Ruleta diaria: premios en
   `Config['dailyRoulette']` (panel), % pendiente en `User.dailyRoulettePendingPct`.
 - **Roles:** `user`, `admin` (todo), `depositor` (solo cargas), `withdrawer` (solo
-  retiros), `publisher_admin` (solo crea usuarios de su publicista — lockdown via
-  `PUBLISHER_ADMIN_ALLOWED_PATHS`).
+  retiros), **`cajero` (#1126) = cargas + retiros a la vez (la UNIÓN de depositor y withdrawer, nunca más que eso)**, `comunidad`,
+  `publisher_admin` (solo crea usuarios de su publicista — lockdown via
+  `PUBLISHER_ADMIN_ALLOWED_PATHS`). Un chequeo de rol NUEVO que admita a depositor o a withdrawer tiene que admitir también a `cajero`
+  (`ADMIN_ROLES` ya lo tiene; las listas sueltas `['admin', 'depositor']` / `['admin', 'withdrawer']` se completan a mano).
 - **Auth:** JWT por header Authorization O por cookie httpOnly `admin_api_session`
   (el panel admin usa cookie).
 - **Mensajes automáticos al usuario** son editables desde la sección COMANDOS

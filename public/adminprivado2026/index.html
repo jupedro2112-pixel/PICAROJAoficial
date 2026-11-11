@@ -643,7 +643,7 @@ document.addEventListener('change', function (ev) {
                     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
                         <input id="osNewUser" class="form-input" placeholder="Usuario nuevo" style="max-width:180px">
                         <input id="osNewPass" class="form-input" type="password" placeholder="Clave (10+)" style="max-width:160px">
-                        <select id="osNewRole" class="form-input" style="max-width:180px"><option value="admin">Admin general</option><option value="depositor">Agente de cargas</option><option value="withdrawer">Agente de retiros</option><option value="comunidad">Comunidad</option></select>
+                        <select id="osNewRole" class="form-input" style="max-width:180px"><option value="admin">Admin general</option><option value="depositor">Agente de cargas</option><option value="withdrawer">Agente de retiros</option><option value="cajero">Cajero (cargas + retiros)</option><option value="comunidad">Comunidad</option></select>
                         <button class="btn-primary" onclick="ownerStaffCreate()">➕ Crear</button>
                     </div>
                     <div id="ownerStaffList">Cargando…</div>
@@ -4993,6 +4993,7 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
                         <option value="admin">Administrador General</option>
                         <option value="depositor">Admin Depositor</option>
                         <option value="withdrawer">Admin Withdrawer</option>
+                        <option value="cajero">Cajero (cargas + retiros)</option>
                         <option value="comunidad">Admin Comunidad</option>
                     </select>
                 </div>

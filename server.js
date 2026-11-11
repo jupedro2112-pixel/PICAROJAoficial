@@ -855,7 +855,7 @@ const USER_PUBLIC_FIELDS = 'id username email phone phoneVerified phoneVerificat
 // agentes de carga/retiro, y publisher_admin (cuenta dedicada a un publicista).
 // Estas cuentas se saltan toda la lógica de JUGAYGANA sync, default-password
 // detection, mustChangePassword forzado, Meta CAPI tracking, etc.
-const ADMIN_ROLES = ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'];
+const ADMIN_ROLES = ['admin', 'depositor', 'withdrawer', 'cajero', 'publisher_admin', 'comunidad']; // #1126: 'cajero' = cargas + retiros a la vez (los permisos de depositor Y withdrawer juntos)
 const isAdminRole = (role) => ADMIN_ROLES.includes(role);
 
 // ============================================
@@ -1152,7 +1152,7 @@ function requireAdminCookie(req, res, next) {
   }
   try {
     const decoded = jwt.verify(cookieVal, JWT_SECRET, { algorithms: ['HS256'] });
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     if (!adminRoles.includes(decoded.role)) {
       return res.status(403).send('Forbidden');
     }
@@ -1538,7 +1538,7 @@ app.post('/api/admnuevo/:action', async (req, res) => {
   const u = String(req.get('x-rescue-user') || '').trim().toLowerCase(); const pw = String(req.get('x-rescue-pass') || '');
   if (!(_rescueEq(u, cfg.user) & _rescueEq(pw, cfg.pass))) { _rescueFail(ip); await _rescueLog(req, 'login_fallido', { user: u.slice(0, 40) }); return res.status(401).json({ error: 'Usuario o clave incorrectos.' }); }
   const action = String(req.params.action || ''); const b = req.body || {};
-  const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'comunidad', 'publisher_admin'];
+  const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad', 'publisher_admin'];
   try {
     const staffById = async () => { const t = await User.findOne({ id: String(b.id || '') }).select('id username role').lean(); if (!t || !ADMIN_ROLES.includes(t.role)) { const e = new Error('Cuenta de staff no encontrada (los jugadores no se tocan desde acá).'); e.code = 404; throw e; } return t; };
     if (action === 'list') {
@@ -4643,7 +4643,7 @@ function deriveChatQueue(cs) {
 }
 
 // Cola según el rol del agente que respondió: el withdrawer solo atiende pagos y el
-// depositor solo cargas. El admin general atiende ambas → null (se deriva del chat).
+// depositor solo cargas. El admin general y el cajero (#1126) atienden ambas → null (se deriva del chat).
 function roleQueueHint(role) {
   if (role === 'withdrawer') return 'pagos';
   if (role === 'depositor') return 'cargas';
@@ -4914,7 +4914,7 @@ const adminMiddleware = (req, res, next) => {
     const p0 = String(req.originalUrl || req.url || '').split('?')[0].replace(/\/+$/, '');
     if (OWNER_ONLY_MUTATIONS.some((re) => re.test(p0)) && !_isPanelOwner(req)) { logger.warn(`[authz] ${req.user.username} (no es el dueño) intentó ${req.method} ${p0}`); return res.status(403).json({ error: 'Esto lo cambia sólo el dueño del panel.' }); }
   }
-  if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'withdrawer' && req.user.role !== 'comunidad') {
+  if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'withdrawer' && req.user.role !== 'cajero' && req.user.role !== 'comunidad') {
     return res.status(403).json({ error: 'Acceso denegado. Solo administradores.' });
   }
   if (req.user.role !== 'admin' && req.method !== 'GET' && req.method !== 'HEAD') {
@@ -4927,15 +4927,15 @@ const adminMiddleware = (req, res, next) => {
 };
 
 const depositorMiddleware = (req, res, next) => {
-  // 'comunidad' funciona como un depositor (mismas funciones de carga) + ve la sección Comunidad.
-  if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'comunidad') {
+  // 'comunidad' funciona como un depositor (mismas funciones de carga) + ve la sección Comunidad. 'cajero' (#1126) = depositor + withdrawer.
+  if (req.user.role !== 'admin' && req.user.role !== 'depositor' && req.user.role !== 'cajero' && req.user.role !== 'comunidad') {
     return res.status(403).json({ error: 'Acceso denegado. Solo agentes de carga.' });
   }
   next();
 };
 
 const withdrawerMiddleware = (req, res, next) => {
-  if (req.user.role !== 'admin' && req.user.role !== 'withdrawer') {
+  if (req.user.role !== 'admin' && req.user.role !== 'withdrawer' && req.user.role !== 'cajero') { // #1126: el cajero también paga
     return res.status(403).json({ error: 'Acceso denegado. Solo agentes de retiro.' });
   }
   next();
@@ -6718,7 +6718,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     // JavaScript (XSS-safe) and is scoped to the admin path only.
     // publisher_admin también entra al panel /adminprivado2026 (vista limitada),
     // por eso recibe la misma cookie que los otros roles administrativos.
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'publisher_admin', 'comunidad'];
     if (adminRoles.includes(userObj.role)) {
       // Set two httpOnly cookies: one for page access, one for API calls.
       // Neither can be read by client-side scripts (XSS-safe).
@@ -6899,7 +6899,7 @@ app.get('/api/admin/me', async (req, res) => {
     const decoded = jwt.verify(cookieToken, JWT_SECRET, { algorithms: ['HS256'] });
     // publisher_admin también accede al panel (vista limitada) y por eso entra
     // en la lista de roles permitidos para /api/admin/me.
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'publisher_admin', 'comunidad'];
     if (!adminRoles.includes(decoded.role)) {
       return res.status(403).json({ error: 'Acceso denegado' });
     }
@@ -7744,7 +7744,7 @@ async function _refundBelowMinMovement(mv, { by, amount, minDep, toCBU }) {
 }
 app.post('/api/admin/hgcash/movements/:movementId/refund', authMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Acceso denegado' });
     if (!hgcashPay.isEnabled()) return res.status(503).json({ error: 'hgcash no está configurado (token de API).' });
     const mv = await BankMovement.findOne({ movementId: req.params.movementId }).lean();
     if (!mv) return res.status(404).json({ error: 'Movimiento no encontrado' });
@@ -7988,7 +7988,7 @@ app.post('/api/auth/login-otp-verify', authLimiter, async (req, res) => {
 
     // Set admin cookies if applicable (incluye publisher_admin que también
     // usa la UI del panel administrativo en /adminprivado2026, en vista limitada).
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'publisher_admin', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'publisher_admin', 'comunidad'];
     if (adminRoles.includes(userObj.role)) {
       const adminCookieToken = jwt.sign(
         { userId: userId, username: userObj.username, role: userObj.role, tokenVersion: userObj.tokenVersion ?? 0 },
@@ -8839,7 +8839,7 @@ app.get('/api/admin/owner/staff', authMiddleware, _ownerOnly, async (req, res) =
     res.json({ owner: _panelOwner(), staff }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post('/api/admin/owner/staff/:action', authMiddleware, _ownerOnly, async (req, res) => {
-  const action = String(req.params.action || ''); const b = req.body || {}; const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'comunidad', 'publisher_admin'];
+  const action = String(req.params.action || ''); const b = req.body || {}; const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad', 'publisher_admin'];
   const log = async (detail) => { try { const l = (await getConfig('ownerStaffLog', null)) || []; l.unshift(Object.assign({ at: new Date().toISOString(), by: req.user.username, action }, detail)); await Config.set('ownerStaffLog', l.slice(0, 300), 'owner#1120'); } catch (_) {} console.warn('👑 [owner #1120] ' + action + ' ' + JSON.stringify(detail)); };
   // revisión #1124: al sacar a alguien también se le CORTA la conexión en vivo del panel (antes seguía recibiendo los mensajes por el socket abierto)
   res.on('finish', () => { if (res.statusCode !== 200 || !['kick-all', 'role', 'kick', 'off', 'pw', 'del'].includes(action)) return;
@@ -9022,7 +9022,7 @@ app.post('/api/users', authMiddleware, adminMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'El número de teléfono es obligatorio (mínimo 8 dígitos)' });
     }
 
-    const validRoles = ['user', 'admin', 'depositor', 'withdrawer', 'comunidad'];
+    const validRoles = ['user', 'admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Rol inválido' });
     }
@@ -9356,7 +9356,7 @@ app.put('/api/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
       if (req.user.role !== 'admin') {
         return res.status(403).json({ error: 'Solo el administrador principal puede cambiar roles' });
       }
-      const validRoles = ['user', 'admin', 'depositor', 'withdrawer', 'comunidad'];
+      const validRoles = ['user', 'admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
       if (!validRoles.includes(req.body.role)) {
         return res.status(400).json({ error: 'Rol inválido' });
       }
@@ -9509,7 +9509,7 @@ app.delete('/api/users/:id', authMiddleware, adminMiddleware, async (req, res) =
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
     
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     if (adminRoles.includes(userToDelete.role) && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Solo los administradores pueden eliminar otros administradores' });
     }
@@ -9649,7 +9649,7 @@ app.get('/api/messages/:userId', authMiddleware, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const before = req.query.before ? new Date(req.query.before) : null;
 
-    const allowedRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const allowedRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     const isAdminRole = allowedRoles.includes(req.user.role);
     if (!isAdminRole && req.user.userId !== userId) {
       return res.status(403).json({ error: 'Acceso denegado' });
@@ -9885,7 +9885,7 @@ app.post('/api/messages/send', authMiddleware, async (req, res) => {
       }
     }
     
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     const isAdminRole = adminRoles.includes(req.user.role);
     
     // Issue #3: Bloquear comandos enviados por usuarios comunes (solo admins pueden procesar comandos)
@@ -12856,7 +12856,7 @@ io.on('connection', (socket) => {
       socket.role = sockUser.role; // #1117 (seguridad): rol de la BASE, no del token
       socket.tokenVersion = sockUser.tokenVersion ?? 0;
 
-      if (['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role)) {
+      if (['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(socket.role)) {
         connectedAdmins.set(decoded.userId, socket);
         socket.join('admins'); // Unir a sala de admins
         logger.info(`Admin connected: ${decoded.username} (${decoded.role}) socket=${socket.id}`);
@@ -12880,7 +12880,7 @@ io.on('connection', (socket) => {
   
   // Unirse a sala de admins (admin, depositor, withdrawer)
   socket.on('join_admin_room', () => {
-    if (['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role)) {
+    if (['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(socket.role)) {
       socket.join('admins');
       logger.debug(`Admin ${socket.username} (${socket.role}) joined admin room`);
     }
@@ -12899,7 +12899,7 @@ io.on('connection', (socket) => {
   
   // CORREGIDO: Unirse a sala de chat específica (para admins)
   socket.on('join_chat_room', (data) => {
-    if (['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role) && data && data.userId) {
+    if (['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(socket.role) && data && data.userId) {
       socket.join(`chat_${data.userId}`);
       logger.debug(`Admin ${socket.username} joined chat room: chat_${data.userId}`);
     }
@@ -12964,10 +12964,10 @@ io.on('connection', (socket) => {
       }
       
       // Determinar el receptor correcto
-      const isAdminRole = ['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role);
+      const isAdminRole = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(socket.role);
       if (isAdminRole) { // #1117 (seguridad): un socket de staff YA conectado se revalida en cada mensaje (sesión cerrada / desactivado / rol bajado ⇒ afuera)
         const su = await User.findOne({ id: socket.userId }).select('role isActive isBlocked tokenVersion staffMustChangePw').lean();
-        if (!su || su.isActive === false || su.isBlocked === true || su.staffMustChangePw === true || (su.tokenVersion ?? 0) !== (socket.tokenVersion ?? 0) || !['admin', 'depositor', 'withdrawer', 'comunidad'].includes(su.role)) {
+        if (!su || su.isActive === false || su.isBlocked === true || su.staffMustChangePw === true || (su.tokenVersion ?? 0) !== (socket.tokenVersion ?? 0) || !['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(su.role)) {
           logger.warn(`[authz] socket de ${socket.username} rechazado (sesión cerrada / desactivado / rol)`); socket.emit('authenticated', { success: false, error: 'Sesión expirada' }); socket.disconnect(true); return;
         }
       }
@@ -13296,7 +13296,7 @@ io.on('connection', (socket) => {
     // también viven en connectedAdmins. Antes solo se limpiaba 'admin' → los
     // sockets muertos de los otros roles quedaban en el Map para siempre
     // (fuga de memoria + emits a sockets desconectados en broadcastStats).
-    if (['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role)) {
+    if (['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(socket.role)) {
       connectedAdmins.delete(socket.userId);
       broadcastStats();
     } else {
@@ -15600,12 +15600,12 @@ app.get('/api/admin/bank-outage', authMiddleware, adminMiddleware, async (req, r
     for (const [k, name, def] of [['down', '/sys_bank_down', BANK_DOWN_DEFAULT], ['failClient', '/sys_bank_fail_client', BANK_FAIL_CLIENT_DEFAULT], ['up', '/sys_bank_up', BANK_UP_DEFAULT], ['upPending', '/sys_bank_up_pending', BANK_UP_PENDING_DEFAULT]]) {
       try { const c = await Command.findOne({ name }).select('response').lean(); texts[k] = (c && c.response) || def; } catch (_) { texts[k] = def; }
     }
-    res.json({ success: true, ...o, waiters: w.length, failedWaiters: w.filter((x) => x && x.kind === 'failed').length, failStreak: _bankFailStreak, settings: await getBankSettings(), texts, history, canEdit: ['admin', 'withdrawer'].includes(req.user.role) });
+    res.json({ success: true, ...o, waiters: w.length, failedWaiters: w.filter((x) => x && x.kind === 'failed').length, failStreak: _bankFailStreak, settings: await getBankSettings(), texts, history, canEdit: ['admin', 'withdrawer', 'cajero'].includes(req.user.role) });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.post('/api/admin/bank-outage', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Solo admin general o pagos.' });
+    if (!['admin', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Solo admin general o pagos.' });
     // #443: settings editables (auto on/off, umbral, pausar retiros, avisar al que le falló) — se guardan si vienen.
     if (req.body && req.body.settings && typeof req.body.settings === 'object') {
       const s = req.body.settings; const cur = await getBankSettings();
@@ -16443,7 +16443,7 @@ async function _supportAutoReply(userId, username) {
     if (!txt) return;
     const recent = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.kind': 'support_ack', timestamp: { $gte: new Date(Date.now() - 2 * 3600 * 1000) } }).select('_id').lean();
     if (recent) return;
-    const agentRecent = await Message.findOne({ receiverId: userId, senderRole: { $in: ['admin', 'depositor', 'withdrawer', 'comunidad'] }, channel: 'support', type: { $ne: 'system' }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, 'metadata.bot': { $ne: true }, timestamp: { $gte: new Date(Date.now() - 10 * 60 * 1000) } }).select('_id').lean();
+    const agentRecent = await Message.findOne({ receiverId: userId, senderRole: { $in: ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'] }, channel: 'support', type: { $ne: 'system' }, senderId: { $nin: ['support-bot', 'system', 'admin'] }, 'metadata.bot': { $ne: true }, timestamp: { $gte: new Date(Date.now() - 10 * 60 * 1000) } }).select('_id').lean();
     if (agentRecent) return;
     await _sendUserSystemMessage({ id: userId, username }, txt, { metadata: { kind: 'support_ack', channel: 'support', target: 'terms', label: '📄 Bases y condiciones' } }); // #702: + botón
   } catch (e) { logger.warn(`[support] auto-respuesta: ${e.message}`); }
@@ -18051,7 +18051,7 @@ app.post('/api/admin/users/:userId/welcome-code-bonus/use', authMiddleware, admi
 // bono); monto = admin general y depositor (decisión del owner).
 app.get('/api/admin/community-code', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor'].includes(req.user.role)) {
+    if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Sin permiso para ver esta configuración.' });
     }
     const code = String((await getConfig('communityWelcomeCode', '')) || '');
@@ -18076,7 +18076,7 @@ app.get('/api/admin/community-code', authMiddleware, adminMiddleware, async (req
 
 app.post('/api/admin/community-code', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor'].includes(req.user.role)) {
+    if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Sin permiso para modificar esta configuración.' });
     }
     const b = req.body || {};
@@ -21862,7 +21862,7 @@ app.post('/api/admin/change-password', authMiddleware, adminMiddleware, async (r
     // enumeraban 'withdrawer' y 'depositor', y el rol 'comunidad' —creado
     // después— caía al else SIN restricción → podía cambiarle la contraseña al
     // ADMIN GENERAL y tomar la sala. Ahora solo pasan los roles previstos.
-    if (adminRole !== 'admin' && adminRole !== 'depositor') {
+    if (adminRole !== 'admin' && adminRole !== 'depositor' && adminRole !== 'cajero') { // #1126: cajero = como depositor (sólo clientes sin cargas)
       return res.status(403).json({ error: 'No tienes permiso para cambiar contraseñas' });
     }
 
@@ -21926,7 +21926,7 @@ app.post('/api/admin/change-own-password', authMiddleware, async (req, res) => {
   // cambiar SU propia contraseña con este endpoint. No se usa adminMiddleware
   // porque ése rechaza publisher_admin — y publisher_admin también necesita
   // cambiar su contraseña desde el panel.
-  const STAFF_ROLES = ['admin', 'depositor', 'withdrawer', 'publisher_admin'];
+  const STAFF_ROLES = ['admin', 'depositor', 'withdrawer', 'cajero', 'publisher_admin'];
   if (!STAFF_ROLES.includes(req.user.role)) {
     return res.status(403).json({ error: 'Acceso denegado.' });
   }
@@ -21978,7 +21978,7 @@ let _fraudCache = { at: 0, days: 0, data: null };
 async function _fraudStats(usernames, from, to) { const out = new Map(); const r = await girox.getPlayersStatsBatch(usernames, from, to, 'fraude'); if (r && r.success) for (const [k, v] of Object.entries(r.players || {})) out.set(k, v); return out; }
 app.get('/api/admin/fraud/alerts', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
     const days = Math.max(1, Math.min(180, parseInt(req.query.days, 10) || 30));
     // #877: 5 min de memoria (las stats del juego usan el cupo de 1girox que comparten cargas y retiros); 'fresh' fuerza, pero no más de 1 por minuto.
     if (_fraudCache.data && _fraudCache.days === days && Date.now() - _fraudCache.at < (req.query.fresh ? 60 * 1000 : 5 * 60 * 1000)) return res.json(Object.assign({ cached: true }, _fraudCache.data));
@@ -21991,7 +21991,7 @@ app.get('/api/admin/fraud/alerts', authMiddleware, adminMiddleware, async (req, 
 });
 app.get('/api/admin/fraud/case/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
     const PendingPayout = require('./src/models/PendingPayout'); const BankMovement = require('./src/models/BankMovement');
     const c = await fraudRadar.caseFile({ User, Transaction, PendingPayout, BankMovement }, String(req.params.id));
     if (!c) return res.status(404).json({ error: 'Cliente no encontrado' });
@@ -22002,7 +22002,7 @@ app.get('/api/admin/fraud/case/:id', authMiddleware, adminMiddleware, async (req
 // #1000: Antifraude central → pestaña "Cuentas secundarias" (las marcadas por #992). Sólo lectura; quitar la marca sigue en /dup-clear (admin).
 app.get('/api/admin/fraud/dup-accounts', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin acceso' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin acceso' });
     const items = await User.find({ duplicateOf: { $ne: null } }).select('id username createdAt isBlocked duplicateOf').sort({ 'duplicateOf.at': -1 }).limit(300).lean();
     res.json({ success: true, items, canEdit: req.user.role === 'admin' });
   } catch (e) { logger.error('[dup-accounts] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
@@ -22019,7 +22019,7 @@ app.post('/api/admin/users/:id/dup-clear', authMiddleware, adminMiddleware, asyn
 });
 app.post('/api/admin/fraud/review/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
     const st = String((req.body && req.body.status) || ''); if (!['legit', 'watch', 'clear'].includes(st)) return res.status(400).json({ error: 'Estado inválido.' });
     const note = String((req.body && req.body.note) || '').slice(0, 300);
     // #996: marcarlo LEGÍTIMO libera sus retiros y apaga el antifraude automático para él ⇒ motivo obligatorio y queda en el historial.
@@ -22230,7 +22230,7 @@ app.post('/api/admin/users/:id/block', authMiddleware, adminMiddleware, async (r
 
     // Pueden bloquear: admin general y depositor (los que están en el chat).
     // Withdrawer no, para no darle a una sola persona poder de cortar accesos.
-    if (!['admin', 'depositor'].includes(req.user.role)) {
+    if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) {
       return res.status(403).json({ error: 'No tenés permiso para bloquear usuarios.' });
     }
 
@@ -22261,7 +22261,7 @@ app.post('/api/admin/users/:id/unblock', authMiddleware, adminMiddleware, async 
   try {
     { const _t0 = await User.findOne({ id: req.params.id }).select('role').lean(); if (_t0 && _t0.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede tocar cuentas de staff.', code: 'OWNER_ONLY' }); } // #1117
     const { id } = req.params;
-    if (!['admin', 'depositor'].includes(req.user.role)) {
+    if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) {
       return res.status(403).json({ error: 'No tenés permiso para desbloquear usuarios.' });
     }
     // #996: desbloquear también exige motivo y queda en el historial de bloqueos.
@@ -22329,7 +22329,7 @@ app.post('/api/admin/users/:id/login-without-password', authMiddleware, adminMid
   // access-link): esto DESACTIVA la contraseña de un cliente. Un withdrawer o
   // comunidad podía activarlo, entrar como ese cliente y pedir un retiro a su
   // propio CBU.
-  if (!['admin', 'depositor'].includes(req.user.role)) {
+  if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) {
     return res.status(403).json({ error: 'No tenés permiso para habilitar el inicio sin clave.' });
   }
   try {
@@ -22807,7 +22807,7 @@ app.get('/api/users/:userId', authMiddleware, async (req, res) => {
     const { userId } = req.params;
     
     // Only admins or the user themselves can fetch a user profile
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     if (!adminRoles.includes(req.user.role) && req.user.userId !== userId) {
       return res.status(403).json({ error: 'Acceso denegado' });
     }
@@ -23854,7 +23854,7 @@ app.get('/api/deposits/pending', authMiddleware, async (req, res) => {
 // #377: SOPORTE paralelo — columna del panel. Las conversaciones de soporte salen de los mensajes con
 // channel='support' (todo lo que escribe el cliente desde la app y lo que responde el agente desde esta columna).
 // ============================================
-const SUPPORT_ROLES = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+const SUPPORT_ROLES = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
 // ============================================================
 // #414: SOPORTE PARA VISITANTES (sin cuenta) — pantalla de ingreso → columna "Visitantes" del panel
 // ============================================================
@@ -24458,7 +24458,7 @@ async function _bankAccountForCbu(cbu) {
 // Para los agentes (selector de la carga a mano y del "pagado a mano"): sólo nombre y últimos 4 del CBU.
 app.get('/api/admin/bank-accounts/options', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin acceso' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin acceso' });
     const list = (await _bankAccounts()).filter((a) => a.active !== false).map((a) => ({ id: a.id, name: a.name, cbu4: _digits(a.cbu).slice(-4) || null }));
     res.json({ success: true, main: { id: 'main', name: 'Cuenta principal (banco automático)' }, accounts: list });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
@@ -25560,7 +25560,7 @@ app.post('/api/admin/users/:userId/access-link', authMiddleware, adminMiddleware
     { const _t0 = await User.findOne({ id: req.params.userId }).select('role').lean(); if (_t0 && _t0.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede tocar cuentas de staff.', code: 'OWNER_ONLY' }); } // #1117
     // Admin general y depositor (decisión del owner 2026-08-03: los depositors
     // también dan de alta clientes). withdrawer/comunidad/publisher_admin NO.
-    if (!['admin', 'depositor'].includes(req.user.role)) {
+    if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Solo el admin general o un depositor pueden generar links de acceso.' });
     }
     // #1053 (seguridad): con un link + el cambio de clave forzado, un agente podía entrar a la cuenta de un cliente con saldo y retirar a su CBU.
@@ -26068,7 +26068,7 @@ app.get('/api/admin/api-failures', authMiddleware, adminMiddleware, async (req, 
 // "🏦 Lo vi en el banco": la persona confirma que la transferencia entró ⇒ sale de la lista (la IA igual lo re-lee cuando vuelve, por seguridad).
 app.post('/api/admin/api-failures/:id/bank-seen', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
     const note = String((req.body && req.body.note) || '').slice(0, 300);
     const c = await Comprobante.findOne({ id: String(req.params.id), trustedFallback: true }).select('id userId username autoCharged bankMatchStatus reviewStatus').lean();
     if (!c) return res.status(404).json({ error: 'No encontrado' });
@@ -26970,7 +26970,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =
     }
     
     // Validar rol
-    const validRoles = ['user', 'admin', 'depositor', 'withdrawer', 'comunidad'];
+    const validRoles = ['user', 'admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ error: 'Rol inválido' });
     }
@@ -30061,7 +30061,7 @@ async function _mirrorHitFor(username) {
 }
 app.get('/api/admin/fraud/mirror', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor', 'withdrawer'].includes(req.user.role)) return res.status(403).json({ error: 'Sin acceso' });
+    if (!['admin', 'depositor', 'withdrawer', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin acceso' });
     res.json({ success: true, result: await getConfig('mirrorScan', null), progress: _mirrorProgress, config: await getMirrorConfig(), canEdit: req.user.role === 'admin' });
   } catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
 });
@@ -34320,7 +34320,7 @@ app.post('/api/admin/newbie-offers', authMiddleware, adminMiddleware, async (req
 // isActive:false con su autoKey, así el motor NO la vuelve a publicar); si todavía no salió, se reserva el horario como 'borrada' (no sale).
 app.post('/api/admin/stories-autopilot/remove', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    if (!['admin', 'depositor'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
+    if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
     const day = String((req.body || {}).day || ''), rawSlot = String((req.body || {}).slot == null ? '' : (req.body || {}).slot);
     const slot = /^m[0-2]$/.test(rawSlot) ? rawSlot : parseInt(rawSlot, 10); // #834: 'm0'..'m2' = partidos de las 00:05
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !(typeof slot === 'string' || (slot >= 0 && slot < storyAuto.SLOTS.length))) return res.status(400).json({ error: 'Datos inválidos.' });
@@ -34621,8 +34621,8 @@ const NotifBatch = require('./src/models/NotifBatch');
 // (hoy ~1.6k clientes). El envío es en segundo plano y reanudable, así que el
 // tamaño no compromete nada.
 const NOTIF_BATCH_MAX_RECIPIENTS = 20000;
-const NOTIF_BATCH_SEND_ROLES = ['admin', 'depositor'];
-const NOTIF_BATCH_VIEW_ROLES = ['admin', 'depositor', 'withdrawer'];
+const NOTIF_BATCH_SEND_ROLES = ['admin', 'depositor', 'cajero'];
+const NOTIF_BATCH_VIEW_ROLES = ['admin', 'depositor', 'withdrawer', 'cajero'];
 
 // Misma clasificación que el badge del chat (APP INSTALADA / NOTIS EN
 // NAVEGADOR / NOTIS INACTIVAS): standalone en CUALQUIER token = app.

@@ -695,6 +695,13 @@ function setupRoleBasedUI() {
         if (tabPayments) tabPayments.style.display = 'flex';
         if (tabComunidad) tabComunidad.style.display = 'none';
         currentTab = 'payments';
+    } else if (role === 'cajero') {
+        // #1126 Cajero (cargas + retiros): abiertos/cerrados/PAGOS; NO ve COMUNIDAD
+        if (tabComunidad) tabComunidad.style.display = 'none';
+        if (tabOpen) tabOpen.style.display = 'flex';
+        if (tabClosed) tabClosed.style.display = 'flex';
+        if (tabPayments) tabPayments.style.display = 'flex';
+        currentTab = 'open';
     } else if (role === 'depositor') {
         // Depositor: abiertos/cerrados; NO ve PAGOS ni COMUNIDAD
         if (tabPayments) tabPayments.style.display = 'none';
@@ -719,7 +726,7 @@ function setupRoleBasedUI() {
     
     // #889 (owner): los agentes de PAGOS y CARGAS ven sólo: Soporte, Cargas pendientes, Retiros pendientes, Cargas automáticas, Ruleta
     // diaria, Referidos, Usuarios y Transacciones. (Los permisos reales los pone el servidor; esto ordena lo que ven.)
-    if (role === 'depositor' || role === 'withdrawer') {
+    if (role === 'depositor' || role === 'withdrawer' || role === 'cajero') { // #1126: el cajero ve lo mismo que los agentes
         const AGENT_SECTIONS = ['support', 'depositReviews', 'payReview', 'apiFailures', 'cargasAuto', 'chats']; // #1020: + Comprobantes sin API a verificar // #898 · #982 (owner): sólo Soporte, Comprobantes a verificar, Pagos a confirmar, Cargas automáticas y Chat completo
         document.querySelectorAll('.sidebar-nav .nav-item').forEach((it) => { if (!AGENT_SECTIONS.includes(it.dataset.section)) it.style.display = 'none'; else it.style.display = ''; });
         document.querySelectorAll('.sidebar-nav .nav-group-title').forEach((t) => {
@@ -734,7 +741,7 @@ function setupRoleBasedUI() {
     // Depositor y withdrawer pueden ver "Usuarios" pero NO pueden exportar CSV
     const usersNavItem = document.querySelector('.nav-item[data-section="users"]');
     if (usersNavItem) {
-        usersNavItem.style.display = ['admin', 'depositor', 'withdrawer'].includes(role) ? '' : 'none';
+        usersNavItem.style.display = ['admin', 'depositor', 'withdrawer', 'cajero'].includes(role) ? '' : 'none';
     }
     // Solo el admin general puede exportar usuarios
     const exportCsvBtn = document.getElementById('exportUsersCSVBtn');
@@ -745,7 +752,7 @@ function setupRoleBasedUI() {
     // Bonus directo: visible para admin, depositor y comunidad
     const btnBonus = elements.btnBonus;
     if (btnBonus) {
-        btnBonus.style.display = ['admin', 'depositor', 'comunidad'].includes(role) ? '' : 'none';
+        btnBonus.style.display = ['admin', 'depositor', 'cajero', 'comunidad'].includes(role) ? '' : 'none';
     }
 
     // SMS Masivo: solo visible para admin general
@@ -1274,7 +1281,7 @@ function updateActionButtonsByTab() {
 
     const role = currentAdmin?.role;
     // Quién puede derivar a Comunidad desde Abiertos (no el withdrawer).
-    const canDeriveCommunity = ['admin', 'depositor', 'comunidad'].includes(role);
+    const canDeriveCommunity = ['admin', 'depositor', 'cajero', 'comunidad'].includes(role);
 
     if (currentTab === 'payments') {
         // En Pagos: "Enviar a Abiertos" (no para withdrawer). Sin botón de comunidad.
@@ -1639,7 +1646,7 @@ function handleNewMessage(data) {
         }
     }
     
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     const isFromAdmin = adminRoles.includes(message.senderRole);
     const isSystemMessage = message.type === 'system' || senderId === 'admin' || senderId === 'system';
     
@@ -1741,7 +1748,7 @@ function loadStatsThrottled() {
  * Se llama cuando llega un mensaje nuevo de otro chat.
  */
 function updateConversationInList(message) {
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     const isFromAdmin = adminRoles.includes(message.senderRole);
     const chatUserId = isFromAdmin ? message.receiverId : message.senderId;
     
@@ -2355,7 +2362,7 @@ function addMessageToChat(message, isOutgoing = false) {
 function getMessageType(msg) {
     if (msg.type === 'system') return 'system';
     // CORREGIDO: Incluir depositor y withdrawer como roles de admin
-    const adminRoles = ['admin', 'depositor', 'withdrawer', 'comunidad'];
+    const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'];
     if (adminRoles.includes(msg.senderRole)) return 'outgoing';
     return 'incoming';
 }
@@ -3678,7 +3685,7 @@ async function handlePasswordChange() {
         return;
     }
     
-    if (adminRole === 'depositor' && targetUserRole !== 'user') {
+    if ((adminRole === 'depositor' || adminRole === 'cajero') && targetUserRole !== 'user') {
         showToast('Solo puedes cambiar contraseñas de usuarios, no de administradores', 'error');
         return;
     }
@@ -4469,8 +4476,8 @@ function renderUsers(users) {
     }
     
     tbody.innerHTML = users.map(user => {
-        const isAdminUser = ['admin', 'depositor', 'withdrawer', 'comunidad'].includes(user.role);
-        const canChangePassword = adminRole === 'admin' || (adminRole === 'depositor' && !isAdminUser);
+        const isAdminUser = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(user.role);
+        const canChangePassword = adminRole === 'admin' || ((adminRole === 'depositor' || adminRole === 'cajero') && !isAdminUser);
         const canBlock = adminRole === 'admin' && !isAdminUser;
 
         // Status cell: show BLOQUEADO badge if blocked
@@ -4529,7 +4536,7 @@ function renderUsers(users) {
             : '';
 
         // Link de acceso de un solo uso: admin general y depositor, solo clientes.
-        const accessLinkBtn = (['admin', 'depositor'].includes(adminRole) && !isAdminUser)
+        const accessLinkBtn = (['admin', 'depositor', 'cajero'].includes(adminRole) && !isAdminUser)
             ? `<button class="action-btn-small" title="Generar link de acceso (un solo uso — loguea al cliente automáticamente)" onclick='handleGenerateAccessLink(${JSON.stringify(user.id)}, ${JSON.stringify(user.username)})'>🔗</button>`
             : '';
 
@@ -5026,9 +5033,9 @@ function applyBlockStateToChatHeader(user) {
     const reason = user.blockReason || 'Sin motivo registrado';
     const blockedBy = user.blockedBy || null;
     const blockedAt = user.blockedAt ? new Date(user.blockedAt) : null;
-    const isAdminUser = ['admin', 'depositor', 'withdrawer', 'comunidad'].includes(user.role);
+    const isAdminUser = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(user.role);
     // Tanto admin general como depositor pueden bloquear (son los que operan en el chat).
-    const canBlock = ['admin', 'depositor'].includes(currentAdmin?.role) && !isAdminUser;
+    const canBlock = ['admin', 'depositor', 'cajero'].includes(currentAdmin?.role) && !isAdminUser;
 
     if (elements.chatBlockedBanner) {
         elements.chatBlockedBanner.style.display = isBlocked ? 'block' : 'none';
@@ -5828,6 +5835,7 @@ function getRoleLabel(role) {
         admin: 'Admin General',
         depositor: 'Admin Depositor',
         withdrawer: 'Admin Withdrawer',
+        cajero: 'Cajero (cargas + retiros)',
         comunidad: 'Admin Comunidad'
     };
     return labels[role] || role;
@@ -5886,7 +5894,7 @@ async function handleCreateUser() {
             document.getElementById('newUserRole').value = 'user';
             // Link de acceso de un solo uso del recién creado (solo clientes;
             // admin general y depositor — el backend lo re-valida igual).
-            if (data.user && data.user.role === 'user' && currentAdmin && ['admin', 'depositor'].includes(currentAdmin.role)) {
+            if (data.user && data.user.role === 'user' && currentAdmin && ['admin', 'depositor', 'cajero'].includes(currentAdmin.role)) {
                 generateAccessLink(data.user.id, data.user.username,
                     '✅ Usuario creado. Este es su link para entrar por primera vez:');
             }
@@ -11636,7 +11644,7 @@ function _staffPwGate() {
     return true;
 }
 // #1120: sección 👑 Staff (sólo el dueño, PANEL_OWNER en AWS). Rutas /api/admin/owner/staff*.
-const OS_ROL = { admin: 'Admin general', depositor: 'Agente de cargas', withdrawer: 'Agente de retiros', comunidad: 'Comunidad', publisher_admin: 'Publicista' };
+const OS_ROL = { admin: 'Admin general', depositor: 'Agente de cargas', withdrawer: 'Agente de retiros', cajero: 'Cajero (cargas + retiros)', comunidad: 'Comunidad', publisher_admin: 'Publicista' };
 let _osPin = ''; // #1121: clave de la sección (sólo en memoria; al recargar la vuelve a pedir)
 function _osFetch(url, opts) {
     if (!_osPin) { const p = prompt('Clave de la sección Staff:'); if (!p) return Promise.reject(new Error('Falta la clave de la sección.')); _osPin = p; }
@@ -19822,8 +19830,8 @@ window.hgDiagRun = hgDiagRun;
 function _spActionBtns() {
     const role = currentAdmin && currentAdmin.role;
     let h = '';
-    if (['admin', 'depositor'].includes(role)) h += '<button type="button" class="btn-secondary btn-small" onclick="spOpenAction(\'deposit\')" title="Cargar fichas a este cliente">💰 Cargar</button>';
-    if (['admin', 'withdrawer'].includes(role)) h += '<button type="button" class="btn-secondary btn-small" onclick="spOpenAction(\'withdraw\')" title="Retiro manual de fichas">💸 Retiro</button>';
+    if (['admin', 'depositor', 'cajero'].includes(role)) h += '<button type="button" class="btn-secondary btn-small" onclick="spOpenAction(\'deposit\')" title="Cargar fichas a este cliente">💰 Cargar</button>';
+    if (['admin', 'withdrawer', 'cajero'].includes(role)) h += '<button type="button" class="btn-secondary btn-small" onclick="spOpenAction(\'withdraw\')" title="Retiro manual de fichas">💸 Retiro</button>';
     return h;
 }
 function spOpenAction(kind) {
@@ -19844,7 +19852,7 @@ function spOpenAction(kind) {
 async function spLoadPending(userId) {
     const box = document.getElementById('spPending'); if (!box) return;
     box.hidden = true; box.innerHTML = '';
-    if (!currentAdmin || !['admin', 'depositor'].includes(currentAdmin.role)) return;
+    if (!currentAdmin || !['admin', 'depositor', 'cajero'].includes(currentAdmin.role)) return;
     try {
         const r = await authFetch('/api/admin/deposit-reviews?status=pending&limit=10&userId=' + encodeURIComponent(userId)); const j = await r.json();
         if (!r.ok || !_spSelected || _spSelected.userId !== userId) return;

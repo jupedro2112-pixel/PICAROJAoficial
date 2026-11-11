@@ -270,9 +270,12 @@ modelos); sus migraciones corren únicamente si algo llamara a ese connectDB.
   necesita otro campo, sumarlo ahí), chequea isActive/isBlocked/`tokenVersion`.
   publisher_admin: lockdown contra `PUBLISHER_ADMIN_ALLOWED_PATHS`. mustChangePassword:
   solo deja pasar `MUST_CHANGE_PASSWORD_ALLOWED_PATHS` (admins se auto-limpian).
-- Middlewares de rol: `adminMiddleware` (admin/depositor/withdrawer/comunidad),
-  `depositorMiddleware` (admin/depositor/comunidad), `withdrawerMiddleware`
-  (admin/withdrawer), `publisherAdminMiddleware`. Acciones sensibles re-chequean
+- Middlewares de rol: `adminMiddleware` (admin/depositor/withdrawer/cajero/comunidad),
+  `depositorMiddleware` (admin/depositor/cajero/comunidad), `withdrawerMiddleware`
+  (admin/withdrawer/cajero), `publisherAdminMiddleware`. **`cajero` (#1126)** = depositor + withdrawer en una sola cuenta: pasa
+  por los dos middlewares, carga y paga, ve Abiertos/Cerrados/Pagos, cambia claves sólo de clientes (como depositor), y las
+  restricciones que son SÓLO del withdrawer (no derivar a Abiertos/Comunidad) no le aplican. Sigue siendo staff NO admin:
+  `STAFF_DENY_MUTATIONS`, `_staffBonusCheck`, `AGENT_SECTIONS` del panel y la auditoría #1125 lo tratan como a los demás agentes. Acciones sensibles re-chequean
   `req.user.role === 'admin'` explícito (patrón obligatorio — ver #80).
 - **`src/middlewares/auth.js` es OTRO sistema de auth** (access 15m + refresh 7d,
   blacklist EN MEMORIA no compartida entre instancias) usado SOLO por las rutas de
@@ -1092,7 +1095,7 @@ VIPCARGAS con su JWT, y el cliente nunca más necesita conocer su clave del casi
 ### Panel admin (`public/adminprivado2026/`)
 - `admin.js` (~12k líneas), auth mixta: login → Bearer en memoria + cookies httpOnly;
   `checkAdminSession()` (`GET /api/admin/me`) restaura sesión al recargar.
-- Roles: admin ve todo; depositor (abiertos/cerrados); withdrawer (solo Pagos);
+- Roles: admin ve todo; depositor (abiertos/cerrados); withdrawer (solo Pagos); cajero (abiertos/cerrados/Pagos, #1126);
   comunidad (abiertos/cerrados/comunidad); **publisher_admin tiene vista propia**
   (`#publisherAdminSection`, early-return en setupRoleBasedUI, funciones `pa*`).
 - Chat: `renderConversations` con coalescing rAF + delegación de eventos (#91);

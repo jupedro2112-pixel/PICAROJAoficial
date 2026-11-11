@@ -142,7 +142,7 @@ async function requireAdmin(req, res, next) {
     return res.status(401).json({ error: 'Token inválido' });
   }
 
-  const adminRoles = ['admin', 'depositor', 'withdrawer'];
+  const adminRoles = ['admin', 'depositor', 'withdrawer', 'cajero'];
   // #1053 (seguridad): un agente podía mandar push a TODOS los clientes ("transferí a este CBU") y cambiar plantillas.
   // Los agentes sólo pueden mandar a UN cliente (POST /send); todo lo demás que no sea leer, sólo el admin general.
   if (decoded.role !== 'admin' && req.method !== 'GET' && req.method !== 'HEAD' && !/^\/send\/?$/.test(req.path)) {

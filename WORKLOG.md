@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12**
+> **Última actualización: 2026-11-12** (#1126)
 
 ## Sesión 2026-11-09
 
@@ -14724,3 +14724,15 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   `_cronClaim` ni el `_isPanelOwner` cerrado — pendiente de actualizar el test, no es un bug del server). **Necesita deploy EB.**
   PROBAR: entrar como dueño → 🛡️ Seguridad abre y muestra tu ingreso con IP; entrar con un agente desde la misma PC → aparece la IP compartida y el 🚨 mismo
   dispositivo + llega el Telegram al grupo de reportes; un admin que no es el dueño no ve el ítem y, si fuerza la ruta, queda como "🚫 Quiso ver Seguridad".
+
+## #1126 — 2026-11-12 · Rol CAJERO = cargas + retiros en una sola cuenta — panel v311 · app v721
+- Pedido del owner: "que se pueda armar un rol de admin que sea depositor y withdrawer en conjunto a la vez, y que tengan los permisos de los dos roles".
+- Nuevo rol `cajero` (etiqueta "Cajero (cargas + retiros)") en el enum de `User.role` y de `Message.senderRole`, en `ADMIN_ROLES` y en TODAS las listas de
+  roles del server (middlewares `adminMiddleware`/`depositorMiddleware`/`withdrawerMiddleware`, socket, soporte, chats, bloqueo/desbloqueo, links de acceso,
+  cambio de clave de clientes, antifraude, lotes de avisos, bank-outage, hgcash refund, rescate `/admnuevo`, sección 👑 Staff del dueño, altas y cambio de rol),
+  en `src/middlewares/auth.js`, `notificationRoutes`, la PWA (`socket.js`/`chat.js`: sonido de mensaje del staff) y el panel (pestañas del chat
+  Abiertos/Cerrados/Pagos; `AGENT_SECTIONS` como los demás agentes; claves sólo de clientes como el depositor; etiquetas `getRoleLabel`/`OS_ROL`; selects de
+  rol en Usuarios y en 👑 Staff). Es la UNIÓN exacta: lo que sólo podía el depositor + lo que sólo podía el withdrawer, nunca lo del admin general.
+- Cómo se crea: 👑 Staff (sólo el dueño) → nuevo con rol "Cajero", o cambiarle el rol a un agente existente. También desde `/admnuevo`.
+- Verificado: `node --check` de los 10 archivos tocados, `test-server-boot` OK, `test-vip-exports` OK, `test-security-1053` 9/9, `test-loss-fixes-1090` 13/13,
+  `test-security-1117` 8/14 (igual que antes: las fallas son del test desactualizado tras #1124). **Necesita deploy EB.**
