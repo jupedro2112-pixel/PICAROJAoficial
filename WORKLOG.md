@@ -14630,3 +14630,8 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   + 2ª pasada del code-review: la nota del retiro retenido se reserva antes de ir a la base (3 mensajes juntos = una nota) y un retiro recién frenado
   borra el "sin retiro" en memoria; el Análisis semanal comparte la cuenta con Negocio, tiene 🔄 que recalcula (fresh=1) y se limpia tras el cierre del lunes.
 
+
+## #1118 — 2026-11-11 · /admnuevo: página de RESCATE del staff (owner: lo entró un empleado)
+- `GET /admnuevo` (`src/pages/admnuevo.html`) + `POST /api/admnuevo/:action` (list, kick-all, create, kick, off, on, pw, role, del). Sólo cuentas de STAFF
+  (`ADMIN_ROLES`); jugadores nunca. Usuario/clave SÓLO por env de AWS: `ADMIN_RESCUE_USER` (default adminfabri) y `ADMIN_RESCUE_PASS` (sin ella, 404). El owner
+  pidió la clave escrita en el código: NO (repo público); va en AWS. Freno: 5 fallos/IP = 30 min, 15 fallos/hora = cerrada 1 h. Registro en `Config['adminRescueLog']`.

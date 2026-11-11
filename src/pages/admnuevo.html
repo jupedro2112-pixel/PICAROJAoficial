@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Rescate del panel</title>
+<style>
+:root{--bg:#f4f4f5;--card:#fff;--tx:#18181b;--mut:#71717a;--bd:#e4e4e7;--red:#e60023;--ok:#16a34a}
+@media (prefers-color-scheme:dark){:root{--bg:#09090b;--card:#18181b;--tx:#fafafa;--mut:#a1a1aa;--bd:#27272a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,sans-serif;padding:16px}
+.w{max-width:720px;margin:0 auto}.c{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+h1{font-size:20px;margin:0 0 12px}h2{font-size:16px;margin:0 0 10px}input,select{width:100%;padding:11px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font-size:16px;margin-bottom:8px}
+button{padding:11px 14px;border:0;border-radius:10px;background:var(--red);color:#fff;font-weight:600;font-size:15px;cursor:pointer}button.s{background:var(--bd);color:var(--tx)}button.g{background:var(--ok)}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.u{border-top:1px solid var(--bd);padding:10px 0}.u b{font-size:16px}.m{color:var(--mut);font-size:13px}
+#msg{position:sticky;top:0;padding:10px;border-radius:10px;margin-bottom:10px;display:none;font-weight:600}.hide{display:none}
+</style></head><body><div class="w">
+<div id="msg"></div>
+<div class="c" id="login"><h1>🔐 Rescate del panel</h1>
+<input id="lu" placeholder="Usuario" autocomplete="username"><input id="lp" type="password" placeholder="Clave" autocomplete="current-password">
+<button id="bIn">Entrar</button></div>
+<div id="app" class="hide">
+<div class="c"><h2>🚨 Cerrar sesión de TODO el staff</h2><p class="m">Saca a todos los agentes y administradores del panel ya mismo (los jugadores no se tocan).</p>
+<button id="bAll">Cerrar todas las sesiones</button></div>
+<div class="c"><h2>➕ Crear administrador</h2>
+<input id="nu" placeholder="Usuario nuevo"><input id="np" type="password" placeholder="Clave (mínimo 10)">
+<select id="nr"><option value="admin">Admin general</option><option value="depositor">Agente de cargas</option><option value="withdrawer">Agente de retiros</option><option value="comunidad">Comunidad</option></select>
+<button class="g" id="bNew">Crear</button></div>
+<div class="c"><h2>👥 Staff</h2><button class="s" id="bRef">Actualizar</button><div id="list"></div></div>
+<div class="c"><button class="s" id="bOut">Salir</button></div>
+</div></div>
+<script>
+(function(){
+var U='',P='';var $=function(i){return document.getElementById(i)};
+function msg(t,ok){var m=$('msg');m.textContent=t;m.style.display='block';m.style.background=ok?'#dcfce7':'#fee2e2';m.style.color=ok?'#14532d':'#7f1d1d';clearTimeout(msg.t);msg.t=setTimeout(function(){m.style.display='none'},6000)}
+function api(path,body){return fetch('/api/admnuevo/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Rescue-User':U,'X-Rescue-Pass':P},body:JSON.stringify(body||{})}).then(function(r){return r.json().catch(function(){return{error:'Error '+r.status}}).then(function(j){if(!r.ok)throw new Error(j.error||('Error '+r.status));return j})})}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
+var ROL={admin:'Admin general',depositor:'Agente de cargas',withdrawer:'Agente de retiros',publisher_admin:'Publicista',comunidad:'Comunidad'};
+function load(){return api('list').then(function(j){var h='';j.staff.forEach(function(u){var st=u.isBlocked?'⛔ bloqueado':(u.isActive===false?'⏸️ desactivado':'✅ activo');
+h+='<div class="u"><b>'+esc(u.username)+'</b> · '+esc(ROL[u.role]||u.role)+' · '+st+(u.staffMustChangePw?' · clave temporal':'')+'<div class="m">Último ingreso: '+esc(u.lastLogin?new Date(u.lastLogin).toLocaleString('es-AR'):'—')+'</div><div class="row">'+
+'<button class="s" data-a="kick" data-id="'+esc(u.id)+'">Cerrar sesión</button>'+
+(u.isBlocked||u.isActive===false?'<button class="g" data-a="on" data-id="'+esc(u.id)+'">Activar</button>':'<button data-a="off" data-id="'+esc(u.id)+'">Bloquear</button>')+
+'<button class="s" data-a="pw" data-id="'+esc(u.id)+'">Cambiar clave</button>'+
+'<button class="s" data-a="role" data-id="'+esc(u.id)+'">Cambiar rol</button>'+
+'<button data-a="del" data-id="'+esc(u.id)+'" data-n="'+esc(u.username)+'">Borrar</button></div></div>'});$('list').innerHTML=h||'<p class="m">Sin cuentas de staff.</p>'})}
+$('bIn').onclick=function(){U=$('lu').value.trim();P=$('lp').value;load().then(function(){$('login').classList.add('hide');$('app').classList.remove('hide');$('lp').value=''}).catch(function(e){U='';P='';msg(e.message)})};
+$('bOut').onclick=function(){U='';P='';location.reload()};
+$('bRef').onclick=function(){load().catch(function(e){msg(e.message)})};
+$('bAll').onclick=function(){if(!confirm('¿Cerrar la sesión de TODO el staff?'))return;api('kick-all').then(function(j){msg('Listo: '+j.n+' sesiones cerradas',1);load()}).catch(function(e){msg(e.message)})};
+$('bNew').onclick=function(){api('create',{username:$('nu').value.trim(),password:$('np').value,role:$('nr').value}).then(function(){msg('Creado',1);$('nu').value='';$('np').value='';load()}).catch(function(e){msg(e.message)})};
+$('list').onclick=function(ev){var b=ev.target.closest('button[data-a]');if(!b)return;var a=b.getAttribute('data-a'),id=b.getAttribute('data-id'),body={id:id};
+if(a==='pw'){var p=prompt('Clave nueva (mínimo 10):');if(!p)return;body.password=p}
+if(a==='role'){var r=prompt('Rol: admin / depositor / withdrawer / comunidad');if(!r)return;body.role=r.trim()}
+if(a==='del'&&!confirm('¿Borrar la cuenta '+b.getAttribute('data-n')+'?'))return;
+api(a,body).then(function(){msg('Listo',1);load()}).catch(function(e){msg(e.message)})};
+$('lp').onkeydown=function(e){if(e.key==='Enter')$('bIn').click()};
+})();
+</script></body></html>

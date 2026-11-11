@@ -1366,6 +1366,58 @@ app.get('/terminos.html', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'terminos.html'));
 });
+// #1118 (owner tras la intrusión de un empleado): /admnuevo = RESCATE del panel. Crea / borra / bloquea / activa / cambia clave y rol de cuentas de STAFF y
+// cierra sesiones, sin depender del panel. Usuario y clave SÓLO por variables de AWS (ADMIN_RESCUE_USER, default 'adminfabri'; ADMIN_RESCUE_PASS): el repo
+// es público, nunca en el código. Sin ADMIN_RESCUE_PASS la página no abre. Jugadores (role 'user') NUNCA se tocan desde acá. Freno: 5 fallos por IP = 30 min
+// y 15 fallos en total por hora = cerrado 1 h (por instancia). Todo queda en Config['adminRescueLog'].
+const _rescueFails = { ip: new Map(), all: [] };
+function _rescueLocked(ip) { const now = Date.now(); _rescueFails.all = _rescueFails.all.filter((t) => now - t < 3600000); if (_rescueFails.all.length >= 15) return true; const e = _rescueFails.ip.get(ip); return !!(e && e.n >= 5 && now < e.until); }
+function _rescueFail(ip) { const now = Date.now(); _rescueFails.all.push(now); const e = _rescueFails.ip.get(ip) || { n: 0, until: 0 }; if (now > e.until) e.n = 0; e.n++; e.until = now + 30 * 60000; _rescueFails.ip.set(ip, e); if (_rescueFails.ip.size > 5000) _rescueFails.ip.clear(); }
+function _rescueEq(a, b) { const x = crypto.createHash('sha256').update(String(a)).digest(); const y = crypto.createHash('sha256').update(String(b)).digest(); return crypto.timingSafeEqual(x, y); }
+function _rescueCfg() { const pass = String(process.env.ADMIN_RESCUE_PASS || ''); return pass.length >= 4 ? { user: String(process.env.ADMIN_RESCUE_USER || 'adminfabri').trim().toLowerCase(), pass } : null; }
+async function _rescueLog(req, action, detail) { try { const l = (await getConfig('adminRescueLog', null)) || []; l.unshift({ at: new Date().toISOString(), ip: req.ip, action, detail }); await Config.set('adminRescueLog', l.slice(0, 300), 'rescue#1118'); } catch (_) {} console.warn('🚨 [admnuevo #1118] ' + action + ' ' + JSON.stringify(detail || {}) + ' ip=' + req.ip); }
+app.get('/admnuevo', (req, res) => {
+  if (!_rescueCfg()) return res.status(404).send('Not found');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'");
+  res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Robots-Tag', 'noindex');
+  res.sendFile(path.join(__dirname, 'src', 'pages', 'admnuevo.html'));
+});
+app.post('/api/admnuevo/:action', async (req, res) => {
+  const cfg = _rescueCfg(); if (!cfg) return res.status(404).json({ error: 'Not found' });
+  res.setHeader('Cache-Control', 'no-store');
+  const ip = String(req.ip || '');
+  if (_rescueLocked(ip)) return res.status(429).json({ error: 'Demasiados intentos. Esperá y probá más tarde.' });
+  const u = String(req.get('x-rescue-user') || '').trim().toLowerCase(); const pw = String(req.get('x-rescue-pass') || '');
+  if (!(_rescueEq(u, cfg.user) & _rescueEq(pw, cfg.pass))) { _rescueFail(ip); await _rescueLog(req, 'login_fallido', { user: u.slice(0, 40) }); return res.status(401).json({ error: 'Usuario o clave incorrectos.' }); }
+  const action = String(req.params.action || ''); const b = req.body || {};
+  const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'comunidad', 'publisher_admin'];
+  try {
+    const staffById = async () => { const t = await User.findOne({ id: String(b.id || '') }).select('id username role').lean(); if (!t || !ADMIN_ROLES.includes(t.role)) { const e = new Error('Cuenta de staff no encontrada (los jugadores no se tocan desde acá).'); e.code = 404; throw e; } return t; };
+    if (action === 'list') {
+      const staff = await User.find({ role: { $in: ADMIN_ROLES } }).select('id username role isActive isBlocked lastLogin staffMustChangePw createdAt').sort({ role: 1, username: 1 }).lean();
+      return res.json({ staff });
+    }
+    if (action === 'kick-all') { const r = await User.updateMany({ role: { $in: ADMIN_ROLES } }, { $inc: { tokenVersion: 1 } }); await _rescueLog(req, 'cerrar_todas', { n: r.modifiedCount }); return res.json({ success: true, n: r.modifiedCount || 0 }); }
+    if (action === 'create') {
+      const username = String(b.username || '').trim(); const role = String(b.role || 'admin'); const pass = String(b.password || '');
+      if (!/^[A-Za-z0-9._-]{4,30}$/.test(username)) return res.status(400).json({ error: 'Usuario: 4 a 30 letras o números.' });
+      if (pass.length < 10) return res.status(400).json({ error: 'La clave tiene que tener 10 caracteres o más.' });
+      if (!ROLES_OK.includes(role)) return res.status(400).json({ error: 'Rol inválido.' });
+      const ex = await User.findOne({ username: new RegExp('^' + username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id role').lean();
+      if (ex) return res.status(409).json({ error: 'Ese usuario ya existe.' });
+      const nu = await User.create({ id: uuidv4(), username, password: pass, role, accountNumber: generateAccountNumber(), balance: 0, isActive: true, isBlocked: false, phoneVerified: false, phoneVerificationPending: false, referralCode: generateReferralCode(), acquisitionSource: 'manual', createdAt: new Date() });
+      await _rescueLog(req, 'crear', { username, role }); return res.json({ success: true, id: nu.id });
+    }
+    const t = await staffById();
+    if (action === 'kick') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 } }); await _rescueLog(req, 'cerrar_sesion', { username: t.username }); return res.json({ success: true }); }
+    if (action === 'off') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: { isActive: false, isBlocked: true, blockReason: 'Bloqueado desde rescate', fcmTokens: [], fcmToken: null } }); await _rescueLog(req, 'bloquear', { username: t.username }); return res.json({ success: true }); }
+    if (action === 'on') { await User.updateOne({ id: t.id }, { $set: { isActive: true, isBlocked: false, blockReason: null } }); await _rescueLog(req, 'activar', { username: t.username }); return res.json({ success: true }); }
+    if (action === 'pw') { const np = String(b.password || ''); if (np.length < 10) return res.status(400).json({ error: 'La clave tiene que tener 10 caracteres o más.' }); await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: { password: await bcrypt.hash(np, 12), staffMustChangePw: false, mustChangePassword: false, passwordChangedAt: new Date() } }); await _rescueLog(req, 'cambiar_clave', { username: t.username }); return res.json({ success: true }); }
+    if (action === 'role') { const r = String(b.role || ''); if (!ROLES_OK.includes(r)) return res.status(400).json({ error: 'Rol inválido (admin / depositor / withdrawer / comunidad).' }); await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: { role: r } }); await _rescueLog(req, 'cambiar_rol', { username: t.username, de: t.role, a: r }); return res.json({ success: true }); }
+    if (action === 'del') { await User.deleteOne({ id: t.id, role: { $in: ADMIN_ROLES } }); await _rescueLog(req, 'borrar', { username: t.username, role: t.role }); return res.json({ success: true }); }
+    return res.status(404).json({ error: 'Acción desconocida.' });
+  } catch (e) { return res.status(e.code === 404 ? 404 : 500).json({ error: e.code === 404 ? e.message : 'Error: ' + e.message }); }
+});
 // #775: CASINO SIMULADO del entorno de prueba (Render). Es la única página propia que se puede embeber (frame-ancestors 'self'):
 // la abre el iframe de Girox directo cuando el SSO viene del simulador. En producción (API real) no se usa y responde 404.
 app.get('/casino-sim', (req, res) => {
