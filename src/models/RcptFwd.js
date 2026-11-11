@@ -25,6 +25,8 @@ const rcptFwdSchema = new mongoose.Schema({
   amount: { type: Number, default: null },
   amountFrom: { type: String, default: null }, // 'ia' | 'texto' | 'corregido' | 'arrastre' | 'arrastre_mes' | 'resto'
   sender: { type: String, default: '' },
+  destHolder: { type: String, default: null }, // #1094: titular y CBU/alias de DESTINO leídos por la IA (el aviso de cambio de terminación repite el último)
+  destCbu: { type: String, default: null },
   status: { type: String, default: 'hold', index: true }, // hold (sin monto / sin grupo para esos centavos) | open | closed | failed | dup (duplicado, no suma) | anulado (/anular)
   error: { type: String, default: null },
   closeId: { type: String, default: null, index: true }

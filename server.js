@@ -32146,7 +32146,7 @@ async function _rbReadAmount(token, file, caption) {
   if (file && /^image\//.test(file.fileMime) && comprobanteAi.isEnabled && comprobanteAi.isEnabled()) {
     try {
       const buf = await _rbDownload(token, file.fileId);
-      if (buf && buf.length <= 8 * 1024 * 1024) { const ai = await comprobanteAi.analyzeComprobante('data:' + file.fileMime + ';base64,' + buf.toString('base64')); if (ai && ai.ok && Number(ai.amount) > 0) return { amount: Math.round(Number(ai.amount) * 100) / 100, from: 'ia', dupKey: ai.coelsaId ? 'c:' + ai.coelsaId : (ai.operationNumber && String(ai.operationNumber).replace(/\W/g, '').length >= 6 ? 'o:' + String(ai.operationNumber).replace(/\W/g, '').toUpperCase() : null) }; }
+      if (buf && buf.length <= 8 * 1024 * 1024) { const ai = await comprobanteAi.analyzeComprobante('data:' + file.fileMime + ';base64,' + buf.toString('base64')); if (ai && ai.ok && Number(ai.amount) > 0) return { destHolder: ai.destHolder ? String(ai.destHolder).slice(0, 80) : null, destCbu: ai.destCbu ? String(ai.destCbu).replace(/\s+/g, ' ').trim().slice(0, 40) : null, amount: Math.round(Number(ai.amount) * 100) / 100, from: 'ia', dupKey: ai.coelsaId ? 'c:' + ai.coelsaId : (ai.operationNumber && String(ai.operationNumber).replace(/\W/g, '').length >= 6 ? 'o:' + String(ai.operationNumber).replace(/\W/g, '').toUpperCase() : null) }; }
     } catch (e) { logger.warn('[rcptbot] lectura ' + e.message); }
   }
   const t = _rbParseAmount(caption || ''); return t ? { amount: t, from: 'texto' } : { amount: null, from: null };
@@ -32198,7 +32198,7 @@ async function _rbOnReceipt(c, bot, m, file, route) {
   const rd = await _rbReadAmount(bot.token, file, m.caption || '');
   // #1079-m (owner: "detectar si el comprobante es duplicado, no sumar y avisar"): misma imagen (file_unique_id) o mismo COELSA / n° de operación
   const or = []; if (rd.dupKey) or.push({ dupKey: rd.dupKey }); if (file && file.fileUid) or.push({ fileUid: file.fileUid });
-  if (rd.dupKey) await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { dupKey: rd.dupKey } });
+  if (rd.dupKey || rd.destCbu || rd.destHolder) await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: Object.assign({}, rd.dupKey ? { dupKey: rd.dupKey } : {}, rd.destCbu ? { destCbu: rd.destCbu } : {}, rd.destHolder ? { destHolder: rd.destHolder } : {}) }); // #1094: + destino
   if (or.length) {
     // owner: "sólo dentro de los que están SIN COTIZAR": abiertos o en un cierre todavía PENDIENTE A COTIZAR (cotizado/enviado ya no cuenta)
     let prev = null;
@@ -32575,6 +32575,38 @@ async function _rbCbuTick() {
   }
 }
 setTimeout(() => { setInterval(() => { _rbCbuTick().catch((e) => logger.warn('[rcptbot] cbu ' + e.message)); }, 60000); }, 80000);
+// #1094 CAMBIO DE TERMINACIÓN (owner: "el 5 y el 20 avisá el cambio de terminación a las 13 h, sólo a los grupos que mandan, y repetí el alias/CBU del
+// último comprobante que están enviando"). Estructura: termNotices [{day, cents}] + termHour (13). El reparto NO cambia (los centavos mandan siempre, también
+// con la terminación anterior): esto sólo avisa y fija el mensaje. Una vez por estructura/mes/día (_rbOnce, varias instancias); si el server estuvo caído a
+// la hora, sale apenas vuelve ese mismo día.
+function _rbTermNext(list, day) { const s2 = (list || []).slice().sort((a, b) => a.day - b.day); return s2.find((x) => x.day > day) || s2[0] || null; }
+function _rbTermMsg(n, next, nowArt, hour, dest) {
+  const p2 = (x) => String(x).padStart(2, '0'); const y = nowArt.getUTCFullYear(), mo = nowArt.getUTCMonth();
+  const nd = next && next.day > n.day ? new Date(Date.UTC(y, mo, next.day)) : next ? new Date(Date.UTC(y, mo + 1, next.day)) : null;
+  const hh = p2(hour) + ':00';
+  return `📢 <b>CAMBIO DE TERMINACIÓN</b>\nDesde hoy ${n.day}/${mo + 1} ${hh} h${nd && (!next || next.day !== n.day) ? ' hasta el ' + nd.getUTCDate() + '/' + (nd.getUTCMonth() + 1) + ' ' + hh + ' h' : ''} los envíos van con terminación <b>,${_rbH(n.cents)}</b>.` +
+    (dest && (dest.destCbu || dest.destHolder) ? `\nMismo CBU de siempre:${dest.destHolder ? '\n👤 Titular: <b>' + _rbH(dest.destHolder) + '</b>' : ''}${dest.destCbu ? '\n🏦 CBU / alias: <code>' + _rbH(dest.destCbu) + '</code>' : ''}` : '\nMismo CBU de siempre.') +
+    '\n⚠️ Cambiá la terminación en tus envíos.';
+}
+async function _rbTermTick() {
+  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
+  const nowArt = new Date(Date.now() - 3 * 3600000); const day = nowArt.getUTCDate(), hr = nowArt.getUTCHours(); const ym = nowArt.toISOString().slice(0, 7);
+  for (const st of (c.structs || []).filter((x) => x && x.on && Array.isArray(x.termNotices) && x.termNotices.length)) {
+    const hour = Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13; if (hr < hour) continue;
+    const n = st.termNotices.find((x) => x.day === day); if (!n) continue;
+    if (!(await _rbOnce('term', st.id + '|' + ym + '|' + day))) continue;
+    const next = _rbTermNext(st.termNotices, day);
+    for (const r of (c.routes || []).filter((x) => x.structId === st.id)) {
+      try {
+        const last = await _rbM().RcptFwd.findOne({ fromChat: String(r.from), destCbu: { $ne: null } }).sort({ createdAt: -1 }).lean();
+        const sent = await _rbSend(c, String(r.from), _rbTermMsg(n, next, nowArt, hour, last), r.botId);
+        await _rbPin(c, String(r.from), r.botId, sent);
+      } catch (e) { logger.warn('[rcptbot] term ' + e.message); }
+    }
+    logger.info(`[rcptbot] cambio de terminación ,${n.cents} avisado · estructura ${st.name}`);
+  }
+}
+setTimeout(() => { setInterval(() => { _rbTermTick().catch((e) => logger.warn('[rcptbot] term ' + e.message)); }, 60000); }, 95000);
 async function _rbAnular(c, bot, m, fromChat, route, dstR, by) {
   const rid = m.reply_to_message && m.reply_to_message.message_id;
   if (!rid) { await _rbSend(c, fromChat, 'Para anular un comprobante, <b>respondé ese comprobante</b> con /anular. Para restar un monto: <b>/restar 50.000</b>.', bot.id); return; }
@@ -32720,7 +32752,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
         routes.push(Object.assign({}, r, { cbuItems, cbuStops, sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
-      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes });
+      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13 }); // #1094
     }
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
@@ -32806,6 +32838,17 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
     if (st.on) { // un grupo que MANDA va encendido en UNA sola estructura (si no, la segunda perdería comprobantes: cada mensaje se toma una vez)
       for (const o of (c.structs || []).filter((x) => x.on && x.id !== st.id)) for (const r of o.routes || []) if ((st.routes || []).some((y) => y.from === r.from)) return res.status(400).json({ error: `"${_rbTitle(c, r.from)}" ya manda en la estructura "${o.name}" (encendida). Un grupo que manda va en una sola estructura.` });
     }
+    if (Array.isArray(b.termNotices)) { // #1094: días del mes en que cambia la terminación (aviso automático a los grupos que mandan)
+      const seen = new Set(); const out = [];
+      for (const x of b.termNotices.slice(0, 8)) {
+        const day = Math.round(Number(x && x.day)); let cents = String((x && x.cents) || '').replace(/\D/g, ''); if (cents.length === 1) cents = '0' + cents;
+        if (!(day >= 1 && day <= 28)) return res.status(400).json({ error: 'Cambio de terminación: el día va del 1 al 28' });
+        if (!/^\d{2}$/.test(cents)) return res.status(400).json({ error: 'Cambio de terminación: la terminación son 2 números (ej. 99)' });
+        if (seen.has(day)) return res.status(400).json({ error: 'Cambio de terminación: el día ' + day + ' está repetido' }); seen.add(day); out.push({ day, cents });
+      }
+      st.termNotices = out.sort((p, q) => p.day - q.day);
+    }
+    if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
     await _rbStructPut(st);
     if (turnedOn) { const c2 = await _rbCfg(true); for (const r of (c2.routes || []).filter((x) => x.structId === st.id)) await _rbSendMenus(c2, r, true).catch(() => {}); }

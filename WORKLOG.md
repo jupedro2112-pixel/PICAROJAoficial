@@ -29,6 +29,19 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1094. Bot de comprobantes: aviso automático de CAMBIO DE TERMINACIÓN (2026-11-11) — panel v295
+- **Owner (armando la estructura Fichas):** 12 grupos que mandan; del 5 al 20 los envíos van con ,99 (4f RACAFU ,99), el resto del mes con ,43 (Pagos Hammy y
+  Fabri ,43); "el 5 y el 20 avisá el cambio de terminación, a las 13 h, sólo a los grupos que mandan, y repetí el alias/CBU del último comprobante que
+  están enviando"; el CBU de bajada es siempre el mismo (si el grupo 2 lo cambia, la terminación sigue); "si alguien manda con la terminación anterior va
+  al grupo de esa terminación" (= como ya funciona: los centavos mandan siempre).
+- **Armado recomendado de Fichas:** cada grupo que manda con DOS reglas fijas (,99 → RACAFU · ,43 → Hammy y Fabri) y "Todo lo demás" vacío (otra terminación
+  ⇒ ❌ TERMINACIÓN MAL). No hace falta programar el CBU de bajada por fechas.
+- **Server:** estructura con `termNotices [{day 1-28, cents}]` + `termHour` (13). `_rbTermTick` (cada minuto): el día y desde la hora, una vez por
+  estructura/mes/día (`_rbOnce('term', …)`), manda a CADA grupo que manda "📢 CAMBIO DE TERMINACIÓN · Desde hoy D/M 13:00 h hasta el D/M 13:00 h van con ,NN ·
+  mismo CBU de siempre (titular + CBU/alias del último comprobante de ESE grupo) · cambiá la terminación" y lo fija. No toca el reparto. La IA ya leía el
+  destino: ahora se guarda en `RcptFwd.destHolder/destCbu`. Si el server estuvo caído a esa hora, sale apenas vuelve ese mismo día.
+- **Panel:** en cada estructura, bloque "📢 Cambio de terminación" (día → terminación, + Día de cambio, hora) y 💾 Guardar estructura.
+
 ### 1093. Bot de comprobantes: detecta TODOS los grupos de cada bot (2026-11-10)
 - **Owner:** "¿por qué no detecta todos los grupos de cada bot? arreglalo así no lo hago manual".
 - **Causas:** (1) `_rbGroupSeen` leía la lista, sacaba el grupo y lo volvía a poner: con 2 bots en el mismo grupo los dos webhooks llegan juntos y el segundo

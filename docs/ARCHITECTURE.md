@@ -2045,6 +2045,9 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
 - **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
 - **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
+- **Bot de comprobantes #1094 (cambio de terminación):** `structs[].termNotices [{day, cents}]` + `termHour`; `_rbTermTick` avisa y fija el mensaje en los grupos
+  que MANDAN de la estructura (una vez por estructura/mes/día con `_rbOnce('term', …)`), con titular/CBU del último `RcptFwd.destCbu` de cada grupo. SÓLO
+  avisa: el reparto sigue siendo por centavos (`_rbPickTo`), también para la terminación vieja. Días 1-28 (todos los meses los tienen).
 - **Bot de comprobantes #1093 (grupos por bot):** `_rbGroupSeen` es ATÓMICO ($addToSet / $pull sobre `value.groups.$.bots`, el grupo se agrega sólo si no está):
   nunca volver a leer→sacar→poner la lista (con 2 bots en un grupo los webhooks llegan juntos y uno pisaba al otro). `_rbRepairGroups` pregunta `getChat` por
   TODOS los grupos conocidos a TODOS los bots (no corta en el primero), saca el bot si Telegram dice kicked / not a member y unifica repetidos
