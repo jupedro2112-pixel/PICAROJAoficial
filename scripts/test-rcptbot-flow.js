@@ -455,6 +455,16 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const n2 = sent.length; await hook(text(997, -3, '/restar 99.999.999')); const t = last(-3).p.text; assert.ok(/RESTADO<\/b>: −\$99\.999\.999/.test(t) && /−\$/.test(t.split('\n').slice(2).join('\n')), t);
     assert.ok(!sent.slice(n2).some((x) => String(x.p.chat_id) === '-1'), 'el grupo 1 no se entera');
   });
+  await caso('#1116 /anular respondiendo un "SUMADO LO ANTERIOR" viejo (contaba en los 2 grupos) lo saca de los dos', async () => {
+    const at = new Date(NOW.getTime() - 60000);
+    RcptFwd.rows.push({ id: 'old-arr', fromChat: '-1', fromTitle: 'buffalobot', toChat: '-3', toTitle: 'fichasnuevobot', srcMsgId: -555, structId: 'E1', amount: 13686199, amountFrom: 'arrastre', status: 'open', createdAt: at });
+    const reply = { message_id: 7001, from: { is_bot: true }, date: Math.floor(at.getTime() / 1000), text: '📥 SUMADO LO ANTERIOR: +$13.686.199 · CLAUDIO\nbuffalobot → fichasnuevobot' };
+    await hook({ message: { message_id: 7002, chat: { id: -3, type: 'supergroup', title: 'fichasnuevobot' }, from: { first_name: 'Ana' }, text: '/anular', reply_to_message: reply } });
+    const t = last(-3).p.text; assert.ok(/AJUSTE ANULADO<\/b>: −\$13\.686\.199/.test(t) && /buffalobot y fichasnuevobot/.test(t), t);
+    assert.strictEqual(RcptFwd.rows.find((x) => x.id === 'old-arr').status, 'anulado');
+    await hook({ message: { message_id: 7003, chat: { id: -3, type: 'supergroup', title: 'fichasnuevobot' }, from: { first_name: 'Ana' }, text: '/anular', reply_to_message: reply } });
+    assert.ok(/No encontré ese ajuste/.test(last(-3).p.text), 'dos veces no');
+  });
   await caso('#1110 empezar de cero: borra SÓLO lo del bot desde la hora, desfija lo del bot, cuentas a $0, presentación de nuevo', async () => {
     const since = NOW.getTime() - 3600000; const chat = '-3'; const msgs = {}; // id ⇒ { mine, date }
     for (let i = 1; i <= 30; i++) msgs[i] = { mine: i % 3 !== 0, date: (i <= 10 ? since - 60000 : since + i * 1000) / 1000 };

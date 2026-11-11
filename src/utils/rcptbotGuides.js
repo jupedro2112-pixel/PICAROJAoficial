@@ -107,6 +107,7 @@ ${n[1]}) COMANDOS (o el botón 📋 Ver comandos)
                           lo nuevo que se reenvía sigue sumando normal)
    /restar 50.000 ....... resta un monto (SÓLO en la cuenta de este grupo; puede quedar a favor: −$X)
    /anular .............. respondiendo un comprobante: lo saca de la suma
+                          (respondiendo un aviso SUMADO LO ANTERIOR / RESTADO: deshace ese ajuste)
    /cbu ................. a qué CBU transferir ahora (titular, CBU, alias, terminación)
    /ayuda ............... menú con botones · /guia ...... esta guía
 
@@ -145,6 +146,7 @@ CBU DE BAJADA (la cuenta a la que transfieren)
 
 CORRECCIONES
    /anular .............. respondiendo un comprobante reenviado: lo saca de la suma
+                          (respondiendo un aviso SUMADO LO ANTERIOR / RESTADO: deshace ese ajuste)
    /restar 50.000 ....... resta un monto · /suma 13.686.199 ... suma lo que había antes del bot
                           (los dos SÓLO en la cuenta de este grupo; entran en su próximo cierre)
 

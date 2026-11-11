@@ -29,6 +29,11 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1116. Bot de comprobantes: /anular deshace un /anterior o /restar (2026-11-11)
+- **Owner (captura 1B RACAFU ,82):** /anterior cargados a las 01:40 con la versión vieja (sumaban en los DOS grupos) y un /restar nuevo sólo restaría en el
+  grupo 2. `_rbAnular`: respondiendo el aviso del bot "SUMADO LO ANTERIOR: +$X" / "RESTADO: −$X", busca ese ajuste (monto, grupo, ± 3 min de la hora del
+  aviso; arrastre/ajuste viejos y nuevos, 'open' o 'srconly') y lo anula: sale de todas las cuentas donde contaba. Guías al día. Test rcptbot-flow 50.
+
 ### 1115. Bot de comprobantes: revisión antes de subir (2026-11-11)
 - Guías del bot al día: /restar sólo en ese grupo, aviso ⚠️ NO ESTOY SEGURO DEL MONTO y ✏️ MONTO CONFIRMADO A MANO.
 - Repaso del modelo vs lo que escribe el bot: ningún campo `required` queda vacío (#1114). IA de comprobantes con modelos 5.x: `max_tokens` 8000 y espera de 75 s

@@ -33041,6 +33041,20 @@ setTimeout(() => { setInterval(() => { _rbMonthCloseTick().catch((e) => logger.w
 async function _rbAnular(c, bot, m, fromChat, route, dstR, by) {
   const rid = m.reply_to_message && m.reply_to_message.message_id;
   if (!rid) { await _rbSend(c, fromChat, 'Para anular un comprobante, <b>respondé ese comprobante</b> con /anular. Para restar un monto: <b>/restar 50.000</b>.', bot.id); return; }
+  // #1116 (owner: "/anterior" viejos en 1B RACAFU): /anular respondiendo el aviso del bot "SUMADO LO ANTERIOR: +$X" o "RESTADO: −$X" deshace ESE ajuste de todas
+  // las cuentas donde contó (los /anterior de antes de #1108 sumaban en los dos grupos). Se busca por monto, grupo y la hora del aviso (± 3 min).
+  const rtx = String((m.reply_to_message && (m.reply_to_message.text || m.reply_to_message.caption)) || ''); const am = rtx.match(/^\S*\s*(SUMADO LO ANTERIOR|RESTADO): [+−-]\$([\d.,]+)/);
+  if (am && m.reply_to_message.from && m.reply_to_message.from.is_bot) {
+    const val = _rbParseAmount(am[2], 1e11) * (am[1] === 'RESTADO' ? -1 : 1); const at = Number(m.reply_to_message.date || 0) * 1000; const sids = route ? [route.structId] : dstR.map((r) => r.structId);
+    const cands = await _rbM().RcptFwd.find({ $or: [{ fromChat }, { toChat: fromChat }], structId: { $in: sids }, amount: val, amountFrom: { $in: ['arrastre', 'ajuste', 'arrastre1', 'arrastre2', 'ajuste1', 'ajuste2'] }, status: { $in: ['open', 'srconly'] } }).lean();
+    const rec = cands.filter((x) => !at || Math.abs(new Date(x.createdAt).getTime() - at) < 180000).sort((a, b) => Math.abs(new Date(a.createdAt) - at) - Math.abs(new Date(b.createdAt) - at))[0];
+    if (!rec) { await _rbSend(c, fromChat, 'No encontré ese ajuste abierto (puede que ya esté anulado o haya entrado en un cierre: en ese caso usá /suma o /restar).', bot.id, { reply_to_message_id: m.message_id, allow_sending_without_reply: true }); return; }
+    const u = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: rec.status }, { $set: { status: 'anulado', error: 'anulado por ' + String(by || '').slice(0, 60) } }, { new: true }); if (!u) return;
+    const where = [rec.fromChat, rec.toChat].filter(Boolean).map((ch) => _rbH(_rbTitle(c, ch))).join(' y ');
+    const tot = route ? (await _rbSrcOnlyLine(fromChat, route.structId)) + '\n' + _rbMonthTxt(await _rbMonthSum(fromChat, route.structId)) : '\n' + (await _rbDstTotalTxt(c, fromChat, dstR));
+    await _rbSend(c, fromChat, `🗑️ <b>AJUSTE ANULADO</b>: ${val < 0 ? '+' : '−'}${_rbMoney2(Math.abs(val))}${by ? ' · ' + _rbH(by) : ''}\nSalió de la cuenta de ${where}.${tot}`, bot.id, { reply_markup: _rbKb(), reply_to_message_id: m.reply_to_message.message_id, allow_sending_without_reply: true });
+    return;
+  }
   const q = route ? { fromChat, structId: route.structId, $or: [{ srcMsgId: rid }, { replyMsgId: rid }] } : { toChat: fromChat, fwdMsgId: rid, structId: { $in: dstR.map((r) => r.structId) } };
   const rec = await _rbM().RcptFwd.findOne(q).lean();
   if (!rec) { await _rbSend(c, fromChat, 'No encontré ese comprobante (respondé la foto o el mensaje del bot).', bot.id); return; }
