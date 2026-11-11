@@ -32549,7 +32549,9 @@ async function _rbPlanRun() {
     if (!bot) { miss.push('bot @' + p.bot + ' (cargá su token en la estructura)'); det.push({ kind: 'bot', name: '@' + p.bot, why: `El bot @${p.bot} no está cargado.`, fix: 'Pegá su token (de @BotFather) en una estructura llamada "' + p.name + '" y guardá.' }); }
     const botId = bot ? String(bot.id) : null; const bd = bot ? (c.botsDec || []).find((b) => String(b.id) === botId) : null;
     const look = (t, role) => { if (!botId) return null; const d = _rbPlanGroup(c, t, botId, p.bot, pins, role); if (d.g) return d.g; miss.push((role === 'src' ? 'grupo que manda "' : role === 'fz' ? 'grupo de fichas "' : 'grupo que recibe "') + t + '"'); det.push(Object.assign({ kind: role, name: t }, d)); return null; };
-    const rules = []; for (const r of p.rules) { const g = look(r.to, 'dst'); if (g) rules.push({ cents: r.cents, to: String(g.id) }); }
+    const cur0 = (c.structs || []).find((x) => _rbNorm(x.name) === _rbNorm(p.name)); const curCents = {}; // #1115: al volver a aplicar el plan, la terminación VIGENTE de cada destino
+    for (const rt of (cur0 && cur0.routes) || []) for (const x of rt.rules || []) if (x && x.to && !curCents[String(x.to)]) curCents[String(x.to)] = x.cents; // (la cambió /nuevocbu o el panel) se respeta
+    const rules = []; for (const r of p.rules) { const g = look(r.to, 'dst'); if (g) rules.push({ cents: curCents[String(g.id)] || r.cents, to: String(g.id) }); }
     const fichasDests = []; for (const t of p.fichasDests || []) { const g = look(t, 'fz'); if (g) fichasDests.push(String(g.id)); } // #1104
     const routes = []; for (const t of p.senders) { const g = look(t, 'src'); if (g && !routes.some((x) => x.from === String(g.id))) routes.push({ from: String(g.id), rules: rules.map((x) => Object.assign({}, x)), otherTo: null }); }
     if (bd && bd.token) { // #1106: en los grupos que MANDAN el bot tiene que ser administrador (si no, Telegram no le pasa las fotos) — aviso, no frena

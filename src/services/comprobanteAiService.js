@@ -125,7 +125,7 @@ async function analyzeComprobante(content, opts = {}) { // opts.model: otro mode
   const model = opts.model || getModel();
   const body = {
     model,
-    max_tokens: /^claude-(opus|sonnet|fable)-5|^claude-haiku-5/.test(model) ? 4000 : 600, // los modelos 5.x piensan antes de contestar
+    max_tokens: /^claude-(opus|sonnet|fable|haiku)-5/.test(model) ? 8000 : 600, // los modelos 5.x piensan antes de contestar (se paga sólo lo usado)
     messages: [{
       role: 'user',
       content: [imageBlock, { type: 'text', text: PROMPT }]
@@ -139,7 +139,7 @@ async function analyzeComprobante(content, opts = {}) { // opts.model: otro mode
         'anthropic-version': ANTHROPIC_VERSION,
         'content-type': 'application/json'
       },
-      timeout: 30000
+      timeout: /^claude-(opus|sonnet|fable|haiku)-5/.test(model) ? 75000 : 30000 // #1115: Opus 5.5 piensa: más margen para que no se corte
     });
 
     // La respuesta trae content: [{type:'text', text:'...'}]

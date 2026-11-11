@@ -416,6 +416,8 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(!rc.structs.find((x) => x.name === 'Fichas' && x.on), 'lo incompleto queda apagado');
     assert.ok(sent.slice(n0).some((x) => String(x.p.chat_id) === '-700' && /BIENVENIDOS/.test(x.p.text || '')) && sent.slice(n0).some((x) => String(x.p.chat_id) === '-701' && /BIENVENIDOS/.test(x.p.text || '')), 'bienvenida en los 2 grupos');
     aiAmount = 20000.33; await hook(Object.assign(photo(800, -700), {})); // un comprobante real llega a S1 Racafu
+    st.routes[0].rules[0].cents = '44'; const pd = cfgDocs.find((d) => d.key === 'rcptbotplan').value; pd.applied['Sector 1'] = 0; await ctx._rbCfg(true); await ctx._rbPlanRun(); // #1115
+    assert.strictEqual(rc.structs.find((x) => x.name === 'Sector 1').routes[0].rules[0].cents, '44', 'volver a aplicar el plan respeta la terminación vigente');
     rc.groups = JSON.parse(keepG); rc.structs = JSON.parse(keepS); rc.bots = JSON.parse(keepB); await ctx._rbCfg(true);
   });
   await caso('bienvenida SÓLO si todo está bien: bot no admin en un grupo que manda ⇒ nada en espera; al arreglarlo sale', async () => {
