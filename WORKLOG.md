@@ -31,6 +31,12 @@
 
 ### 1117. 🚨 BLOQUEO DE EMERGENCIA DEL PANEL (2026-11-11)
 - **Owner:** "me entraron al panel… me hackearon, ¿cómo saco a toda la gente?… está contestando a todos los usuarios".
+- **Más (mismo #1117):** `STAFF_LOCKDOWN_PIN` (6+) pone TODAS las claves del panel (Datos, INICIO, bot de comprobantes, historial de números) en una nueva.
+  El bloqueo anota en `staffLockdownLog.quienRespondio48h` qué CUENTA REAL mandó mensajes (la firma Martín/Sofía/Agustina es el turno; la cuenta real está en
+  `Message.senderId` / `metadata.agent`). Seguridad: `authMiddleware` y el socket toman el ROL de la BASE (no del token); un socket de staff se revalida en cada
+  mensaje (sesión cerrada / desactivado ⇒ desconectado). DUEÑO DEL PANEL (`PANEL_OWNER` o `STAFF_LOCKDOWN_KEEP`, `_isPanelOwner`): sólo él cambia roles, crea /
+  borra / edita / bloquea / resetea clave / link de acceso de cuentas de STAFF y cambia las claves del panel; con jugadores todo igual. Revisado: un jugador no
+  puede entrar al panel (registro siempre 'user', roles sólo por admin) y el historial público no tiene claves reales (sólo textos de ejemplo).
 - Arranque: con la variable de entorno `STAFF_LOCKDOWN=<código nuevo>` (corre UNA vez por código, `Config['staffLockdownDone']`): cierra las sesiones de TODO el
   staff (tokenVersion+1) y desactiva con clave al azar a todos menos `STAFF_LOCKDOWN_KEEP` (usuario admin del owner; `STAFF_LOCKDOWN_PASS` 10+ = su clave
   nueva). Las cuentas de prueba lalodj / lalodj499910 / diego576413 pasan a 'user' desactivadas. Sin KEEP válido sólo cierra sesiones. Registro en

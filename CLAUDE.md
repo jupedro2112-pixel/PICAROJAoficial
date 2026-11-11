@@ -84,6 +84,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   Staff: sesión de 8 h y logout revoca (tokenVersion). Login con bloqueo por cuenta (10 fallos / 15 min) y claves de Datos/INICIO con 6 intentos.
   **#995:** el chequeo compara la ruta sin barras finales (no sacarlo); antifraude del retiro fail-closed (`level:'unchecked'` ⇒ revisión);
   bono de historia una vez por historia (`User.storyBonusUsed`); carga manual repetida en 90 s pide confirmar (`DUP_DEPOSIT`). Detalle: ARCHITECTURE "#995".
+- **🚨 SEGURIDAD #1117 (intrusión 2026-11-11):** bloqueo de emergencia por variables de entorno de AWS (`STAFF_LOCKDOWN` código nuevo, `STAFF_LOCKDOWN_KEEP`
+  usuario del dueño, `STAFF_LOCKDOWN_PASS`, `STAFF_LOCKDOWN_PIN`): cierra sesiones de TODO el staff y desactiva a todos menos al dueño (jugadores intactos).
+  `PANEL_OWNER`: sólo el dueño toca roles / cuentas de staff / claves del panel (`_isPanelOwner`; una ruta NUEVA que toque staff o permisos lo usa). El ROL se lee de
+  la BASE (authMiddleware y socket), nunca del token. Las respuestas firman con el nombre de TURNO; la cuenta real está en `metadata.agent`.
 - **SEGURIDAD #1053:** link de acceso de un depositor sólo para clientes SIN cargas; push masivas / plantillas sólo admin (agentes: `/send` a uno);
   login por código SMS sólo `role:'user'`; "asd123" en cuenta con cargas ⇒ `DEFAULT_PASSWORD_REVOKED`; bono que tipea el agente pasa por `_capGift`; el bono de
   1ª carga se reserva con `_reserveFirstDepositBonus` (un camino NUEVO de bono de 1ª carga tiene que usarla). Test `scripts/test-security-1053.js`.

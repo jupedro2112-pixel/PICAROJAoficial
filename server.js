@@ -4609,7 +4609,7 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ error: 'Sesión expirada. Por favor, vuelve a iniciar sesión.' });
     }
     
-    req.user = decoded;
+    req.user = Object.assign({}, decoded, { role: user.role, username: user.username }); // #1117 (seguridad): el ROL sale de la BASE, nunca del token (un rol bajado deja de valer al instante)
 
     // Lockdown del rol publisher_admin: sólo puede tocar las rutas listadas en
     // PUBLISHER_ADMIN_ALLOWED_PATHS. Cualquier otra ruta devuelve 403, así no
@@ -8300,6 +8300,7 @@ app.post('/api/admin/verify-sms-password', authMiddleware, async (req, res) => {
 
 app.post('/api/admin/users/:id/reset-password', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    { const _t0 = await User.findOne({ id: req.params.id }).select('role').lean(); if (_t0 && _t0.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede tocar cuentas de staff.', code: 'OWNER_ONLY' }); } // #1117
     // Resetear contraseñas (incluida la de otros admins) es poder de admin general.
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Solo el administrador principal puede resetear contraseñas' });
@@ -8580,8 +8581,14 @@ app.post('/api/messages/welcome', authMiddleware, async (req, res) => {
 // usuarios con todos sus campos. 0 callers (el panel usa /api/admin/users paginado
 // y GET /api/users/:userId para el detalle). Si algo externo lo necesitara: git revert.
 
+// #1117 (owner tras la intrusión: "en usuarios limitá el acceso para poder ajustar permisos"): DUEÑO DEL PANEL = variable de entorno PANEL_OWNER (o
+// STAFF_LOCKDOWN_KEEP). Sólo él cambia roles/permisos, crea o borra cuentas de staff, les cambia clave/teléfono/estado y cambia las claves del panel.
+// Sin la variable, como antes (cualquier admin general).
+function _panelOwner() { return String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP || '').trim().toLowerCase(); }
+function _isPanelOwner(req) { const o = _panelOwner(); return !o || (req.user && req.user.role === 'admin' && String(req.user.username || '').toLowerCase() === o); }
 app.post('/api/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    if (String((req.body && req.body.role) || 'user') !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel crea cuentas de staff.', code: 'OWNER_ONLY' }); // #1117
     const { username, password, email, phone, role = 'user' } = req.body;
 
     if (!username || !password) {
@@ -8897,6 +8904,8 @@ app.get('/api/admin/girox/test-sso', authMiddleware, adminMiddleware, async (req
 
 app.put('/api/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    { const _t0 = await User.findOne({ id: req.params.id }).select('role').lean(); // #1117: roles y cuentas de staff ⇒ sólo el dueño
+      if (((req.body && req.body.role !== undefined) || (_t0 && _t0.role !== 'user')) && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel cambia permisos o cuentas de staff.', code: 'OWNER_ONLY' }); }
     const { id } = req.params;
     // #413 (seguridad): un cajero/comunidad NO puede editar cuentas de staff (teléfono, isActive…): era la puerta para
     // resetear por SMS la clave del admin general. Sólo el admin general edita a otros admins.
@@ -9077,6 +9086,7 @@ app.get('/api/admin/sync-status', authMiddleware, adminMiddleware, async (req, r
 
 app.delete('/api/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    { const _t0 = await User.findOne({ id: req.params.id }).select('role').lean(); if (_t0 && _t0.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel borra cuentas de staff.', code: 'OWNER_ONLY' }); } // #1117
     const { id } = req.params;
     
     const userToDelete = await User.findOne({ id });
@@ -12414,10 +12424,11 @@ io.on('connection', (socket) => {
       }
 
       socket.userId = decoded.userId;
-      socket.username = decoded.username;
-      socket.role = decoded.role;
+      socket.username = sockUser.username || decoded.username;
+      socket.role = sockUser.role; // #1117 (seguridad): rol de la BASE, no del token
+      socket.tokenVersion = sockUser.tokenVersion ?? 0;
 
-      if (['admin', 'depositor', 'withdrawer', 'comunidad'].includes(decoded.role)) {
+      if (['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role)) {
         connectedAdmins.set(decoded.userId, socket);
         socket.join('admins'); // Unir a sala de admins
         logger.info(`Admin connected: ${decoded.username} (${decoded.role}) socket=${socket.id}`);
@@ -12526,6 +12537,12 @@ io.on('connection', (socket) => {
       
       // Determinar el receptor correcto
       const isAdminRole = ['admin', 'depositor', 'withdrawer', 'comunidad'].includes(socket.role);
+      if (isAdminRole) { // #1117 (seguridad): un socket de staff YA conectado se revalida en cada mensaje (sesión cerrada / desactivado / rol bajado ⇒ afuera)
+        const su = await User.findOne({ id: socket.userId }).select('role isActive isBlocked tokenVersion').lean();
+        if (!su || su.isActive === false || su.isBlocked === true || (su.tokenVersion ?? 0) !== (socket.tokenVersion ?? 0) || !['admin', 'depositor', 'withdrawer', 'comunidad'].includes(su.role)) {
+          logger.warn(`[authz] socket de ${socket.username} rechazado (sesión cerrada / desactivado / rol)`); socket.emit('authenticated', { success: false, error: 'Sesión expirada' }); socket.disconnect(true); return;
+        }
+      }
       const targetReceiverId = isAdminRole ? receiverId : 'admin';
       const targetReceiverRole = isAdminRole ? 'user' : 'admin';
       
@@ -13916,8 +13933,10 @@ async function initializeData() {
         const ids = who.map((x) => x.senderId); const us = await User.find({ id: { $in: ids } }).select('id username role').lean(); for (const x of who) { const u = us.find((y) => y.id === x.senderId); x.cuenta = u ? u.username + ' (' + u.role + ')' : '(no existe: ' + x.senderId + ')'; }
       } catch (e) { who = [{ error: e.message }]; }
       console.warn('🚨 [lockdown #1117] quién respondió (48 h): ' + JSON.stringify(who.map((x) => [x.cuenta, x.n, x.clientes])));
+      const npin = String(process.env.STAFF_LOCKDOWN_PIN || '').trim(); let pins = false; // #1117: TODAS las claves del panel a una nueva (Datos, INICIO, bot de comprobantes, historial de números)
+      if (/^\S{6,32}$/.test(npin)) { for (const k of ['datosIaPinHash', 'inicioPinHash', 'rcptBotPinHash', 'phoneLogPinHash']) await Config.set(k, _sha(npin), 'lockdown#1117'); pins = true; }
       await Config.set('staffLockdownDone', lc, 'lockdown#1117');
-      await Config.set('staffLockdownLog', { at: new Date().toISOString(), kept: owner ? owner.username : null, newPass: !!(owner && np.length >= 10), disabled: off, sessionsClosed: staff.length, quienRespondio48h: who }, 'lockdown#1117');
+      await Config.set('staffLockdownLog', { at: new Date().toISOString(), kept: owner ? owner.username : null, newPass: !!(owner && np.length >= 10), disabled: off, sessionsClosed: staff.length, quienRespondio48h: who, clavesDelPanel: pins }, 'lockdown#1117');
       console.warn('🚨 [lockdown #1117] sesiones cerradas: ' + staff.length + ' · desactivados: ' + off.length + ' · queda: ' + (owner ? owner.username : 'NADIE (KEEP no encontrado: sólo se cerraron sesiones)'));
     }
   } catch (e) { console.error('[lockdown #1117] ' + e.message); }
@@ -21727,6 +21746,7 @@ app.get('/api/admin/block-history', authMiddleware, adminMiddleware, async (req,
 });
 app.post('/api/admin/users/:id/block', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    { const _t0 = await User.findOne({ id: req.params.id }).select('role').lean(); if (_t0 && _t0.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede tocar cuentas de staff.', code: 'OWNER_ONLY' }); } // #1117
     const { id } = req.params;
     const { reason } = req.body;
 
@@ -21761,6 +21781,7 @@ app.post('/api/admin/users/:id/block', authMiddleware, adminMiddleware, async (r
 
 app.post('/api/admin/users/:id/unblock', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    { const _t0 = await User.findOne({ id: req.params.id }).select('role').lean(); if (_t0 && _t0.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede tocar cuentas de staff.', code: 'OWNER_ONLY' }); } // #1117
     const { id } = req.params;
     if (!['admin', 'depositor'].includes(req.user.role)) {
       return res.status(403).json({ error: 'No tenés permiso para desbloquear usuarios.' });
@@ -23536,6 +23557,7 @@ app.use('/api/admin/datos-ia', authMiddleware, adminMiddleware, async (req, res,
 app.get('/api/admin/datos-ia-pin', authMiddleware, adminMiddleware, async (req, res) => { res.json({ enabled: !!(await _datosPinHash()), canEdit: req.user.role === 'admin' }); });
 app.post('/api/admin/datos-ia-pin', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    if (!_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede hacer esto.', code: 'OWNER_ONLY' }); // #1117
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo el administrador general.' });
     const pin = String((req.body && req.body.pin) || '').trim();
     if (pin && !/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
@@ -23563,6 +23585,7 @@ async function _inicioPinHash() { if (_inicioPinCache.hash !== undefined && Date
 app.get('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, res) => { res.json({ enabled: !!(await _inicioPinHash()), canEdit: req.user.role === 'admin' }); });
 app.post('/api/admin/inicio-pin', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    if (!_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede hacer esto.', code: 'OWNER_ONLY' }); // #1117
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
     const pin = String((req.body && req.body.pin) || '').trim(), cur = String((req.body && req.body.current) || '').trim();
     if (!/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
@@ -23589,6 +23612,7 @@ async function _phoneLogPinHash() { if (_phoneLogPinCache.hash !== undefined && 
 app.get('/api/admin/phone-log-pin', authMiddleware, adminMiddleware, async (req, res) => { res.json({ enabled: !!(await _phoneLogPinHash()), canEdit: req.user.role === 'admin' }); });
 app.post('/api/admin/phone-log-pin', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    if (!_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede hacer esto.', code: 'OWNER_ONLY' }); // #1117
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
     const pin = String((req.body && req.body.pin) || '').trim(), cur = String((req.body && req.body.current) || '').trim();
     if (!/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
@@ -25053,6 +25077,7 @@ app.post('/api/auth/install-link', authMiddleware, async (req, res) => {
 });
 app.post('/api/admin/users/:userId/access-link', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    { const _t0 = await User.findOne({ id: req.params.userId }).select('role').lean(); if (_t0 && _t0.role !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede tocar cuentas de staff.', code: 'OWNER_ONLY' }); } // #1117
     // Admin general y depositor (decisión del owner 2026-08-03: los depositors
     // también dan de alta clientes). withdrawer/comunidad/publisher_admin NO.
     if (!['admin', 'depositor'].includes(req.user.role)) {
@@ -26452,6 +26477,7 @@ app.post('/api/admin/users/:userId/notes', authMiddleware, adminMiddleware, asyn
 // Crear usuario o admin
 app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    if (String((req.body && req.body.role) || 'user') !== 'user' && !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel crea cuentas de staff.', code: 'OWNER_ONLY' }); // #1117
     const { username, password, email, phone, role = 'user' } = req.body;
     const adminRole = req.user.role;
     
@@ -33235,6 +33261,7 @@ let _rbPinCache = { at: 0, hash: undefined };
 async function _rbPinHash() { if (_rbPinCache.hash !== undefined && Date.now() - _rbPinCache.at < 60000) return _rbPinCache.hash; let h = null; try { h = await getConfig('rcptBotPinHash', null); } catch (_) {} _rbPinCache = { at: Date.now(), hash: h || null }; return _rbPinCache.hash; }
 app.post('/api/admin/rcptbot-pin', authMiddleware, adminMiddleware, async (req, res) => {
   try {
+    if (!_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel puede hacer esto.', code: 'OWNER_ONLY' }); // #1117
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Sólo el administrador general.' });
     const pin = String((req.body && req.body.pin) || '').trim(), cur = String((req.body && req.body.current) || '').trim();
     if (!/^\S{4,32}$/.test(pin)) return res.status(400).json({ error: 'La clave tiene que tener entre 4 y 32 caracteres, sin espacios.' });
