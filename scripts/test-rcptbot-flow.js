@@ -435,6 +435,13 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await hook(text(990, -3, '/suma 12.613.986')); assert.ok(/SUMADO LO ANTERIOR<\/b>: \+\$12\.613\.986/.test(last(-3).p.text), last(-3).p.text);
     rc.bots.pop(); rc.groups.find((g) => g.id === '-3').bots.pop(); await ctx._rbCfg(true);
   });
+  await caso('#1112-b el MISMO bot en 2 estructuras que mandan al mismo grupo 2 (Ganamos + Publicidad ⇒ 3P 2G): /suma contesta una sola vez', async () => {
+    const rc = cfgDocs.find((d) => d.key === 'rcptbot').value; rc.groups.push({ id: '-7', title: 'publicidad', bots: ['111'] });
+    rc.structs.push({ id: 'E7', name: 'Publicidad', on: true, botId: '111', routes: [{ from: '-7', rules: [{ cents: '99', to: '-3' }], otherTo: null }] }); await ctx._rbCfg(true);
+    const n = sent.length; await hook(text(995, -3, '/suma 1.000')); await hook(text(995, -3, '/suma 1.000'));
+    const out = sent.slice(n).filter((x) => String(x.p.chat_id) === '-3' && /SUMADO LO ANTERIOR/.test(x.p.text || '')); assert.strictEqual(out.length, 1, 'una sola respuesta');
+    rc.structs.pop(); rc.groups.pop(); await ctx._rbCfg(true);
+  });
   await caso('#1110 empezar de cero: borra SÓLO lo del bot desde la hora, desfija lo del bot, cuentas a $0, presentación de nuevo', async () => {
     const since = NOW.getTime() - 3600000; const chat = '-3'; const msgs = {}; // id ⇒ { mine, date }
     for (let i = 1; i <= 30; i++) msgs[i] = { mine: i % 3 !== 0, date: (i <= 10 ? since - 60000 : since + i * 1000) / 1000 };
