@@ -2051,6 +2051,16 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
 - **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
 - **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
+- **Bot de comprobantes #1128/#1129 (cada GRUPO 2 configurable + flujo DIRECTO):** `st.destCfg[<chat>]` (panel → tarjeta "⚙️ Grupos 2" dentro de la estructura;
+  `_rbDestCfg(st, to)` da la config EFECTIVA heredando `dailyClose`/`monthlyClose`/`usdtCheck` de la estructura): `mode` quote (cierre ⇒ pending ⇒ quoted ⇒ sent) |
+  send (cierre ⇒ quoted directo, sin cotizar) | none (cierre ⇒ `done`, nada pendiente) | fichas (= `fichasDests`); `close` ''|all|weekdays|weekly + `closeHour` +
+  `closeDow`; `monthly`; `usdtCheck`; `feePct` (margen, 2,5). `_rbDailyCloseTick`/`_rbMonthCloseTick` cierran POR DESTINO (agrupan los que coinciden para que el grupo 1
+  reciba un solo cierre; `opts.to` + `srcOnlyToo`); `_rbCloseStatusFor`/`_rbCloseExtra` fijan el estado inicial del RcptClose; `_rbDstKb`/`_rbDstMode` arman el menú según
+  el modo; `_rbDstCloseMsg` recibe `g.mode`. **Por defecto NADA cierra solo** (migración `noautoclose1129` apaga lo que había; RB_PLAN sin `dailyClose`): el cierre lo da la
+  gente escribiendo **"Cierre de día!"** (`_RB_CLOSE_RX`, con o sin acento/signos) en el grupo 1 (= /cierre) o en el grupo 2 (`_rbDstCloseCmd`: cierra lo de ese destino de
+  todos los que le mandan). En el grupo 2 un mensaje que es SÓLO el precio del USDT (100–100000, `_rbDstFee` = feePct) cotiza lo pendiente: `_rbQuote` muestra
+  fecha · pendiente · − margen % = total · total / precio = USDT (entero hacia abajo) · "foto por ese monto exacto"; una FOTO con algo `quoted` va directo a
+  `_rbSentPhoto` (sin responder al bot). Los comandos y botones viejos siguen funcionando. Estado nuevo `done` en las listas de estados vivos (reset, /restart).
 - **Bot de comprobantes #1127 (`/restart` por grupo):** `_rbRestartCmd` = el "Empezar de cero" de UN grupo desde Telegram: sólo administradores del grupo
   (`_rbIsGroupAdmin`: getChatMember creator/administrator o admin anónimo que escribe como el grupo) y con confirmación (`/restart si`). Archiva RcptFwd/RcptClose
   vivos de ese chat (fromChat o toChat ⇒ `status:'reset'`, también lo compartido con su par), borra el arrastre de fichas del grupo (`$unset` por campo), borra

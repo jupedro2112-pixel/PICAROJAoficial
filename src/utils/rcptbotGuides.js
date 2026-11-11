@@ -7,11 +7,12 @@
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function closeTxt(ctx, html) {
-  const b = (t) => (html ? '<b>' + t + '</b>' : t);
-  if (ctx.close === 'weekdays') return 'cierre automático de ' + b('lunes a viernes a las 13 h') + ' (lo del fin de semana entra en el del lunes)';
-  if (ctx.close === 'all') return 'cierre automático ' + b('todos los días a las 13 h');
-  if (ctx.close === 'weekly') return 'cierre automático ' + b('semanal, los lunes a las 00:00');
+const DOW = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+function closeTxt(ctx, html) { // #1128: hora y día configurables por grupo 2
+  const b = (t) => (html ? '<b>' + t + '</b>' : t); const hh = (ctx.closeHour == null ? 13 : ctx.closeHour) + ' h';
+  if (ctx.close === 'weekdays') return 'cierre automático de ' + b('lunes a viernes a las ' + hh) + ' (lo del fin de semana entra en el del lunes)';
+  if (ctx.close === 'all') return 'cierre automático ' + b('todos los días a las ' + hh);
+  if (ctx.close === 'weekly') return 'cierre automático ' + b('semanal, los ' + DOW[ctx.closeDow == null ? 1 : ctx.closeDow] + ' a las ' + (ctx.closeHour == null ? '00:00' : hh));
   if (ctx.monthly) return 'cierre automático ' + b('a fin de mes') + ' (día 1 a las 00:00)';
   return 'cierre ' + b('a mano') + ' cuando completen el monto (/cierre o el botón)';
 }
@@ -43,9 +44,11 @@ Soy el bot de comprobantes. Este es un <b>grupo de FICHAS</b>.
 Soy el bot de comprobantes.
 
 🧾 Acá llegan los comprobantes que corresponden a este grupo, todos en <b>una sola cuenta</b>, con el monto y la suma acumulada.
-🔒 ${closeTxt(ctx, true)} ⇒ ⏳ <b>PENDIENTE A COTIZAR</b>.
+${ctx.mode === 'none' ? `🔒 ${closeTxt(ctx, true)}: llega el total cerrado y la suma arranca de $0. <b>Nada queda pendiente</b> (este grupo sólo lleva la cuenta).` : ctx.mode === 'send' ? `🔒 ${closeTxt(ctx, true)} ⇒ 📤 <b>PENDIENTE A ENVIAR</b> (sin cotizar).
+✅ <b>Enviado</b>: mandás la foto de los USDT${ctx.usdtCheck ? ' y controlo que coincida' : ''} ⇒ listo.` : `🔒 ${closeTxt(ctx, true)} ⇒ ⏳ <b>PENDIENTE A COTIZAR</b>.
 💱 <b>Cotizar</b>: precio del USDT y comisión ⇒ calculo los USDT ⇒ 📤 <b>PENDIENTE A ENVIAR</b>.
 ✅ <b>Enviado</b>: mandás la foto de los USDT${ctx.usdtCheck ? ' y controlo que coincida' : ''} ⇒ listo.
+✍️ <b>Sin comandos</b>: «Cierre de día!» cierra · el precio del USDT (ej. 1647) cotiza con el margen de ${ctx.feePct == null ? '2,5' : String(ctx.feePct).replace('.', ',')} % · la foto del envío marca Enviado.`}
 ✏️ Si alguien corrige un monto o un decimal, llega aclarado.
 
 📗 Abajo va el archivo con la explicación completa.`;
@@ -171,6 +174,22 @@ OTROS
    - Queda fijado 📌 FICHAS <MES> · COMPLETADO (fichas, suma, diferencia).
    - La cuenta nueva arranca en esa diferencia (negativa = falta cubrir; positiva = a favor).
 ` + tail;
+  if (ctx.mode === 'none') return head + `
+2) CIERRE
+   - ${closeTxt(ctx, false)}.
+   - Llega 🔒 CIERRE con el total cerrado y la suma arranca de $0. Este grupo SÓLO lleva la cuenta:
+     no hay cotización ni envío pendientes.
+` + tail;
+  if (ctx.mode === 'send') return head + `
+2) CIERRE
+   - ${closeTxt(ctx, false)}.
+   - Llega 🔒 CIERRE con lo cerrado y 📤 PENDIENTE A ENVIAR (sin cotizar).
+
+3) ENVIAR (botón del menú)
+   ✅ Enviado ........... respondé su mensaje con la FOTO del envío de los USDT ⇒ ✅ VERIFICADO ENVIADO (también: /enviado).${ctx.usdtCheck ? `
+                          El bot lee los USDT de la foto: si no coincide avisa ❌ NO COINCIDE y sigue
+                          pendiente; si está bien igual, botón "OK (a verificar)".` : ''}
+` + tail;
   return head + `
 2) CIERRE
    - ${closeTxt(ctx, false)}.
@@ -181,6 +200,10 @@ OTROS
                           "1150 2" (USDT a $1.150, 2% de comisión). Hace la cuenta sola:
                           pesos ÷ precio − comisión = USDT A ENVIAR ⇒ 📤 PENDIENTE A ENVIAR
                           (también: /cotizado 1150 2)
+   ✍️ DIRECTO, sin comandos: escribí "Cierre de día!" para cerrar (a cualquier hora), escribí sólo el
+                          precio del USDT (ej. 1647) para cotizar lo pendiente (resta el margen configurado:
+                          $17.400.000 − 2,5 % = $16.965.000; / 1647 = 10.300 USDT) y mandá la foto del envío
+                          por ese monto exacto para marcar ENVIADO.
    ✅ Enviado ........... respondé su mensaje con la FOTO del envío de los USDT ⇒ ✅ VERIFICADO ENVIADO.${ctx.usdtCheck ? `
                           El bot lee los USDT de la foto: si no coincide avisa ❌ NO COINCIDE y sigue
                           pendiente; si está bien igual, botón "OK (a verificar)".` : ''}

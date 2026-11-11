@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1127)
+> **Última actualización: 2026-11-12** (#1129)
 
 ## Sesión 2026-11-09
 
@@ -14749,3 +14749,25 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Verificado: `node --check` de server.js y rcptbotGuides.js, `test-server-boot` OK, `test-rcptbot` 5/5, `test-rcptbot-flow` 51 casos OK. **Necesita deploy EB.**
   PROBAR después de subir: en un grupo escribir `/restart` (tiene que explicar y pedir `/restart si`), luego `/restart si`: desaparecen los mensajes del bot
   de las últimas 48 h, llega "✅ GRUPO REINICIADO" y la presentación nueva; `/total` da $0. Un miembro que no es admin recibe "🔒 sólo un administrador".
+
+## #1128 / #1129 — 2026-11-12 · Bot de comprobantes: cada GRUPO 2 configurable desde el panel + flujo DIRECTO sin comandos — panel v312
+- Pedido del owner: "configurar del lado grupo 2 cómo funciona ese grupo: si puede cotizar, enviar cotización, si es fichas cierre mensual, si es el resto cierres
+  diarios a las 13, el finde el lunes a las 13; todo editable porque se me desacomodó todo". Y después: "que el cierre NO sea automático más de cada grupo:
+  detectar si escriben Cierre de día! (con acento o algo parecido), antes o después de las 13; cuando cotiza: fecha, suma de lo pendiente, resta el margen −2,5 %,
+  total, total / precio del USDT (17.400.000 − 2,5 % = 16.965.000; 16.965.000 / 1647 = 10.300), y más tarde la foto de ese monto exacto; directo, sin comandos en
+  el grupo 2 (3P 2G RACAFU ,83, 1B, 5C, S1 Racafu ,33)".
+- **Panel (#1128):** dentro de cada estructura, una tarjeta "⚙️ Grupos 2" por destino: Qué hace (💱 cotiza y envía · 📤 sólo envía, sin cotizar · 📊 sólo la cuenta ·
+  🎰 fichas), margen % (2,5), cierre automático (no / todos los días / lunes a viernes con el finde el lunes / semanal con día) + hora, cierre de mes, control de la
+  foto de USDT. Lo de la estructura queda plegado como "valores por defecto" (lo heredan los destinos sin configuración propia, así lo viejo no cambia). Guardado en
+  `st.destCfg` (validado), estado inicial del cierre según el modo (`pending` / `quoted` sin cotización / `done` / `fichas`), menú del grupo 2 según el modo, cierres
+  diarios/semanales/mensuales POR DESTINO (los que coinciden van juntos: un solo mensaje en el grupo 1).
+- **Flujo directo (#1129):** NADA cierra solo (migración única apaga los cierres automáticos que había; el plan del código ya no los trae; desde el panel se pueden
+  volver a encender). En el grupo 1 o en el grupo 2 escriben **"Cierre de día!"** (cierro/cierre, con o sin acento, con o sin signos) a cualquier hora ⇒ cierra y queda
+  ⏳ pendiente a cotizar (en el grupo 2 cierra lo de ese destino de todos los que le mandan). En el grupo 2 escriben SÓLO el **precio del USDT** (ej. 1647) ⇒
+  "💱 COTIZADO · fecha · Pendiente $17.400.000 · − 2,5 % = $16.965.000 · $16.965.000 / 1.647 = 10.300 USDT · PENDIENTE A ENVIAR: 10.300 USDT — mandá acá la foto
+  del envío por ese monto exacto". Mandan la **foto** (sin responder a nada) ⇒ ENVIADO (si el grupo tiene control de foto, compara los USDT). Los botones y comandos
+  (/cierre, /cotizado, /enviado) siguen andando; si responden al pedido del bot con sólo el precio, usa el margen configurado.
+- Ayudas, menús y guías actualizados (grupo 1 y grupo 2). Test `test-rcptbot-flow` adaptado (menú por modo, plan sin cierre automático, USDT enteros): 51/51;
+  `test-rcptbot` 5/5; `test-server-boot` OK. **Necesita deploy EB.**
+  PROBAR después de subir: panel → Bot de comprobantes → estructura → tarjeta del grupo 2 → elegir modo/margen → 💾 Guardar; en el grupo 1 escribir "Cierre de
+  día!" ⇒ 🔒 CIERRE en los dos grupos y el 2 dice PENDIENTE A COTIZAR; en el grupo 2 escribir "1647" ⇒ la cuenta con el −2,5 %; mandar una foto ⇒ ✅ ENVIADO.

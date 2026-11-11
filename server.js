@@ -32613,6 +32613,56 @@ async function _rbPendTxt(fromChat, toChat, structId, exceptId) {
 // Arrastre en Config['rcptbotfichas'].value[<grupo>] = { carry, month, at, by } (escrito POR CAMPO).
 const _rbMoneyS = (n) => (Number(n) < 0 ? '−' + _rbMoney(-Number(n)) : _rbMoney(n)); // #1104: negativo legible (−$9.999)
 function _rbIsFichas(c, toChat) { return (c.structs || []).some((st) => st && st.on && (st.fichasDests || []).map(String).includes(String(toChat))); }
+// #1128 (owner: "configurar del lado grupo 2 cómo funciona ese grupo: si cotiza, si envía, si es fichas cierre mensual, si el resto cierres diarios a las
+// 13, el finde el lunes a las 13; todo editable desde el panel"): configuración POR DESTINO dentro de la estructura, `st.destCfg[<chat>]`:
+//   mode: 'quote' (cierre ⇒ ⏳ a cotizar ⇒ 📤 a enviar) | 'send' (cierre ⇒ 📤 a enviar, sin cotizar) | 'none' (cierre informativo, nada pendiente) |
+//         'fichas' (= fichasDests: suma del mes + completar fichas el día 1)
+//   close: '' (a mano con /cierre) | 'all' (todos los días) | 'weekdays' (lunes a viernes; el finde entra en el del lunes) | 'weekly' (el día closeDow)
+//   closeHour (0-23, hora argentina del corte) · closeDow (0-6, sólo semanal) · monthly (cierre de mes el día 1 a las 00:00) · usdtCheck (controlar la foto)
+// Sin configuración propia HEREDA lo de la estructura (dailyClose / monthlyClose / usdtCheck), así lo viejo sigue igual.
+const _RB_MODES = ['quote', 'send', 'none', 'fichas'], _RB_CLOSES = ['', 'all', 'weekdays', 'weekly'];
+function _rbStructOf(c, structId) { return (c.structs || []).find((x) => x && x.id === structId) || {}; }
+function _rbDestCfg(st, toChat) {
+  st = st || {}; const d = ((st.destCfg || {})[String(toChat)]) || {}; const fichas = (st.fichasDests || []).map(String).includes(String(toChat));
+  const mode = fichas ? 'fichas' : (_RB_MODES.includes(d.mode) && d.mode !== 'fichas' ? d.mode : 'quote');
+  const close = fichas ? '' : (_RB_CLOSES.includes(d.close) ? d.close : (st.dailyClose || ''));
+  const h = Number(d.closeHour); const closeHour = Number.isInteger(h) && h >= 0 && h <= 23 ? h : (close === 'weekly' ? 0 : 13);
+  const w = Number(d.closeDow); const closeDow = Number.isInteger(w) && w >= 0 && w <= 6 ? w : 1;
+  const fp = Number(d.feePct); // #1129: margen % que se resta antes de dividir por el precio del USDT (owner: −2,5 %)
+  return { mode, close, closeHour, closeDow, monthly: fichas ? true : (typeof d.monthly === 'boolean' ? d.monthly : !!st.monthlyClose), usdtCheck: typeof d.usdtCheck === 'boolean' ? d.usdtCheck : !!st.usdtCheck, feePct: Number.isFinite(fp) && fp >= 0 && fp < 50 ? fp : 2.5 };
+}
+// #1129 (owner): el cierre lo da la GENTE escribiendo "Cierre de día!" (con o sin acento, con o sin signos; también "cierro de dia") en el grupo 1 o en el grupo 2, a cualquier hora.
+const _RB_CLOSE_RX = /^[\s!¡.*]*cierr[eo]\s*(?:de(?:l)?\s*)?d[ií]a[\s!.*]*$/i;
+function _rbDstFee(c, toChat) { const r = (c.routes || []).find((x) => _rbDests(c, x).some((d) => d.to === String(toChat))); return r ? _rbDestCfg(_rbStructOf(c, r.structId), toChat).feePct : 2.5; }
+async function _rbDstCloseCmd(c, toChat, dstR, by, botId) { // #1129: "Cierre de día!" en el GRUPO 2 ⇒ cierra lo de este destino (de todos los que le mandan) ⇒ queda pendiente a cotizar
+  if (_rbIsFichas(c, toChat)) { await _rbSend(c, toChat, 'Este grupo es de FICHAS: cierra solo el día 1 del mes.', botId); return; }
+  const col = {}; let n = 0;
+  for (const r of dstR) { try { const x = await _rbClose(c, r, by || 'cierre de día', { to: toChat, collect: col }); if (x && x.ok) n++; } catch (e) { logger.warn('[rcptbot] cierre de día (grupo 2) ' + e.message); } }
+  if (!n) { await _rbSend(c, toChat, 'No hay nada sumado para cerrar.', botId); return; }
+  for (const [to, g] of Object.entries(col)) { try { await _rbDstCloseMsg(c, to, g); } catch (e) { logger.warn('[rcptbot] cierre grupo 2 ' + e.message); } }
+}
+// estado inicial de un cierre según el modo del destino (+ campos que lo explican)
+function _rbCloseStatusFor(cfg) { return cfg.mode === 'fichas' ? 'fichas' : cfg.mode === 'send' ? 'quoted' : cfg.mode === 'none' ? 'done' : 'pending'; }
+function _rbCloseExtra(cfg, now) { const s = _rbCloseStatusFor(cfg); return s === 'quoted' ? { quoteNote: 'sin cotización (el grupo envía directo)', quotedBy: 'configuración', quotedAt: now } : s === 'done' ? { sentBy: 'sin seguimiento (sólo la cuenta)', sentAt: now } : {}; }
+// modo efectivo de un grupo 2 (si varias estructuras encendidas le mandan con modos distintos, gana el más completo)
+function _rbDstMode(c, toChat) {
+  const ms = (c.routes || []).filter((r) => _rbDests(c, r).some((d) => d.to === String(toChat))).map((r) => _rbDestCfg(_rbStructOf(c, r.structId), toChat).mode);
+  if (!ms.length) return 'quote'; if (ms.includes('fichas')) return 'fichas'; if (ms.includes('quote')) return 'quote'; if (ms.includes('send')) return 'send'; return 'none';
+}
+function _rbDstKb(c, toChat) { // menú del grupo 2 según su modo
+  const mode = _rbDstMode(c, toChat); if (mode === 'fichas') return _RB_FICHAS_KB;
+  const rows = [[{ text: mode === 'none' ? '📊 Ver suma' : '📊 Ver suma y pendientes', callback_data: 'rbm:total' }]];
+  if (mode === 'quote') rows.push([{ text: '💱 Cotizar (precio USDT y comisión)', callback_data: 'rbm:quote' }]);
+  if (mode !== 'none') rows.push([{ text: '✅ Enviado (mandar foto de los USDT)', callback_data: 'rbm:sent' }]);
+  rows.push([{ text: '📋 Comandos', callback_data: 'rbm:help' }], [{ text: '🏦 Ver CBU', callback_data: 'rbm:cbu' }, { text: '🔄 Nuevo CBU', callback_data: 'rbm:ncbu' }], [{ text: '⛔ Parar (no hay CBU)', callback_data: 'rbm:stop' }]);
+  return { inline_keyboard: rows };
+}
+function _rbDstPendTail(mode, p) { // qué queda pendiente después de un cierre, según el modo
+  if (mode === 'none') return '\n✅ Sin nada pendiente (este grupo sólo lleva la cuenta).';
+  if (mode === 'send') return `\n📤 <b>PENDIENTE A ENVIAR: ${_rbMoney(p.quoted.total)}</b>`;
+  return `\n⏳ <b>PENDIENTE A COTIZAR: ${_rbMoney(p.pending.total)}</b>` + (p.quoted.n ? `\n📤 Pendiente a enviar: <b>${_rbMoney(p.quoted.total)}</b>` : '');
+}
+function _rbDstHowTail(mode) { return mode === 'none' ? '' : mode === 'send' ? '\n\nCuando se envíe: /enviado (o el botón ✅ Enviado)' : '\n\nCuando esté cotizado: /cotizado · cuando se envíe: /enviado'; }
 async function _rbFichasState(toChat) { const d = ((await Config.collection.findOne({ key: 'rcptbotfichas' })) || {}).value || {}; return d[String(toChat)] || { carry: 0 }; }
 async function _rbFichasTxt(toChat) {
   const o = await _rbDstOpenAll(toChat); const st = await _rbFichasState(toChat); const carry = Math.round((Number(st.carry) || 0) * 100) / 100;
@@ -32687,7 +32737,7 @@ function _rbPickKb(c, route, recId, exceptTo) {
 // suma actualizada, todo el detalle"). Menú = mensaje fijado con botones 'rbm:<acción>' (cierre / cotizado / enviado piden confirmar).
 const _RB_CIRCUITO = '🔁 <b>CÓMO SIGUE</b>: comprobantes → se suman → <b>CIERRE</b> (lo da el grupo que manda cuando completa el monto: /cierre o el botón) → ⏳ PENDIENTE A COTIZAR → el destino marca 💱 COTIZADO → 📤 PENDIENTE A ENVIAR → el destino marca ✅ ENVIADO → listo. Después del cierre la suma arranca de $0; el total del mes sigue hasta fin de mes.';
 function _rbSrcCmdsTxt() {
-  return '\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y el total del mes\n🔒 /cierre — dar el cierre del TOTAL (la suma vuelve a $0)\n🔒 /cierre 500.000 — cerrar SÓLO ese monto: queda anotado y el resto sigue sumando\n📥 /suma 13.686.199 — sumar lo que venían acumulando ANTES del bot (queda SÓLO en este grupo; lo nuevo sigue sumando normal)\n🏦 /cbu — ver a qué CBU transferir ahora (titular, CBU, alias y terminación)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado o reenviado)\n🗑️ /anular — respondiendo un comprobante: lo saca de la suma (avisa en los dos grupos)\n🧹 /restart — (administradores del grupo) borra lo viejo del bot, desfija, archiva la cuenta y arranca de $0\n🚫 Comprobante DUPLICADO: el bot avisa y NO lo suma (si es otro distinto, botón para sumarlo)\n✏️ Responder la foto con el monto — corregir un monto mal leído\n↪️ Botón "Me equivoqué: cambiar grupo" — mover un comprobante al grupo correcto\n❓ /ayuda — ver este menú de nuevo · 📘 /guia — la guía completa en archivo\n\n🔁 <b>CÓMO SIGUE</b>: los comprobantes se suman → cuando completen el monto, <b>/cierre</b> (o /cierre 500.000 para cerrar sólo ese monto) → la suma arranca de $0 (o sigue con el resto). Cotización y envío los maneja el otro grupo. El total del mes sigue hasta fin de mes.';
+  return '\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y el total del mes\n🔒 /cierre — dar el cierre del TOTAL (la suma vuelve a $0) · también escribiendo <b>Cierre de día!</b> a cualquier hora\n🔒 /cierre 500.000 — cerrar SÓLO ese monto: queda anotado y el resto sigue sumando\n📥 /suma 13.686.199 — sumar lo que venían acumulando ANTES del bot (queda SÓLO en este grupo; lo nuevo sigue sumando normal)\n🏦 /cbu — ver a qué CBU transferir ahora (titular, CBU, alias y terminación)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado o reenviado)\n🗑️ /anular — respondiendo un comprobante: lo saca de la suma (avisa en los dos grupos)\n🧹 /restart — (administradores del grupo) borra lo viejo del bot, desfija, archiva la cuenta y arranca de $0\n🚫 Comprobante DUPLICADO: el bot avisa y NO lo suma (si es otro distinto, botón para sumarlo)\n✏️ Responder la foto con el monto — corregir un monto mal leído\n↪️ Botón "Me equivoqué: cambiar grupo" — mover un comprobante al grupo correcto\n❓ /ayuda — ver este menú de nuevo · 📘 /guia — la guía completa en archivo\n\n🔁 <b>CÓMO SIGUE</b>: los comprobantes se suman → cuando completen el monto, <b>/cierre</b> (o /cierre 500.000 para cerrar sólo ese monto) → la suma arranca de $0 (o sigue con el resto). Cotización y envío los maneja el otro grupo. El total del mes sigue hasta fin de mes.';
 }
 const _RB_CMDS_BTN = [{ text: '📋 Ver comandos', callback_data: 'rbm:help' }]; // #1079-k: en cada suma
 const _rbKb = (...rows) => ({ inline_keyboard: rows.filter(Boolean).concat([_RB_CMDS_BTN]) });
@@ -32713,12 +32763,12 @@ const _RB_DST_KB = { inline_keyboard: [[{ text: '📊 Ver suma y pendientes', ca
 function _rbDstRoutes(c, toChat, botId) { return (c.routes || []).filter((r) => (!botId || r.botId === botId) && _rbDests(c, r).some((d) => d.to === String(toChat))); }
 function _rbDstHelpTxt(c, toChat, routes) {
   const srcs = routes.map((r) => { const cs = (r.rules || []).filter((x) => String(x.to) === String(toChat)).map((x) => ',' + x.cents); return `• de ${_rbH(_rbTitle(c, r.from))}${cs.length ? ' (los que terminan en ' + _rbH(cs.join(' / ')) + ')' : ' (todo lo demás)'}`; }).join('\n');
-  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n💱 Cotizar (botón) o /cotizado 1150 2 — precio del USDT y comisión %: hace la cuenta (pesos ÷ precio − comisión = USDT a enviar) ⇒ PENDIENTE A ENVIAR\n✅ Enviado (botón) — respondés con la FOTO del envío de los USDT ⇒ VERIFICADO ENVIADO, sale de pendientes (sin foto: /enviado)\n📥 /suma 13.686.199 — sumar lo que había ANTES del bot (queda SÓLO en este grupo y entra en su próximo cierre)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n🧹 /restart — (administradores del grupo) borra lo viejo del bot, desfija, archiva la cuenta y arranca de $0\n🔄 /nuevocbu — cambiar el CBU de bajada (te pide Titular, CBU, Alias y Terminación; con Desde/Hasta queda programado y cambia solo). Se avisa al grupo que manda.\n⛔ /parar — no hay CBU: avisa al grupo que manda que no transfiera hasta nuevo aviso\n🏦 /cbu — ver el CBU vigente y los programados\n❓ /ayuda — ver este menú de nuevo · 📗 /guia — la guía completa en archivo\n\n${_RB_CIRCUITO}`;
+  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n✍️ <b>SIN COMANDOS</b>: escribí <b>Cierre de día!</b> (a cualquier hora) y cierro lo sumado ⇒ pendiente a cotizar · escribí el <b>precio del USDT</b> (ej. <b>1647</b>) y cotizo lo pendiente: resto el margen configurado y divido por el precio · mandá la <b>foto del envío</b> y queda ✅ ENVIADO\n💱 Cotizar (botón) o /cotizado 1150 2 — precio del USDT y comisión %: hace la cuenta (pesos ÷ precio − comisión = USDT a enviar) ⇒ PENDIENTE A ENVIAR\n✅ Enviado (botón) — respondés con la FOTO del envío de los USDT ⇒ VERIFICADO ENVIADO, sale de pendientes (sin foto: /enviado)\n📥 /suma 13.686.199 — sumar lo que había ANTES del bot (queda SÓLO en este grupo y entra en su próximo cierre)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n🧹 /restart — (administradores del grupo) borra lo viejo del bot, desfija, archiva la cuenta y arranca de $0\n🔄 /nuevocbu — cambiar el CBU de bajada (te pide Titular, CBU, Alias y Terminación; con Desde/Hasta queda programado y cambia solo). Se avisa al grupo que manda.\n⛔ /parar — no hay CBU: avisa al grupo que manda que no transfiera hasta nuevo aviso\n🏦 /cbu — ver el CBU vigente y los programados\n❓ /ayuda — ver este menú de nuevo · 📗 /guia — la guía completa en archivo\n\n${_RB_CIRCUITO}`;
 }
 async function _rbPin(c, chat, botId, r) { if (!(r && r.ok && r.result)) return; const b = _rbTokFor(c, chat, botId); if (b) await tgChannel.call(b.token, 'pinChatMessage', { chat_id: chat, message_id: r.result.message_id, disable_notification: true }); }
 async function _rbSendDstHelp(c, toChat, botId, pin) {
   const routes = _rbDstRoutes(c, toChat, botId); if (!routes.length) return null;
-  const r = await _rbSend(c, toChat, _rbDstHelpTxt(c, toChat, routes), botId || routes[0].botId, { reply_markup: _RB_DST_KB }); if (pin) await _rbPin(c, toChat, botId || routes[0].botId, r); return r;
+  const r = await _rbSend(c, toChat, _rbDstHelpTxt(c, toChat, routes), botId || routes[0].botId, { reply_markup: _rbDstKb(c, toChat) }); if (pin) await _rbPin(c, toChat, botId || routes[0].botId, r); return r; // #1128: botones según el modo del grupo 2
 }
 // #1079-o: GUÍA completa como archivo (.txt) — "los que envían" en el grupo que manda, "los que reciben" en el destino; fijada al arrancar y con /guia
 async function _rbSendGuide(c, chat, kind, botId, pin) {
@@ -32732,16 +32782,17 @@ async function _rbSendGuide(c, chat, kind, botId, pin) {
 function _rbGroupCtx(c, chat, kind, botId) {
   chat = String(chat); const sOf = (r) => (c.structs || []).find((x) => x && x.id === r.structId) || {};
   if (kind === 'src') { const route = (c.routes || []).find((r) => String(r.from) === chat && (!botId || r.botId === botId)); if (!route) return null; const st = sOf(route);
-    return { group: _rbTitle(c, chat), close: st.dailyClose || '', monthly: !!st.monthlyClose, srcQuote: !!st.srcQuote, usdtCheck: !!st.usdtCheck }; }
-  const rs = _rbDstRoutes(c, chat, botId); if (!rs.length) return null; const sts = [...new Map(rs.map((r) => [r.structId, sOf(r)])).values()];
-  return { group: _rbTitle(c, chat), close: (sts[0] || {}).dailyClose || '', monthly: sts.some((x) => x.monthlyClose), usdtCheck: sts.some((x) => x.usdtCheck), fichas: _rbIsFichas(c, chat) };
+    const ds = _rbDests(c, route).map((d) => _rbDestCfg(st, d.to)); const f0 = ds[0] || _rbDestCfg(st, ''); // #1128: lo que ve el grupo 1 = cómo cierran sus destinos
+    return { group: _rbTitle(c, chat), close: f0.close, closeHour: f0.closeHour, closeDow: f0.closeDow, monthly: ds.some((x) => x.monthly), srcQuote: !!st.srcQuote, usdtCheck: !!st.usdtCheck }; }
+  const rs = _rbDstRoutes(c, chat, botId); if (!rs.length) return null; const cfgs = rs.map((r) => _rbDestCfg(sOf(r), chat)); const f = cfgs[0]; // #1128: config efectiva del grupo 2
+  return { group: _rbTitle(c, chat), close: f.close, closeHour: f.closeHour, closeDow: f.closeDow, monthly: cfgs.some((x) => x.monthly), usdtCheck: cfgs.some((x) => x.usdtCheck), fichas: _rbIsFichas(c, chat), mode: _rbDstMode(c, chat), feePct: f.feePct };
 }
 const _RB_FICHAS_KB = { inline_keyboard: [[{ text: '📊 Ver suma del mes', callback_data: 'rbm:total' }], [{ text: '🎰 Completar fichas del mes anterior', callback_data: 'rbf:ask' }], [{ text: '📋 Comandos', callback_data: 'rbm:help' }], [{ text: '🏦 Ver CBU', callback_data: 'rbm:cbu' }, { text: '🔄 Nuevo CBU', callback_data: 'rbm:ncbu' }], [{ text: '⛔ Parar (no hay CBU)', callback_data: 'rbm:stop' }]] };
 // #1106 (owner): BIENVENIDA en cada grupo = presentación breve FIJADA y después el archivo con la explicación completa (sin fijar, queda justo abajo).
 async function _rbWelcome(c, chat, kind, botId) {
   const G = require('./src/utils/rcptbotGuides'); const ctx = _rbGroupCtx(c, chat, kind, botId); if (!ctx) return { ok: false, error: 'el grupo no está en una estructura encendida' };
   const route = kind === 'src' ? (c.routes || []).find((r) => String(r.from) === String(chat) && (!botId || r.botId === botId)) : null;
-  const kb = kind === 'src' ? _rbSrcKb(c, route) : ctx.fichas ? _RB_FICHAS_KB : _RB_DST_KB;
+  const kb = kind === 'src' ? _rbSrcKb(c, route) : _rbDstKb(c, chat); // #1128
   const r = await _rbSend(c, String(chat), kind === 'src' ? G.welcomeSrc(ctx) : G.welcomeDst(ctx), botId, { reply_markup: kb });
   if (r && r.ok) {
     await _rbPin(c, String(chat), botId, r).catch(() => {}); await _rbSendGuide(c, chat, kind, botId, false).catch(() => {});
@@ -32947,7 +32998,7 @@ async function _rbDstCloseMsg(c, toChat, g) { // #1101: cierre en el grupo 2 com
     return;
   }
   const now = new Date(); const p = await _rbPendSum({ toChat: String(toChat), status: { $in: ['pending', 'quoted'] } });
-  await _rbSend(c, toChat, `🔒 <b>CIERRE ${_rbDT(now)}</b>${g.struct ? ' · ' + _rbH(g.struct) : ''}\nCerrado: <b>${_rbMoney2(g.total)}</b> (${g.count} comprobante${g.count === 1 ? '' : 's'})${g.extra ? ' · ' + g.extra : ''}\n⏳ <b>PENDIENTE A COTIZAR: ${_rbMoney(p.pending.total)}</b>` + (p.quoted.n ? `\n📤 Pendiente a enviar: <b>${_rbMoney(p.quoted.total)}</b>` : '') + `\n${g.newSum || '🆕 Suma nueva: <b>$0</b>'}\n\nCuando esté cotizado: /cotizado · cuando se envíe: /enviado`, g.bot, { reply_markup: _rbKb() });
+  await _rbSend(c, toChat, `🔒 <b>CIERRE ${_rbDT(now)}</b>${g.struct ? ' · ' + _rbH(g.struct) : ''}\nCerrado: <b>${_rbMoney2(g.total)}</b> (${g.count} comprobante${g.count === 1 ? '' : 's'})${g.extra ? ' · ' + g.extra : ''}` + _rbDstPendTail(g.mode || 'quote', p) + `\n${g.newSum || '🆕 Suma nueva: <b>$0</b>'}` + _rbDstHowTail(g.mode || 'quote'), g.bot, { reply_markup: _rbKb() }); // #1128: según el modo del grupo 2
 }
 async function _rbCloseBatch(c, routes, by, before) { // #1101: cierres automáticos de varios equipos ⇒ un mensaje por grupo 2
   const col = {};
@@ -32956,8 +33007,8 @@ async function _rbCloseBatch(c, routes, by, before) { // #1101: cierres automát
 }
 async function _rbClose(c, route, by, opts = {}) {
   const fromChat = String(route.from); const structId = route.structId || null; const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
-  const srcQ = !!((c.structs || []).find((x) => x && x.id === structId) || {}).srcQuote; // #1101: cotización propia del grupo 1
-  const fichasSet = new Set((((c.structs || []).find((x) => x && x.id === structId) || {}).fichasDests || []).map(String)); // #1104
+  const stObj = _rbStructOf(c, structId); const srcQ = !!stObj.srcQuote; // #1101: cotización propia del grupo 1
+  const fichasSet = new Set((stObj.fichasDests || []).map(String)); // #1104
   if (fichasSet.size && !opts.monthly) { if (opts.to && fichasSet.has(String(opts.to))) return { ok: false, why: 'ese grupo es de FICHAS: cierra sólo el día 1 del mes' }; }
   const q = { fromChat, status: 'open' }; if (structId) q.structId = structId; if (opts.to) q.toChat = String(opts.to); else if (fichasSet.size && !opts.monthly) q.toChat = { $nin: [...fichasSet] }; if (opts.before) q.createdAt = { $lt: opts.before }; // #1095: cierre de mes ⇒ sólo lo del mes cerrado · #1104: el grupo de fichas sólo cierra el día 1
   let part = null, reqAmt = null;
@@ -32970,7 +33021,7 @@ async function _rbClose(c, route, by, opts = {}) {
   await _rbM().RcptFwd.updateMany(q, { $set: { status: 'closed', closeId } });
   const rows = await _rbM().RcptFwd.aggregate([{ $match: { closeId } }, { $group: { _id: '$toChat', toTitle: { $first: '$toTitle' }, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 }, first: { $min: '$createdAt' } } }]);
   // #1108: lo anterior del GRUPO 1 se cierra con su cierre total (sólo se muestra acá; no va al grupo 2)
-  let srcOnly = 0; if (reqAmt == null && !opts.to) { const sq = { fromChat, status: 'srconly' }; if (structId) sq.structId = structId; if (opts.before) sq.createdAt = { $lt: opts.before }; const so = await _rbM().RcptFwd.aggregate([{ $match: sq }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } }]); if (so[0] && so[0].total) { await _rbM().RcptFwd.updateMany(sq, { $set: { status: 'srcclosed', closeId } }); srcOnly = so[0].total; } }
+  let srcOnly = 0; if (reqAmt == null && (!opts.to || opts.srcOnlyToo)) { /* #1128: srcOnlyToo = cierre por destino que también cierra lo anterior del grupo 1 */ const sq = { fromChat, status: 'srconly' }; if (structId) sq.structId = structId; if (opts.before) sq.createdAt = { $lt: opts.before }; const so = await _rbM().RcptFwd.aggregate([{ $match: sq }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } }]); if (so[0] && so[0].total) { await _rbM().RcptFwd.updateMany(sq, { $set: { status: 'srcclosed', closeId } }); srcOnly = so[0].total; } }
   if (!rows.length && srcOnly) { await _rbSend(c, fromChat, `🔒 <b>CIERRE ${_rbDT(new Date())}</b>${route.structName ? ' · ' + _rbH(route.structName) : ''}\n📥 Anterior de este grupo: cerrado <b>${_rbMoney2(srcOnly)}</b>\n🆕 Suma nueva: <b>$0</b>\n${_rbMonthTxt(await _rbMonthSum(fromChat, structId))}`, route.botId || null, { reply_markup: _rbKb() }); return { ok: true, closes: 0, total: 0 }; }
   if (!rows.length) return { ok: false, why: 'no hay comprobantes abiertos' };
   // Revisión nocturna: el parcial se calcula con lo que REALMENTE se cerró (no con la lectura previa): si entró un comprobante en el medio o
@@ -32990,13 +33041,13 @@ async function _rbClose(c, route, by, opts = {}) {
       await _rbM().RcptFwd.create({ id: uuidv4(), fromChat, fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), srcMsgId: -(Math.floor(Math.random() * 1e12) + 1e6), structId, amount: part.rest, amountFrom: 'resto', sender: 'resto del cierre', status: 'open' });
       r.total = part.amount;
     }
-    await _rbM().RcptClose.create({ id: cid, batchId: closeId, fromChat, fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), structId, structName: route.structName || '', periodFrom: r.first, count: r.count, total: r.total, partialOf: part ? part.of : null, by: String(by || '').slice(0, 60), status: fichasSet.has(String(r._id)) ? 'fichas' : 'pending', fichasMonth: fichasSet.has(String(r._id)) ? _rbPrevMonthLabel(now) : '', srcStatus: srcQ ? 'pending' : null });
+    await _rbM().RcptClose.create(Object.assign({ id: cid, batchId: closeId, fromChat, fromTitle, toChat: r._id, toTitle: r.toTitle || _rbTitle(c, r._id), structId, structName: route.structName || '', periodFrom: r.first, count: r.count, total: r.total, partialOf: part ? part.of : null, by: String(by || '').slice(0, 60), status: _rbCloseStatusFor(_rbDestCfg(stObj, String(r._id))), fichasMonth: fichasSet.has(String(r._id)) ? _rbPrevMonthLabel(now) : '', srcStatus: srcQ ? 'pending' : null }, _rbCloseExtra(_rbDestCfg(stObj, String(r._id)), now))); // #1128: estado según el modo del destino
     const det = `del ${_rbDT(r.first)} al ${_rbDT(now)} · ${r.count} comprobante${r.count === 1 ? '' : 's'}` + (part ? ` · cierre PARCIAL de ${_rbMoney2(part.of)}` : '');
     const newSum = part ? `🔁 Queda sumando el resto: <b>${_rbMoney2(part.rest)}</b>` : '🆕 Suma nueva: <b>$0</b>';
     // #1101: el grupo 2 ve UNA cuenta. Cierres automáticos de varios equipos (opts.collect) ⇒ un solo mensaje al final (_rbDstCloseMsg).
     const t2 = (Number(r.total) || 0) + (pre2 ? Number(pre2.total) || 0 : 0); const n2 = (Number(r.count) || 0) + (pre2 ? Number(pre2.count) || 0 : 0); // #1108: el grupo 2 ve su cuenta (con su anterior)
-    if (opts.collect) { const k = String(r._id); const g = opts.collect[k] || (opts.collect[k] = { total: 0, count: 0, bot: pre, struct: route.structName || '', fichas: fichasSet.has(k) }); g.total += t2; g.count += n2; }
-    else await _rbDstCloseMsg(c, String(r._id), { fichas: fichasSet.has(String(r._id)), total: t2, count: n2, bot: pre, struct: route.structName || '', extra: part ? `cierre PARCIAL de ${_rbMoney2(part.of)}` : '', newSum });
+    if (opts.collect) { const k = String(r._id); const g = opts.collect[k] || (opts.collect[k] = { total: 0, count: 0, bot: pre, struct: route.structName || '', fichas: fichasSet.has(k), mode: _rbDestCfg(stObj, k).mode }); g.total += t2; g.count += n2; }
+    else await _rbDstCloseMsg(c, String(r._id), { fichas: fichasSet.has(String(r._id)), mode: _rbDestCfg(stObj, String(r._id)).mode, total: t2, count: n2, bot: pre, struct: route.structName || '', extra: part ? `cierre PARCIAL de ${_rbMoney2(part.of)}` : '', newSum });
     lines.push(`→ ${_rbH(r.toTitle)}: cerrado <b>${_rbMoney2(r.total)}</b> (${r.count} comp.)` + (part ? `\n🔁 Queda sumando: <b>${_rbMoney2(part.rest)}</b>` : '')); // #1089: el detalle (pendiente a cotizar, fechas) va sólo al grupo 2
   }
   if (srcOnly) lines.push(`📥 Anterior de este grupo: cerrado <b>${_rbMoney2(srcOnly)}</b>`); // #1108
@@ -33024,18 +33075,42 @@ setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('
 // 13:00 en punto (lo que llega después es del cierre siguiente). Una vez por estructura/día (_rbOnce). Grupo 1: sumas · grupo 2: pendiente a cotizar.
 async function _rbDailyCloseTick() {
   const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
-  const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
-  // #1099 (owner, Cotizaciones: "suman de lunes a lunes; el lunes 00:00 se hace cierre semanal pendiente a cotizar y empieza de 0"): 'weekly'.
-  if (dow === 1) for (const st of (c.structs || []).filter((x) => x && x.on && x.dailyClose === 'weekly')) {
-    if (!(await _rbFlag('wclose|' + st.id + '|' + dk))) continue; const cut0 = new Date(dk + 'T00:00:00-03:00');
-    await _rbCloseBatch(c, (c.routes || []).filter((x) => x.structId === st.id), 'cierre semanal automático', cut0);
+  if (await _rbFlag('noautoclose1129')) { // #1129 (owner: "que el cierre no sea automático más de cada grupo"): UNA vez, todo a cierre A MANO (la frase "Cierre de día!"); desde el panel se puede volver a encender
+    const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const sts = ((d.value || {}).structs || []); const set = {};
+    sts.forEach((st, i) => { if (st && st.dailyClose) set[`value.structs.${i}.dailyClose`] = ''; for (const to of Object.keys((st && st.destCfg) || {})) if (st.destCfg[to] && st.destCfg[to].close) set[`value.structs.${i}.destCfg.${to}.close`] = ''; });
+    if (Object.keys(set).length) { await Config.collection.updateOne({ key: 'rcptbot' }, { $set: set }); _rbMem.at = 0; logger.info('[rcptbot] #1129: cierres automáticos apagados (' + Object.keys(set).length + ')'); }
+    return;
   }
-  if (_tgArtHour(now) < 13) return;
-  const cut = new Date(dk + 'T13:00:00-03:00');
-  for (const st of (c.structs || []).filter((x) => x && x.on && (x.dailyClose === 'all' || x.dailyClose === 'weekdays'))) {
-    if (st.dailyClose === 'weekdays' && (dow === 0 || dow === 6)) continue;
-    if (!(await _rbFlag('dclose|' + st.id + '|' + dk))) continue;
-    await _rbCloseBatch(c, (c.routes || []).filter((x) => x.structId === st.id), 'automático 13 h', cut);
+  const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay(); const hr = _tgArtHour(now);
+  // #1128: POR DESTINO (`_rbDestCfg`, hereda lo de la estructura): 'weekly' el día closeDow desde las closeHour · 'all' todos los días desde las closeHour ·
+  // 'weekdays' lunes a viernes (el finde entra en el del lunes). Cierra lo que entró ANTES de la hora en punto. Una vez por estructura/corte/día (_rbFlag; las
+  // llaves viejas 'dclose|<st>|<día>' y 'wclose|…' se mantienen para 13 h y lunes 00:00). Los destinos de una misma ruta que cierran en el mismo corte van en UN
+  // cierre (un solo mensaje en el grupo 1, como antes); si sólo cierran algunos, cada uno por separado (el primero también cierra lo anterior del grupo 1).
+  for (const st of (c.structs || []).filter((x) => x && x.on)) {
+    const rs = (c.routes || []).filter((x) => x.structId === st.id); if (!rs.length) continue;
+    const byCut = {};
+    for (const r of rs) for (const d of _rbDests(c, r)) {
+      const f = _rbDestCfg(st, d.to); if (!f.close || f.mode === 'fichas') continue;
+      let due = false, label = '';
+      if (f.close === 'weekly') { due = dow === f.closeDow && hr >= f.closeHour; label = 'cierre semanal automático'; }
+      else if (f.close === 'all') { due = hr >= f.closeHour; label = 'automático ' + f.closeHour + ' h'; }
+      else if (f.close === 'weekdays') { due = dow !== 0 && dow !== 6 && hr >= f.closeHour; label = 'automático ' + f.closeHour + ' h'; }
+      if (!due) continue;
+      const k = f.close + '|' + f.closeHour; const g = byCut[k] || (byCut[k] = { cut: new Date(dk + 'T' + String(f.closeHour).padStart(2, '0') + ':00:00-03:00'), label, dests: new Set() }); g.dests.add(d.to);
+    }
+    for (const [k, g] of Object.entries(byCut)) {
+      const fk = (k === 'all|13' || k === 'weekdays|13') ? 'dclose|' + st.id + '|' + dk : k === 'weekly|0' ? 'wclose|' + st.id + '|' + dk : (k.startsWith('weekly') ? 'wclose|' : 'dclose|') + st.id + '|' + k + '|' + dk;
+      if (!(await _rbFlag(fk))) continue;
+      const col = {};
+      for (const r of rs) {
+        const ds = _rbDests(c, r).filter((d) => _rbDestCfg(st, d.to).mode !== 'fichas'); const mine = ds.filter((d) => g.dests.has(d.to)); if (!mine.length) continue;
+        try {
+          if (mine.length === ds.length) await _rbClose(c, r, g.label, { before: g.cut, collect: col });
+          else for (let i = 0; i < mine.length; i++) await _rbClose(c, r, g.label, { before: g.cut, collect: col, to: mine[i].to, srcOnlyToo: i === 0 });
+        } catch (e) { logger.warn('[rcptbot] cierre ' + e.message); }
+      }
+      for (const [to, gg] of Object.entries(col)) { try { await _rbDstCloseMsg(c, to, gg); } catch (e) { logger.warn('[rcptbot] cierre grupo 2 ' + e.message); } }
+    }
   }
 }
 setTimeout(() => { setInterval(() => { _rbDailyCloseTick().catch((e) => logger.warn('[rcptbot] cierre 13 h ' + e.message)); }, 60000); }, 105000);
@@ -33047,14 +33122,14 @@ const RB_PLAN = { v: 2, structs: [ // v2 (#1111): ,43 de Fichas pasa a "Pago fic
   { name: 'Fichas', bot: 'fichasnuevobot', dailyClose: '', monthlyClose: true, termHour: 13, fichasDests: ['Pago fichas GIROX ,43'], termNotices: [{ day: 5, cents: '99' }, { day: 20, cents: '43' }], // #1104: ,43 = grupo de FICHAS
     senders: ['STOCK 1GIROX ICE', '1GIROX ANANA', '1GIROX BUFFALO', '1GIROX JOKER', '1GIROX GOLDEN', '1GIROX TOKIO', '1GIROX BOSTON', '1GIROX PARADISE', '1GIROX LAS VEGAS', '1GIROX SHANGAI', '1GIROX VIP PLATINIUM', '1GIROX ORO'],
     rules: [{ cents: '99', to: '4f RACAFU ,99' }, { cents: '43', to: 'Pago fichas GIROX ,43' }] },
-  { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [],
+  { name: 'Ganamos', bot: 'Bajadasasuncionbot', dailyClose: '', monthlyClose: false, termHour: 13, termNotices: [],
     senders: ['BAJADAS GANAMOS'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] },
-  { name: 'Publicidad', bot: 'Bajadasasuncionbot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [], // #1098: igual que Ganamos, suma aparte
+  { name: 'Publicidad', bot: 'Bajadasasuncionbot', dailyClose: '', monthlyClose: false, termHour: 13, termNotices: [], // #1098: igual que Ganamos, suma aparte
     senders: ['BAJADAS PUBLICIDAD'], rules: [{ cents: '83', to: '3P 2G RACAFU ,83' }] },
-  { name: 'Cotizaciones', bot: 'Cotizacionbuffabot', dailyClose: 'weekly', monthlyClose: false, usdtCheck: true, srcQuote: true, termHour: 13, termNotices: [], // #1100: semanal + foto USDT
+  { name: 'Cotizaciones', bot: 'Cotizacionbuffabot', dailyClose: '', monthlyClose: false, usdtCheck: true, srcQuote: true, termHour: 13, termNotices: [], // #1100: semanal + foto USDT
     senders: ['BAJADAS PARADISE', 'BAJADAS JOKER', 'BAJADAS PORTO', 'BAJADAS JACK', 'BAJADAS BOSTON', 'BAJADAS TOKIO/ANANA', 'BAJADAS VIP/PLATINIUM', 'BAJADAS LAS VEGAS'],
     rules: [{ cents: '79', to: '5C RACAFU ,79' }] },
-  { name: 'Sector 1', bot: 'Sectorunobot', dailyClose: 'weekdays', monthlyClose: false, termHour: 13, termNotices: [], // #1102: igual que Ganamos
+  { name: 'Sector 1', bot: 'Sectorunobot', dailyClose: '', monthlyClose: false, termHour: 13, termNotices: [], // #1102: igual que Ganamos
     senders: ['BAJADAS S1'], rules: [{ cents: '33', to: 'S1 Racafu ,33' }] }
 ] }; // un plan NUEVO se aplica solo (applied[nombre] vacío); subir `v` re-aplica TODOS (pisa cambios hechos a mano)
 const _rbNorm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
@@ -33150,7 +33225,9 @@ async function _rbQuote(c, toChat, price, pct, by, structIds, botId, replyTo) {
   }
   const det = `• ${list.reduce((a, x) => a + (Number(x.count) || 0), 0)} comprobantes`; // #1101: sin separar por equipos
   const routes = _rbDstRoutes(c, toChat, botId).filter((r) => !structIds || !structIds.length || structIds.includes(r.structId));
-  await _rbSend(c, toChat, `💱 <b>COTIZADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(tot)}</b>\n÷ USDT ${_rbMoney2(price)} = ${_rbUsdt(bruto)} USDT` + (pct ? `\n− comisión ${pct}% = ${_rbUsdt(bruto - neto)} USDT` : '') + `\n➡️ <b>A ENVIAR: ${_rbUsdt(neto)} USDT</b>\n📤 Queda PENDIENTE A ENVIAR: cuando envíes tocá ✅ Enviado y mandá la foto.\n\n` + (routes.length ? await _rbDstTotalTxt(c, toChat, routes) : ''), botId, Object.assign({ reply_markup: _rbKb() }, replyTo ? { reply_to_message_id: replyTo, allow_sending_without_reply: true } : {}));
+  // #1129 (owner): fecha · suma de lo pendiente · − margen % = total · total / precio = USDT (entero, hacia abajo) · foto por ese monto exacto
+  const fee = Math.round(tot * pct) / 100; const net = Math.round((tot - fee) * 100) / 100; const usdtInt = Math.floor(net / price); const nf = (n) => Number(n).toLocaleString('es-AR');
+  await _rbSend(c, toChat, `💱 <b>COTIZADO · ${_rbDT(now)}</b>${by ? ' · ' + _rbH(by) : ''}\nPendiente: <b>${_rbMoney2(tot)}</b> (${list.length} cierre${list.length === 1 ? '' : 's'} · ${det.slice(2)})` + (pct ? `\n− ${String(pct).replace('.', ',')}% = <b>${_rbMoney2(net)}</b>` : '') + `\n${_rbMoney2(net)} / ${nf(price)} = <b>${nf(usdtInt)} USDT</b>\n📤 <b>PENDIENTE A ENVIAR: ${nf(usdtInt)} USDT</b> — mandá acá la foto del envío por ese monto exacto.\n\n` + (routes.length ? await _rbDstTotalTxt(c, toChat, routes) : ''), botId, Object.assign({ reply_markup: _rbKb() }, replyTo ? { reply_to_message_id: replyTo, allow_sending_without_reply: true } : {}));
 }
 // #1099: número de USDT tal como viene en la foto (1,234.56 · 1.234,56 · 1234.5 · 1 234,56). El separador decimal es el ÚLTIMO . o , con 1-2 cifras detrás.
 function _rbUsdtNum(raw) {
@@ -33227,8 +33304,7 @@ async function _rbSentPhoto(c, toChat, m, by, structIds, botId) {
   // #1099 (owner, estructura Cotizaciones): "esperás confirmación que coincida los USDT con la foto que envía USDT; si no coincide o el bot no lee, que se
   // pueda ajustar a mano y ponemos OK, a verificar". Sólo para estructuras con `usdtCheck`.
   let usdtOk = null;
-  const chk = new Set((c.structs || []).filter((x) => x && x.usdtCheck).map((x) => x.id));
-  if (list.some((x) => chk.has(x.structId))) {
+  if (list.some((x) => _rbDestCfg(_rbStructOf(c, x.structId), toChat).usdtCheck)) { // #1128: por destino (hereda el de la estructura)
     const want = Math.round(list.reduce((a, x) => a + (Number(x.quoteUsdt) || 0), 0) * 100) / 100;
     if (want > 0) {
       const got = await _rbReadUsdt(c, toChat, botId, f);
@@ -33309,7 +33385,7 @@ function _rbCbuShort(c, routes) {
   return '🏦 CBU DE BAJADA\n' + (out.join('\n') || 'Sin datos') + (out.length > 2 ? '\nDetalle: /cbu' : '');
 }
 const _RB_HELP_SRC = '📋 COMANDOS\n/total suma · /cierre todo · /cierre 500.000 parcial · /suma 13.686.199 (lo anterior, sólo acá) · /restar 50.000 · /anular (respondiendo) · /cbu · /restart reiniciar el grupo (admins) · /guia guía completa';
-const _RB_HELP_DST = '📋 COMANDOS\n/total detalle · /cotizado 1150 · /enviado · /nuevocbu · /parar · /cbu · /anular (respondiendo) · /restar 50.000 · /suma 13.686.199 (lo anterior, sólo acá) · /restart reiniciar el grupo (admins) · /guia guía completa';
+const _RB_HELP_DST = '📋 COMANDOS\n/total detalle · /cotizado 1150 · /enviado · /nuevocbu · /parar · /cbu · /anular (respondiendo) · /restar 50.000 · /suma 13.686.199 (lo anterior, sólo acá) · /restart reiniciar el grupo (admins) · /guia guía completa\n✍️ SIN COMANDOS: "Cierre de día!" cierra · el precio del USDT (ej. 1647) cotiza · la foto del envío marca ENVIADO';
 async function _rbMenuCb(c, bot, cq) {
   const act = String(cq.data || '').slice(4); const chat = cq.message && cq.message.chat && String(cq.message.chat.id); const ans = (t) => tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: t ? _rbAlertTxt(t) : '', show_alert: !!t });
   if (!chat) return ans();
@@ -33319,7 +33395,7 @@ async function _rbMenuCb(c, bot, cq) {
   if (!(await _rbOnce(chat, 'cb' + cq.id))) return ans();
   const mid = cq.message.message_id; const kb = (m) => tgChannel.call(bot.token, 'editMessageReplyMarkup', { chat_id: chat, message_id: mid, reply_markup: m }).catch(() => {});
   const isMenu = () => { try { return (cq.message.reply_markup.inline_keyboard || []).some((row) => row.some((b) => /^rbm:(total|quote|close)$/.test(b.callback_data || ''))); } catch (_) { return false; } };
-  const menuKb = route ? _rbSrcKb(c, route) : _RB_DST_KB;
+  const menuKb = route ? _rbSrcKb(c, route) : _rbDstKb(c, chat); // #1128
   // confirmación EN el mismo menú: cambia los botones a "✅ Sí / Cancelar" y avisa con un cartel corto
   const ask = async (q, ok) => { if (isMenu()) { await kb({ inline_keyboard: [[{ text: '✅ Sí, confirmar', callback_data: 'rbm:' + ok }], [{ text: '✖️ Cancelar', callback_data: 'rbm:no' }]] }); return ans(q + '\n\nTocá "✅ Sí, confirmar" en el menú.'); } await ans(); await _rbSend(c, chat, q, bot.id, { reply_markup: { inline_keyboard: [[{ text: '✅ Sí', callback_data: 'rbm:' + ok }, { text: 'Cancelar', callback_data: 'rbm:no' }]] } }); };
   // al confirmar/cancelar: si el mensaje era un menú (o la confirmación hecha sobre el menú) vuelve el menú; si era un mensaje aparte, se le sacan los botones
@@ -33571,12 +33647,16 @@ async function _rbMonthCloseTick() {
   const ym = nowArt.toISOString().slice(0, 7); const m0 = new Date(ym + '-01T00:00:00-03:00');
   const pm = new Date(Date.UTC(nowArt.getUTCFullYear(), nowArt.getUTCMonth() - 1, 1)); const pYm = pm.toISOString().slice(0, 7); const p0 = new Date(pYm + '-01T00:00:00-03:00');
   const mesTxt = _RB_MES[pm.getUTCMonth()].toUpperCase() + ' ' + pm.getUTCFullYear();
-  for (const st of (c.structs || []).filter((x) => x && x.on && x.monthlyClose)) {
+  for (const st of (c.structs || []).filter((x) => x && x.on)) { // #1128: por destino (`monthly` de cada grupo 2; hereda monthlyClose de la estructura; fichas siempre)
+    const rs = (c.routes || []).filter((x) => x.structId === st.id); if (!rs.some((r) => _rbDests(c, r).some((d) => _rbDestCfg(st, d.to).monthly))) continue;
     if (!(await _rbFlag('mclose|' + st.id + '|' + ym))) continue;
     const col = {}; // #1101: el grupo 2 recibe UN solo cierre
-    for (const r of (c.routes || []).filter((x) => x.structId === st.id)) {
+    for (const r of rs) {
+      const ds = _rbDests(c, r); const mine = ds.filter((d) => _rbDestCfg(st, d.to).monthly); if (!mine.length) continue;
       try {
-        const cl = await _rbClose(c, r, 'cierre de mes automático', { before: m0, collect: col, monthly: true });
+        let cl = null;
+        if (mine.length === ds.length) cl = await _rbClose(c, r, 'cierre de mes automático', { before: m0, collect: col, monthly: true });
+        else for (let i = 0; i < mine.length; i++) { const x = await _rbClose(c, r, 'cierre de mes automático', { before: m0, collect: col, monthly: true, to: mine[i].to, srcOnlyToo: i === 0 }); if (x && x.ok) cl = x; }
         const a = await _rbM().RcptFwd.aggregate([{ $match: { fromChat: String(r.from), structId: st.id, status: { $in: ['open', 'closed'] }, createdAt: { $gte: p0, $lt: m0 }, amountFrom: { $ne: 'resto' } } }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
         const t = a[0] || { total: 0, count: 0 };
         const sent = await _rbSend(c, String(r.from), `📌 <b>TOTAL DE ${mesTxt}</b>${st.name ? ' · ' + _rbH(st.name) : ''}\n💰 <b>${_rbMoney2(t.total)}</b> (${t.count} comprobante${t.count === 1 ? '' : 's'})${cl && cl.ok ? '' : '\n(no había nada abierto para cerrar)'}\n🆕 Desde hoy la suma empieza de <b>$0</b>.`, r.botId);
@@ -33659,10 +33739,17 @@ async function _rbOnMessage(c, bot, m) {
     }
     if (/^\/fichas(@\w+)?$/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) { if (!(await _rbFichasAsk(c, fromChat, bot.id))) await _rbSend(c, fromChat, 'No hay ningún mes esperando las fichas.', bot.id); } return; }
   }
+  // #1129 (owner: "que funcione directo, sin comandos en el grupo 2"): "Cierre de día!" cierra y deja pendiente a cotizar; un mensaje que es SÓLO el precio del
+  // USDT (ej. 1647) cotiza lo pendiente con el margen configurado (−2,5 %); una FOTO con algo cotizado = la foto del envío (más abajo).
+  if (!route && dstR.length && _RB_CLOSE_RX.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbDstCloseCmd(c, fromChat, dstR, by, bot.id); return; }
+  if (!route && dstR.length && !m.reply_to_message && /^\s*\$?\s*\d[\d.,]*\s*$/.test(text) && _rbDstMode(c, fromChat) === 'quote') {
+    const price = _rbParseAmount(text, 1e7); const sids = [...new Set(dstR.map((r) => r.structId))];
+    if (price >= 100 && price <= 100000 && (await _rbM().RcptClose.countDocuments({ toChat: fromChat, status: 'pending', structId: { $in: sids } }))) { if (await _rbOnce(fromChat, m.message_id)) await _rbQuote(c, fromChat, price, _rbDstFee(c, fromChat), by, sids, bot.id, m.message_id); return; }
+  }
   if (!route && dstR.length && m.reply_to_message && m.reply_to_message.from && m.reply_to_message.from.is_bot) {
     const rtx = String(m.reply_to_message.text || ''); const sids = [...new Set(dstR.map((r) => r.structId))];
     if (rtx.startsWith(_RB_Q_MARK) && text) {
-      if (!(await _rbOnce(fromChat, m.message_id))) return; const qp = _rbQuoteParse(text);
+      if (!(await _rbOnce(fromChat, m.message_id))) return; const qp = _rbQuoteParse(text); if (qp && !/\d[\d.,]*\s+\d/.test(text)) qp.pct = _rbDstFee(c, fromChat); // #1129: sólo el precio ⇒ margen configurado
       if (!qp) { await _rbSend(c, fromChat, 'No entendí. Respondé con el precio del USDT y la comisión %, ej.: <b>1150 2</b>', bot.id, { reply_to_message_id: m.message_id, reply_markup: { force_reply: true, input_field_placeholder: '1150 2' } }); return; }
       await _rbQuote(c, fromChat, qp.price, qp.pct, by, sids, bot.id, m.message_id); return;
     }
@@ -33670,6 +33757,10 @@ async function _rbOnMessage(c, bot, m) {
       if (!_rbFileOf(m)) { if (text && (await _rbOnce(fromChat, m.message_id))) await _rbSend(c, fromChat, 'Mandá la <b>FOTO</b> del envío de los USDT respondiendo el mensaje 📸 ENVIADO.', bot.id, { reply_to_message_id: m.message_id }); return; }
       if (await _rbOnce(fromChat, m.message_id)) await _rbSentPhoto(c, fromChat, m, by, sids, bot.id); return;
     }
+  }
+  if (!route && dstR.length && _rbFileOf(m) && ['quote', 'send'].includes(_rbDstMode(c, fromChat))) { // #1129: la foto del envío va directo (sin responder al bot)
+    const sids = [...new Set(dstR.map((r) => r.structId))];
+    if (await _rbM().RcptClose.countDocuments({ toChat: fromChat, status: 'quoted', structId: { $in: sids } })) { if (await _rbOnce(fromChat, m.message_id)) await _rbSentPhoto(c, fromChat, m, by, sids, bot.id); return; }
   }
   const cmd = (text.match(/^\/(cotizado|enviado)(@\w+)?(\s+.*)?$/i) || [])[1];
   if (cmd && cmd.toLowerCase() === 'cotizado' && !route && dstR.length) { const qp = _rbQuoteParse((text.match(/^\/\w+(?:@\w+)?\s+(.+)$/) || [])[1] || ''); if (qp) { if (await _rbOnce(fromChat, m.message_id)) await _rbQuote(c, fromChat, qp.price, qp.pct, by, [...new Set(dstR.map((r) => r.structId))], bot.id, m.message_id); return; } }
@@ -33679,7 +33770,7 @@ async function _rbOnMessage(c, bot, m) {
     return;
   }
   if (!route) return;
-  const cm = text.match(/^\/(?:cierre|cierrededia)(?:@\w+)?(?:\s+(.+))?$/i) || (/^cierre de d[ií]a$/i.test(text) ? [text, ''] : null);
+  const cm = text.match(/^\/(?:cierre|cierrededia)(?:@\w+)?(?:\s+(.+))?$/i) || (_RB_CLOSE_RX.test(text) ? [text, ''] : null); // #1129: "Cierre de día!" (con o sin acento / signos)
   if (cm) { if (await _rbOnce(fromChat, m.message_id)) await _rbCloseCmd(c, route, by, cm[1] || '', bot.id); return; }
   if (/^\/total(@\w+)?$/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSend(c, fromChat, await _rbSrcTotalTxt(c, route), bot.id, { reply_markup: _rbKb() }); return; }
   if (text && m.reply_to_message) { // corrige el monto respondiendo la foto (o la respuesta del bot)
@@ -33793,7 +33884,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
         routes.push(Object.assign({}, r, { cbuItems, cbuStops, sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
-      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose, dailyClose: st.dailyClose || '', usdtCheck: !!st.usdtCheck, srcQuote: !!st.srcQuote, fichasDests: st.fichasDests || [] }); // #1094 / #1095 / #1096 / #1099 / #1101 / #1104
+      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose, dailyClose: st.dailyClose || '', usdtCheck: !!st.usdtCheck, srcQuote: !!st.srcQuote, fichasDests: st.fichasDests || [], destCfg: st.destCfg || {}, destEff: Object.fromEntries([...new Set((st.routes || []).flatMap((r) => (r.rules || []).map((x) => String(x.to)).concat(r.otherTo ? [String(r.otherTo)] : [])))].map((to) => [to, _rbDestCfg(st, to)])) }); // #1094 / #1095 / #1096 / #1099 / #1101 / #1104 / #1128
     }
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
@@ -33909,6 +34000,21 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
     if (typeof b.usdtCheck === 'boolean') st.usdtCheck = b.usdtCheck; // #1099
     if (typeof b.srcQuote === 'boolean') st.srcQuote = b.srcQuote; // #1101
     if (Array.isArray(b.fichasDests)) st.fichasDests = [...new Set(b.fichasDests.map(String).filter((x) => /^-?\d{3,20}$/.test(x)))].slice(0, 10); // #1104
+    if (b.destCfg && typeof b.destCfg === 'object' && !Array.isArray(b.destCfg)) { // #1128: configuración de cada GRUPO 2 (destino) de esta estructura
+      const dests = new Set((st.routes || []).flatMap((r) => (r.rules || []).map((x) => String(x.to)).concat(r.otherTo ? [String(r.otherTo)] : [])));
+      const out = {}; const fz = new Set((st.fichasDests || []).map(String));
+      for (const [to, v] of Object.entries(b.destCfg)) {
+        if (!/^-?\d{3,20}$/.test(to) || !dests.has(to) || !v || typeof v !== 'object') continue;
+        const mode = _RB_MODES.includes(v.mode) ? v.mode : 'quote'; const close = _RB_CLOSES.includes(v.close) ? v.close : '';
+        const h = Math.round(Number(v.closeHour)); const w = Math.round(Number(v.closeDow));
+        if (v.closeHour != null && v.closeHour !== '' && !(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Grupo 2 "' + _rbTitle(c, to) + '": la hora del cierre va de 0 a 23' });
+        if (v.closeDow != null && v.closeDow !== '' && !(w >= 0 && w <= 6)) return res.status(400).json({ error: 'Grupo 2 "' + _rbTitle(c, to) + '": día de la semana inválido' });
+        const fp = v.feePct == null || v.feePct === '' ? 2.5 : Number(String(v.feePct).replace(',', '.')); if (!(fp >= 0 && fp < 50)) return res.status(400).json({ error: 'Grupo 2 "' + _rbTitle(c, to) + '": el margen va de 0 a 49 %' });
+        out[to] = { feePct: fp, mode, close: mode === 'fichas' ? '' : close, closeHour: v.closeHour != null && v.closeHour !== '' ? h : (close === 'weekly' ? 0 : 13), closeDow: v.closeDow != null && v.closeDow !== '' ? w : 1, monthly: mode === 'fichas' ? true : !!v.monthly, usdtCheck: mode === 'none' || mode === 'fichas' ? false : !!v.usdtCheck };
+        if (mode === 'fichas') fz.add(to); else fz.delete(to);
+      }
+      st.destCfg = out; st.fichasDests = [...fz].slice(0, 10);
+    }
     if (b.dailyClose != null) { const v = String(b.dailyClose); if (!['', 'all', 'weekdays', 'weekly'].includes(v)) return res.status(400).json({ error: 'Cierre de 13 h inválido' }); st.dailyClose = v; } // #1096
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
@@ -33950,7 +34056,7 @@ async function _rbCleanChat(bot, chat, sinceMs, maxScan) {
 async function _rbResetAccounts(by) {
   const now = new Date(); const tag = { resetAt: now, resetBy: String(by || '').slice(0, 60) };
   const f = await _rbM().RcptFwd.updateMany({ status: { $in: ['open', 'closed', 'hold', 'srconly', 'srcclosed', 'dup'] } }, { $set: Object.assign({ status: 'reset' }, tag) });
-  const cl = await _rbM().RcptClose.updateMany({ status: { $in: ['pending', 'quoted', 'sent', 'fichas', 'fichasdone'] } }, { $set: Object.assign({ status: 'reset', srcStatus: null }, tag) });
+  const cl = await _rbM().RcptClose.updateMany({ status: { $in: ['pending', 'quoted', 'sent', 'done', 'fichas', 'fichasdone'] } }, { $set: Object.assign({ status: 'reset', srcStatus: null }, tag) });
   await Config.collection.updateOne({ key: 'rcptbotfichas' }, { $set: { value: {} } }, { upsert: true });
   return { comprobantes: f.modifiedCount || 0, cierres: cl.modifiedCount || 0 };
 }
@@ -33982,7 +34088,7 @@ async function _rbCleanRun(opts, by) {
 // panel (#1110) pero de UN solo grupo: borra lo que escribió el bot acá (48 h, límite de Telegram; lo de la gente no se toca), desfija lo suyo, archiva la
 // cuenta de este grupo (comprobantes y cierres vivos ⇒ 'reset', fuera de toda suma; arrastre de fichas a 0) y manda la presentación + la guía de nuevo.
 // Sólo ADMINISTRADORES del grupo y con confirmación (/restart si). Corre en segundo plano (borrar puede tardar minutos) con candado por grupo.
-const _RB_LIVE_FWD = ['open', 'closed', 'hold', 'srconly', 'srcclosed', 'dup'], _RB_LIVE_CLOSE = ['pending', 'quoted', 'sent', 'fichas', 'fichasdone'];
+const _RB_LIVE_FWD = ['open', 'closed', 'hold', 'srconly', 'srcclosed', 'dup'], _RB_LIVE_CLOSE = ['pending', 'quoted', 'sent', 'done', 'fichas', 'fichasdone'];
 async function _rbIsGroupAdmin(bot, chat, m) {
   if (m.sender_chat && String(m.sender_chat.id) === String(chat)) return true; // administrador anónimo: escribe como el grupo
   if (!m.from) return false;

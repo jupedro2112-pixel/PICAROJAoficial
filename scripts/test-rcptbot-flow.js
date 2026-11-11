@@ -232,7 +232,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(/No entendí/.test(last(-3).p.text)); assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').some((x) => x.status === 'pending'));
     await hook({ message: { message_id: 901, chat: { id: -3, type: 'supergroup', title: 'fichasnuevobot' }, from: { first_name: 'Ana' }, text: '1.150 2%', reply_to_message: { message_id: 1, from: { is_bot: true }, text: pq.p.text.replace(/<[^>]+>/g, '') } } });
     const q = last(-3).p.text; const neto = pesos / 1150 * 0.98; const fmt = (n) => n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    assert.ok(/COTIZADO/.test(q) && q.includes('A ENVIAR: ' + fmt(neto) + ' USDT') && /comisión 2%/.test(q) && /SUMA ACTUALIZADA/.test(q), q);
+    assert.ok(/COTIZADO/.test(q) && q.includes('A ENVIAR: ' + Math.floor(neto).toLocaleString('es-AR') + ' USDT') && /− 2% =/.test(q) && /SUMA ACTUALIZADA/.test(q), q); // #1129: fecha · pendiente · − margen = total · total / precio = USDT enteros
     assert.ok(RcptClose.rows.filter((x) => x.toChat === '-3').every((x) => x.status !== 'pending'));
     await cbMenu(-3, 'rbm:quote', ctx._RB_DST_KB); assert.ok(alertOf().show_alert && /No hay nada PENDIENTE A COTIZAR/.test(alertOf().text), JSON.stringify(alertOf()));
     await cbMenu(-3, 'rbm:sent', ctx._RB_DST_KB); const ps = last(-3); assert.ok(/^📸 ENVIADO/.test(ps.p.text) && ps.p.text.includes(fmt(neto) + ' USDT'), ps.p.text);
@@ -262,7 +262,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     aiAmount = 300.99; await hook(photo(60)); const r = last(-1); const kb = r.p.reply_markup.inline_keyboard; assert.ok(kb[kb.length - 1][0].callback_data === 'rbm:help', JSON.stringify(kb));
     const cp = sent.filter((x) => x.method === 'copyMessage').slice(-1)[0]; assert.ok(cp.p.reply_markup && cp.p.reply_markup.inline_keyboard.some((x) => x[0].callback_data === 'rbm:help'));
     await cbIn(-1, 'rbm:help', 6300); assert.ok(sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0].p.reply_markup === ctx._RB_SRC_KB);
-    await cbIn(-2, 'rbm:help', 6301); assert.ok(sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0].p.reply_markup === ctx._RB_DST_KB);
+    await cbIn(-2, 'rbm:help', 6301); assert.strictEqual(JSON.stringify(sent.filter((x) => x.method === 'editMessageReplyMarkup').slice(-1)[0].p.reply_markup), JSON.stringify(ctx._RB_DST_KB)); // #1128: el menú se arma según el modo
     aiAmount = 300.43; await hook(photo(61)); assert.ok(/TERMINACIÓN MAL<\/b>: \$300,43 termina en <b>,43/.test(last(-1).p.text) && /elegí a qué grupo va/.test(last(-1).p.text), last(-1).p.text);
   });
   await caso('cada grupo con su decimal: ,43 en el grupo del ,99 avisa que es del otro grupo', async () => {
@@ -415,7 +415,7 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     rc.bots.push({ id: '777', username: 'Sectorunobot', tokenEnc: '777:TOKEN', secret: 'S7' });
     rc.groups.push({ id: '-700', title: 'BAJADAS S1', bots: ['777'] }, { id: '-701', title: 'S1 Racafu ,33', bots: ['777'] });
     await ctx._rbCfg(true); const n0 = sent.length; await ctx._rbPlanRun();
-    const st = rc.structs.find((x) => x.name === 'Sector 1'); assert.ok(st && st.on && st.botId === '777' && st.dailyClose === 'weekdays', JSON.stringify(st));
+    const st = rc.structs.find((x) => x.name === 'Sector 1'); assert.ok(st && st.on && st.botId === '777' && st.dailyClose === '', JSON.stringify(st)); // #1129: el plan ya no trae cierre automático (se cierra con "Cierre de día!")
     assert.strictEqual(JSON.stringify(st.routes.map((r) => [r.from, r.rules])), JSON.stringify([['-700', [{ cents: '33', to: '-701' }]]]));
     const rep = cfgDocs.find((d) => d.key === 'rcptbotplan').value; assert.ok(rep.applied['Sector 1'] === ctx.RB_PLAN.v && rep.report['Sector 1'].ok, JSON.stringify(rep.report['Sector 1']));
     const f = rep.report.Fichas; assert.ok(f && !f.ok && f.detail.some((d) => d.kind === 'bot' && /fichasnuevobot/.test(d.why)), JSON.stringify(f));
