@@ -33,5 +33,20 @@ const img = 'data:image/jpeg;base64,AAAA';
     const r = await A.analyzeComprobante(img, { model: 'claude-opus-5-5' }); assert.strictEqual(lastBody.model, 'claude-opus-5-5'); assert.ok(lastBody.max_tokens >= 4000); assert.strictEqual(r.amount, 100);
     await A.analyzeComprobante(img); assert.strictEqual(lastBody.model, 'claude-haiku-4-5'); assert.strictEqual(lastBody.max_tokens, 600);
   });
-  console.log(`\n${ok}/6 casos OK`);
+  await caso('los 7 comprobantes reales del owner (Personal Pay con centavos arriba, Ualá con coma, foto girada)', async () => {
+    const reales = [ // [lo que se ve, pesos, centavos, monto correcto]
+      ['$281.142⁹⁹', '281142', '99', 281142.99], ['$ 281.142 99', '281142', '99', 281142.99], ['$447.116⁹⁹', '447116', '99', 447116.99],
+      ['$300.000⁹⁹', '300000', '99', 300000.99], ['$ 411.646,99', '411646', '99', 411646.99], ['$ 379.895⁴⁰', '379895', '40', 379895.40],
+      ['$309.963⁹⁹', '309963', '99', 309963.99], ['$500.000⁹⁹', '500000', '99', 500000.99]];
+    for (const [txt, p, c, want] of reales) {
+      assert.strictEqual(A.parseArAmount(txt), want, 'texto ' + txt);
+      for (const num of [want, Number(p.slice(0, -3) + '.' + p.slice(-3)), null]) { // la IA puede devolver el número bien, con el punto de miles como decimal, o nada
+        reply = { es_comprobante: true, monto: num, monto_texto: txt, monto_pesos: p, monto_centavos: c };
+        const r = await A.analyzeComprobante(img); assert.ok(r.amount === want && !r.amountConflict, txt + ' / ' + num + ' ⇒ ' + JSON.stringify([r.amount, r.amountConflict]));
+      }
+      reply = { es_comprobante: true, monto: Number(p.slice(1)) + Number(c) / 100, monto_texto: txt, monto_pesos: p.slice(1), monto_centavos: c }; // dígito perdido en el número y en los pesos
+      const r = await A.analyzeComprobante(img); assert.ok(r.amountConflict, 'dígito perdido ⇒ duda: ' + txt);
+    }
+  });
+  console.log(`\n${ok}/7 casos OK`);
 })();
