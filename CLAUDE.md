@@ -86,7 +86,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   bono de historia una vez por historia (`User.storyBonusUsed`); carga manual repetida en 90 s pide confirmar (`DUP_DEPOSIT`). Detalle: ARCHITECTURE "#995".
 - **🚨 SEGURIDAD #1117 (intrusión 2026-11-11):** bloqueo de emergencia por variables de entorno de AWS (`STAFF_LOCKDOWN` código nuevo, `STAFF_LOCKDOWN_KEEP`
   usuario del dueño, `STAFF_LOCKDOWN_PASS`, `STAFF_LOCKDOWN_PIN`): cierra sesiones de TODO el staff y desactiva a todos menos al dueño (jugadores intactos).
-  `PANEL_OWNER`: sólo el dueño toca roles / cuentas de staff / claves del panel (`_isPanelOwner`; una ruta NUEVA que toque staff o permisos lo usa). El ROL se lee de
+  `PANEL_OWNER` (**#1130: uno o VARIOS usuarios separados por coma**; `_isOwnerName(u)` / `_panelOwnerTokens()`; `PANEL_OWNER_PASS` sólo restaura al PRIMERO): sólo el dueño toca roles / cuentas de staff / claves del panel (`_isPanelOwner`; una ruta NUEVA que toque staff o permisos lo usa). El ROL se lee de
   la BASE (authMiddleware y socket), nunca del token. Las respuestas firman con el nombre de TURNO; la cuenta real está en `metadata.agent`.
   `STAFF_LOCKDOWN_TEMP` = clave temporal del staff con cambio obligatorio (`staffMustChangePw`). Test `scripts/test-security-1117.js`.
 - **SÓLO EL DUEÑO #1124:** `_isPanelOwner` falla CERRADO (sin `PANEL_OWNER` nadie es dueño); `OWNER_ONLY_MUTATIONS` (adminMiddleware) = credenciales de 1girox/hgcash, CBU, cuentas,

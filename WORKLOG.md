@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1129)
+> **Última actualización: 2026-11-12** (#1130)
 
 ## Sesión 2026-11-09
 
@@ -14771,3 +14771,12 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   `test-rcptbot` 5/5; `test-server-boot` OK. **Necesita deploy EB.**
   PROBAR después de subir: panel → Bot de comprobantes → estructura → tarjeta del grupo 2 → elegir modo/margen → 💾 Guardar; en el grupo 1 escribir "Cierre de
   día!" ⇒ 🔒 CIERRE en los dos grupos y el 2 dice PENDIENTE A COTIZAR; en el grupo 2 escribir "1647" ⇒ la cuenta con el −2,5 %; mandar una foto ⇒ ✅ ENVIADO.
+
+## #1130 — 2026-11-12 · `PANEL_OWNER` con VARIOS dueños (el owner puso dos y "dejaron de funcionar los 2")
+- Causa: `_panelOwner()` tomaba la variable entera como UN nombre ("fabio,juan"); ninguno coincidía ⇒ los dos perdieron 👑 Staff, 🛡️ Seguridad y todo lo de
+  "sólo el dueño". El guardián #1119 no corrió (el nombre con coma no pasa su validación), así que no tocó claves ni creó cuentas raras.
+- Ahora `PANEL_OWNER` acepta varios usuarios separados por coma (o espacio / punto y coma), hasta 10. Todos son dueños (`_isPanelOwner`, `isPanelOwner` del
+  login, protección en /admnuevo). El guardián repasa a cada uno (admin, activo, desbloqueado); `PANEL_OWNER_PASS` restaura la clave SÓLO del PRIMERO (y lo crea si
+  no existe); los demás manejan su clave desde el panel. 👑 Staff muestra los dueños. El lockdown #1117 sigue con un solo `STAFF_LOCKDOWN_KEEP`.
+- Verificado: `node --check`, `test-server-boot` OK, `test-security-1117` 8/14 (igual que antes). **Necesita deploy EB** (ya está en `fabio.zip`). En SSM:
+  `PANEL_OWNER = usuario1,usuario2` (sin espacios raros; el primero es el principal de `PANEL_OWNER_PASS`).

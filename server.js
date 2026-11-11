@@ -1557,7 +1557,7 @@ app.post('/api/admnuevo/:action', async (req, res) => {
       await _rescueLog(req, 'crear', { username, role }); return res.json({ success: true, id: nu.id });
     }
     const t = await staffById();
-    if (['off', 'del', 'role'].includes(action) && _panelOwner() && String(t.username).toLowerCase() === _panelOwner()) return res.status(403).json({ error: 'Es la cuenta del dueño (PANEL_OWNER): no se bloquea, borra ni cambia de rol.' }); // #1119
+    if (['off', 'del', 'role'].includes(action) && _isOwnerName(t.username)) return res.status(403).json({ error: 'Es la cuenta del dueño (PANEL_OWNER): no se bloquea, borra ni cambia de rol.' }); // #1119
     if (action === 'kick') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 } }); await _rescueLog(req, 'cerrar_sesion', { username: t.username }); return res.json({ success: true }); }
     if (action === 'off') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: { isActive: false, isBlocked: true, blockReason: 'Bloqueado desde rescate', fcmTokens: [], fcmToken: null } }); await _rescueLog(req, 'bloquear', { username: t.username }); return res.json({ success: true }); }
     if (action === 'on') { await User.updateOne({ id: t.id }, { $set: { isActive: true, isBlocked: false, blockReason: null } }); await _rescueLog(req, 'activar', { username: t.username }); return res.json({ success: true }); }
@@ -6750,7 +6750,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       // POST /api/platform/session, que pide un link de un solo uso en el momento.
       user: {
         staffMustChangePw: userObj.role !== 'user' && !!(((await User.findOne({ id: userId }).select('staffMustChangePw').lean()) || {}).staffMustChangePw), // #1117
-        isPanelOwner: !!(_panelOwner() && userObj.role === 'admin' && String(userObj.username || '').toLowerCase() === _panelOwner()), // #1120
+        isPanelOwner: !!(userObj.role === 'admin' && _isOwnerName(userObj.username)), // #1120 · #1130: varios dueños
         id: userId,
         username: userObj.username,
         email: userObj.email,
@@ -6939,7 +6939,7 @@ app.get('/api/admin/me', async (req, res) => {
         role: user.role,
         balance: user.balance,
         staffMustChangePw: user.role !== 'user' && user.staffMustChangePw === true, // #1117
-        isPanelOwner: !!(_panelOwner() && user.role === 'admin' && String(user.username || '').toLowerCase() === _panelOwner()), // #1120
+        isPanelOwner: !!(user.role === 'admin' && _isOwnerName(user.username)), // #1120 · #1130: varios dueños
         needsPasswordChange: !user.passwordChangedAt,
         // Sólo se llena para role='publisher_admin'. El front lo usa para mostrar
         // qué publicista(s) representa la cuenta y para filtrar el mini-dashboard.
@@ -8817,9 +8817,13 @@ app.post('/api/messages/welcome', authMiddleware, async (req, res) => {
 // #1117 (owner tras la intrusión: "en usuarios limitá el acceso para poder ajustar permisos"): DUEÑO DEL PANEL = variable de entorno PANEL_OWNER (o
 // STAFF_LOCKDOWN_KEEP). Sólo él cambia roles/permisos, crea o borra cuentas de staff, les cambia clave/teléfono/estado y cambia las claves del panel.
 // Sin la variable, como antes (cualquier admin general).
-function _panelOwner() { return String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP || '').trim().toLowerCase(); }
+// #1130: PANEL_OWNER acepta VARIOS usuarios separados por coma (también espacio o punto y coma). _panelOwner() = el principal (para mostrar / compatibilidad);
+// _panelOwnerTokens() = todos tal como están escritos; _isOwnerName(u) = ¿es uno de los dueños? (sin distinguir mayúsculas).
+function _panelOwnerTokens() { return String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean).slice(0, 10); }
+function _panelOwner() { return String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP || '').split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean)[0] || ''; }
+function _isOwnerName(username) { const u = String(username || '').trim().toLowerCase(); return !!u && String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP || '').split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean).includes(u); }
 // revisión #1124: SIN PANEL_OWNER nadie es dueño (antes cualquier admin lo era; el Render que comparte la base no tiene la variable ⇒ ahí cualquier admin tocaba staff).
-function _isPanelOwner(req) { const o = _panelOwner(); return !!o && !!(req.user && req.user.role === 'admin' && String(req.user.username || '').toLowerCase() === o); }
+function _isPanelOwner(req) { const os = String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP || '').split(/[\s,;]+/).map((x) => x.trim().toLowerCase()).filter(Boolean); return !!os.length && !!(req.user && req.user.role === 'admin' && os.includes(String(req.user.username || '').toLowerCase())); } // #1130: varios dueños
 // #1120 (owner): sección "👑 Staff" del panel, SÓLO para el dueño (PANEL_OWNER configurado en AWS). Misma lógica que /admnuevo pero con la sesión del panel.
 // Sin PANEL_OWNER en AWS no abre para nadie (si no, cualquier admin sería "dueño"). El dueño no se puede tocar a sí mismo (rol/bloqueo/borrar).
 // #1121 (owner): además pide la clave de la sección (`STAFF_SECTION_PIN`, SÓLO en AWS: el repo es público). 6 fallos = 15 min trabada.
@@ -8836,7 +8840,7 @@ function _ownerOnly(req, res, next) {
 }
 app.get('/api/admin/owner/staff', authMiddleware, _ownerOnly, async (req, res) => {
   try { const staff = await User.find({ role: { $in: ADMIN_ROLES } }).select('id username role isActive isBlocked lastLogin staffMustChangePw').sort({ role: 1, username: 1 }).lean();
-    res.json({ owner: _panelOwner(), staff }); } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ owner: _panelOwnerTokens().map((x) => x.toLowerCase()).join(', '), owners: _panelOwnerTokens().map((x) => x.toLowerCase()), staff }); } catch (e) { res.status(500).json({ error: e.message }); } // #1130
 });
 app.post('/api/admin/owner/staff/:action', authMiddleware, _ownerOnly, async (req, res) => {
   const action = String(req.params.action || ''); const b = req.body || {}; const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad', 'publisher_admin'];
@@ -14387,27 +14391,34 @@ async function initializeData() {
   // #1119 (owner: "el admin principal configurado en AWS que siempre tenga acceso"): al arrancar y cada 2 min, la cuenta de PANEL_OWNER queda SIEMPRE admin,
   // activa, desbloqueada y sin clave temporal; con PANEL_OWNER_PASS (10+, sólo en AWS) su clave vuelve a ser ésa si alguien se la cambió (y se cierran
   // las sesiones que la tenían). Nadie más que el dueño puede tocarlo desde el panel (_isPanelOwner); esto deshace lo que se haga por fuera (base, Render).
+  // #1130 (owner puso DOS usuarios en PANEL_OWNER y "dejaron de funcionar los 2"): ahora PANEL_OWNER acepta VARIOS separados por coma (o espacio / punto y coma).
+  // Todos son dueños del panel (_isPanelOwner). El guardián repasa a cada uno; PANEL_OWNER_PASS restaura la clave SÓLO del PRIMERO (es "la clave de AWS del
+  // dueño principal"; los demás manejan la suya desde el panel) y, si el primero no existe, lo crea.
   { let _ogBusy = false; const _ownerGuardTick = async () => {
       if (_ogBusy) return; _ogBusy = true;
       try {
-        const o = _panelOwner(); if (!o || !/^[a-z0-9._-]{3,40}$/.test(o)) return;
-        const u = await User.findOne({ username: new RegExp('^' + o.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id username role isActive isBlocked staffMustChangePw password').lean();
-        const pass = String(process.env.PANEL_OWNER_PASS || '');
-        if (!u) {
-          if (pass.length >= 10) { await User.create({ id: uuidv4(), username: String(process.env.PANEL_OWNER || process.env.STAFF_LOCKDOWN_KEEP).trim(), password: pass, role: 'admin', accountNumber: generateAccountNumber(), balance: 0, isActive: true, isBlocked: false, phoneVerified: false, phoneVerificationPending: false, referralCode: generateReferralCode(), acquisitionSource: 'manual', createdAt: new Date() }); console.warn('🚨 [owner-guard #1119] cuenta del dueño CREADA: ' + o); }
-          return;
+        const toks = _panelOwnerTokens(); const pass0 = String(process.env.PANEL_OWNER_PASS || '');
+        for (let i = 0; i < toks.length; i++) {
+          const raw = toks[i]; const o = raw.toLowerCase(); if (!/^[a-z0-9._-]{3,40}$/.test(o)) { console.warn('[owner-guard #1119] PANEL_OWNER inválido: "' + raw + '" (sólo letras, números . _ -; varios separados por coma)'); continue; }
+          const pass = i === 0 ? pass0 : '';
+          const u = await User.findOne({ username: new RegExp('^' + o.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id username role isActive isBlocked staffMustChangePw password').lean();
+          if (!u) {
+            if (pass.length >= 10) { await User.create({ id: uuidv4(), username: raw, password: pass, role: 'admin', accountNumber: generateAccountNumber(), balance: 0, isActive: true, isBlocked: false, phoneVerified: false, phoneVerificationPending: false, referralCode: generateReferralCode(), createdAt: new Date(), lastLogin: null }); console.warn('🚨 [owner-guard #1119] cuenta del dueño CREADA: ' + raw); }
+            else console.warn('[owner-guard #1119] la cuenta del dueño "' + raw + '" no existe' + (i === 0 ? ' (con PANEL_OWNER_PASS de 10+ se crea sola)' : ' (creala desde 👑 Staff con el dueño principal)'));
+            continue;
+          }
+          const set = {}; const fixed = [];
+          if (u.role !== 'admin') { set.role = 'admin'; fixed.push('rol ' + u.role + '→admin'); }
+          if (u.isActive === false) { set.isActive = true; fixed.push('activada'); }
+          if (u.isBlocked === true) { set.isBlocked = false; set.blockReason = null; fixed.push('desbloqueada'); }
+          if (u.staffMustChangePw === true && pass.length >= 10) { set.staffMustChangePw = false; fixed.push('sin clave temporal'); }
+          let inc = null;
+          if (pass.length >= 10 && !(await bcrypt.compare(pass, String(u.password || '')))) { set.password = await bcrypt.hash(pass, 12); set.passwordChangedAt = new Date(); set.mustChangePassword = false; set.staffMustChangePw = false; inc = { tokenVersion: 1 }; fixed.push('clave restaurada a la de AWS'); }
+          if (!fixed.length) continue;
+          await User.updateOne({ id: u.id }, Object.assign({ $set: set }, inc ? { $inc: inc } : {}));
+          console.warn('🚨 [owner-guard #1119] ' + u.username + ': ' + fixed.join(', '));
+          try { const l = (await getConfig('ownerGuardLog', null)) || []; l.unshift({ at: new Date().toISOString(), user: u.username, fixed }); await Config.set('ownerGuardLog', l.slice(0, 200), 'owner-guard#1119'); } catch (_) {}
         }
-        const set = {}; const fixed = [];
-        if (u.role !== 'admin') { set.role = 'admin'; fixed.push('rol ' + u.role + '→admin'); }
-        if (u.isActive === false) { set.isActive = true; fixed.push('activada'); }
-        if (u.isBlocked === true) { set.isBlocked = false; set.blockReason = null; fixed.push('desbloqueada'); }
-        if (u.staffMustChangePw === true && pass.length >= 10) { set.staffMustChangePw = false; fixed.push('sin clave temporal'); }
-        let inc = null;
-        if (pass.length >= 10 && !(await bcrypt.compare(pass, String(u.password || '')))) { set.password = await bcrypt.hash(pass, 12); set.passwordChangedAt = new Date(); set.mustChangePassword = false; set.staffMustChangePw = false; inc = { tokenVersion: 1 }; fixed.push('clave restaurada a la de AWS'); }
-        if (!fixed.length) return;
-        await User.updateOne({ id: u.id }, Object.assign({ $set: set }, inc ? { $inc: inc } : {}));
-        console.warn('🚨 [owner-guard #1119] ' + u.username + ': ' + fixed.join(', '));
-        try { const l = (await getConfig('ownerGuardLog', null)) || []; l.unshift({ at: new Date().toISOString(), fixed }); await Config.set('ownerGuardLog', l.slice(0, 200), 'owner-guard#1119'); } catch (_) {}
       } catch (e) { console.error('[owner-guard #1119] ' + e.message); } finally { _ogBusy = false; }
     };
     await _ownerGuardTick(); setInterval(_ownerGuardTick, 2 * 60 * 1000);
