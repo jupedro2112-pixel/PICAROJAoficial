@@ -33075,7 +33075,7 @@ setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('
 // 13:00 en punto (lo que llega después es del cierre siguiente). Una vez por estructura/día (_rbOnce). Grupo 1: sumas · grupo 2: pendiente a cotizar.
 async function _rbDailyCloseTick() {
   const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
-  if (await _rbFlag('noautoclose1129')) { // #1129 (owner: "que el cierre no sea automático más de cada grupo"): UNA vez, todo a cierre A MANO (la frase "Cierre de día!"); desde el panel se puede volver a encender
+  if ((await Config.collection.updateOne({ key: 'rcptbot', 'value.noAutoClose1129': { $ne: true } }, { $set: { 'value.noAutoClose1129': true } })).modifiedCount === 1) { // marca permanente (no _rbFlag: esa lista guarda 400 y se cae) // #1129 (owner: "que el cierre no sea automático más de cada grupo"): UNA vez, todo a cierre A MANO (la frase "Cierre de día!"); desde el panel se puede volver a encender
     const d = (await Config.collection.findOne({ key: 'rcptbot' })) || {}; const sts = ((d.value || {}).structs || []); const set = {};
     sts.forEach((st, i) => { if (st && st.dailyClose) set[`value.structs.${i}.dailyClose`] = ''; for (const to of Object.keys((st && st.destCfg) || {})) if (st.destCfg[to] && st.destCfg[to].close) set[`value.structs.${i}.destCfg.${to}.close`] = ''; });
     if (Object.keys(set).length) { await Config.collection.updateOne({ key: 'rcptbot' }, { $set: set }); _rbMem.at = 0; logger.info('[rcptbot] #1129: cierres automáticos apagados (' + Object.keys(set).length + ')'); }
