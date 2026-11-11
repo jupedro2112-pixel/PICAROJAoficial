@@ -14655,3 +14655,9 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Las rutas `/api/admin/owner/staff*` (#1120) estaban ANTES de `const authMiddleware` ⇒ "Cannot access 'authMiddleware' before initialization" al cargar
   server.js. Se movieron después de `_isPanelOwner`. **Trampa:** una ruta nueva con `authMiddleware` va DESPUÉS de su definición (~L4555); antes sólo rutas
   sin middleware de sesión. Verificación nueva: cargar server.js con módulos simulados (scratchpad `boot.js`) además de `node --check`.
+
+## #1123 — 2026-11-11 · Chat de la burbuja de Girox más chico y con la barra de abajo estilo WhatsApp (app v719)
+- Owner: "el chat quedó muy grande; que siempre salga de la burbuja; la parte de abajo siempre estilo WhatsApp, salvo la fila de Agustina en negro;
+  el recuadro de los datos más chico y el chat más chico así se ve la página de fondo". pin.css (bloque #1123, al final): burbuja 400×620 ⇒ 360×530;
+  barra de escribir con fondo del chat, caja blanca redonda, enviar verde (la cabecera negra de #1092 queda); `#spBankMsg` más chico.
+  home.js `casinoSupport`: con el chat nuevo y el casino abierto, Soporte abre la BURBUJA (ya no sale del casino a pantalla completa).

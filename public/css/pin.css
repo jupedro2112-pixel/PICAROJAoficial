@@ -3443,3 +3443,27 @@ html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino .sp-ticker {
 .toast { top: calc(var(--sat, env(safe-area-inset-top, 0px)) + 8px) !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important;
   max-width: calc(100vw - 32px); width: max-content; text-align: center; z-index: 100010 !important; animation: vipToastIn .25s ease !important; }
 @keyframes vipToastIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── #1123 (owner: "el chat quedó muy grande; que siempre salga de la burbuja; la parte de abajo siempre estilo WhatsApp, salvo la fila de Agustina
+   en negro que está bien; el recuadro de los datos más chico y el chat completo más chico así se ve la página de fondo"). Sólo la burbuja de Girox. */
+#casinoOverlay > #supportPanel.sp-in-casino { width: min(360px, calc(100vw - 28px)) !important; height: min(530px, calc(100vh - 175px - var(--sat, 0px))) !important; }
+@supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: min(530px, calc(100dvh - 175px - var(--sat, 0px))) !important; } }
+/* barra de escribir: estilo WhatsApp (fondo del chat, caja blanca redonda, enviar verde, iconos grises) — la cabecera sigue negra (#1092) */
+#casinoOverlay > #supportPanel.sp-in-casino .chat-input-container, body.home-mini:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .chat-input-container {
+  background: var(--p-wa-bg) !important; border-top: 0 !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .chat-input-container .wa-icon-btn { color: var(--p-wa-time) !important; background: transparent !important; }
+#casinoOverlay > #supportPanel.sp-in-casino #messageInput { background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border: 0 !important; border-radius: 22px !important;
+  box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; }
+#casinoOverlay > #supportPanel.sp-in-casino .send-btn { background: var(--p-wa-out) !important; color: #fff !important; border-radius: 50% !important; }
+/* recuadro de los datos (titular / alias / CBU / bono) más chico */
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sp-bankmsg { width: 84% !important; max-width: 270px !important; font-size: 11.5px !important; border-radius: 12px !important; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-bonus { margin: 6px 8px 0; padding: 4px 7px; font-size: 11px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-head { padding: 6px 10px 5px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-head b { font-size: 12.5px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-head small { font-size: 10px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-r { padding: 4px 8px 4px 10px; gap: 6px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-kv small { font-size: 8.5px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-kv code { font-size: 11.5px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-cp { padding: 5px 9px; font-size: 11px; border-radius: 8px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-foot { margin: 0 10px; padding: 4px 0; font-size: 10.5px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-attach { margin: 2px 8px 8px; padding: 7px 10px; font-size: 12px; border-radius: 9px; }

@@ -2638,6 +2638,7 @@
     function casinoSupport() {
         // #1042-r: con sólo Girox (todo en uno) no se sale del casino: Soporte abre el chat nuevo adentro (clásico ⇒ Carga rápida, como la burbuja).
         if (_onlyGirox()) { if (document.body.classList.contains('sp-classic')) { toggleCasinoLoad(true); return; } if (!_spCasino) _supportIntoCasino(); return; }
+        if (!document.body.classList.contains('sp-classic') && _casinoIsOpen()) { if (!_spCasino) _supportIntoCasino(); return; } // #1123 (owner): "que siempre salga de la burbuja" (no sale del casino a pantalla completa)
         try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80);
     }
     function _onlyGirox() { return _menuOn('girox') && MENU_ORDER.filter(_menuOn).length === 1 && _casinoIsOpen(); }
