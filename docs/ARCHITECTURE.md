@@ -2064,6 +2064,7 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
   todos los que le mandan). En el grupo 2 un mensaje que es SÓLO el precio del USDT (100–100000, `_rbDstFee` = feePct) cotiza lo pendiente: `_rbQuote` muestra
   fecha · pendiente · − margen % = total · total / precio = USDT (entero hacia abajo) · "foto por ese monto exacto"; una FOTO con algo `quoted` va directo a
   `_rbSentPhoto` (sin responder al bot). Los comandos y botones viejos siguen funcionando. Estado nuevo `done` en las listas de estados vivos (reset, /restart).
+- **Retiro con bono pendiente #1133:** retirar en 1girox cancela el bono con rollover pendiente; el modal de retiro (`_paintRollover` / `handleWithdrawSubmit`) lo avisa y pide confirmar. Un cambio en los ítems de `_rolloverSummary` tiene que conservar `kind:'bonus'`.
 - **Bot de comprobantes #1132 (🛑 Borrar todo y apagar):** `Config['rcptbot'].paused` = interruptor GENERAL. Todo camino nuevo del bot (webhook, tick, envío
   automático) tiene que salir con `c.paused` (hoy: webhook salvo my_chat_member, los 7 ticks y la bienvenida al prender una estructura). `wipe-off` apaga además
   todas las estructuras y corre `_rbCleanRun` (48 h, cuentas a $0, sin presentación); `resume` sólo saca el interruptor.

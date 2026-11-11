@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1132)
+> **Última actualización: 2026-11-12** (#1133)
 
 ## Sesión 2026-11-09
 
@@ -14799,4 +14799,11 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - **▶️ Volver a encender** (`POST /api/admin/rcptbot/resume`) saca el interruptor; las estructuras siguen apagadas para prenderlas de a una.
 - Tests: `test-rcptbot-flow` 52 (caso nuevo del bot apagado), `test-rcptbot` 5/5, `test-server-boot` OK. **Necesita deploy EB.**
   PROBAR: tocar 🛑 ⇒ cartel "⏸️ BOT APAGADO" con el avance; en los grupos desaparecen los mensajes de los bots de las últimas 48 h; una foto nueva no se suma.
+
+## #1133 — 2026-11-12 · Retiro: aviso de que el BONO con rollover pendiente se pierde al retirar — app v722
+- Reclamo de un cliente (captura del owner): con carga $10.000 ×1 ya cumplida + bono $10.000 ×5 pendiente, la app deja retirar $20.000 y al pagarse 1girox
+  CANCELA el bono pendiente, sin avisar. Owner: "¿podés solucionar eso?".
+- `public/js/withdraw.js` `_paintRollover`: si hay ítems `kind:'bonus'` con rollover pendiente, cartel rojo bajo "Qué te falta para liberar el resto":
+  "si retirás tu saldo disponible, el bono … se cancela y lo perdés". Al tocar Continuar, `confirm` con el monto del bono (cancelar = no retira).
+- No se cambió el cálculo de lo retirable ni el servidor. Es comportamiento de 1girox (según lo informado por el cliente; no figura en la doc de la Partner API).
 

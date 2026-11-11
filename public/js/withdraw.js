@@ -133,9 +133,10 @@ VIP.withdraw = (function () {
 
     // #881: detalle del rollover arriba del formulario: saldo total, cuánto es retirable, cuánto está bloqueado y cuánto falta apostar.
     let _rolloverShown = false;
+    let _bonusLost = 0; // #1133: bono con rollover pendiente que se pierde al retirar
     function _paintRollover(r) {
         // #884 (owner): "en retiro explicá bien cuánto tiene disponible para retirar, con detalle, que no se quejen todos a soporte".
-        _rolloverShown = false;
+        _rolloverShown = false; _bonusLost = 0;
         let box = _el('withdrawRollover');
         if (!box) { const anchor = _el('withdrawNoBalance'); if (!anchor || !anchor.parentNode) return; box = document.createElement('div'); box.id = 'withdrawRollover'; box.className = 'wd-roll'; anchor.parentNode.insertBefore(box, anchor); }
         if (!r) { box.style.display = 'none'; box.innerHTML = ''; return; }
@@ -146,6 +147,8 @@ VIP.withdraw = (function () {
             box.style.display = ''; return;
         }
         const items = (r.items || []).filter((x) => x.remaining > 0);
+        // #1133 (owner, reclamo de un cliente): retirar lo disponible CANCELA en 1girox el bono con rollover pendiente: avisarlo acá y pedir confirmación al retirar.
+        _bonusLost = items.filter((x) => x.kind === 'bonus').reduce((a, x) => a + (Number(x.locked) || 0), 0);
         const row = (x) => {
             const what = x.kind === 'bonus' ? '🎁 Bono' : x.kind === 'deposit' ? '💵 Carga' : '🎯 Objetivo';
             const mult = x.multiplier ? ' ×' + x.multiplier : '';
@@ -156,6 +159,7 @@ VIP.withdraw = (function () {
         box.innerHTML = '<div class="wd-roll-big' + (r.available >= wMin ? ' ok' : '') + '">Podés retirar hoy: <b>' + m(r.available) + '</b></div>'
             + '<div class="wd-roll-sum"><span>Saldo total <b>' + m(r.balance) + '</b></span><span>Todavía en juego <b>' + m(r.locked) + '</b></span></div>'
             + (items.length ? '<div class="wd-roll-h">Qué te falta para liberar el resto</div>' + items.map(row).join('') : '')
+            + (_bonusLost > 0 ? '<p class="wd-roll-lose">⚠️ <b>Ojo:</b> si retirás tu saldo disponible, el bono que todavía tiene rollover pendiente (<b>' + m(_bonusLost) + '</b>) <b>se cancela y lo perdés</b>. Si lo querés conservar, terminá de apostar el rollover antes de retirar.</p>' : '') // #1133
             + (r.available < wMin ? '<p class="wd-roll-p wd-roll-warn">El retiro mínimo es ' + m(wMin) + '. Cuando lo retirable llegue a ese monto vas a poder pedirlo desde acá.</p>' : '')
             + '<details class="wd-roll-faq"><summary>¿Por qué no puedo retirar todo mi saldo?</summary><ul>'
             + '<li><b>Cada carga</b> se juega ×' + _depX(r) + ' antes de retirarla y <b>cada bono o regalo</b> ×' + _bonX(r) + '. Es para que el servicio no se use para mover plata sin jugar.</li>'
@@ -247,6 +251,8 @@ VIP.withdraw = (function () {
             _showError('withdrawError', _rolloverShown ? `Hoy podés retirar hasta $${_balance.toLocaleString('es-AR')}: el resto es bono que todavía tiene rollover (arriba ves cuánto te falta apostar).` : `No podés retirar más que tu saldo disponible ($${_balance.toLocaleString('es-AR')}).`); // #881
             return;
         }
+
+        if (_bonusLost > 0 && !confirm('⚠️ Si retirás ahora, tu bono de $' + Math.round(_bonusLost).toLocaleString('es-AR') + ' que todavía tiene rollover pendiente SE CANCELA y lo perdés.\n\n¿Querés retirar igual?')) return; // #1133
 
         _pendingWithdraw = { titular, cbu, alias, amount, saveData };
 

@@ -2629,6 +2629,7 @@ html.sat-fixed.ios-notch #casinoTopBar { padding-top: var(--sat) !important; }
 .wd-roll-big { font: 800 15px var(--p-font); margin: 0 0 6px; } .wd-roll-big b { font-size: 19px; } .wd-roll-big.ok b { color: #16a34a; }
 .wd-roll-falta { color: var(--p-red, #e60023); white-space: nowrap; }
 .wd-roll-warn { color: var(--p-text); font-weight: 700; }
+.wd-roll-lose { margin: 8px 0 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--p-red, #e60023); color: var(--p-text); font-size: 12px; line-height: 1.35; } /* #1133 */
 .wd-roll-faq { margin-top: 8px; font-size: 12px; } .wd-roll-faq summary { cursor: pointer; font-weight: 800; color: var(--p-text); }
 .wd-roll-faq ul { margin: 6px 0 0; padding-left: 18px; color: var(--p-muted); } .wd-roll-faq li { margin: 3px 0; }
 
