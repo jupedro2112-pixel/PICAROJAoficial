@@ -14640,3 +14640,8 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - `_ownerGuardTick` (arranque + cada 2 min): la cuenta de `PANEL_OWNER` (o `STAFF_LOCKDOWN_KEEP`) vuelve a quedar admin, activa, desbloqueada y sin clave temporal;
   con `PANEL_OWNER_PASS` (10+, sólo en AWS) la clave vuelve a ésa si alguien se la cambió (cierra sesiones) y, si la cuenta no existe, la crea. Registro `Config['ownerGuardLog']`.
   /admnuevo no bloquea/borra/cambia de rol al dueño.
+
+## #1120 — 2026-11-11 · Sección "👑 Staff (dueño)" en el panel
+- Sólo la ve y la usa el dueño (`PANEL_OWNER` en AWS; `isPanelOwner` en login y `/api/admin/me`; rutas `/api/admin/owner/staff*` con `_ownerOnly`, sin PANEL_OWNER
+  no abre para nadie). Cambiar rol, SACAR el rol (pasa a 'user' desactivado), bloquear, activar, cerrar sesión, cambiar clave, borrar, crear y cerrar sesión de
+  todo el staff. El dueño no se toca a sí mismo. Registro `Config['ownerStaffLog']`. Panel v307.

@@ -1419,6 +1419,42 @@ app.post('/api/admnuevo/:action', async (req, res) => {
     return res.status(404).json({ error: 'Acción desconocida.' });
   } catch (e) { return res.status(e.code === 404 ? 404 : 500).json({ error: e.code === 404 ? e.message : 'Error: ' + e.message }); }
 });
+// #1120 (owner): sección "👑 Staff" del panel, SÓLO para el dueño (PANEL_OWNER configurado en AWS). Misma lógica que /admnuevo pero con la sesión del panel.
+// Sin PANEL_OWNER en AWS no abre para nadie (si no, cualquier admin sería "dueño"). El dueño no se puede tocar a sí mismo (rol/bloqueo/borrar).
+function _ownerOnly(req, res, next) { if (!_panelOwner() || !_isPanelOwner(req)) return res.status(403).json({ error: 'Sólo el dueño del panel (PANEL_OWNER en AWS).' }); next(); }
+app.get('/api/admin/owner/staff', authMiddleware, _ownerOnly, async (req, res) => {
+  try { const staff = await User.find({ role: { $in: ADMIN_ROLES } }).select('id username role isActive isBlocked lastLogin staffMustChangePw').sort({ role: 1, username: 1 }).lean();
+    res.json({ owner: _panelOwner(), staff }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/owner/staff/:action', authMiddleware, _ownerOnly, async (req, res) => {
+  const action = String(req.params.action || ''); const b = req.body || {}; const ROLES_OK = ['admin', 'depositor', 'withdrawer', 'comunidad', 'publisher_admin'];
+  const log = async (detail) => { try { const l = (await getConfig('ownerStaffLog', null)) || []; l.unshift(Object.assign({ at: new Date().toISOString(), by: req.user.username, action }, detail)); await Config.set('ownerStaffLog', l.slice(0, 300), 'owner#1120'); } catch (_) {} console.warn('👑 [owner #1120] ' + action + ' ' + JSON.stringify(detail)); };
+  try {
+    if (action === 'kick-all') { const r = await User.updateMany({ role: { $in: ADMIN_ROLES }, id: { $ne: req.user.userId } }, { $inc: { tokenVersion: 1 } }); await log({ n: r.modifiedCount }); return res.json({ success: true, n: r.modifiedCount || 0 }); }
+    if (action === 'create') {
+      const username = String(b.username || '').trim(); const role = String(b.role || ''); const pass = String(b.password || '');
+      if (!/^[A-Za-z0-9._-]{4,30}$/.test(username)) return res.status(400).json({ error: 'Usuario: 4 a 30 letras o números.' });
+      if (pass.length < 10) return res.status(400).json({ error: 'La clave tiene que tener 10 caracteres o más.' });
+      if (!ROLES_OK.includes(role)) return res.status(400).json({ error: 'Rol inválido.' });
+      if (await User.findOne({ username: new RegExp('^' + username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }).select('id').lean()) return res.status(409).json({ error: 'Ese usuario ya existe.' });
+      await User.create({ id: uuidv4(), username, password: pass, role, accountNumber: generateAccountNumber(), balance: 0, isActive: true, isBlocked: false, phoneVerified: false, phoneVerificationPending: false, referralCode: generateReferralCode(), acquisitionSource: 'manual', createdAt: new Date() });
+      await log({ username, role }); return res.json({ success: true });
+    }
+    const t = await User.findOne({ id: String(b.id || '') }).select('id username role').lean();
+    if (!t || !ADMIN_ROLES.includes(t.role)) return res.status(404).json({ error: 'Cuenta de staff no encontrada.' });
+    if (t.id === req.user.userId && action !== 'pw') return res.status(400).json({ error: 'Es tu propia cuenta.' });
+    if (action === 'role') { const r = String(b.role || ''); if (!ROLES_OK.includes(r) && r !== 'user') return res.status(400).json({ error: 'Rol inválido.' });
+      const set = { role: r }; if (r === 'user') { set.isActive = false; set.fcmTokens = []; set.fcmToken = null; } // sacarle el rol = deja de ser staff y no entra más
+      await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: set }); await log({ username: t.username, de: t.role, a: r }); return res.json({ success: true }); }
+    if (action === 'kick') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 } }); await log({ username: t.username }); return res.json({ success: true }); }
+    if (action === 'off') { await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: { isActive: false, isBlocked: true, blockReason: 'Bloqueado por el dueño', fcmTokens: [], fcmToken: null } }); await log({ username: t.username }); return res.json({ success: true }); }
+    if (action === 'on') { await User.updateOne({ id: t.id }, { $set: { isActive: true, isBlocked: false, blockReason: null } }); await log({ username: t.username }); return res.json({ success: true }); }
+    if (action === 'pw') { const np = String(b.password || ''); if (np.length < 10) return res.status(400).json({ error: 'La clave tiene que tener 10 caracteres o más.' });
+      await User.updateOne({ id: t.id }, { $inc: { tokenVersion: 1 }, $set: { password: await bcrypt.hash(np, 12), staffMustChangePw: false, mustChangePassword: false, passwordChangedAt: new Date() } }); await log({ username: t.username }); return res.json({ success: true }); }
+    if (action === 'del') { await User.deleteOne({ id: t.id, role: { $in: ADMIN_ROLES } }); await log({ username: t.username, role: t.role }); return res.json({ success: true }); }
+    res.status(404).json({ error: 'Acción desconocida.' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // #775: CASINO SIMULADO del entorno de prueba (Render). Es la única página propia que se puede embeber (frame-ancestors 'self'):
 // la abre el iframe de Girox directo cuando el SSO viene del simulador. En producción (API real) no se usa y responde 404.
 app.get('/casino-sim', (req, res) => {
@@ -6580,6 +6616,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       // POST /api/platform/session, que pide un link de un solo uso en el momento.
       user: {
         staffMustChangePw: userObj.role !== 'user' && !!(((await User.findOne({ id: userId }).select('staffMustChangePw').lean()) || {}).staffMustChangePw), // #1117
+        isPanelOwner: !!(_panelOwner() && userObj.role === 'admin' && String(userObj.username || '').toLowerCase() === _panelOwner()), // #1120
         id: userId,
         username: userObj.username,
         email: userObj.email,
@@ -6768,6 +6805,7 @@ app.get('/api/admin/me', async (req, res) => {
         role: user.role,
         balance: user.balance,
         staffMustChangePw: user.role !== 'user' && user.staffMustChangePw === true, // #1117
+        isPanelOwner: !!(_panelOwner() && user.role === 'admin' && String(user.username || '').toLowerCase() === _panelOwner()), // #1120
         needsPasswordChange: !user.passwordChangedAt,
         // Sólo se llena para role='publisher_admin'. El front lo usa para mostrar
         // qué publicista(s) representa la cuenta y para filtrar el mini-dashboard.

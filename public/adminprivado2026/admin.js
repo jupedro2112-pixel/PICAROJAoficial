@@ -671,6 +671,7 @@ function setupRoleBasedUI() {
         });
         try { document.querySelectorAll('.sidebar-nav details, .sidebar-nav .nav-legacy-wrap').forEach((d) => { if (!d.querySelector('.nav-item:not([style*="display: none"])')) d.style.display = 'none'; }); } catch (_) {}
     }
+    { const _os = document.getElementById('navOwnerStaff'); if (_os) _os.style.display = (currentAdmin && currentAdmin.isPanelOwner) ? '' : 'none'; } // #1120: sólo el dueño
     // Depositor y withdrawer pueden ver "Usuarios" pero NO pueden exportar CSV
     const usersNavItem = document.querySelector('.nav-item[data-section="users"]');
     if (usersNavItem) {
@@ -5068,6 +5069,7 @@ function switchSection(section) {
     // sección no se refrescaba en background, así que puede haber chats nuevos).
     if (section === 'chats') loadConversations(false);
     if (section === 'users') loadUsers(1);
+    if (section === 'ownerStaff') loadOwnerStaff(); // #1120
     if (section === 'transactions') {
         // La primera vez que se entra, el rango arranca en HOY (antes traía TODO
         // desde el inicio de los tiempos → se trababa). Después respeta el filtro
@@ -11573,6 +11575,51 @@ function _staffPwGate() {
     if (!document.getElementById('staffPwNote')) { const n = document.createElement('p'); n.id = 'staffPwNote'; n.style.cssText = 'margin:0 0 .75rem;font-size:13px;line-height:1.45'; n.innerHTML = 'Entraste con la <b>clave temporal</b>. En "Contraseña actual" poné la temporal y creá una <b>clave nueva</b> (mínimo 6 caracteres) que <b>sólo sepas vos</b>. Después volvés a entrar con la nueva.'; const b = m.querySelector('.modal-body'); if (b) b.insertBefore(n, b.firstChild); }
     return true;
 }
+// #1120: sección 👑 Staff (sólo el dueño, PANEL_OWNER en AWS). Rutas /api/admin/owner/staff*.
+const OS_ROL = { admin: 'Admin general', depositor: 'Agente de cargas', withdrawer: 'Agente de retiros', comunidad: 'Comunidad', publisher_admin: 'Publicista' };
+function _osEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => '&#' + c.charCodeAt(0) + ';'); }
+async function loadOwnerStaff() {
+    const box = document.getElementById('ownerStaffList'); if (!box) return;
+    try {
+        const r = await authFetch('/api/admin/owner/staff'); const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error');
+        const me = String((currentAdmin && currentAdmin.username) || '').toLowerCase();
+        box.innerHTML = (d.staff || []).map((u) => {
+            const mine = String(u.username).toLowerCase() === me;
+            const st = u.isBlocked ? '⛔ bloqueado' : (u.isActive === false ? '⏸️ desactivado' : '✅ activo');
+            const opts = Object.keys(OS_ROL).map((k) => '<option value="' + k + '"' + (k === u.role ? ' selected' : '') + '>' + OS_ROL[k] + '</option>').join('') + '<option value="user">❌ Sacarle el rol</option>';
+            return '<div style="border-top:1px solid var(--p-border,#ddd);padding:10px 0"><b>' + _osEsc(u.username) + '</b> ' + (mine ? '👑 (vos)' : '') + ' · ' + st + (u.staffMustChangePw ? ' · clave temporal' : '') +
+                '<div style="font-size:12px;opacity:.7">Último ingreso: ' + _osEsc(u.lastLogin ? new Date(u.lastLogin).toLocaleString('es-AR') : '—') + '</div>' +
+                '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">' +
+                (mine ? '' : '<select class="form-input" style="max-width:190px" onchange="ownerStaffAct(\'role\',\'' + _osEsc(u.id) + '\',{role:this.value})">' + opts + '</select>' +
+                    '<button class="btn-secondary" onclick="ownerStaffAct(\'kick\',\'' + _osEsc(u.id) + '\')">Cerrar sesión</button>' +
+                    ((u.isBlocked || u.isActive === false) ? '<button class="btn-primary" onclick="ownerStaffAct(\'on\',\'' + _osEsc(u.id) + '\')">Activar</button>' : '<button class="btn-danger" onclick="ownerStaffAct(\'off\',\'' + _osEsc(u.id) + '\')">Bloquear</button>')) +
+                '<button class="btn-secondary" onclick="ownerStaffAct(\'pw\',\'' + _osEsc(u.id) + '\')">Cambiar clave</button>' +
+                (mine ? '' : '<button class="btn-danger" onclick="ownerStaffAct(\'del\',\'' + _osEsc(u.id) + '\')">Borrar</button>') +
+                '</div></div>';
+        }).join('') || 'Sin cuentas de staff.';
+    } catch (e) { box.textContent = '❌ ' + e.message; }
+}
+async function ownerStaffAct(action, id, extra) {
+    const body = Object.assign({ id }, extra || {});
+    if (action === 'pw') { const p = prompt('Clave nueva (10 caracteres o más):'); if (!p) return; body.password = p; }
+    if (action === 'del' && !confirm('¿Borrar esta cuenta de staff?')) return;
+    if (action === 'kick-all' && !confirm('¿Cerrar la sesión de TODO el staff (menos la tuya)?')) return;
+    if (action === 'role' && body.role === 'user' && !confirm('¿Sacarle el rol? Deja de ser staff y no puede entrar más.')) { loadOwnerStaff(); return; }
+    try {
+        const r = await authFetch('/api/admin/owner/staff/' + action, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error');
+        showToast('✅ Listo' + (d.n != null ? ' (' + d.n + ')' : ''), 'success'); loadOwnerStaff();
+    } catch (e) { showToast('❌ ' + e.message, 'error'); loadOwnerStaff(); }
+}
+async function ownerStaffCreate() {
+    const u = document.getElementById('osNewUser'), p = document.getElementById('osNewPass'), ro = document.getElementById('osNewRole');
+    try {
+        const r = await authFetch('/api/admin/owner/staff/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.value.trim(), password: p.value, role: ro.value }) });
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error');
+        showToast('✅ Cuenta creada', 'success'); u.value = ''; p.value = ''; loadOwnerStaff();
+    } catch (e) { showToast('❌ ' + e.message, 'error'); }
+}
+window.loadOwnerStaff = loadOwnerStaff; window.ownerStaffAct = ownerStaffAct; window.ownerStaffCreate = ownerStaffCreate;
 function showChangeOwnPasswordModal() {
     document.getElementById('ownCurrentPassword').value = '';
     document.getElementById('ownNewPassword').value = '';
