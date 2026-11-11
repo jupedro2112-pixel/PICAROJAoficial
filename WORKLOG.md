@@ -30,6 +30,7 @@
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
 ### 1115. Bot de comprobantes: revisión antes de subir (2026-11-11)
+- Guías del bot al día: /restar sólo en ese grupo, aviso ⚠️ NO ESTOY SEGURO DEL MONTO y ✏️ MONTO CONFIRMADO A MANO.
 - Repaso del modelo vs lo que escribe el bot: ningún campo `required` queda vacío (#1114). IA de comprobantes con modelos 5.x: `max_tokens` 8000 y espera de 75 s
   (Opus piensa antes de contestar; con 4000/30 s podía cortarse y la foto quedaba "sin leer").
 - `_rbPlanRun`: al volver a aplicar el plan (versión nueva) se respeta la TERMINACIÓN vigente de cada destino (si la cambió /nuevocbu o el panel) en vez de

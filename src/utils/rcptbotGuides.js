@@ -72,6 +72,8 @@ No hace falta escribir nada: sólo mandar la foto.
    ✅ REENVIADO / SUMADO ... entró y se sumó. Muestra la suma y el total del mes.
    ⚠️ NO SE PUDO LEER ...... NO se sumó. Mandá una foto bien legible y se suma
                             (o respondé la foto con el monto con centavos).
+   ⚠️ NO ESTOY SEGURO ...... leí dos montos distintos: NO se sumó. Tocá el botón con el monto correcto
+                            (o respondé la foto con el monto con centavos).
    ❌ TERMINACIÓN MAL ...... los centavos no corresponden. NO se sumó.
                             Si el cliente se equivocó, tocá el botón y elegí; si el monto está mal,
                             respondé la foto con el monto correcto.
@@ -103,7 +105,7 @@ ${n[1]}) COMANDOS (o el botón 📋 Ver comandos)
    /cierre .............. cierra TODO lo sumado · /cierre 500.000 ... sólo ese monto
    /suma 13.686.199 ..... suma lo que venían acumulando antes del bot (SÓLO en la cuenta de este grupo;
                           lo nuevo que se reenvía sigue sumando normal)
-   /restar 50.000 ....... resta un monto
+   /restar 50.000 ....... resta un monto (SÓLO en la cuenta de este grupo; puede quedar a favor: −$X)
    /anular .............. respondiendo un comprobante: lo saca de la suma
    /cbu ................. a qué CBU transferir ahora (titular, CBU, alias, terminación)
    /ayuda ............... menú con botones · /guia ...... esta guía
@@ -123,6 +125,7 @@ function dst(ctx = {}) {
 Los comprobantes que corresponden a este grupo, todos en UNA SOLA CUENTA (no importa de qué grupo vengan).
 Cada uno trae el monto y la suma. Además pueden llegar:
    ✏️ MONTO CORREGIDO ..... el que envió corrigió el monto o el decimal (dice qué decía la foto y quién corrigió)
+   ✏️ MONTO CONFIRMADO A MANO ... la lectura dudaba entre dos montos y el que envió eligió el correcto
    ❌ ANULADO · MONTO CORREGIDO ... no era de este grupo: se descontó de la suma
    ⚠️ "se equivocó con el decimal, pero va a este grupo" (lo eligieron a mano)
    🗑️ ANULADO · ➖ RESTADO · 📥 sumado lo anterior
@@ -143,7 +146,7 @@ CBU DE BAJADA (la cuenta a la que transfieren)
 CORRECCIONES
    /anular .............. respondiendo un comprobante reenviado: lo saca de la suma
    /restar 50.000 ....... resta un monto · /suma 13.686.199 ... suma lo que había antes del bot
-                          (SÓLO en la cuenta de este grupo; entra en su próximo cierre)
+                          (los dos SÓLO en la cuenta de este grupo; entran en su próximo cierre)
 
 OTROS
    /total ............... suma actualizada y pendientes
