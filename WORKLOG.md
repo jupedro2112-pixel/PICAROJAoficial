@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1126)
+> **Última actualización: 2026-11-12** (#1127)
 
 ## Sesión 2026-11-09
 
@@ -14736,3 +14736,16 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Cómo se crea: 👑 Staff (sólo el dueño) → nuevo con rol "Cajero", o cambiarle el rol a un agente existente. También desde `/admnuevo`.
 - Verificado: `node --check` de los 10 archivos tocados, `test-server-boot` OK, `test-vip-exports` OK, `test-security-1053` 9/9, `test-loss-fixes-1090` 13/13,
   `test-security-1117` 8/14 (igual que antes: las fallas son del test desactualizado tras #1124). **Necesita deploy EB.**
+
+## #1127 — 2026-11-12 · Bot de comprobantes: `/restart` en cada grupo (limpiar todo lo viejo del bot)
+- Pedido del owner (cambió de grupo y quiere repasar que todo ande): "en cada grupo poner /restart y poder limpiar todo lo viejo del bot".
+- Nuevo comando `/restart` en cualquier grupo que esté en una estructura (el que manda o el destino). Hace lo mismo que "Empezar de cero" del panel (#1110)
+  pero SÓLO para ese grupo: borra lo que escribió cada bot ahí en las últimas 48 h (límite de Telegram; lo de la gente no se toca), desfija lo del bot, archiva la
+  cuenta del grupo (comprobantes sumados y cierres pendientes ⇒ `reset`, fuera de toda suma; arrastre de fichas a 0) y vuelve a mandar la presentación + la guía.
+  Como la cuenta es compartida entre el grupo que manda y su destino, el aviso lo dice: también se archiva lo del par.
+- Sólo lo puede usar un ADMINISTRADOR del grupo (Telegram `getChatMember`; el admin anónimo también) y pide confirmar: `/restart` explica qué va a hacer y hay
+  que escribir `/restart si`. Corre en segundo plano con candado por grupo (15 min) y al final deja "✅ GRUPO REINICIADO" con los números. Registro en
+  `Config['rcptbotrestarts']`. Aparece en `/ayuda`, en el menú de comandos de los dos tipos de grupo y en `/guia`.
+- Verificado: `node --check` de server.js y rcptbotGuides.js, `test-server-boot` OK, `test-rcptbot` 5/5, `test-rcptbot-flow` 51 casos OK. **Necesita deploy EB.**
+  PROBAR después de subir: en un grupo escribir `/restart` (tiene que explicar y pedir `/restart si`), luego `/restart si`: desaparecen los mensajes del bot
+  de las últimas 48 h, llega "✅ GRUPO REINICIADO" y la presentación nueva; `/total` da $0. Un miembro que no es admin recibe "🔒 sólo un administrador".

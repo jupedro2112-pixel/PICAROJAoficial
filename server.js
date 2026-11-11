@@ -32687,7 +32687,7 @@ function _rbPickKb(c, route, recId, exceptTo) {
 // suma actualizada, todo el detalle"). Menú = mensaje fijado con botones 'rbm:<acción>' (cierre / cotizado / enviado piden confirmar).
 const _RB_CIRCUITO = '🔁 <b>CÓMO SIGUE</b>: comprobantes → se suman → <b>CIERRE</b> (lo da el grupo que manda cuando completa el monto: /cierre o el botón) → ⏳ PENDIENTE A COTIZAR → el destino marca 💱 COTIZADO → 📤 PENDIENTE A ENVIAR → el destino marca ✅ ENVIADO → listo. Después del cierre la suma arranca de $0; el total del mes sigue hasta fin de mes.';
 function _rbSrcCmdsTxt() {
-  return '\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y el total del mes\n🔒 /cierre — dar el cierre del TOTAL (la suma vuelve a $0)\n🔒 /cierre 500.000 — cerrar SÓLO ese monto: queda anotado y el resto sigue sumando\n📥 /suma 13.686.199 — sumar lo que venían acumulando ANTES del bot (queda SÓLO en este grupo; lo nuevo sigue sumando normal)\n🏦 /cbu — ver a qué CBU transferir ahora (titular, CBU, alias y terminación)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado o reenviado)\n🗑️ /anular — respondiendo un comprobante: lo saca de la suma (avisa en los dos grupos)\n🚫 Comprobante DUPLICADO: el bot avisa y NO lo suma (si es otro distinto, botón para sumarlo)\n✏️ Responder la foto con el monto — corregir un monto mal leído\n↪️ Botón "Me equivoqué: cambiar grupo" — mover un comprobante al grupo correcto\n❓ /ayuda — ver este menú de nuevo · 📘 /guia — la guía completa en archivo\n\n🔁 <b>CÓMO SIGUE</b>: los comprobantes se suman → cuando completen el monto, <b>/cierre</b> (o /cierre 500.000 para cerrar sólo ese monto) → la suma arranca de $0 (o sigue con el resto). Cotización y envío los maneja el otro grupo. El total del mes sigue hasta fin de mes.';
+  return '\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y el total del mes\n🔒 /cierre — dar el cierre del TOTAL (la suma vuelve a $0)\n🔒 /cierre 500.000 — cerrar SÓLO ese monto: queda anotado y el resto sigue sumando\n📥 /suma 13.686.199 — sumar lo que venían acumulando ANTES del bot (queda SÓLO en este grupo; lo nuevo sigue sumando normal)\n🏦 /cbu — ver a qué CBU transferir ahora (titular, CBU, alias y terminación)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado o reenviado)\n🗑️ /anular — respondiendo un comprobante: lo saca de la suma (avisa en los dos grupos)\n🧹 /restart — (administradores del grupo) borra lo viejo del bot, desfija, archiva la cuenta y arranca de $0\n🚫 Comprobante DUPLICADO: el bot avisa y NO lo suma (si es otro distinto, botón para sumarlo)\n✏️ Responder la foto con el monto — corregir un monto mal leído\n↪️ Botón "Me equivoqué: cambiar grupo" — mover un comprobante al grupo correcto\n❓ /ayuda — ver este menú de nuevo · 📘 /guia — la guía completa en archivo\n\n🔁 <b>CÓMO SIGUE</b>: los comprobantes se suman → cuando completen el monto, <b>/cierre</b> (o /cierre 500.000 para cerrar sólo ese monto) → la suma arranca de $0 (o sigue con el resto). Cotización y envío los maneja el otro grupo. El total del mes sigue hasta fin de mes.';
 }
 const _RB_CMDS_BTN = [{ text: '📋 Ver comandos', callback_data: 'rbm:help' }]; // #1079-k: en cada suma
 const _rbKb = (...rows) => ({ inline_keyboard: rows.filter(Boolean).concat([_RB_CMDS_BTN]) });
@@ -32713,7 +32713,7 @@ const _RB_DST_KB = { inline_keyboard: [[{ text: '📊 Ver suma y pendientes', ca
 function _rbDstRoutes(c, toChat, botId) { return (c.routes || []).filter((r) => (!botId || r.botId === botId) && _rbDests(c, r).some((d) => d.to === String(toChat))); }
 function _rbDstHelpTxt(c, toChat, routes) {
   const srcs = routes.map((r) => { const cs = (r.rules || []).filter((x) => String(x.to) === String(toChat)).map((x) => ',' + x.cents); return `• de ${_rbH(_rbTitle(c, r.from))}${cs.length ? ' (los que terminan en ' + _rbH(cs.join(' / ')) + ')' : ' (todo lo demás)'}`; }).join('\n');
-  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n💱 Cotizar (botón) o /cotizado 1150 2 — precio del USDT y comisión %: hace la cuenta (pesos ÷ precio − comisión = USDT a enviar) ⇒ PENDIENTE A ENVIAR\n✅ Enviado (botón) — respondés con la FOTO del envío de los USDT ⇒ VERIFICADO ENVIADO, sale de pendientes (sin foto: /enviado)\n📥 /suma 13.686.199 — sumar lo que había ANTES del bot (queda SÓLO en este grupo y entra en su próximo cierre)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n🔄 /nuevocbu — cambiar el CBU de bajada (te pide Titular, CBU, Alias y Terminación; con Desde/Hasta queda programado y cambia solo). Se avisa al grupo que manda.\n⛔ /parar — no hay CBU: avisa al grupo que manda que no transfiera hasta nuevo aviso\n🏦 /cbu — ver el CBU vigente y los programados\n❓ /ayuda — ver este menú de nuevo · 📗 /guia — la guía completa en archivo\n\n${_RB_CIRCUITO}`;
+  return `📌 <b>GRUPO DE DESTINO · ${_rbH(_rbTitle(c, toChat))}</b>\nAcá llegan los comprobantes reenviados:\n${srcs}\nCada uno trae el monto y la suma acumulada. Si el cliente se equivocó con los centavos, llega con el aviso ⚠️.\n\n📋 <b>COMANDOS</b> (o los botones de abajo)\n📊 /total — ver la suma actualizada y los pendientes con todo el detalle\n💱 Cotizar (botón) o /cotizado 1150 2 — precio del USDT y comisión %: hace la cuenta (pesos ÷ precio − comisión = USDT a enviar) ⇒ PENDIENTE A ENVIAR\n✅ Enviado (botón) — respondés con la FOTO del envío de los USDT ⇒ VERIFICADO ENVIADO, sale de pendientes (sin foto: /enviado)\n📥 /suma 13.686.199 — sumar lo que había ANTES del bot (queda SÓLO en este grupo y entra en su próximo cierre)\n➖ /restar 50.000 — restar un monto de la suma (algo mal enviado)\n🗑️ /anular — respondiendo un comprobante reenviado: lo saca de la suma\n🧹 /restart — (administradores del grupo) borra lo viejo del bot, desfija, archiva la cuenta y arranca de $0\n🔄 /nuevocbu — cambiar el CBU de bajada (te pide Titular, CBU, Alias y Terminación; con Desde/Hasta queda programado y cambia solo). Se avisa al grupo que manda.\n⛔ /parar — no hay CBU: avisa al grupo que manda que no transfiera hasta nuevo aviso\n🏦 /cbu — ver el CBU vigente y los programados\n❓ /ayuda — ver este menú de nuevo · 📗 /guia — la guía completa en archivo\n\n${_RB_CIRCUITO}`;
 }
 async function _rbPin(c, chat, botId, r) { if (!(r && r.ok && r.result)) return; const b = _rbTokFor(c, chat, botId); if (b) await tgChannel.call(b.token, 'pinChatMessage', { chat_id: chat, message_id: r.result.message_id, disable_notification: true }); }
 async function _rbSendDstHelp(c, toChat, botId, pin) {
@@ -33308,8 +33308,8 @@ function _rbCbuShort(c, routes) {
   }
   return '🏦 CBU DE BAJADA\n' + (out.join('\n') || 'Sin datos') + (out.length > 2 ? '\nDetalle: /cbu' : '');
 }
-const _RB_HELP_SRC = '📋 COMANDOS\n/total suma · /cierre todo · /cierre 500.000 parcial · /suma 13.686.199 (lo anterior, sólo acá) · /restar 50.000 · /anular (respondiendo) · /cbu · /guia guía completa';
-const _RB_HELP_DST = '📋 COMANDOS\n/total detalle · /cotizado 1150 · /enviado · /nuevocbu · /parar · /cbu · /anular (respondiendo) · /restar 50.000 · /suma 13.686.199 (lo anterior, sólo acá) · /guia guía completa';
+const _RB_HELP_SRC = '📋 COMANDOS\n/total suma · /cierre todo · /cierre 500.000 parcial · /suma 13.686.199 (lo anterior, sólo acá) · /restar 50.000 · /anular (respondiendo) · /cbu · /restart reiniciar el grupo (admins) · /guia guía completa';
+const _RB_HELP_DST = '📋 COMANDOS\n/total detalle · /cotizado 1150 · /enviado · /nuevocbu · /parar · /cbu · /anular (respondiendo) · /restar 50.000 · /suma 13.686.199 (lo anterior, sólo acá) · /restart reiniciar el grupo (admins) · /guia guía completa';
 async function _rbMenuCb(c, bot, cq) {
   const act = String(cq.data || '').slice(4); const chat = cq.message && cq.message.chat && String(cq.message.chat.id); const ans = (t) => tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: cq.id, text: t ? _rbAlertTxt(t) : '', show_alert: !!t });
   if (!chat) return ans();
@@ -33636,6 +33636,7 @@ async function _rbOnMessage(c, bot, m) {
   if (/^\/nuevocbu(@\w+)?/i.test(text) && dstR.length) { if (await _rbOnce(fromChat, m.message_id)) await _rbCbuCmd(c, bot, fromChat, dstR, text, by); return; }
   if (/^\/parar(@\w+)?$/i.test(text) && dstR.length) { if (await _rbOnce(fromChat, m.message_id)) await _rbCbuStop(c, dstR, fromChat, by, bot.id); return; }
   if (/^\/anular(@\w+)?$/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbAnular(c, bot, m, fromChat, route, dstR, by); return; }
+  if (/^\/restart(@\w+)?(\s|$)/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbRestartCmd(c, bot, m, fromChat, route, dstR, by); return; } // #1127: reiniciar ESTE grupo (admins, con confirmación)
   // #1085: respuesta al pedido del bot en el grupo 2: precio del USDT + comisión (COTIZAR) o la FOTO del envío (ENVIADO)
   if (route && m.reply_to_message && m.reply_to_message.from && m.reply_to_message.from.is_bot) { // #1101: cotización propia del grupo 1
     const rtx = String(m.reply_to_message.text || '');
@@ -33975,6 +33976,49 @@ async function _rbCleanRun(opts, by) {
     st.step = 'listo';
   } catch (e) { st.error = e.message; logger.warn('[rcptbot] empezar de cero ' + e.message); }
   st.running = false; st.finishedAt = new Date(); await save();
+}
+
+// #1127 (owner: "en cada grupo poner /restart y poder limpiar todo lo viejo del bot"): REINICIAR ESTE GRUPO desde Telegram = el "Empezar de cero" del
+// panel (#1110) pero de UN solo grupo: borra lo que escribió el bot acá (48 h, límite de Telegram; lo de la gente no se toca), desfija lo suyo, archiva la
+// cuenta de este grupo (comprobantes y cierres vivos ⇒ 'reset', fuera de toda suma; arrastre de fichas a 0) y manda la presentación + la guía de nuevo.
+// Sólo ADMINISTRADORES del grupo y con confirmación (/restart si). Corre en segundo plano (borrar puede tardar minutos) con candado por grupo.
+const _RB_LIVE_FWD = ['open', 'closed', 'hold', 'srconly', 'srcclosed', 'dup'], _RB_LIVE_CLOSE = ['pending', 'quoted', 'sent', 'fichas', 'fichasdone'];
+async function _rbIsGroupAdmin(bot, chat, m) {
+  if (m.sender_chat && String(m.sender_chat.id) === String(chat)) return true; // administrador anónimo: escribe como el grupo
+  if (!m.from) return false;
+  try { const r = await tgChannel.call(bot.token, 'getChatMember', { chat_id: chat, user_id: m.from.id }); const s = r && r.ok && r.result ? String(r.result.status || '') : ''; return s === 'creator' || s === 'administrator'; } catch (_) { return false; }
+}
+async function _rbRestartCmd(c, bot, m, fromChat, route, dstR, by) {
+  const arg = String((String(m.text || '').match(/^\/restart(?:@\w+)?\s*(.*)$/i) || [])[1] || '').trim().toLowerCase();
+  const kind = route ? 'src' : 'dst'; const title = _rbH(_rbTitle(c, fromChat)); const rep = { reply_to_message_id: m.message_id, allow_sending_without_reply: true };
+  if (!(await _rbIsGroupAdmin(bot, fromChat, m))) { await _rbSend(c, fromChat, '🔒 <b>/restart</b> lo puede usar sólo un <b>administrador del grupo</b>.', bot.id, rep); return; }
+  if (!/^(si|sí|ok|confirmar|confirmo)$/.test(arg)) {
+    await _rbSend(c, fromChat, `🧹 <b>REINICIAR ESTE GRUPO</b> · ${title}\nEsto hace:\n• borra lo que escribió el bot acá en las últimas 48 h (lo de la gente no se toca; Telegram no deja borrar más atrás)\n• desfija los mensajes del bot\n• archiva la cuenta de este grupo: lo sumado y los cierres pendientes quedan guardados pero fuera de toda suma ⇒ <b>la suma arranca de $0</b>${kind === 'dst' ? ' (también la de los grupos que le mandan a éste)' : ' (también la parte de este grupo en su destino)'}\n• manda la presentación y la guía de nuevo\n\nSi estás seguro, escribí <b>/restart si</b>`, bot.id, rep);
+    return;
+  }
+  const lk = 'rbrestart_' + fromChat.replace(/[^0-9]/g, '');
+  if (!(await _cronClaim(lk, 15 * 60000))) { await _rbSend(c, fromChat, '⏳ Ya hay un reinicio en curso en este grupo.', bot.id, rep); return; }
+  (async () => {
+    const st = { chat: fromChat, title: _rbTitle(c, fromChat), by: String(by || '').slice(0, 60), at: new Date(), deleted: 0, unpinned: 0, comprobantes: 0, cierres: 0, bots: [] };
+    try {
+      const tag = { resetAt: new Date(), resetBy: ('/restart ' + String(by || '')).slice(0, 60) };
+      const f = await _rbM().RcptFwd.updateMany({ $or: [{ fromChat }, { toChat: fromChat }], status: { $in: _RB_LIVE_FWD } }, { $set: Object.assign({ status: 'reset' }, tag) });
+      const cl = await _rbM().RcptClose.updateMany({ $or: [{ fromChat }, { toChat: fromChat }], status: { $in: _RB_LIVE_CLOSE } }, { $set: Object.assign({ status: 'reset', srcStatus: null }, tag) });
+      st.comprobantes = f.modifiedCount || 0; st.cierres = cl.modifiedCount || 0;
+      await Config.collection.updateOne({ key: 'rcptbotfichas' }, { $unset: { ['value.' + fromChat]: '' } }).catch(() => {}); // arrastre de fichas de este grupo a 0 (por campo)
+      const g = _rbGroup(c, fromChat); const bids = [...new Set([...((g && g.bots) || []), bot.id].map(String))];
+      for (const bid of bids) { const b = (c.botsDec || []).find((x) => String(x.id) === bid && x.token); if (!b) continue;
+        const r = await _rbCleanChat(b, fromChat, Date.now() - 48 * 3600000, 2500).catch((e) => ({ error: e.message, deleted: 0, unpinned: 0 }));
+        st.deleted += r.deleted || 0; st.unpinned += r.unpinned || 0; st.bots.push({ bot: b.username || b.id, deleted: r.deleted || 0, error: r.error || '' }); }
+      await Config.collection.updateOne({ key: 'rcptbotflags' }, { $pull: { 'value.k': { $regex: '^welcome1106\\|' + fromChat + '\\|' } } }).catch(() => {}); // la presentación vuelve a salir en este grupo
+      await _rbSend(c, fromChat, `✅ <b>GRUPO REINICIADO</b>${by ? ' · ' + _rbH(by) : ''}\n🗑️ ${st.deleted} mensajes del bot borrados · 📌 ${st.unpinned} desfijados\n📦 ${st.comprobantes} comprobantes y ${st.cierres} cierres archivados (fuera de toda suma)\nLa suma arranca de <b>$0</b>.`, bot.id);
+      const c2 = await _rbCfg(true); const w = await _rbWelcome(c2, fromChat, kind, bot.id).catch((e) => ({ ok: false, error: e.message })); if (w && w.ok) await _rbFlag('welcome1106|' + fromChat + '|' + bot.id);
+      st.welcome = !!(w && w.ok); st.finishedAt = new Date();
+      await Config.collection.updateOne({ key: 'rcptbotrestarts' }, { $push: { 'value.list': { $each: [st], $slice: -50 } } }, { upsert: true }).catch(() => {});
+      logger.info('[rcptbot] /restart ' + st.title + ' por ' + st.by + ': ' + st.deleted + ' borrados, ' + st.comprobantes + ' comprobantes y ' + st.cierres + ' cierres archivados');
+    } catch (e) { logger.warn('[rcptbot] /restart ' + e.message); await _rbSend(c, fromChat, '❌ No pude terminar el reinicio: ' + _rbH(e.message), bot.id).catch(() => {}); }
+    finally { try { await Config.collection.updateOne({ key: 'cronlock_' + lk }, { $set: { 'value.until': 0 } }); } catch (_) {} }
+  })();
 }
 app.post('/api/admin/rcptbot/clean', authMiddleware, adminMiddleware, _rbPinGate, async (req, res) => {
   try {

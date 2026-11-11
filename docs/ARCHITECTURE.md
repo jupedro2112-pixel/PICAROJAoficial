@@ -2051,6 +2051,11 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
 - **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
 - **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
+- **Bot de comprobantes #1127 (`/restart` por grupo):** `_rbRestartCmd` = el "Empezar de cero" de UN grupo desde Telegram: sólo administradores del grupo
+  (`_rbIsGroupAdmin`: getChatMember creator/administrator o admin anónimo que escribe como el grupo) y con confirmación (`/restart si`). Archiva RcptFwd/RcptClose
+  vivos de ese chat (fromChat o toChat ⇒ `status:'reset'`, también lo compartido con su par), borra el arrastre de fichas del grupo (`$unset` por campo), borra
+  los mensajes de CADA bot del grupo de las últimas 48 h (`_rbCleanChat`), desfija, saca el flag `welcome1106|<chat>|…` y reenvía la presentación. Corre en segundo
+  plano con candado `_cronClaim('rbrestart_<chat>')`; registro en `Config['rcptbotrestarts'].list` (últimos 50). Está en `/ayuda`, los menús de comandos y `/guia`.
 - **Bot de comprobantes #1110:** "Empezar de cero" (`/api/admin/rcptbot/clean`, `_rbCleanRun`): borra sólo mensajes del bot (detecta los suyos con `editMessageReplyMarkup`, que falla en los ajenos), desfija los del bot, `status:'reset'` en RcptFwd/RcptClose vivos y reenvía la presentación. `status:'reset'` no cuenta en ninguna suma.
 - **Bot de comprobantes #1108/#1109:** `/suma` no cruza: grupo 1 ⇒ RcptFwd `status:'srconly'` (toChat ''), grupo 2 ⇒ RcptFwd `fromChat:''` (entra en su cierre como RcptClose aparte). Lectura del monto: 2 modelos (`RCPTBOT_AI_MODEL`/`RCPTBOT_AI_CHECK_MODEL`) + `resolveAmount` (pesos/centavos/texto); duda ⇒ `RcptFwd.doubt` + botones `rba:`; nunca se suma un monto dudoso.
 - **Bot de comprobantes #1106:** bienvenida por grupo = `_rbWelcome` (fijada → archivo → /anterior), `_rbWelcomeStruct` (cada grupo una vez); textos en `src/utils/rcptbotGuides.js` (el del grupo 1 NO dice adónde va). Plan: `_rbPlanGroup` (diagnóstico) + `pins` (ID a mano, `/api/admin/rcptbot/plan-pin`).

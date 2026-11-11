@@ -110,6 +110,8 @@ ${n[1]}) COMANDOS (o el botón 📋 Ver comandos)
                           (respondiendo un aviso SUMADO LO ANTERIOR / RESTADO: deshace ese ajuste)
    /cbu ................. a qué CBU transferir ahora (titular, CBU, alias, terminación)
    /ayuda ............... menú con botones · /guia ...... esta guía
+   /restart ............. (administradores del grupo) borra lo que escribió el bot (48 h), desfija, archiva
+                          la cuenta de este grupo y arranca de $0; pide confirmar con /restart si
 
 ${n[2]}) CBU
    - Cuando cambia, llega 📢 CAMBIO DE CBU / CAMBIO DE TERMINACIÓN (queda fijado arriba).
@@ -153,6 +155,8 @@ CORRECCIONES
 OTROS
    /total ............... suma actualizada y pendientes
    /ayuda ............... menú con botones · /guia ...... esta guía
+   /restart ............. (administradores del grupo) borra lo que escribió el bot (48 h), desfija, archiva
+                          la cuenta de este grupo y arranca de $0; pide confirmar con /restart si
 `;
   if (ctx.fichas) return head + `
 2) GRUPO DE FICHAS: SUMA DEL MES
