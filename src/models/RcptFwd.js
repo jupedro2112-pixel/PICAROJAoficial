@@ -60,7 +60,10 @@ const rcptCloseSchema = new mongoose.Schema({
   // #1085: cotización con precio del USDT y comisión % ⇒ USDT a enviar; al enviar, la FOTO del envío
   quoteFeePct: { type: Number, default: null },
   quoteUsdt: { type: Number, default: null },
-  sentPhoto: { type: String, default: '' }
+  sentPhoto: { type: String, default: '' },
+  sentManual: { type: Boolean, default: false }, // #1099: foto de USDT que no coincidía / no se leía y el agente confirmó a mano (A VERIFICAR)
+  sentReadUsdt: { type: Number, default: null }, // #1099: USDT que leyó el bot en la foto
+  sentTry: { type: String, default: null } // #1099: intento de envío esperando el ✅ OK a mano
 }, { timestamps: true });
 const RcptClose = mongoose.models.RcptClose || mongoose.model('RcptClose', rcptCloseSchema);
 module.exports = { RcptFwd, RcptClose };

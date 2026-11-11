@@ -29,6 +29,17 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1099. Bot de comprobantes: cierre SEMANAL y control de la FOTO de USDT (2026-11-11) — panel v299
+- **Owner (estructura 4 Cotizaciones, @Cotizacionbuffabot; mandan BAJADAS PARADISE / JOKER / PORTO / JACK / BOSTON / TOKIO/ANANA / VIP/PLATINIUM / LAS VEGAS):**
+  "suman de lunes a lunes; el lunes 00:00 cierre semanal pendiente a cotizar y empieza de 0; el grupo 2 funciona igual (cotiza un agente: precio del USDT +
+  comisión, que puede ser 0); esperás que los USDT coincidan con la foto del envío y ahí deja de estar pendiente; si no coincide o el bot no lee, que se
+  pueda confirmar a mano: OK, a verificar. Sólo para estos grupos de bajadas".
+- `dailyClose: 'weekly'` ⇒ `_rbDailyCloseTick` el lunes (ART) cierra lo de antes del lunes 00:00 (`_rbOnce('wclose', …)`).
+- `usdtCheck` (tilde "📸 Controlar la foto de USDT"): en `_rbSentPhoto` el bot lee la foto con la IA de comprobantes (`amountRaw` nuevo en
+  comprobanteAiService ⇒ `_rbUsdtNum`, acepta 1,234.56 / 1.234,56) y compara con la suma de `quoteUsdt` (tolerancia 0,5 USDT o 0,3 %). Coincide ⇒ VERIFICADO
+  ENVIADO "la foto dice X USDT: coincide". No coincide / no se lee ⇒ "❌ NO COINCIDE", sigue pendiente a enviar (`sentTry`, `sentReadUsdt`) y botón
+  "✅ OK (confirmar a mano · a verificar)" (`rbs:<id>`) ⇒ enviado con `sentManual: true` y el mensaje marca ⚠️ A VERIFICAR.
+
 ### 1098. Bot de comprobantes: estructura 3 Publicidad en el plan (2026-11-11)
 - **Owner:** Publicidad (@Bajadasasuncionbot, el mismo de Ganamos): BAJADAS PUBLICIDAD con ,83 → 3P 2G RACAFU ,83, "funciona igual que Ganamos pero son sumas
   independientes" (lun–vie 13 h). Cada grupo que manda ya tiene su suma y su cierre; en el grupo 2 llegan los dos cierres y /cotizado cotiza los pendientes juntos.

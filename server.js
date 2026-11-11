@@ -32279,7 +32279,13 @@ setTimeout(() => { setInterval(() => { _rbCloseTick().catch((e) => logger.warn('
 // 13:00 en punto (lo que llega después es del cierre siguiente). Una vez por estructura/día (_rbOnce). Grupo 1: sumas · grupo 2: pendiente a cotizar.
 async function _rbDailyCloseTick() {
   const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
-  const now = new Date(); if (_tgArtHour(now) < 13) return; const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+  const now = new Date(); const dk = _schedArtKey(now); const dow = new Date(dk + 'T12:00:00Z').getUTCDay();
+  // #1099 (owner, Cotizaciones: "suman de lunes a lunes; el lunes 00:00 se hace cierre semanal pendiente a cotizar y empieza de 0"): 'weekly'.
+  if (dow === 1) for (const st of (c.structs || []).filter((x) => x && x.on && x.dailyClose === 'weekly')) {
+    if (!(await _rbOnce('wclose', st.id + '|' + dk))) continue; const cut0 = new Date(dk + 'T00:00:00-03:00');
+    for (const r of (c.routes || []).filter((x) => x.structId === st.id)) { try { await _rbClose(c, r, 'cierre semanal automático', { before: cut0 }); } catch (e) { logger.warn('[rcptbot] cierre semanal ' + e.message); } }
+  }
+  if (_tgArtHour(now) < 13) return;
   const cut = new Date(dk + 'T13:00:00-03:00');
   for (const st of (c.structs || []).filter((x) => x && x.on && (x.dailyClose === 'all' || x.dailyClose === 'weekdays'))) {
     if (st.dailyClose === 'weekdays' && (dow === 0 || dow === 6)) continue;
@@ -32363,16 +32369,62 @@ async function _rbQuote(c, toChat, price, pct, by, structIds, botId, replyTo) {
   const routes = _rbDstRoutes(c, toChat, botId).filter((r) => !structIds || !structIds.length || structIds.includes(r.structId));
   await _rbSend(c, toChat, `💱 <b>COTIZADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(tot)}</b>\n÷ USDT ${_rbMoney2(price)} = ${_rbUsdt(bruto)} USDT` + (pct ? `\n− comisión ${pct}% = ${_rbUsdt(bruto - neto)} USDT` : '') + `\n➡️ <b>A ENVIAR: ${_rbUsdt(neto)} USDT</b>\n📤 Queda PENDIENTE A ENVIAR: cuando envíes tocá ✅ Enviado y mandá la foto.\n\n` + (routes.length ? await _rbDstTotalTxt(c, toChat, routes) : ''), botId, Object.assign({ reply_markup: _rbKb() }, replyTo ? { reply_to_message_id: replyTo, allow_sending_without_reply: true } : {}));
 }
+// #1099: número de USDT tal como viene en la foto (1,234.56 · 1.234,56 · 1234.5 · 1 234,56). El separador decimal es el ÚLTIMO . o , con 1-2 cifras detrás.
+function _rbUsdtNum(raw) {
+  if (raw == null) return null; if (typeof raw === 'number') return raw > 0 ? Math.round(raw * 100) / 100 : null;
+  let t = String(raw).replace(/[^\d.,]/g, ''); if (!t) return null;
+  const m2 = t.match(/[.,](\d{1,2})$/); let n;
+  if (m2) n = Number(t.slice(0, -m2[0].length).replace(/[.,]/g, '') + '.' + m2[1]); else n = Number(t.replace(/[.,]/g, ''));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+}
+async function _rbReadUsdt(c, chat, botId, f) {
+  try {
+    if (!f || !/^image\//.test(String(f.fileMime || '')) || !(comprobanteAi.isEnabled && comprobanteAi.isEnabled())) return null;
+    const b = _rbTokFor(c, chat, botId); if (!b) return null; const buf = await _rbDownload(b.token, f.fileId); if (!buf || buf.length > 8 * 1024 * 1024) return null;
+    const ai = await comprobanteAi.analyzeComprobante('data:' + f.fileMime + ';base64,' + buf.toString('base64')); if (!ai || !ai.ok) return null;
+    return _rbUsdtNum(ai.amountRaw != null ? ai.amountRaw : ai.amount);
+  } catch (e) { logger.warn('[rcptbot] lectura USDT ' + e.message); return null; }
+}
+// #1099: botón "✅ OK (a verificar)" del NO COINCIDE ⇒ ENVIADO confirmado a mano (queda marcado A VERIFICAR).
+async function _rbSentOkCb(c, bot, q) {
+  const id = String(q.data || '').slice(4).replace(/[^0-9a-f]/g, ''); const chat = q.message && q.message.chat ? String(q.message.chat.id) : '';
+  const by = [q.from && q.from.first_name, q.from && q.from.last_name].filter(Boolean).join(' ') || 'agente';
+  const list = id ? await _rbM().RcptClose.find({ sentTry: id, status: 'quoted' }).lean() : [];
+  if (!list.length) { await tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: q.id, text: 'Ya no está pendiente (o se mandó otra foto).', show_alert: true }); return; }
+  await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) }, status: 'quoted', sentTry: id }, { $set: { status: 'sent', sentManual: true, sentBy: String(by).slice(0, 60), sentAt: new Date() } });
+  await tgChannel.call(bot.token, 'answerCallbackQuery', { callback_query_id: q.id, text: '✅ Confirmado a mano (a verificar)' });
+  const usdt = list.reduce((a, x) => a + (Number(x.quoteUsdt) || 0), 0); const tot = list.reduce((a, x) => a + (Number(x.total) || 0), 0);
+  await _rbSend(c, chat, `✅ <b>ENVIADO · CONFIRMADO A MANO</b> · ${_rbH(by)}\n${list.map((x) => '• De ' + _rbH(x.fromTitle) + ': ' + _rbMoney(x.total) + (x.quoteUsdt ? ' → ' + _rbUsdt(x.quoteUsdt) + ' USDT' : '')).join('\n')}\nTotal: <b>${_rbMoney(tot)}</b>${usdt ? ' · <b>' + _rbUsdt(usdt) + ' USDT</b>' : ''}\n⚠️ <b>A VERIFICAR</b>: la foto no coincidía o no se leyó.\nYa no queda pendiente.`, bot.id);
+}
 async function _rbSentPhoto(c, toChat, m, by, structIds, botId) {
   const q = { toChat: String(toChat), status: 'quoted' }; if (structIds && structIds.length) q.structId = { $in: structIds };
   const list = await _rbM().RcptClose.find(q).sort({ createdAt: 1 }).lean(); const rt = { reply_to_message_id: m.message_id, allow_sending_without_reply: true };
   if (!list.length) { await _rbSend(c, toChat, 'No hay nada COTIZADO pendiente a enviar. Primero 💱 Cotizar.', botId, rt); return; }
   const f = _rbFileOf(m); const now = new Date();
-  await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) }, status: 'quoted' }, { $set: { status: 'sent', sentBy: String(by || '').slice(0, 60), sentAt: now, sentPhoto: (f && f.fileId) || '' } });
+  // #1099 (owner, estructura Cotizaciones): "esperás confirmación que coincida los USDT con la foto que envía USDT; si no coincide o el bot no lee, que se
+  // pueda ajustar a mano y ponemos OK, a verificar". Sólo para estructuras con `usdtCheck`.
+  let usdtOk = null;
+  const chk = new Set((c.structs || []).filter((x) => x && x.usdtCheck).map((x) => x.id));
+  if (list.some((x) => chk.has(x.structId))) {
+    const want = Math.round(list.reduce((a, x) => a + (Number(x.quoteUsdt) || 0), 0) * 100) / 100;
+    if (want > 0) {
+      const got = await _rbReadUsdt(c, toChat, botId, f);
+      if (got != null && Math.abs(got - want) <= Math.max(0.5, want * 0.003)) usdtOk = got;
+      else {
+        const tryId = uuidv4().replace(/-/g, '').slice(0, 12);
+        await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) }, status: 'quoted' }, { $set: { sentTry: tryId, sentReadUsdt: got, sentPhoto: (f && f.fileId) || '' } });
+        await _rbSend(c, toChat, `❌ <b>NO COINCIDE</b>
+${got != null ? 'La foto dice <b>' + _rbUsdt(got) + ' USDT</b>' : 'No pude leer los USDT de la foto'}; tenía que ser <b>${_rbUsdt(want)} USDT</b>.
+Sigue <b>PENDIENTE A ENVIAR</b>. Mandá la foto correcta respondiendo 📸 ENVIADO o, si está bien, tocá el botón (queda <b>A VERIFICAR</b>).`, botId, Object.assign({ reply_markup: { inline_keyboard: [[{ text: '✅ OK (confirmar a mano · a verificar)', callback_data: 'rbs:' + tryId }]] } }, rt));
+        return;
+      }
+    }
+  }
+  await _rbM().RcptClose.updateMany({ id: { $in: list.map((x) => x.id) }, status: 'quoted' }, { $set: Object.assign({ status: 'sent', sentBy: String(by || '').slice(0, 60), sentAt: now, sentPhoto: (f && f.fileId) || '' }, usdtOk != null ? { sentReadUsdt: usdtOk } : {}) });
   const usdt = list.reduce((a, x) => a + (Number(x.quoteUsdt) || 0), 0); const tot = list.reduce((a, x) => a + (Number(x.total) || 0), 0);
   const det = list.map((x) => `• De ${_rbH(x.fromTitle)}: ${_rbMoney(x.total)}${x.quoteUsdt ? ' → ' + _rbUsdt(x.quoteUsdt) + ' USDT' : ''}`).join('\n');
   const routes = _rbDstRoutes(c, toChat, botId).filter((r) => !structIds || !structIds.length || structIds.includes(r.structId));
-  await _rbSend(c, toChat, `✅ <b>VERIFICADO ENVIADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(tot)}</b>${usdt ? ' · <b>' + _rbUsdt(usdt) + ' USDT</b>' : ''}\nYa no queda pendiente.\n\n` + (routes.length ? await _rbDstTotalTxt(c, toChat, routes) : ''), botId, Object.assign({ reply_markup: _rbKb() }, rt));
+  await _rbSend(c, toChat, `✅ <b>VERIFICADO ENVIADO</b>${by ? ' · ' + _rbH(by) : ''}\n${det}\nTotal: <b>${_rbMoney(tot)}</b>${usdt ? ' · <b>' + _rbUsdt(usdt) + ' USDT</b>' : ''}${usdtOk != null ? '\n📸 La foto dice ' + _rbUsdt(usdtOk) + ' USDT: <b>coincide</b> ✅' : ''}\nYa no queda pendiente.\n\n` + (routes.length ? await _rbDstTotalTxt(c, toChat, routes) : ''), botId, Object.assign({ reply_markup: _rbKb() }, rt));
 }
 async function _rbDestCmd(c, toChat, cmd, by, arg, structIds, botId, opts = {}) {
   const q = cmd === 'cotizado' ? { toChat, status: 'pending' } : { toChat, status: { $in: ['pending', 'quoted'] } }; if (structIds && structIds.length) q.structId = { $in: structIds };
@@ -32791,6 +32843,7 @@ app.post('/api/rcptbot/webhook/:bot', async (req, res) => {
       return;
     }
     if (u.callback_query && u.callback_query.message && u.callback_query.message.chat) _rbGroupSeen(u.callback_query.message.chat, bot.id).catch(() => {}); // #1093
+    if (u.callback_query && String(u.callback_query.data || '').startsWith('rbs:')) { await _rbSentOkCb(await _rbCfg(), bot, u.callback_query); return; } // #1099
     if (u.callback_query) { const cfg = await _rbCfg(); if (String(u.callback_query.data || '').startsWith('rbc:')) await _rbCbuCb(cfg, bot, u.callback_query); else if (String(u.callback_query.data || '').startsWith('rbm:')) await _rbMenuCb(cfg, bot, u.callback_query); else await _rbOnCallback(cfg, bot, u.callback_query); return; } // #1079-f/i
     const m = u.message; if (!m || !m.chat) return;
     if (m.migrate_to_chat_id) { await _rbGroupMigrate(m.chat.id, { id: m.migrate_to_chat_id, type: 'supergroup', title: m.chat.title }, bot.id); return; } // #1087
@@ -32844,7 +32897,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
         routes.push(Object.assign({}, r, { cbuItems, cbuStops, sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
-      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose, dailyClose: st.dailyClose || '' }); // #1094 / #1095 / #1096
+      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose, dailyClose: st.dailyClose || '', usdtCheck: !!st.usdtCheck }); // #1094 / #1095 / #1096 / #1099
     }
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
@@ -32942,7 +32995,8 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
       st.termNotices = out.sort((p, q) => p.day - q.day);
     }
     if (typeof b.monthlyClose === 'boolean') st.monthlyClose = b.monthlyClose; // #1095
-    if (b.dailyClose != null) { const v = String(b.dailyClose); if (!['', 'all', 'weekdays'].includes(v)) return res.status(400).json({ error: 'Cierre de 13 h inválido' }); st.dailyClose = v; } // #1096
+    if (typeof b.usdtCheck === 'boolean') st.usdtCheck = b.usdtCheck; // #1099
+    if (b.dailyClose != null) { const v = String(b.dailyClose); if (!['', 'all', 'weekdays', 'weekly'].includes(v)) return res.status(400).json({ error: 'Cierre de 13 h inválido' }); st.dailyClose = v; } // #1096
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
     await _rbStructPut(st);

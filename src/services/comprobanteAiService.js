@@ -159,6 +159,7 @@ async function analyzeComprobante(content) {
       coelsaId: /^[A-Za-z0-9]{12,40}$/.test(String(parsed.coelsa_id || '').replace(/[\s-]/g, '')) ? String(parsed.coelsa_id).replace(/[\s-]/g, '').toUpperCase() : null,
       originCuit: String(parsed.cuit_origen || '').replace(/\D/g, '').length === 11 ? String(parsed.cuit_origen).replace(/\D/g, '') : null,
       amount: amountNum,
+      amountRaw: parsed.monto == null ? null : String(parsed.monto).slice(0, 40), // #1099: el texto tal cual (USDT viene como 1,234.56)
       originHolder: parsed.titular_origen ? String(parsed.titular_origen).trim() : null,
       originCbu: parsed.cbu_origen ? String(parsed.cbu_origen).trim() : null,
       destHolder: parsed.titular_destino ? String(parsed.titular_destino).trim() : null,
