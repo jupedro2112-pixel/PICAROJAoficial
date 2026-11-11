@@ -29,6 +29,12 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1112. Bot de comprobantes: /anterior no contestaba con varios bots en el grupo (2026-11-11)
+- **Owner:** "/anterior 12.613.986 en 4f RACAFU ,99 no hizo nada" (bots ya administradores). Causa: con VARIOS bots nuestros en el grupo, todos reciben el
+  comando y `_rbOnce` (chat+mensaje) lo reserva para el PRIMERO; `/suma` y `/restar` no chequeaban que el bot tuviera ese grupo en su estructura ⇒ un bot ajeno
+  lo reservaba, no hacía nada, y el correcto ya no podía contestar. Arreglo: `/suma` y `/restar` con `(route || dstR.length)` y, al inicio de `_rbOnMessage`, un
+  bot que no tiene nada que ver con el grupo NO procesa nada si otro bot nuestro sí lo tiene (`_rbOther`). Test rcptbot-flow 47.
+
 ### 1111. Bot de comprobantes: el ,43 de Fichas va a "Pago fichas GIROX ,43" (2026-11-11)
 - **Owner:** "cambiar el grupo de fichas donde envía por ése; el otro queda anulado". `RB_PLAN` v2: ,43 y `fichasDests` ⇒ "Pago fichas GIROX ,43" (sale de "Pagos Hammy
   y Fabri ,43"). El plan se vuelve a aplicar solo al subir (versión nueva); si @fichasnuevobot todavía no está en el grupo nuevo, la estructura sigue como estaba y

@@ -428,6 +428,13 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const n1 = sent.length; r = await ctx._rbWelcomeIfReady(c, c.structs[0]); assert.ok(r.done && sent.length === n1, 'ya la tienen: ni revisa');
     rc.groups = JSON.parse(keepG); rc.structs = JSON.parse(keepS); await ctx._rbCfg(true);
   });
+  await caso('#1112 dos bots nuestros en el grupo 2: /suma lo contesta el de la estructura aunque el otro lo reciba primero', async () => {
+    const rc = cfgDocs.find((d) => d.key === 'rcptbot').value; rc.bots.push({ id: '222', username: 'b222', tokenEnc: '222:TOKEN', secret: 'S2' }); rc.groups.find((g) => g.id === '-3').bots.push('222'); await ctx._rbCfg(true);
+    const hook2 = async (update) => { const req = { params: { bot: '222' }, get: () => 'S2', body: update }; const res = { headersSent: false, status() { return this; }, end() {}, json() { this.headersSent = true; } }; await routes['POST /api/rcptbot/webhook/:bot'](req, res); };
+    const n = sent.length; await hook2(text(990, -3, '/suma 12.613.986')); assert.strictEqual(sent.slice(n).filter((x) => String(x.p.chat_id) === '-3').length, 0, 'el otro bot no contesta ni reserva');
+    await hook(text(990, -3, '/suma 12.613.986')); assert.ok(/SUMADO LO ANTERIOR<\/b>: \+\$12\.613\.986/.test(last(-3).p.text), last(-3).p.text);
+    rc.bots.pop(); rc.groups.find((g) => g.id === '-3').bots.pop(); await ctx._rbCfg(true);
+  });
   await caso('#1110 empezar de cero: borra SÓLO lo del bot desde la hora, desfija lo del bot, cuentas a $0, presentación de nuevo', async () => {
     const since = NOW.getTime() - 3600000; const chat = '-3'; const msgs = {}; // id ⇒ { mine, date }
     for (let i = 1; i <= 30; i++) msgs[i] = { mine: i % 3 !== 0, date: (i <= 10 ? since - 60000 : since + i * 1000) / 1000 };

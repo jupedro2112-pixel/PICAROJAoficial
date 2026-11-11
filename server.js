@@ -33066,11 +33066,15 @@ async function _rbOnMessage(c, bot, m) {
   const fromChat = String(m.chat.id); const mine = (c.routes || []).filter((x) => x.botId === bot.id); const route = mine.find((x) => String(x.from) === fromChat);
   const text = String(m.text || '').trim(); const by = [m.from && m.from.first_name, m.from && m.from.last_name].filter(Boolean).join(' ');
   const dstR = route ? [] : _rbDstRoutes(c, fromChat, bot.id);
+  // #1112: con VARIOS bots nuestros en el grupo, todos reciben el comando y _rbOnce (por chat+mensaje) lo reserva para el PRIMERO: un bot que no tiene nada que
+  // ver con este grupo NO puede reservarlo (si no, el que corresponde se queda sin contestar: le pasó al owner con /anterior en 4f RACAFU ,99).
+  const _rbOther = !route && !dstR.length && (c.routes || []).some((r) => r.botId !== bot.id && (String(r.from) === fromChat || _rbDests(c, r).some((d) => d.to === fromChat)));
+  if (_rbOther) return;
   if (/^\/(start|ayuda|menu)(@\w+)?$/i.test(text)) { if (!(await _rbOnce(fromChat, m.message_id))) return; if (route) await _rbSendHelp(c, route, false); else if (dstR.length) await _rbSendDstHelp(c, fromChat, bot.id, false); else await tgChannel.call(bot.token, 'sendMessage', { chat_id: fromChat, text: '✅ Grupo detectado: ya aparece en el panel (Bot de comprobantes).' }); return; }
   // Grupo de DESTINO: /cotizado ⇒ los cierres pendientes a cotizar pasan a cotizados; /enviado ⇒ dejan de estar pendientes (owner).
   if (!route && dstR.length && /^\/total(@\w+)?$/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSend(c, fromChat, await _rbDstTotalTxt(c, fromChat, dstR), bot.id, { reply_markup: _rbKb() }); return; }
-  if (/^\/(anterior|sumar|suma)(@\w+)?(\s|$)/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbCarryCmd(c, bot, m, fromChat, text, by); return; } // #1108: /suma = /anterior
-  if (/^\/restar(@\w+)?(\s|$)/i.test(text)) { if (await _rbOnce(fromChat, m.message_id)) await _rbCarryCmd(c, bot, m, fromChat, text, by, -1); return; }
+  if (/^\/(anterior|sumar|suma)(@\w+)?(\s|$)/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbCarryCmd(c, bot, m, fromChat, text, by); return; } // #1108: /suma = /anterior
+  if (/^\/restar(@\w+)?(\s|$)/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbCarryCmd(c, bot, m, fromChat, text, by, -1); return; }
   if (/^\/gu[ií]a(@\w+)?$/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSendGuide(c, fromChat, route ? 'src' : 'dst', bot.id, false); return; }
   if (/^\/cbu(@\w+)?$/i.test(text) && (route || dstR.length)) { if (await _rbOnce(fromChat, m.message_id)) await _rbSend(c, fromChat, _rbCbuShowTxt(c, route ? [route] : dstR, !!route), bot.id, { reply_markup: _rbKb() }); return; }
   if (/^\/nuevocbu(@\w+)?/i.test(text) && dstR.length) { if (await _rbOnce(fromChat, m.message_id)) await _rbCbuCmd(c, bot, fromChat, dstR, text, by); return; }
