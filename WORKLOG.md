@@ -29,6 +29,14 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1095. Bot de comprobantes: CIERRE DE MES automático por estructura (2026-11-11) — panel v296
+- **Owner (Fichas):** "en este grupo vamos a sumar comprobante por comprobante hasta el cierre de mes, último día de mes incluido; después empieza de 0 y
+  deja el mes anterior arriba la suma".
+- Tilde por estructura `monthlyClose` (panel: "🗓️ Cierre de mes automático"). `_rbMonthCloseTick`: el día 1 desde las 00:00 ART, una vez por estructura/mes
+  (`_rbOnce('mclose', …)`), cierra con `_rbClose(…, { before: día 1 00:00 })` (lo que entra después ya es del mes nuevo; el grupo 2 recibe el cierre pendiente a
+  cotizar como siempre) y en cada grupo que manda manda y FIJA "📌 TOTAL DE <MES>: $X (N comprobantes) · desde hoy la suma empieza de $0". Los cierres a mano
+  (/cierre) siguen funcionando durante el mes.
+
 ### 1094. Bot de comprobantes: aviso automático de CAMBIO DE TERMINACIÓN (2026-11-11) — panel v295
 - **Owner (armando la estructura Fichas):** 12 grupos que mandan; del 5 al 20 los envíos van con ,99 (4f RACAFU ,99), el resto del mes con ,43 (Pagos Hammy y
   Fabri ,43); "el 5 y el 20 avisá el cambio de terminación, a las 13 h, sólo a los grupos que mandan, y repetí el alias/CBU del último comprobante que

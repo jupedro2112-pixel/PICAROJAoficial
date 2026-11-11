@@ -32223,7 +32223,7 @@ async function _rbOnReceipt(c, bot, m, file, route) {
 // resto vuelve a la suma como un registro 'resto' (abierto, entra en el próximo cierre; no cuenta otra vez en el total del mes).
 async function _rbClose(c, route, by, opts = {}) {
   const fromChat = String(route.from); const structId = route.structId || null; const closeId = uuidv4(); const fromTitle = _rbTitle(c, fromChat);
-  const q = { fromChat, status: 'open' }; if (structId) q.structId = structId; if (opts.to) q.toChat = String(opts.to);
+  const q = { fromChat, status: 'open' }; if (structId) q.structId = structId; if (opts.to) q.toChat = String(opts.to); if (opts.before) q.createdAt = { $lt: opts.before }; // #1095: cierre de mes ⇒ sólo lo del mes cerrado
   let part = null, reqAmt = null;
   if (opts.amount != null) {
     const cur = await _rbOpenSum(fromChat, opts.to, structId); const a = Math.round(Number(opts.amount) * 100) / 100; const tot = Math.round(cur.total * 100) / 100;
@@ -32607,6 +32607,30 @@ async function _rbTermTick() {
   }
 }
 setTimeout(() => { setInterval(() => { _rbTermTick().catch((e) => logger.warn('[rcptbot] term ' + e.message)); }, 60000); }, 95000);
+// #1095 CIERRE DE MES AUTOMÁTICO (owner: "en este grupo sumamos comprobante por comprobante hasta el cierre de mes, último día incluido; después
+// empieza de 0 y deja el mes anterior arriba la suma"). Estructura con `monthlyClose`: el día 1 desde las 00:00 (ART), una vez por estructura/mes, cierra
+// lo abierto de ANTES del día 1 (lo que entra después de las 00:00 ya es del mes nuevo), y en cada grupo que manda fija "📌 TOTAL DE <MES>".
+async function _rbMonthCloseTick() {
+  const c = await _rbCfg(true); if (c.onRender || !(c.botsDec || []).some((b) => b.token)) return;
+  const nowArt = new Date(Date.now() - 3 * 3600000); if (nowArt.getUTCDate() !== 1) return;
+  const ym = nowArt.toISOString().slice(0, 7); const m0 = new Date(ym + '-01T00:00:00-03:00');
+  const pm = new Date(Date.UTC(nowArt.getUTCFullYear(), nowArt.getUTCMonth() - 1, 1)); const pYm = pm.toISOString().slice(0, 7); const p0 = new Date(pYm + '-01T00:00:00-03:00');
+  const mesTxt = _RB_MES[pm.getUTCMonth()].toUpperCase() + ' ' + pm.getUTCFullYear();
+  for (const st of (c.structs || []).filter((x) => x && x.on && x.monthlyClose)) {
+    if (!(await _rbOnce('mclose', st.id + '|' + ym))) continue;
+    for (const r of (c.routes || []).filter((x) => x.structId === st.id)) {
+      try {
+        const cl = await _rbClose(c, r, 'cierre de mes automático', { before: m0 });
+        const a = await _rbM().RcptFwd.aggregate([{ $match: { fromChat: String(r.from), structId: st.id, status: { $in: ['open', 'closed'] }, createdAt: { $gte: p0, $lt: m0 }, amountFrom: { $ne: 'resto' } } }, { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } }, count: { $sum: 1 } } }]);
+        const t = a[0] || { total: 0, count: 0 };
+        const sent = await _rbSend(c, String(r.from), `📌 <b>TOTAL DE ${mesTxt}</b>${st.name ? ' · ' + _rbH(st.name) : ''}\n💰 <b>${_rbMoney2(t.total)}</b> (${t.count} comprobante${t.count === 1 ? '' : 's'})${cl && cl.ok ? '' : '\n(no había nada abierto para cerrar)'}\n🆕 Desde hoy la suma empieza de <b>$0</b>.`, r.botId);
+        await _rbPin(c, String(r.from), r.botId, sent);
+      } catch (e) { logger.warn('[rcptbot] cierre de mes ' + e.message); }
+    }
+    logger.info('[rcptbot] cierre de mes ' + pYm + ' · estructura ' + st.name);
+  }
+}
+setTimeout(() => { setInterval(() => { _rbMonthCloseTick().catch((e) => logger.warn('[rcptbot] cierre de mes ' + e.message)); }, 60000); }, 100000);
 async function _rbAnular(c, bot, m, fromChat, route, dstR, by) {
   const rid = m.reply_to_message && m.reply_to_message.message_id;
   if (!rid) { await _rbSend(c, fromChat, 'Para anular un comprobante, <b>respondé ese comprobante</b> con /anular. Para restar un monto: <b>/restar 50.000</b>.', bot.id); return; }
@@ -32752,7 +32776,7 @@ app.get('/api/admin/rcptbot', authMiddleware, adminMiddleware, _rbPinGate, async
         routes.push(Object.assign({}, r, { cbuItems, cbuStops, sums, carry, month: await _rbMonthSum(r.from, st.id), hold: await _rbM().RcptFwd.countDocuments({ fromChat: String(r.from), structId: st.id, status: 'hold' }) }));
       }
       const b = (c.botsDec || []).find((x) => x.id === String(st.botId || ''));
-      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13 }); // #1094
+      structs.push({ id: st.id, name: st.name || '', on: !!st.on, botId: st.botId || null, botUser: b ? b.username : '', routes, termNotices: st.termNotices || [], termHour: Number.isFinite(Number(st.termHour)) ? Number(st.termHour) : 13, monthlyClose: !!st.monthlyClose }); // #1094 / #1095
     }
     const closes = await _rbM().RcptClose.find({}).sort({ createdAt: -1 }).limit(60).lean();
     const recent = await _rbM().RcptFwd.find({}).sort({ createdAt: -1 }).limit(40).select('fromTitle toTitle amount amountFrom status error sender createdAt').lean();
@@ -32848,6 +32872,7 @@ app.post('/api/admin/rcptbot/struct', authMiddleware, adminMiddleware, _rbPinGat
       }
       st.termNotices = out.sort((p, q) => p.day - q.day);
     }
+    if (typeof b.monthlyClose === 'boolean') st.monthlyClose = b.monthlyClose; // #1095
     if (b.termHour != null) { const h = Math.round(Number(b.termHour)); if (!(h >= 0 && h <= 23)) return res.status(400).json({ error: 'Cambio de terminación: la hora va de 0 a 23' }); st.termHour = h; }
     const turnedOn = st.on && !(cur && cur.on);
     await _rbStructPut(st);
