@@ -70,7 +70,8 @@ const tgChannel = {
   sendMedia: async (token, kind, chat, media, extra) => { sent.push({ token, method: 'sendMedia:' + kind, p: Object.assign({ chat_id: chat }, extra) }); return { ok: true, result: { message_id: ++msgId } }; },
 };
 let aiAmount = 25000.99;
-const comprobanteAi = { isEnabled: () => true, analyzeComprobante: async () => ({ ok: true, amount: aiAmount }) };
+let aiByModel = null; // #1109: { modelo: monto } para simular lecturas distintas
+const comprobanteAi = { isEnabled: () => true, analyzeComprobante: async (d, o) => ({ ok: true, amount: aiByModel && o && o.model in aiByModel ? aiByModel[o.model] : aiAmount }) };
 let NOW = new Date('2026-11-10T15:00:00Z'); // martes 12:00 ART
 const RealDate = Date; class FakeDate extends RealDate { constructor(...a) { if (a.length) super(...a); else super(NOW.getTime()); } static now() { return NOW.getTime(); } }
 const routes = {}; const app = { get: (p, ...h) => { routes['GET ' + p] = h[h.length - 1]; }, post: (p, ...h) => { routes['POST ' + p] = h[h.length - 1]; } };
@@ -184,19 +185,21 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     const post = RcptFwd.rows.filter((x) => x.toChat === '-3' && x.status === 'open').reduce((a, x) => a + x.amount, 0);
     assert.ok(Math.abs(post - pre - 13686199) < 0.001, pre + ' ' + post);
     assert.ok(/SUMADO LO ANTERIOR<\/b>: \+\$13\.686\.199/.test(last(-3).p.text) && !/SUMADO LO ANTERIOR/.test(last(-1).p.text), 'queda sólo en el grupo 2 (#1084)');
-    await hook(text(41, -1, '/anterior 5000')); assert.ok(/manda a 2 grupos/.test(last(-1).p.text), last(-1).p.text);
+    const n2 = RcptFwd.rows.filter((x) => x.status === 'open').length; const mon = (t) => Number(((t.match(/Total de \w+ \(sin corte\): <b>\$([\d.]+)/) || [])[1] || '0').replace(/\./g, ''));
+    await hook(text(41, -1, '/suma 5000')); const t41 = last(-1).p.text; assert.ok(/SUMADO LO ANTERIOR/.test(t41) && /Sólo en la cuenta de este grupo/.test(t41) && /Anterior de este grupo: <b>\$5\.000/.test(t41), t41); // #1108
+    assert.strictEqual(RcptFwd.rows.filter((x) => x.status === 'open').length, n2, 'no llega a ningún grupo 2'); assert.ok(!/SUMADO LO ANTERIOR<\/b>: \+\$5\.000/.test(last(-3).p.text + last(-2).p.text), 'el grupo 2 no se entera');
     await hook(text(42, -3, '/anterior')); assert.ok(/Escribí el monto/.test(last(-3).p.text));
   });
   await caso('menú: /ayuda en el DESTINO explica los comandos con botones; /total del destino con pendientes', async () => {
     await hook(text(50, -2, '/ayuda')); const h = last(-2); assert.ok(/GRUPO DE DESTINO/.test(h.p.text) && /\/cotizado/.test(h.p.text) && /\/enviado/.test(h.p.text) && /CÓMO SIGUE/.test(h.p.text), h.p.text);
     assert.strictEqual(JSON.stringify(h.p.reply_markup.inline_keyboard.map((r) => r[0].callback_data)), JSON.stringify(['rbm:total', 'rbm:quote', 'rbm:sent', 'rbm:help', 'rbm:cbu', 'rbm:stop']));
     await hook(text(51, -2, '/total')); assert.ok(/SUMA ACTUALIZADA/.test(last(-2).p.text) && /Desde el último cierre: <b>/.test(last(-2).p.text) && !/De buffalobot/.test(last(-2).p.text), last(-2).p.text); // #1101
-    await hook(text(52, -1, '/ayuda')); const g = last(-1); assert.ok(/\/cierre 500\.000/.test(g.p.text) && /\/anterior/.test(g.p.text) && g.p.reply_markup.inline_keyboard.length === 4, g.p.text);
+    await hook(text(52, -1, '/ayuda')); const g = last(-1); assert.ok(/\/cierre 500\.000/.test(g.p.text) && /\/suma/.test(g.p.text) && g.p.reply_markup.inline_keyboard.length === 4, g.p.text);
   });
   const cbIn = (chat, data, mid = 6000) => hook({ callback_query: { id: 'q' + Math.random(), data, from: { first_name: 'Ana' }, message: { message_id: mid, chat: { id: chat, type: 'supergroup', title: 'x' } } } });
   await caso('/cierre 500.000 con 2 destinos: elige la suma, cierra ESE monto y el resto sigue sumando', async () => {
-    const tot = (to) => RcptFwd.rows.filter((x) => x.toChat === to && x.status === 'open').reduce((a, x) => a + x.amount, 0);
-    aiAmount = 1000.99; await hook(photo(56)); // las dos sumas con plata ⇒ pregunta de cuál
+    const tot = (to) => RcptFwd.rows.filter((x) => x.toChat === to && x.fromChat === '-1' && x.status === 'open').reduce((a, x) => a + x.amount, 0); // #1108: sólo lo del grupo 1 (lo anterior del grupo 2 no lo cierra el 1)
+    aiAmount = 1000.99; await hook(photo(56)); aiAmount = 600000.50; await hook(photo(57)); // las dos sumas con plata ⇒ pregunta de cuál
     const before = tot('-3'); const monthBefore = (last(-1).p.text.match(/Total de \w+ \(sin corte\): <b>([^<]+)/) || [])[1];
     await hook(text(53, -1, '/cierre 500.000')); const q = last(-1); assert.ok(/De qué suma se cierran <b>\$500\.000<\/b>/.test(q.p.text), q.p.text);
     const btn = q.p.reply_markup.inline_keyboard.find((r) => /fichasnuevobot/.test(r[0].text))[0];
@@ -424,6 +427,28 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     assert.ok(cfgDocs.find((d) => d.key === 'rcptbotplan').value.welcome.Wtest.sent);
     const n1 = sent.length; r = await ctx._rbWelcomeIfReady(c, c.structs[0]); assert.ok(r.done && sent.length === n1, 'ya la tienen: ni revisa');
     rc.groups = JSON.parse(keepG); rc.structs = JSON.parse(keepS); await ctx._rbCfg(true);
+  });
+  await caso('#1109 las dos lecturas no coinciden ⇒ NO se suma; botón "✅ Es $X" lo reenvía aclarado', async () => {
+    const st = cfgDocs[0].value.structs[0]; st.on = true; st.routes = [{ from: '-1', rules: [{ cents: '99', to: '-3' }], otherTo: null }]; st.srcQuote = false; await ctx._rbCfg(true);
+    aiByModel = { 'claude-opus-5-5': 28142.99, 'claude-sonnet-5-5': 281142.99 }; const nOpen = RcptFwd.rows.filter((x) => x.status === 'open').length;
+    await hook(photo(950)); const q = last(-1).p; assert.ok(/NO ESTOY SEGURO DEL MONTO/.test(q.text) && /No se sumó/.test(q.text) && /\$281\.142,99/.test(q.text) && /\$28\.142,99/.test(q.text), q.text);
+    assert.strictEqual(RcptFwd.rows.filter((x) => x.status === 'open').length, nOpen, 'no se sumó');
+    const btn = q.reply_markup.inline_keyboard.find((r) => /281\.142,99/.test(r[0].text))[0]; assert.ok(/^rba:/.test(btn.callback_data));
+    await cbIn(-1, btn.callback_data); const rec = RcptFwd.rows.find((x) => x.srcMsgId === 950); assert.ok(rec.status === 'open' && rec.amount === 281142.99 && rec.toChat === '-3', JSON.stringify(rec));
+    const cap = sent.filter((x) => x.method === 'copyMessage' && String(x.p.chat_id) === '-3').slice(-1)[0].p.caption; assert.ok(/MONTO CONFIRMADO A MANO<\/b> por Ana/.test(cap), cap);
+    await cbIn(-1, btn.callback_data); assert.ok(/Ya está resuelto/.test(sent.filter((x) => x.method === 'answerCallbackQuery').slice(-1)[0].p.text), 'no se suma dos veces');
+    aiByModel = { 'claude-opus-5-5': 50000.99, 'claude-sonnet-5-5': 50000.99 }; await hook(photo(951)); assert.ok(/REENVIADO/.test(last(-1).p.text), 'si coinciden, normal');
+    aiByModel = null;
+  });
+  await caso('#1108 /suma: el anterior del grupo 2 entra en SU cierre (como cierre aparte); el del grupo 1 se cierra sin pasar al 2', async () => {
+    for (const x of RcptFwd.rows) if (x.status === 'open' || x.status === 'srconly') x.status = 'closed';
+    await hook(text(960, -3, '/suma 1.000.000')); assert.ok(/Sólo en la cuenta de este grupo/.test(last(-3).p.text), last(-3).p.text);
+    await hook(text(961, -1, '/suma 2.000.000')); assert.ok(!/2\.000\.000/.test(last(-3).p.text), 'el grupo 2 no ve lo del 1');
+    aiAmount = 10000.99; await hook(photo(962)); const n0 = RcptClose.rows.length;
+    await hook(text(963, -1, '/cierre')); const btn = last(-1).p.reply_markup && last(-1).p.reply_markup.inline_keyboard; if (btn && /rbc|close/.test(JSON.stringify(btn))) await cbIn(-1, btn[0][0].callback_data);
+    const news = RcptClose.rows.slice(n0); assert.ok(news.some((x) => x.fromChat === '-1' && Math.abs(x.total - 10000.99) < 0.01) && news.some((x) => x.fromChat === '' && x.total === 1000000) && !news.some((x) => x.total === 2000000), JSON.stringify(news));
+    const g1 = sent.filter((x) => String(x.p.chat_id) === '-1' && /CIERRE/.test(x.p.text || '')).slice(-1)[0].p.text; assert.ok(/Anterior de este grupo: cerrado <b>\$2\.000\.000/.test(g1) && !/1\.000\.000/.test(g1), g1);
+    const g2 = sent.filter((x) => String(x.p.chat_id) === '-3' && /CIERRE/.test(x.p.text || '')).slice(-1)[0].p.text; assert.ok(/\$1\.010\.000,99/.test(g2) && !/2\.000\.000/.test(g2), g2);
   });
   await caso('estructura APAGADA no reenvía nada', async () => { cfgDocs[0].value.structs[0].on = false; await ctx._rbCfg(true); const n = sent.length; await hook(photo(13)); assert.strictEqual(sent.length, n); });
   await caso('secreto incorrecto ⇒ 401', async () => { let code = 0; await routes['POST /api/rcptbot/webhook/:bot']({ params: { bot: '111' }, get: () => 'MAL', body: {} }, { status(c) { code = c; return this; }, end() {}, json() {} }); assert.strictEqual(code, 401); });

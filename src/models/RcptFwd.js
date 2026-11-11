@@ -19,6 +19,7 @@ const rcptFwdSchema = new mongoose.Schema({
   fileKind: { type: String, default: null }, // photo | document
   fileMime: { type: String, default: null },
   fileName: { type: String, default: null },
+  doubt: { type: [Number], default: undefined }, // #1109: montos posibles cuando las lecturas no coinciden (botones ✅ Es $X)
   caption: { type: String, default: '' },
   fwdMsgId: { type: Number, default: null },
   replyMsgId: { type: Number, default: null },

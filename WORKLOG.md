@@ -29,6 +29,27 @@
   10 min) y con el botón **🩺 Revisar grupos ahora** (`GET /api/admin/rcptbot?repair=1`). `_rbGroupSeen` lee fresco y guarda hasta 400. El panel actualiza
   la lista de grupos cada 20 s sin pisar lo que se está editando. Prueba: `test-rcptbot-flow.js` (36 casos).
 
+### 1109. Bot de comprobantes: LECTURA DEL MONTO a prueba de errores (2026-11-11)
+- **Owner (con fotos):** "detectó mal el número, necesito que lea bien el número grande de la transferencia": $447.116⁹⁹ se leyó $447,12 (la IA devolvía
+  447.116 como número ⇒ punto de miles tomado como coma) y $281.142,99 como $28.142,99 (foto girada, Haiku 4.5 se comió un dígito).
+- `comprobanteAiService`: el prompt pide además `monto_texto` (tal cual), `monto_pesos` (todos los dígitos) y `monto_centavos`, con el formato argentino y fotos
+  giradas explicados; `resolveAmount` cruza pesos+centavos / texto / número (un número con 3 decimales no cuenta) ⇒ `amountConflict` + `amountCandidates`.
+  `analyzeComprobante(content, { model })` (los 5.x con max_tokens 4000 porque piensan). Test nuevo `scripts/test-receipt-amount.js` (6).
+- Bot de comprobantes (`_rbReadAmount`): DOS lecturas en paralelo con modelos distintos (`RCPTBOT_AI_MODEL` = claude-opus-5-5, `RCPTBOT_AI_CHECK_MODEL` =
+  claude-sonnet-5-5, '0' = sin segunda). Si no coinciden (o una dudó) ⇒ NO se suma: "⚠️ NO ESTOY SEGURO DEL MONTO: leí $A o $B" con botones "✅ Es $X"
+  (`rba:<id>:<i>`, `RcptFwd.doubt`) o responder el monto; si el que mandó escribió el monto y es uno de los leídos, se usa ése. Lo confirmado llega al grupo 2
+  con "✏️ MONTO CONFIRMADO A MANO por …". El chat de clientes sigue con su modelo (sólo mejora el cruce del monto).
+
+### 1108. Bot de comprobantes: /suma (lo anterior) SÓLO en el grupo donde se escribe (2026-11-11)
+- **Owner:** "en Fichas, como ya se reenvió todo y está sumado en el otro grupo, que se pueda poner lo anterior en el grupo 1 pero no pase al grupo 2, y en el
+  grupo 2 sumar /anterior de lo que había sin que se cruce" · "otra /suma para sumar lo anterior de cada grupo; todo lo próximo que detecta y reenvía sí suma
+  en el grupo 2".
+- `/suma` (= `/anterior`, `/sumar`): GRUPO 1 ⇒ RcptFwd `toChat ''` `status 'srconly'` (su suma, su mes; al cerrar total ⇒ 'srcclosed', línea "📥 Anterior de este
+  grupo" en SU cierre, nunca al 2). GRUPO 2 (aunque le manden varios) ⇒ RcptFwd `fromChat ''` 'open' (su cuenta; en su próximo cierre total entra como un
+  RcptClose aparte "anterior del grupo", no lo ve ningún grupo 1). `/restar` sigue igual. Textos/guías/bienvenida dicen /suma.
+- **Fix de #1101:** la respuesta ✅ del grupo 1 mostraba como "Acumulado" la cuenta TOTAL del grupo 2 (todos los que le mandan); ahora su propia suma.
+- Tests: rcptbot-flow 45; los 30 del repo OK.
+
 ### 1107. Bot de comprobantes: la bienvenida sale SÓLO en estructuras que andan perfecto (2026-11-11) — panel v303
 - **Owner:** "que se envíen las que funcionan perfecto; las que falta editar algo, que esperen que ajuste para confirmar".
 - `_rbWelcomeIfReady`: antes de mandar revisa en Telegram cada grupo de la estructura (`_rbStructHealth`: bot adentro; ADMINISTRADOR en los que mandan salvo

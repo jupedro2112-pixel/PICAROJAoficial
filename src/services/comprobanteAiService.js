@@ -72,6 +72,12 @@ const PROMPT = [
   '  (ej: 3QK7M2XWZ8H4N6P1R9T5VB). Copialo EXACTO, carácter por carácter (ojo con 0/O, 1/I, 5/S, 8/B). Si no está, null.',
   '  No lo confundas con el "Código de transacción" / id interno de la billetera (ej. un UUID como 1a2b3c4d-…): ese va en numero_operacion.',
   '- monto: el importe transferido, sólo el número sin símbolos ni puntos de miles (number).',
+  '- monto_texto: el importe EXACTO como está impreso, con sus puntos y comas (string, ej. "$ 447.116,99").',
+  '- monto_pesos: TODOS los dígitos de la parte entera del importe, sin puntos ni espacios (string, ej. "447116").',
+  '- monto_centavos: los 2 dígitos de los centavos (string, ej. "99"); "00" si no tiene.',
+  '  FORMATO ARGENTINO: el PUNTO separa los MILES ("447.116" son cuatrocientos cuarenta y siete MIL ciento dieciséis) y los',
+  '  centavos van después de la COMA o en números CHIQUITOS ARRIBA (superíndice): "$447.116⁹⁹" = 447116 pesos con 99 centavos.',
+  '  Si la imagen está GIRADA o de costado, girala mentalmente y leé el número grande dígito por dígito, sin saltear ninguno.',
   '- titular_origen: nombre del que envió el dinero (string).',
   '- cbu_origen: CBU/CVU o alias de la cuenta de ORIGEN (string).',
   '- cuit_origen: CUIT/CUIL de quien ENVÍA el dinero (string, ej. 20-12345678-9), o null.',
@@ -83,7 +89,7 @@ const PROMPT = [
   'Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, con',
   'exactamente estas claves:',
   '{"es_comprobante": true|false, "confianza": 0..1, "numero_operacion": string|null, "coelsa_id": string|null,',
-  ' "monto": number|null, "titular_origen": string|null, "cbu_origen": string|null, "cuit_origen": string|null,',
+  ' "monto": number|null, "monto_texto": string|null, "monto_pesos": string|null, "monto_centavos": string|null, "titular_origen": string|null, "cbu_origen": string|null, "cuit_origen": string|null,',
   ' "titular_destino": string|null, "cbu_destino": string|null,',
   ' "banco": string|null, "fecha": string|null}'
 ].join('\n');
@@ -109,17 +115,17 @@ function parseJsonLoose(text) {
  *   amount, originHolder, originCbu, bank, paymentDate, rawText, model } o
  *   { ok:false, error } si no se pudo analizar.
  */
-async function analyzeComprobante(content) {
+async function analyzeComprobante(content, opts = {}) { // opts.model: otro modelo (el bot de comprobantes usa uno más preciso)
   const apiKey = getApiKey();
   if (!apiKey) return { ok: false, error: 'ANTHROPIC_API_KEY no configurada' };
 
   const imageBlock = buildImageBlock(content);
   if (!imageBlock) return { ok: false, error: 'Contenido no es una imagen analizable' };
 
-  const model = getModel();
+  const model = opts.model || getModel();
   const body = {
     model,
-    max_tokens: 600,
+    max_tokens: /^claude-(opus|sonnet|fable)-5|^claude-haiku-5/.test(model) ? 4000 : 600, // los modelos 5.x piensan antes de contestar
     messages: [{
       role: 'user',
       content: [imageBlock, { type: 'text', text: PROMPT }]
@@ -146,9 +152,13 @@ async function analyzeComprobante(content) {
       return { ok: false, error: 'Respuesta de IA sin JSON válido', rawText: raw };
     }
 
-    const amountNum = (parsed.monto === null || parsed.monto === undefined)
+    const amountNum0 = (parsed.monto === null || parsed.monto === undefined)
       ? null
       : (Number(String(parsed.monto).replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}\b)/g, '').replace(',', '.')) || null);
+    // #1109 (owner: "detectó mal el número": $447.116⁹⁹ leído como 447,12 y $281.142,99 como 28.142,99). El monto sale de pesos + centavos por separado
+    // y se cruza con el texto impreso y con el número; si no coinciden, amountConflict (el que llama decide: el bot de comprobantes NO adivina).
+    const amt = resolveAmount(parsed, amountNum0);
+    const amountNum = amt.amount;
 
     return {
       ok: true,
@@ -158,7 +168,7 @@ async function analyzeComprobante(content) {
       // #999: COELSA ID (lo trae el banco en cada transferencia: cruce exacto) y CUIT de origen (cruce con fromCUIT del movimiento).
       coelsaId: /^[A-Za-z0-9]{12,40}$/.test(String(parsed.coelsa_id || '').replace(/[\s-]/g, '')) ? String(parsed.coelsa_id).replace(/[\s-]/g, '').toUpperCase() : null,
       originCuit: String(parsed.cuit_origen || '').replace(/\D/g, '').length === 11 ? String(parsed.cuit_origen).replace(/\D/g, '') : null,
-      amount: amountNum,
+      amount: amountNum, amountConflict: amt.conflict, amountCandidates: amt.candidates,
       amountRaw: parsed.monto == null ? null : String(parsed.monto).slice(0, 40), // #1099: el texto tal cual (USDT viene como 1,234.56)
       originHolder: parsed.titular_origen ? String(parsed.titular_origen).trim() : null,
       originCbu: parsed.cbu_origen ? String(parsed.cbu_origen).trim() : null,
@@ -178,4 +188,31 @@ async function analyzeComprobante(content) {
   }
 }
 
-module.exports = { isEnabled, analyzeComprobante, getModel };
+// Monto en formato argentino a número: "447.116,99" / "$ 447.116⁹⁹" / "447116.99" / "281.142 99". Devuelve null si es ambiguo.
+const SUP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9' };
+function parseArAmount(txt) {
+  if (txt == null) return null; let t = String(txt).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g, (m) => ',' + m.split('').map((ch) => SUP[ch]).join('')).replace(/[^\d.,\s]/g, ' ').trim();
+  t = t.replace(/\s+/g, ' ');
+  let m = t.match(/^(\d{1,3}(?:[.\s]\d{3})+|\d+)(?:\s*,\s*(\d{1,2}))?$/); // 447.116,99 · 447 116,99 · 447116,99 · 447.116
+  if (m) return Number(m[1].replace(/[.\s]/g, '')) + (m[2] ? Number(m[2].padEnd(2, '0')) / 100 : 0);
+  m = t.match(/^(\d{1,3}(?:\.\d{3})+) (\d{2})$/); if (m) return Number(m[1].replace(/\./g, '')) + Number(m[2]) / 100; // 281.142 99 (centavos arriba)
+  m = t.match(/^(\d{1,3}(?:,\d{3})+)\.(\d{2})$/); if (m) return Number(m[1].replace(/,/g, '') + '.' + m[2]); // 1,234.56 (formato inglés)
+  m = t.match(/^(\d+)\.(\d{2})$/); if (m) return Number(m[1] + '.' + m[2]); // 447116.99
+  return null;
+}
+function resolveAmount(parsed, numeric) {
+  const r2 = (n) => Math.round(n * 100) / 100; const cands = [];
+  const pesos = String(parsed.monto_pesos == null ? '' : parsed.monto_pesos).replace(/\D/g, ''); const cent = String(parsed.monto_centavos == null ? '' : parsed.monto_centavos).replace(/\D/g, '');
+  const parts = pesos ? r2(Number(pesos) + (cent ? Number(cent.slice(0, 2).padEnd(2, '0')) / 100 : 0)) : null; if (parts) cands.push(parts);
+  const txt = parseArAmount(parsed.monto_texto); if (txt) cands.push(r2(txt));
+  // el número suelto con 3 decimales (447.116) es un punto de miles mal tomado: no sirve para decidir
+  const numOk = numeric != null && !/\.\d{3}$/.test(String(parsed.monto)) ? r2(numeric) : null; if (numOk) cands.push(numOk);
+  const uniq = [...new Set(cands)];
+  if (!uniq.length) return { amount: null, conflict: false, candidates: [] };
+  if (uniq.length === 1) return { amount: uniq[0], conflict: false, candidates: uniq };
+  // pesos+centavos y el texto impreso mandan; si esos dos coinciden, el número suelto no cuenta
+  if (parts && txt && r2(txt) === parts) return { amount: parts, conflict: false, candidates: uniq };
+  return { amount: parts || r2(txt || numOk), conflict: true, candidates: uniq };
+}
+
+module.exports = { isEnabled, analyzeComprobante, getModel, parseArAmount, resolveAmount };

@@ -82,7 +82,7 @@ No hace falta escribir nada: sólo mandar la foto.
 4) CORREGIR UN MONTO O UN DECIMAL
    - Respondé la foto (o la respuesta del bot) con el monto correcto, con centavos (ej. 25000,82).
    - El bot lo corrige y ajusta la suma. Del otro lado llega aclarado qué se corrigió y quién.
-   - Si ya entró en un cierre no se puede corregir así: usá /restar o /anterior.
+   - Si ya entró en un cierre no se puede corregir así: usá /restar o /suma.
    - /anular respondiendo un comprobante lo saca de la suma.
 
 5) CIERRE
@@ -101,7 +101,8 @@ ${ctx.srcQuote ? `
 ${n[1]}) COMANDOS (o el botón 📋 Ver comandos)
    /total ............... suma actualizada y total del mes
    /cierre .............. cierra TODO lo sumado · /cierre 500.000 ... sólo ese monto
-   /anterior 13.686.199 . suma lo que venían acumulando antes del bot
+   /suma 13.686.199 ..... suma lo que venían acumulando antes del bot (SÓLO en la cuenta de este grupo;
+                          lo nuevo que se reenvía sigue sumando normal)
    /restar 50.000 ....... resta un monto
    /anular .............. respondiendo un comprobante: lo saca de la suma
    /cbu ................. a qué CBU transferir ahora (titular, CBU, alias, terminación)
@@ -141,7 +142,8 @@ CBU DE BAJADA (la cuenta a la que transfieren)
 
 CORRECCIONES
    /anular .............. respondiendo un comprobante reenviado: lo saca de la suma
-   /restar 50.000 ....... resta un monto · /anterior 13.686.199 ... suma lo que venía de antes del bot
+   /restar 50.000 ....... resta un monto · /suma 13.686.199 ... suma lo que había antes del bot
+                          (SÓLO en la cuenta de este grupo; entra en su próximo cierre)
 
 OTROS
    /total ............... suma actualizada y pendientes

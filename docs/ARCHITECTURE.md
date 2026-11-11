@@ -2045,6 +2045,7 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Caja:** para agentes, `GET /api/admin/caja-movimientos` (+ receipt/verify) sólo `source:'caja'`.
 - **Stats de publicistas:** depósitos reales sin `payout_refund` (los `/r/<token>` también sin PRUEBA ni fallidas).
 - **Webhooks salientes:** `processQueue` reserva cada item (`findOneAndUpdate` sobre `nextRetryAt`) antes de mandarlo.
+- **Bot de comprobantes #1108/#1109:** `/suma` no cruza: grupo 1 ⇒ RcptFwd `status:'srconly'` (toChat ''), grupo 2 ⇒ RcptFwd `fromChat:''` (entra en su cierre como RcptClose aparte). Lectura del monto: 2 modelos (`RCPTBOT_AI_MODEL`/`RCPTBOT_AI_CHECK_MODEL`) + `resolveAmount` (pesos/centavos/texto); duda ⇒ `RcptFwd.doubt` + botones `rba:`; nunca se suma un monto dudoso.
 - **Bot de comprobantes #1106:** bienvenida por grupo = `_rbWelcome` (fijada → archivo → /anterior), `_rbWelcomeStruct` (cada grupo una vez); textos en `src/utils/rcptbotGuides.js` (el del grupo 1 NO dice adónde va). Plan: `_rbPlanGroup` (diagnóstico) + `pins` (ID a mano, `/api/admin/rcptbot/plan-pin`).
 - **Bot de comprobantes #1104 (grupo de FICHAS):** `struct.fichasDests` ⇒ sin cierres salvo el de MES; `RcptClose.status` 'fichas' → 'fichasdone' al completar; arrastre en `Config['rcptbotfichas']` (escribir por campo).
 - **Bot de comprobantes #1103:** lo automático de una vez por período usa `_rbFlag` (Config['rcptbotflags']), NUNCA `_rbOnce` (lista de 500 mensajes, se cae).
