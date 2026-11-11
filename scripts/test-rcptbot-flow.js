@@ -74,7 +74,7 @@ const tgChannel = {
 };
 let aiAmount = 25000.99;
 let aiByModel = null; // #1109: { modelo: monto } para simular lecturas distintas
-const comprobanteAi = { isEnabled: () => true, analyzeComprobante: async (d, o) => ({ ok: true, amount: aiByModel && o && o.model in aiByModel ? aiByModel[o.model] : aiAmount }) };
+const comprobanteAi = { isEnabled: () => true, analyzeComprobante: async (d, o) => { if (global.AI_DELAY) await new Promise((r) => setTimeout(r, global.AI_DELAY)); return { ok: true, amount: aiByModel && o && o.model in aiByModel ? aiByModel[o.model] : aiAmount }; } };
 let NOW = new Date('2026-11-10T15:00:00Z'); // martes 12:00 ART
 const RealDate = Date; class FakeDate extends RealDate { constructor(...a) { if (a.length) super(...a); else super(NOW.getTime()); } static now() { return NOW.getTime(); } }
 const routes = {}; const app = { get: (p, ...h) => { routes['GET ' + p] = h[h.length - 1]; }, post: (p, ...h) => { routes['POST ' + p] = h[h.length - 1]; } };
@@ -290,6 +290,12 @@ let ok = 0; const caso = async (n, fn) => { try { await fn(); ok++; console.log(
     await hook(photoU(81, 'U1')); assert.ok(/COMPROBANTE DUPLICADO · NO SE SUMA/.test(last(-1).p.text), last(-1).p.text); assert.strictEqual(openSum('-2'), s0);
     const btn = last(-1).p.reply_markup.inline_keyboard[0][0]; assert.ok(/Es otro/.test(btn.text));
     await cbIn(-1, btn.callback_data); assert.ok(Math.abs(openSum('-2') - s0 - 4000.99) < 0.01);
+  });
+  await caso('revisión #1124: la MISMA foto mandada dos veces mientras la IA lee ⇒ se suma UNA sola vez', async () => {
+    aiAmount = 5000.99; const s0 = openSum('-2'); global.AI_DELAY = 30;
+    await Promise.all([hook(photoU(7090, 'U9')), hook(photoU(7091, 'U9'))]); global.AI_DELAY = 0;
+    assert.ok(Math.abs(openSum('-2') - s0 - 5000.99) < 0.01, 'sumó ' + (openSum('-2') - s0));
+    assert.strictEqual(RcptFwd.rows.filter((x) => x.fileUid === 'U9' && x.status === 'dup').length, 1);
   });
   await caso('duplicado de algo ya COTIZADO ⇒ no se detecta (se suma normal)', async () => {
     aiAmount = 7000.99; await hook(photoU(82, 'U2')); await hook(text(83, -1, '/cierre')); await hook(text(84, -2, '/cotizado'));

@@ -29,7 +29,7 @@ const okResp = (o, extra) => Object.assign({ stop_reason: 'end_turn', model: 'cl
 const FACTS = { minDeposit: 2000, withdrawMin: 5000, depositRolloverX: 1, giftRolloverX: 5, firstDepositPct: 100, firstDepositCap: 15000, installGiftOn: true, installGiftFixed: 5000, refunds: { daily: 'sobre todo lo perdido 10%' }, referralsOn: false, platforms: 'Girox', officialTexts: ['Carga mínima $2.000'] };
 const USER_NEW = { username: 'ana', accountDays: 0, realDeposits: 0, welcomeEligible: true, firstDepositPct: 100, appInstalled: false, pendingReceipts: 0, payout: '' };
 
-caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallbacks default + header beta', async () => {
+caso('Pedido: modelo Haiku 5.5 por defecto, esfuerzo low, JSON con esquema, SIN fallbacks (Haiku no los admite)', async () => {
   nextErr = null; nextResp = okResp({ reply: '¡Hola! Para cargar tocá DEPOSITAR.', handoff: false, handoff_reason: '' });
   const r = await bot.generateReply({ facts: FACTS, user: USER_NEW, agentName: 'Sofía', history: [{ role: 'user', text: 'hola' }] });
   assert.ok(r.ok); assert.strictEqual(r.reply, '¡Hola! Para cargar tocá DEPOSITAR.'); assert.strictEqual(r.handoff, false);
@@ -37,7 +37,7 @@ caso('Pedido: modelo Opus 5.5 por defecto, esfuerzo low, JSON con esquema, fallb
   assert.strictEqual(b.model, 'claude-haiku-5-5'); assert.strictEqual(b.output_config.effort, 'low');
   assert.strictEqual(b.output_config.format.type, 'json_schema'); assert.deepStrictEqual(b.output_config.format.schema.required, ['reply', 'handoff', 'handoff_reason', 'ignore', 'learn_question', 'learn_answer', 'info_topic', 'fix']);
   assert.strictEqual(b.output_config.format.schema.additionalProperties, false);
-  assert.strictEqual(b.fallbacks, 'default'); assert.strictEqual(lastReq.opts.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
+  assert.ok(!('fallbacks' in b) && !lastReq.opts.headers['anthropic-beta'], 'Haiku 5.5 no admite fallbacks (400): no se mandan (revisión #1124)');
   assert.ok(!('thinking' in b) && !('temperature' in b), 'no manda thinking/temperature (Opus 5.5)');
   assert.strictEqual(lastReq.opts.headers['x-api-key'], 'test-key');
 });
@@ -165,7 +165,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   // #1042-e: todo adentro de Girox — Soporte se muda al casino, Volver vuelve al juego, DEPOSITAR usa la Carga rápida, el casino al cerrarse lo devuelve
   const H = fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8');
   assert.ok(/VIP\.ui\.toggleCasinoChat = function \(\) \{ casinoChatToggle\(\); \}/.test(H) && /async function casinoChatToggle\(\) \{[\s\S]{0,800}if \(classic\) \{ toggleCasinoLoad\(\); return; \}[\s\S]{0,120}_supportIntoCasino\(\)/.test(H), 'la BURBUJA de Girox abre el chat nuevo (clásico ⇒ Carga rápida)');
-  assert.ok(/function casinoSupport\(\) \{[\s\S]{0,400}try \{ VIP\.ui\.closeCasinoFrame\(\); \} catch \(_\) \{\} setTimeout\(\(\) => \{ try \{ setHomeMode\('mini'\)/.test(H), 'el botón Soporte del casino, como antes (salvo sólo Girox)');
+  assert.ok(/function casinoSupport\(\) \{[\s\S]{0,700}_casinoIsOpen\(\)\) \{ if \(!_spCasino\) _supportIntoCasino\(\); return; \}[\s\S]{0,200}setHomeMode\('mini'\)/.test(H), 'el botón Soporte del casino abre la burbuja (#1123); clásico como antes');
   assert.ok(/function closeSupport\(\) \{\s*if \(_supportOutOfCasino\(\)\) return;/.test(H) && /_supportOutOfCasino\(\); \} catch \(_\) \{\} \/\/ #1042-e: el chat vuelve/.test(H), 'vuelve a su lugar');
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
   { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); assert.ok(/#supportPanel:not\(\.sp-in-casino\) \.sp-actbar \{ display: none !important; \}/.test(C2) && !/^body:not\(\.sp-classic\) #supportPanel /m.test(C2), 'lo nuevo sólo en la burbuja; Soporte como antes'); }

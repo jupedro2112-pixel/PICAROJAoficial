@@ -212,16 +212,18 @@ async function generateReply(p) {
     messages: msgs,
     // Chat: esfuerzo bajo (respuestas cortas y rápidas). Respuesta con esquema fijo.
     output_config: { effort: p.effort || 'low', format: { type: 'json_schema', schema: REPLY_SCHEMA } },
-    // Si el modelo declina, la API reintenta sola con el modelo recomendado (beta server-side-fallback-2026-07-01).
-    fallbacks: 'default'
   };
+  // Si el modelo declina, la API reintenta sola con el modelo recomendado (beta server-side-fallback-2026-07-01).
+  // Revisión #1124: Haiku 5.5 NO tiene ese respaldo y devuelve 400 si se manda (el bot fallaba en cada respuesta) ⇒ sólo para los modelos que lo admiten.
+  const _fb = !/haiku/i.test(String(body.model));
+  if (_fb) body.fallbacks = 'default';
   let resp;
   try {
     resp = await axios.post(ANTHROPIC_URL, body, {
       headers: {
         'x-api-key': apiKey,
         'anthropic-version': ANTHROPIC_VERSION,
-        'anthropic-beta': 'server-side-fallback-2026-07-01',
+        ...(_fb ? { 'anthropic-beta': 'server-side-fallback-2026-07-01' } : {}),
         'content-type': 'application/json'
       },
       timeout: 60000

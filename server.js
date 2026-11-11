@@ -16280,7 +16280,7 @@ async function _supportBotHistory(u) {
   return rows.reverse().map((m) => {
     const mine = m.senderId === u.id;
     const txt = m.type === 'image' ? '[mandó una imagen]' : m.type === 'video' ? '[mandó un video]' : String(m.content || '').slice(0, 1500);
-    if (mine) return { role: 'user', text: txt };
+    if (mine) return { role: 'user', text: txt.replace(/\[\s*aviso\s+autom[aá]tico\s*\]/gi, '(el cliente escribió: aviso automático)') }; // revisión #1124: un cliente no puede hacerse pasar por un aviso de la app
     return { role: 'assistant', text: m.type === 'system' ? '[aviso automático] ' + txt : txt };
   });
 }
@@ -32225,9 +32225,13 @@ const _rbH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/<
 const _rbMoney = (n) => { const v = Math.round(Number(n) || 0); return (v < 0 ? '−$' : '$') + Math.abs(v).toLocaleString('es-AR'); }; // #1113: negativo = a favor (−$X)
 const _rbMoney2 = (n) => { const v0 = Number(n) || 0; if (v0 < 0) return '−' + _rbMoney2(-v0); const v = v0; return '$' + v.toLocaleString('es-AR', Number.isInteger(v) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }; // ,50 (no ,5): los centavos deciden el grupo
 function _rbParseAmount(txt, max = 100000000) { // max: un comprobante; los comandos (/anterior, /cierre, panel) aceptan sumas grandes
-  const ms = String(txt || '').match(/\d[\d.,]*/g); if (!ms) return null; let best = null;
+  const src = String(txt || ''); let ms = src.match(/\d[\d.,]*/g); if (!ms) return null; let best = null;
+  // revisión #1124: un número largo SIN separadores (n° de operación, CUIT, CBU) no gana si hay otro con separadores o con "$" adelante
+  // ("25000,99 op 87654321" daba 87.654.321). Con un solo número (p. ej. "/suma 13686199") se toma igual.
+  const fmt = ms.filter((x) => /[.,]/.test(x.replace(/[.,]$/, '')) || new RegExp('\\$\\s*' + x.replace(/[.]/g, '\\.')).test(src)); if (fmt.length && fmt.length < ms.length) ms = fmt;
   for (const raw of ms) {
     let t = raw.replace(/[.,]$/, '');
+    if (/^\d{1,3}(\.\d{3})+\.\d{1,2}$/.test(t)) t = t.replace(/\.(\d{1,2})$/, ',$1'); // revisión #1124: "20.800.000.50" (punto en vez de coma) = 20.800.000,50, no 2.080.000.050
     if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); else if (/\.\d{1,2}$/.test(t) && !/\.\d{3}/.test(t)) t = t.replace(/,/g, ''); else t = t.replace(/[.,]/g, '');
     const n = Number(t); if (Number.isFinite(n) && n >= 1 && n <= max && (best === null || n > best)) best = n;
   }
@@ -32541,15 +32545,15 @@ async function _rbRoute(c, rec, amount, from, opts = {}) {
   const route = (c.routes || []).find((x) => String(x.from) === rec.fromChat && (!rec.structId || x.structId === rec.structId));
   const reply = (text, kb) => _rbSend(c, rec.fromChat, text, rec.srcBot, Object.assign({ reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true }, kb ? { reply_markup: kb } : {}));
   if (!(Number(amount) > 0) && opts.doubt && opts.doubt.length > 1) { // #1109: las lecturas no coinciden ⇒ no se suma, el grupo elige
-    await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', doubt: opts.doubt } });
+    await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'hold' }, { $set: { status: 'hold', doubt: opts.doubt } });
     await reply(`⚠️ <b>NO ESTOY SEGURO DEL MONTO</b>: leí ${opts.doubt.map((v) => '<b>' + _rbMoney2(v) + '</b>').join(' o ')}.\n<b>No se sumó ni se reenvió.</b>\n👇 Tocá el correcto, o respondé esta foto con el monto (con centavos). Si no es ninguno, mandá una foto más clara, derecha y de frente.`, { inline_keyboard: opts.doubt.map((v, i) => [{ text: '✅ Es ' + _rbMoney2(v), callback_data: `rba:${rec.id}:${i}` }]) });
     return;
   }
-  if (!(Number(amount) > 0)) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold' } }); await reply('⚠️ <b>NO SE PUDO LEER EL COMPROBANTE</b>: <b>no se sumó ni se reenvió</b>.\n📸 Por favor mandá una <b>foto bien legible</b> (completa, sin cortes ni reflejos, que se vea el monto con los centavos). Cuando llegue bien, se suma.\n✏️ O respondé esta foto con el monto con centavos (ej. 25000,99).'); return; } // #1105 (owner)
+  if (!(Number(amount) > 0)) { await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'hold' }, { $set: { status: 'hold' } }); await reply('⚠️ <b>NO SE PUDO LEER EL COMPROBANTE</b>: <b>no se sumó ni se reenvió</b>.\n📸 Por favor mandá una <b>foto bien legible</b> (completa, sin cortes ni reflejos, que se vea el monto con los centavos). Cuando llegue bien, se suma.\n✏️ O respondé esta foto con el monto con centavos (ej. 25000,99).'); return; } // #1105 (owner)
   const to = opts.forceTo ? (_rbDests(c, route).some((d) => d.to === String(opts.forceTo)) ? String(opts.forceTo) : null) : (route && _rbPickTo(route, amount));
-  if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`❌ <b>TERMINACIÓN MAL</b>: ${_rbMoney2(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó.${_rbOtherGroupTxt(c, route, amount)}\n⚠️ Prestá atención a los centavos:\n${_rbRulesList(c, route || {})}\n👇 Si el cliente se equivocó con el decimal, <b>elegí a qué grupo va</b>. Si el monto está mal, respondé esta foto con el correcto (con centavos).`, route ? _rbPickKb(c, route, rec.id) : undefined); return; }
+  if (!to) { await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'hold' }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply(`❌ <b>TERMINACIÓN MAL</b>: ${_rbMoney2(amount)} termina en <b>,${_rbCents(amount)}</b> y no hay grupo para esos centavos. NO se reenvió ni se sumó.${_rbOtherGroupTxt(c, route, amount)}\n⚠️ Prestá atención a los centavos:\n${_rbRulesList(c, route || {})}\n👇 Si el cliente se equivocó con el decimal, <b>elegí a qué grupo va</b>. Si el monto está mal, respondé esta foto con el correcto (con centavos).`, route ? _rbPickKb(c, route, rec.id) : undefined); return; }
   const toTitle = _rbTitle(c, to); const dst = _rbTokFor(c, to, (route && route.botId) || rec.srcBot);
-  if (!dst) { await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply('⚠️ Ningún bot cargado está en ' + _rbH(toTitle) + ': agregalo a ese grupo. No se reenvió.'); return; }
+  if (!dst) { await _rbM().RcptFwd.updateOne({ id: rec.id, status: 'hold' }, { $set: { status: 'hold', amount, amountFrom: from } }); await reply('⚠️ Ningún bot cargado está en ' + _rbH(toTitle) + ': agregalo a ese grupo. No se reenvió.'); return; }
   const set = await _rbM().RcptFwd.findOneAndUpdate({ id: rec.id, status: 'hold' }, { $set: { status: 'open', toChat: to, toTitle, amount, amountFrom: from } }, { new: true });
   if (!set) return; // ya se reenvió (otra instancia / otro bot)
   const fz = _rbIsFichas(c, to); const s = await _rbDstOpenAll(to); const pend = fz ? '\n' + await _rbFichasTxt(to) : await _rbDstPendLine(to); // #1101: una sola cuenta · #1104: grupo de fichas
@@ -32589,7 +32593,11 @@ async function _rbOnReceipt(c, bot, m, file, route) {
   if (or.length) {
     // owner: "sólo dentro de los que están SIN COTIZAR": abiertos o en un cierre todavía PENDIENTE A COTIZAR (cotizado/enviado ya no cuenta)
     let prev = null;
-    for (const x of await _rbM().RcptFwd.find({ $or: or, id: { $ne: rec.id }, status: { $in: ['open', 'closed'] } }).sort({ createdAt: -1 }).limit(10).lean()) {
+    // revisión #1124: + el mismo comprobante mandado ANTES y todavía en lectura ('hold' de los últimos 15 min): la IA tarda 10-75 s y las dos copias
+    // se sumaban. Sólo cuenta la copia MÁS VIEJA (así la primera sigue y las demás quedan como duplicado).
+    const _mine = new Date(rec.createdAt || Date.now()).getTime();
+    for (const x of await _rbM().RcptFwd.find({ $or: or, id: { $ne: rec.id }, status: { $in: ['open', 'closed', 'hold'] } }).sort({ createdAt: -1 }).limit(10).lean()) {
+      if (x.status === 'hold') { const t = new Date(x.createdAt).getTime(); if ((t < _mine || (t === _mine && String(x.id) < String(rec.id))) && _mine - t < 15 * 60000) { prev = x; break; } continue; }
       if (x.status === 'open') { prev = x; break; }
       const cl = await _rbM().RcptClose.findOne({ batchId: x.closeId, toChat: x.toChat }).lean()
         || await _rbM().RcptClose.findOne({ fromChat: x.fromChat, toChat: x.toChat, createdAt: { $gte: x.createdAt } }).sort({ createdAt: 1 }).lean(); // cierres de antes de #1079-m
@@ -32597,7 +32605,7 @@ async function _rbOnReceipt(c, bot, m, file, route) {
     }
     if (prev) {
       await _rbM().RcptFwd.updateOne({ id: rec.id }, { $set: { status: 'dup', dupOf: prev.id, amount: rd.amount, amountFrom: rd.from } });
-      await _rbSend(c, rec.fromChat, `🚫 <b>COMPROBANTE DUPLICADO · NO SE SUMA</b>\nYa se mandó el ${_rbDT(prev.createdAt)} en ${_rbH(prev.fromTitle)} → ${_rbH(prev.toTitle || '')} · ${_rbMoney2(prev.amount)}${prev.status === 'closed' ? ' (ya entró en un cierre)' : ''}.\nSi es OTRA transferencia distinta, tocá el botón.`, rec.srcBot, { reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true, reply_markup: _rbKb(rd.amount > 0 ? [{ text: '✅ Es otro comprobante: sumarlo', callback_data: `rb:${rec.id}:f` }] : null) });
+      await _rbSend(c, rec.fromChat, `🚫 <b>COMPROBANTE DUPLICADO · NO SE SUMA</b>\nYa se mandó el ${_rbDT(prev.createdAt)} en ${_rbH(prev.fromTitle)} → ${_rbH(prev.toTitle || '')} · ${prev.status === 'hold' ? 'llegó recién, se está leyendo' : _rbMoney2(prev.amount)}${prev.status === 'closed' ? ' (ya entró en un cierre)' : ''}.\nSi es OTRA transferencia distinta, tocá el botón.`, rec.srcBot, { reply_to_message_id: rec.srcMsgId, allow_sending_without_reply: true, reply_markup: _rbKb(rd.amount > 0 ? [{ text: '✅ Es otro comprobante: sumarlo', callback_data: `rb:${rec.id}:f` }] : null) });
       return;
     }
   }
@@ -33321,7 +33329,7 @@ async function _rbOnMessage(c, bot, m) {
   if (!route && dstR.length && _rbIsFichas(c, fromChat)) { // #1104: FICHAS del mes anterior (respuesta al botón o /fichas monto)
     const fm = text.match(/^\/fichas(?:@\w+)?\s+(.+)$/i); const isRep = m.reply_to_message && m.reply_to_message.from && m.reply_to_message.from.is_bot && String(m.reply_to_message.text || '').startsWith(_RB_F_MARK);
     if (fm || (isRep && text)) {
-      if (!(await _rbOnce(fromChat, m.message_id))) return; const n = _rbParseAmount(fm ? fm[1] : text, 1e11);
+      if (!(await _rbOnce(fromChat, m.message_id))) return; const _ft = String(fm ? fm[1] : text).trim(); const n = /^\$?\s*0+([.,]0+)?$/.test(_ft) ? 0 : _rbParseAmount(_ft, 1e11); // revisión #1124: un mes con 0 fichas se puede cargar
       if (!(n >= 0) || n === null) { await _rbSend(c, fromChat, 'No entendí el monto. Ej.: <b>/fichas 12.500.000</b>', bot.id, { reply_to_message_id: m.message_id }); return; }
       await _rbFichasApply(c, fromChat, n, by, bot.id, m.message_id); return;
     }
@@ -33747,7 +33755,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
   try {
     const got = String(req.get('x-telegram-bot-api-secret-token') || '');
     let sec = await _tgSecretNow();
-    if (sec && got.length === sec.length && !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec))) { _tgSecretMem.at = 0; sec = await _tgSecretNow(); } // por si se rotó
+    if (sec && got.length === sec.length && !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec)) && Date.now() - (_tgSecretMem.flushAt || 0) > 30000) { _tgSecretMem.flushAt = Date.now(); _tgSecretMem.at = 0; sec = await _tgSecretNow(); } // por si se rotó · revisión #1124: como mucho 1 relectura cada 30 s (pedidos falsos no golpean la base)
     if (!sec || got.length !== sec.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(sec))) return res.status(401).end();
     const c = await _tgCfg();
     res.json({ ok: true }); // a Telegram se le contesta enseguida; lo demás sigue acá
