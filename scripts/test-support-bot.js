@@ -48,7 +48,7 @@ caso('Prompt: fijo cacheado primero; datos del servicio y del cliente (etapa sin
   assert.ok(/ETAPA: sin carga/.test(dyn)); assert.ok(/Califica para el bono de primera carga \(100%\)/.test(dyn)); assert.ok(/\$5\.000 en fichas/.test(dyn));
   assert.ok(/TU NOMBRE EN ESTE TURNO: Sofía/.test(dyn)); assert.ok(/referidos está pausado/.test(dyn));
   const fixed = b.system[0].text;
-  assert.ok(/NO tienen nada que ver con el servicio/.test(fixed) && /la gente viene a JUGAR/.test(fixed) && /MAPA DE LA APP/.test(fixed)); assert.ok(/MUY RESUMIDO/.test(fixed) && /info_topic/.test(fixed) && /sin carga.*directo a la carga/i.test(fixed) && /captura ENTERA/.test(fixed) && /sin negarlo ni hacerte pasar/.test(fixed) && /Soy Tati, la asistente virtual/.test(fixed) && /Juego responsable/.test(fixed));
+  assert.ok(/NO tienen nada que ver con el servicio/.test(fixed) && /la gente viene a JUGAR/.test(fixed) && /MAPA DE LA APP/.test(fixed)); assert.ok(/MUY RESUMIDO/.test(fixed) && /info_topic/.test(fixed) && /sin carga.*para cargar toca DEPOSITAR/i.test(fixed) && /NO escribas el CBU/.test(fixed) && /captura ENTERA/.test(fixed) && /sin negarlo ni hacerte pasar/.test(fixed) && /Soy Tati, la asistente virtual/.test(fixed) && /Juego responsable/.test(fixed));
 });
 caso('Cliente sin bono de bienvenida: el prompt dice que NO se lo ofrezca', async () => {
   nextResp = okResp({ reply: 'ok', handoff: false, handoff_reason: '' });
@@ -170,7 +170,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/if \(_casinoIsOpen\(\)\) \{ _supportOutOfCasino\(\); try \{ toggleCasinoLoad\(true\)/.test(H), 'DEPOSITAR adentro del casino');
   { const C2 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); assert.ok(/#supportPanel:not\(\.sp-in-casino\) \.sp-actbar \{ display: none !important; \}/.test(C2) && !/^body:not\(\.sp-classic\) #supportPanel /m.test(C2), 'lo nuevo sólo en la burbuja; Soporte como antes'); }
   { const C3 = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'), I3 = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
-    assert.ok(/body\.menus-one\.no-menu-full\.no-menu-basic\.no-menu-easy \.casino-topbar \.ct-multi \{ display: none !important; \}/.test(C3) && /class="casino-back ct-multi"/.test(H) && /id="ctSms"/.test(H) && /id="waHeadTg"/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'index.html'), 'utf8')), 'sólo Girox: sin Volver ni Menú, con Verificar SMS arriba y Telegram en el chat (#1092)');
+    assert.ok(/body\.menus-one\.no-menu-full\.no-menu-basic\.no-menu-easy \.casino-topbar \.ct-multi \{ display: none !important; \}/.test(C3) && /class="casino-back ct-multi"/.test(H) && /id="ctHelp"/.test(H) && /id="ctLoadChat"/.test(H) && /id="waHeadTg"/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'index.html'), 'utf8')), 'sólo Girox: sin Volver ni Menú, con 🎧 Soporte arriba (#1134), CARGA AQUÍ en el medio y Telegram en el chat (#1092)');
     assert.ok(/function _onlyGirox\(\)/.test(H) && /if \(_onlyGirox\(\)\) \{/.test(H), 'sólo Girox: Soporte abre el chat adentro del juego');
     ['refund', 'sorteo', 'misiones', 'ruleta', 'fueguito', 'referidos', 'sms'].forEach((t) => assert.ok(I3.includes("VIP.home.spInfo('" + t + "')"), 'fila de servicio: ' + t));
     assert.ok(/mig1042rGiroxOnly/.test(S), 'migración: sólo Girox una vez');
@@ -179,7 +179,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
       assert.ok(/async function _menuRetTick\(/.test(S) && /cron_locks/.test(S) && /Config\.set\('menuRetention'/.test(S) && /app\.get\('\/api\/admin\/inicio\/menus'/.test(S) && /loadInicioMenus\(\); \/\/ #1042-y/.test(A4), 'INICIO: panorama de menús por cron con lock (la ruta sólo lee)'); }
     { const U3 = fs.readFileSync(path.join(ROOT, 'public/js/ui.js'), 'utf8'), C3 = fs.readFileSync(path.join(ROOT, 'public/js/chat.js'), 'utf8');
       assert.ok(/VIP\.home\.casinoChatToggle\) return VIP\.home\.casinoChatToggle\(\)/.test(U3), 'burbuja: el primer toque abre el chat nuevo');
-      assert.ok(/if \(r\.handoff\) \{\n    const why = /.test(S) && /target: 'problema', label: '🆘 Tengo otro problema'/.test(S) && C3.includes("'problema']"), 'a Soporte sólo por el botón (la IA manda al botón)');
+      assert.ok(/if \(r\.handoff\) \{\n    const why = /.test(S) && /target: 'problema', label: '👤 Hablar con un agente'/.test(S) && C3.includes("'problema']"), 'a Soporte sólo por el botón (la IA manda al botón)');
       assert.ok(/SUPPORT_GREET_DEFAULT/.test(S) && /spGreetMsg/.test(C3) && /24 \* 3600 \* 1000\);\n          const cur = matchStage/.test(S), 'saludo al entrar + chat de 24 h para el cliente'); }
     { const A3 = fs.readFileSync(path.join(ROOT, 'public/adminprivado2026/admin.js'), 'utf8');
       assert.ok((S.match(/_supportBotCost\(r\);/g) || []).length === 2 && /const ai = await _inicioAiUsage\(day\)/.test(S) && /_inicioAiHtml\(d\.ai, n\)/.test(A3), 'INICIO: consumo de la IA día a día (bot + Probar)');
@@ -192,7 +192,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
     assert.ok(/Ya te paso con una persona del equipo, un segundo/.test(S), 'Tengo otro problema ⇒ "Ya te paso con una persona del equipo, un segundo"');
     assert.ok(/async function _supportSentSince\(/.test(S) && (S.match(/if \(await _supportSentSince\(userId, _t0\)\) return;/g) || []).length === 2, 'palabra clave sin respuesta fija ⇒ contesta la IA (nunca un visto)');
     assert.ok(!/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \},[^\n]*senderId:/.test(S) && (S.match(/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \}/g) || []).length >= 5, 'agente reciente = sólo personas (sin claves repetidas)');
-    assert.ok(/if \(quick === 'problema'\) \{[\s\S]{0,400}await _supportHandoffNow\(/.test(S) && I3.includes("VIP.home.supportQuick('problema')"), 'Tengo otro problema ⇒ directo a un agente');
+    assert.ok(/if \(quick === 'problema'\) \{[\s\S]{0,400}await _supportHandoffNow\(/.test(S) && fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8').includes("VIP.home.spHelpPick(\\'problema\\')"), 'Hablar con un agente (🎧 Soporte, #1134) ⇒ directo a un agente');
     assert.ok((S.match(/_supportLearnFromAgent\(/g) || []).length >= 3 && /'metadata\.learned': \{ \$ne: true \}/.test(S) && /aiMaxReplies: 20, classic:/.test(S) && /mig1042vAiFree/.test(S), 'aprende del agente; la IA una sola vez (lo aprendido no cuenta)');
     assert.ok((S.match(/await _depositLuck\(/g) || []).length === 2 && /'\/sys_withdraw_chat'/.test(S) && /'\/sys_payout_done_chat'/.test(S), 'chat nuevo: carga con buena suerte, retiro pedido y pagado escritos');
     assert.ok(/if \(spNewCasino\(\)\) \{ try \{ toggleCasinoLoad\(false\); \} catch \(_\) \{\} spShowChat\(\); return; \}/.test(H) && /if \(spNewCasino\(\)\) \{ spShowChat\(\); return; \}/.test(H), 'chat nuevo: sin carteles de carga ni de retiro');

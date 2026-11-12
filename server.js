@@ -14188,6 +14188,8 @@ async function initializeData() {
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
     // #1060 (owner): el botón ahora se llama "🆘 Otro problema" y va primero ⇒ el texto que lo nombra, si quedó el de antes sin editar.
     try { await Command.updateOne({ name: '/sys_support_to_button', response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.' }, { $set: { response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.' } }); } catch (_) {}
+    // #1134 (owner): "Otro problema" pasó a 🎧 Soporte → Hablar con un agente ⇒ el texto que lo nombra, si quedó el de #1060 sin editar.
+    try { await Command.updateOne({ name: '/sys_support_to_button', response: SUPPORT_TO_BUTTON_DEFAULT_OLD1060 }, { $set: { response: SUPPORT_TO_BUTTON_DEFAULT } }); } catch (_) {}
     // #1042-w (owner): "Tengo otro problema" ⇒ "Ya te paso con una persona del equipo, un segundo" (si quedó el texto anterior sin editar).
     try { await Command.updateOne({ name: '/sys_support_problem', response: 'Contame qué pasó en un mensaje y en breve te responde alguien del equipo 🙌' }, { $set: { response: 'Ya te paso con una persona del equipo, un segundo 🙌' } }); } catch (_) {}
     // #1042-u (owner 2026-11-09): "la IA responde 1 mensaje nomás" ⇒ UNA vez, aiMaxReplies = 1 (campo puntual, nunca leer→mezclar→guardar).
@@ -15211,9 +15213,9 @@ async function initializeData() {
     },
     {
       name: '/sys_support_to_button',
-      description: 'CHAT NUEVO (#1042-x): cuando el bot no puede resolver algo (reclamo, no sabe, pide una persona) NO pasa solo a un agente: manda este texto con el botón "🆘 Tengo otro problema". Sin variables.',
+      description: 'CHAT NUEVO (#1042-x): cuando el bot no puede resolver algo (reclamo, no sabe, pide una persona) NO pasa solo a un agente: manda este texto con el botón "👤 Hablar con un agente" (#1134: 🎧 Soporte arriba a la izquierda). Sin variables.',
       type: 'message',
-      response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.'
+      response: SUPPORT_TO_BUTTON_DEFAULT
     },
     {
       name: '/sys_bot_fix_install',
@@ -15223,7 +15225,7 @@ async function initializeData() {
     },
     {
       name: '/sys_support_problem',
-      description: 'CHAT NUEVO (#1042-u): respuesta cuando el cliente toca "🆘 Tengo otro problema" (el chat pasa directo a un agente en Soporte). Sin variables. Vacío = no se manda nada (igual pasa al agente).',
+      description: 'CHAT NUEVO (#1042-u): respuesta cuando el cliente toca "👤 Hablar con un agente" (🎧 Soporte, #1134; el chat pasa directo a un agente en Soporte). Sin variables. Vacío = no se manda nada (igual pasa al agente).',
       type: 'message',
       response: 'Ya te paso con una persona del equipo, un segundo 🙌'
     },
@@ -16355,7 +16357,7 @@ async function _supportQuickReply(userId, username, quick, text) {
     if (quick === 'problema') {
       const t = await renderSystemCommand('/sys_support_problem', 'Ya te paso con una persona del equipo, un segundo 🙌', {});
       if (t) await _sendUserSystemMessage({ id: userId, username }, t, { metadata: { channel: 'support', topic: 'problema' } });
-      await _supportHandoffNow(userId, username, 'tocó "Tengo otro problema"');
+      await _supportHandoffNow(userId, username, 'tocó "Hablar con un agente"');
       return;
     }
     const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
@@ -16470,7 +16472,8 @@ const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu car
 const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 20, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
 // #1042-v: ¿le llegó al cliente alguna respuesta (bot, automático o persona) desde `since`?
 const SUPPORT_GREET_DEFAULT = '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀'; // #1042-x
-const SUPPORT_TO_BUTTON_DEFAULT = 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.'; // #1042-x
+const SUPPORT_TO_BUTTON_DEFAULT_OLD1060 = 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.';
+const SUPPORT_TO_BUTTON_DEFAULT = 'Eso lo ve una persona del equipo 🙌 Tocá 🎧 Soporte (arriba a la izquierda) y después "Hablar con un agente".'; // #1042-x · #1134: el botón ahora es 🎧 Soporte → Hablar con un agente (abajo del mensaje del bot también va el botón)
 async function _supportSentSince(userId, since) {
   try { return !!(await Message.findOne({ receiverId: userId, senderRole: { $ne: 'user' }, adminOnly: { $ne: true }, timestamp: { $gte: since } }).select('_id').lean()); } catch (_) { return false; }
 }
@@ -16748,7 +16751,7 @@ async function _supportBotRun(userId, username, token, t0) {
     _supportBotStat('toButton');
     try {
       const note = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: userId, receiverRole: 'user',
-        content: `🤖 El bot le indicó tocar "🆘 Tengo otro problema" (${why}). Si lo toca, el chat se abre para vos.`,
+        content: `🤖 El bot le indicó tocar "👤 Hablar con un agente" (${why}). Si lo toca, el chat se abre para vos.`,
         type: 'system', adminOnly: true, metadata: { kind: 'bot_to_button', reason: why }, timestamp: new Date(), read: true });
       io.to(`chat_${userId}`).emit('new_message', note);
     } catch (_) {}
@@ -16771,7 +16774,7 @@ async function _supportBotRun(userId, username, token, t0) {
       content: reply, type: 'text', channel: 'support', timestamp: new Date(), read: false,
       // Si habla del comprobante, va con el botón "Adjuntar comprobante": abre la GUÍA de 3 pasos (#1030, VIP.autoload.sendReceipt ⇒ pickReceipt), nunca el selector directo.
       // #1042-p (owner): botón de INFO del tema que preguntó (la IA elige info_topic); con Girox abierto se abre adentro del casino.
-      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, r.learnedId ? { learned: true } : {}, r.toButton ? { kind: 'go_section', target: 'problema', label: '🆘 Tengo otro problema' } : _sbInfoButton(r, reply)) });
+      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, r.learnedId ? { learned: true } : {}, r.toButton ? { kind: 'go_section', target: 'problema', label: '👤 Hablar con un agente' } : _sbInfoButton(r, reply)) });
     io.to(`user_${userId}`).emit('new_message', message);
     io.to(`chat_${userId}`).emit('new_message', message);
     notifyAdmins('new_message', { message, userId, username });

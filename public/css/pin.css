@@ -3167,9 +3167,9 @@ body.no-ref #referralBtn, body.no-ref .ez-ref, body.no-ref .svc-ref, body.no-ref
 body:not(.sp-classic) .sp-actbar { padding: 8px 10px 0; background: var(--p-bg); }
 body:not(.sp-classic) .sp-acts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 body:not(.sp-classic) .sp-acts button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 4px; border-radius: 12px; font: 800 12.5px/1 var(--p-font); letter-spacing: .02em; cursor: pointer; border: 1px solid transparent; }
-body:not(.sp-classic) .sp-acts .sp-dep { background: var(--p-red); color: var(--p-inv); box-shadow: 0 4px 14px rgba(210, 58, 78, .28); }
-body:not(.sp-classic) .sp-acts .sp-dep:active { background: var(--p-red-dark); }
-body:not(.sp-classic) .sp-acts .sp-wd { background: var(--p-card); color: var(--p-text); border-color: var(--p-border-hi); }
+body:not(.sp-classic) .sp-acts .sp-dep { background: var(--p-green); color: var(--p-inv); box-shadow: 0 4px 14px rgba(22, 163, 74, .28); } /* #1134: DEPOSITAR verde */
+body:not(.sp-classic) .sp-acts .sp-dep:active { filter: brightness(.92); }
+body:not(.sp-classic) .sp-acts .sp-wd { background: var(--p-red); color: var(--p-inv); border-color: transparent; } /* #1134: RETIRAR rojo */
 body:not(.sp-classic) .sp-ticker { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--p-red-soft); color: var(--p-red-dark); font: 800 12.5px/1.2 var(--p-font); text-align: left; cursor: pointer; }
 body:not(.sp-classic) .sp-ticker[hidden] { display: none; }
 body:not(.sp-classic) .sp-tk-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--p-red); animation: spTkPulse 1.4s ease-in-out infinite; }
@@ -3187,7 +3187,7 @@ html[data-theme="dark"] body:not(.sp-classic) .sp-acts .sp-dep { box-shadow: non
    cliente con tildes, caja redonda y enviar verde. Sólo dentro de #supportPanel; colores por tokens con su versión nocturna. */
 :root { --p-wa-bg: #efeae2; --p-wa-in: #ffffff; --p-wa-in-text: #111b21; --p-wa-out: #1fa855; --p-wa-out-text: #ffffff; --p-wa-time: #667781; --p-wa-line: #e2ddd5; }
 html[data-theme="dark"] { --p-wa-bg: #0b141a; --p-wa-in: #202c33; --p-wa-in-text: #e9edef; --p-wa-out: #005c4b; --p-wa-out-text: #e9edef; --p-wa-time: #8696a0; --p-wa-line: #222d34; }
-body:not(.sp-classic) .sp-acts .sp-rf { background: var(--p-green); color: var(--p-inv); }
+body:not(.sp-classic) .sp-acts .sp-rf { background: var(--p-card); color: var(--p-text); border-color: var(--p-border-hi); } /* #1134: neutro (verde = depositar) */
 body:not(.sp-classic) .sp-actbar { position: sticky; top: 0; z-index: 6; padding-bottom: 8px; border-bottom: 1px solid var(--p-border); }
 body:not(.sp-classic) #supportPanel.sp-in-casino .chat-container, body.wa-dark:not(.sp-classic) #supportPanel.sp-in-casino .chat-container, body:not(.sp-classic) #supportPanel.sp-in-casino #chatMessages { background: var(--p-wa-bg) !important; background-image: none !important; }
 body:not(.sp-classic) #supportPanel.sp-in-casino .message, body.wa-dark:not(.sp-classic) #supportPanel.sp-in-casino .message { box-shadow: 0 1px .5px rgba(11, 20, 26, .13) !important; padding: 7px 10px 6px !important; font-size: 15px; line-height: 1.38; }
@@ -3254,15 +3254,14 @@ body.no-ref #spInfoBar .ref-only { display: none !important; }
 .casino-topbar .ct-one { display: none !important; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar .ct-multi { display: none !important; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar .ct-one { display: flex !important; }
-body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctSms { order: 1; }
+body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctHelp { order: 1; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctStories { order: 2; }
-body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .casino-brand { order: 3; }
+body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .casino-brand, body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .casino-loadchat { order: 3; }
 body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctSupport { order: 4; }
-body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .tn-btn:not(#ctSms):not(#ctStories):not(#ctSupport) { order: 5; }
+body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > .tn-btn:not(#ctHelp):not(#ctStories):not(#ctSupport) { order: 5; }
 /* #1042-t: en el chat de la burbuja (ya está adentro del juego) no hace falta el botón "Jugar ahora" del mensaje de carga. */
 #casinoOverlay > #supportPanel.sp-in-casino .plat-play-now[onclick^="VIP.home.playNow"] { display: none !important; }
 /* #1042-u: "Tengo otro problema" (va directo a un agente) se distingue del resto */
-#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar .sp-ib-help { border-color: var(--p-red, #e60023) !important; color: var(--p-red, #e60023) !important; }
 
 /* #1049 (owner: "sacá el soporte de arriba porque se van a equivocar"): con el chat nuevo, el Soporte vive en la BURBUJA; el botón de la barra del
    casino se oculta (con el chat clásico queda, porque ahí es el único acceso). */
@@ -3422,7 +3421,6 @@ html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino {
 }
 html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino .sp-ticker { background: var(--p-red-soft); color: var(--p-red-dark); }
 #casinoOverlay > #supportPanel.sp-in-casino #waThemeBtn { display: none !important; }
-#casinoOverlay > #supportPanel.sp-in-casino #spInfoSms { display: none !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .wa-head { background: var(--p-chat-edge) !important; color: var(--p-chat-edge-text) !important; border-bottom: 0 !important; gap: 8px !important; align-items: center !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-name { color: var(--p-chat-edge-text) !important; }
 #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-status { color: var(--p-chat-edge-muted) !important; }
@@ -3439,7 +3437,6 @@ html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino .sp-ticker {
 #casinoOverlay > #supportPanel.sp-in-casino .wht-txt b { font-size: 11px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #casinoOverlay > #supportPanel.sp-in-casino .wht-txt small { font-size: 9.5px; font-weight: 600; color: var(--p-chat-edge-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 340px) { #casinoOverlay > #supportPanel.sp-in-casino .wht-txt small { display: none; } }
-.casino-topbar #ctSms.ct-sms-ok .tn-ico { color: var(--p-green); }
 /* Avisos: debajo del borde del teléfono (notch / barra de estado), a la altura de la barra con el Perfil; centrados para no tapar un costado. */
 .toast { top: calc(var(--sat, env(safe-area-inset-top, 0px)) + 8px) !important; left: 50% !important; right: auto !important; transform: translateX(-50%) !important;
   max-width: calc(100vw - 32px); width: max-content; text-align: center; z-index: 100010 !important; animation: vipToastIn .25s ease !important; }
@@ -3468,3 +3465,33 @@ html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino .sp-ticker {
 #casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-cp { padding: 5px 9px; font-size: 11px; border-radius: 8px; }
 #casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-foot { margin: 0 10px; padding: 4px 0; font-size: 10.5px; }
 #casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-attach { margin: 2px 8px 8px; padding: 7px 10px; font-size: 12px; border-radius: 9px; }
+
+/* #1134 (owner): 🎧 Soporte arriba a la izquierda + cuadro de problemas en el chat + fila de servicio que se desliza sola + aclaración de
+   DEPOSITAR / RETIRAR + CARGA AQUÍ grande en el medio cuando el chat está cerrado. */
+body:not(.sp-classic) .sp-acts-hint { display: block; margin-top: 5px; font: 600 10.5px/1.3 var(--p-font); color: var(--p-muted); text-align: center; }
+body:not(.sp-classic) .sp-acts-hint b { color: var(--p-text); font-weight: 800; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar.sp-ib-run { overflow: hidden !important; display: block !important; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track { display: flex; gap: 6px; width: max-content; animation: spIbRun 32s linear infinite; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track:active, #casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track:hover { animation-play-state: paused; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track button { flex: 0 0 auto; border: 1px solid var(--p-border); background: var(--p-card); color: var(--p-text); border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+@keyframes spIbRun { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 3px)); } }
+@media (prefers-reduced-motion: reduce) { #casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track { animation: none; } #casinoOverlay > #supportPanel.sp-in-casino .sp-infobar.sp-ib-run { overflow-x: auto !important; } }
+.sp-helpmsg { max-width: 92% !important; padding: 10px !important; }
+.sp-helpmsg .shm-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.sp-helpmsg .shm-head b { font: 800 13.5px var(--p-font); color: var(--p-text); }
+.sp-helpmsg .shm-head small { font: 600 11.5px var(--p-font); color: var(--p-muted); }
+.sp-helpmsg .shm-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sp-helpmsg .shm-opts button { padding: 8px 6px; border: 1px solid var(--p-border-hi, var(--p-border)); border-radius: 10px; background: var(--p-card); color: var(--p-text); font: 700 12px var(--p-font); cursor: pointer; text-align: center; }
+.sp-helpmsg .shm-opts button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.sp-helpmsg .shm-agent { display: block; width: 100%; margin-top: 8px; padding: 10px; border: 0; border-radius: 10px; background: var(--p-text); color: var(--p-bg, #fff); font: 800 13px var(--p-font); cursor: pointer; }
+.casino-loadchat { display: none; }
+body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-loadchat { display: inline-flex !important; flex: 1 1 0; min-width: 0; align-items: center; justify-content: center; gap: 7px; margin: 0 4px; padding: 6px 12px; border: 2px solid var(--p-green); border-radius: 14px; background: var(--p-green); color: #fff; cursor: pointer; box-shadow: 0 0 0 0 rgba(22, 163, 74, .55); animation: clcPulse 2.2s ease-out infinite; }
+body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-brand, body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-srt { display: none !important; }
+.casino-loadchat .clc-ico { font-size: 18px; line-height: 1; }
+.casino-loadchat .clc-txt { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; text-align: left; }
+.casino-loadchat .clc-txt b { font: 900 14px var(--p-font); letter-spacing: .6px; white-space: nowrap; }
+.casino-loadchat .clc-txt small { font: 700 9.5px var(--p-font); opacity: .92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@keyframes clcPulse { 0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, .55); } 70% { box-shadow: 0 0 0 9px rgba(22, 163, 74, 0); } 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); } }
+@media (prefers-reduced-motion: reduce) { .casino-loadchat { animation: none !important; } }
+@media (max-width: 360px) { .casino-loadchat .clc-txt small { display: none; } }
+

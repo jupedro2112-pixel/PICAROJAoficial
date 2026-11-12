@@ -521,7 +521,13 @@
     // #1082 (owner: "el bono vigente de arriba no lo quiero ahí; dejalo en el chat siempre: que el ÚLTIMO mensaje sea el de los datos, que se pueda
     // copiar desde el chat y, si hay bono vigente, que aparezca ahí con los datos; sacando lo rojo de arriba se gana chat"). Mensaje LOCAL (no se guarda)
     // que un observador mantiene siempre al final de #chatMessages. Datos: GET /api/config/cbu (ensureCbu) + bono: GET /api/bonus/vigente.
-    let _sbmEl = null, _sbmObs = null;
+    let _sbmEl = null, _sbmObs = null, _sbmShown = false;
+    function _sbmPlace(first) { // #1134: primera vez al final; si el chat se vuelve a dibujar, vuelve debajo del saludo (nunca al final otra vez)
+        const list = _el('chatMessages'); if (!list || !_sbmEl) return;
+        if (document.body.classList.contains('sp-classic')) { if (_sbmEl.parentNode) _sbmEl.remove(); return; }
+        if (first) list.appendChild(_sbmEl);
+        if (!_sbmObs) { try { _sbmObs = new MutationObserver(() => { if (!_sbmEl || document.body.classList.contains('sp-classic') || list.contains(_sbmEl)) return; const g = list.querySelector('[data-message-id="local-greet"]'); if (g) g.after(_sbmEl); }); _sbmObs.observe(list, { childList: true }); } catch (_) {} }
+    }
     function _sbmKeepLast() {
         const list = _el('chatMessages'); if (!list || !_sbmEl) return;
         if (document.body.classList.contains('sp-classic')) { if (_sbmEl.parentNode) _sbmEl.remove(); return; }
@@ -546,8 +552,9 @@
                 (c.number ? row('CBU / CVU', c.number, 'cbu') : '') + (c.alias ? row('ALIAS', c.alias, 'alias') : '') +
                 '<div class="sbm-foot">' + (c.titular ? '<span>Titular <b>' + e(c.titular) + '</b></span>' : '') + (md ? '<span>Mínimo <b class="sbm-min">' + md + '</b></span>' : '') + '</div>' +
                 '<button type="button" class="sbm-attach" onclick="VIP.autoload.pickReceipt(\'chat\')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg> Subir comprobante</button></div>';
-            _sbmKeepLast();
-            try { VIP.chat.scrollToBottom(); } catch (_) {}
+            // #1134 (owner: "está mandando constantemente los datos del CBU; eso cuando apenas entran, 1 vez"): se muestra UNA vez por apertura de
+            // la app, en su lugar (debajo del saludo); después los mensajes nuevos quedan abajo y no vuelve a saltar al final.
+            if (!_sbmShown) { _sbmShown = true; _sbmPlace(true); try { VIP.chat.scrollToBottom(); } catch (_) {} }
         } catch (_) {}
     }
     // Revisión nocturna: al volver la app a primer plano se repintan los datos del chat (el CBU pudo cambiar con la app abierta).
@@ -894,7 +901,7 @@
         } catch (_) {}
     }
     // #384 (owner): los chips MANDAN el mensaje solos. 'cargar' / 'retirar' reciben respuesta automática con botón al sector.
-    const SUPPORT_QUICK_TEXT = { carga: '💳 Tengo un problema con una carga', retiro: '💸 Tengo un problema con un retiro', reembolso: '🎁 Tengo un problema con un reembolso', bono: '🎰 Tengo un problema con el bono', otro: '❓ Tengo un problema con otra cosa', problema: '🆘 Tengo otro problema', cargar: '💳 Quiero hacer una carga', retirar: '💸 Quiero retirar mi premio' }; // #602 soporte de problemas
+    const SUPPORT_QUICK_TEXT = { carga: '💳 Tengo un problema con una carga', retiro: '💸 Tengo un problema con un retiro', reembolso: '🎁 Tengo un problema con un reembolso', bono: '🎰 Tengo un problema con el bono', otro: '❓ Tengo un problema con otra cosa', problema: '👤 Quiero hablar con un agente', cargar: '💳 Quiero hacer una carga', retirar: '💸 Quiero retirar mi premio' }; // #602 soporte de problemas
     function supportQuick(kind) {
         try {
             const k = SUPPORT_QUICK_TEXT[kind] ? kind : 'otro';
@@ -2616,7 +2623,7 @@
             if (h && !_el('spCasinoX')) h.insertAdjacentHTML('beforeend', '<button type="button" class="wa-head-btn sp-casino-x" id="spCasinoX" onclick="VIP.home.closeSupport()" aria-label="Cerrar el chat">✕</button>');
             const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; nm.textContent = (_el('spName') && _el('spName').textContent) || 'Soporte'; } if (stt) { stt.dataset.prev = stt.textContent; stt.textContent = 'En línea'; }
         } catch (_) {}
-        try { const u = (VIP.state && VIP.state.currentUser) || {}; const b = _el('spInfoSms'); if (b) b.style.display = u.phoneVerified === true ? 'none' : ''; } catch (_) {} // #1042-r
+        try { const u = (VIP.state && VIP.state.currentUser) || {}; document.querySelectorAll('#spInfoBar .ib-sms').forEach((b) => { b.style.display = u.phoneVerified === true ? 'none' : ''; }); } catch (_) {} try { _ibMarquee(); } catch (_) {} // #1042-r
         try { _paintCtSms(); } catch (_) {} // #1092
         _open = true; _unread = 0; _paintBadge();
         try { VIP.chat.scrollToBottom(); } catch (_) {}
@@ -2640,6 +2647,43 @@
         if (_onlyGirox()) { if (document.body.classList.contains('sp-classic')) { toggleCasinoLoad(true); return; } if (!_spCasino) _supportIntoCasino(); return; }
         if (!document.body.classList.contains('sp-classic') && _casinoIsOpen()) { if (!_spCasino) _supportIntoCasino(); return; } // #1123 (owner): "que siempre salga de la burbuja" (no sale del casino a pantalla completa)
         try { VIP.ui.closeCasinoFrame(); } catch (_) {} setTimeout(() => { try { setHomeMode('mini'); } catch (_) {} }, 80);
+    }
+    // #1134 (owner): 🎧 Soporte arriba a la izquierda ⇒ abre el chat y aparece ADENTRO del chat un cuadro para elegir el problema (los mismos temas
+    // de siempre: carga, retiro, reembolso, bono, otra cosa) + "Hablar con un agente" (supportQuick('problema') ⇒ directo a una persona).
+    // Es un mensaje LOCAL (no se guarda): si el chat se vuelve a dibujar sigue al final hasta que eligen algo o pasan 3 min.
+    let _shEl = null, _shObs = null, _shUntil = 0;
+    function casinoHelp() {
+        if (document.body.classList.contains('sp-classic')) return casinoSupport();
+        if (_casinoIsOpen()) { if (!_spCasino) _supportIntoCasino(); } else { try { setHomeMode('mini'); } catch (_) {} }
+        setTimeout(spHelpMenu, 250);
+    }
+    function spHelpPick(kind) {
+        _shUntil = 0; if (_shEl) _shEl.remove();
+        supportQuick(kind);
+    }
+    function spHelpMenu() {
+        const list = _el('chatMessages'); if (!list) return;
+        if (!_shEl) {
+            _shEl = document.createElement('div'); _shEl.className = 'message-wrapper sp-helpmsg-w'; _shEl.id = 'spHelpMsg';
+            const b = (k, t) => '<button type="button" onclick="VIP.home.spHelpPick(\'' + k + '\')">' + t + '</button>';
+            _shEl.innerHTML = '<div class="message agente sp-helpmsg"><div class="shm-head"><b>🎧 Soporte</b><small>¿Qué problema tenés? Elegí una opción</small></div>' +
+                '<div class="shm-opts">' + b('carga', '💳 Con una carga') + b('retiro', '💸 Con un retiro') + b('reembolso', '🎁 Con un reembolso') + b('bono', '🎰 Con el bono') + b('otro', '❓ Otra cosa') + '</div>' +
+                '<button type="button" class="shm-agent" onclick="VIP.home.spHelpPick(\'problema\')">👤 Hablar con un agente</button></div>';
+        }
+        _shUntil = Date.now() + 3 * 60 * 1000;
+        list.appendChild(_shEl);
+        if (!_shObs) { try { _shObs = new MutationObserver(() => { if (_shEl && Date.now() < _shUntil && !list.contains(_shEl)) list.appendChild(_shEl); }); _shObs.observe(list, { childList: true }); } catch (_) {} }
+        try { VIP.chat.scrollToBottom(); } catch (_) {}
+    }
+    // #1134 (owner): la fila de servicio (Reembolsos, Sorteos, Misiones…) se desliza sola, como la cinta del bono. Se duplica una vez para que el
+    // recorrido sea continuo; las copias no llevan id. Se frena al tocarla (CSS) y no se mueve con "reducir movimiento".
+    function _ibMarquee() {
+        const bar = _el('spInfoBar'); if (!bar || bar.dataset.mq) return;
+        const btns = Array.from(bar.querySelectorAll(':scope > button')); if (!btns.length) return;
+        const track = document.createElement('div'); track.className = 'sp-ib-track';
+        btns.forEach((x) => track.appendChild(x));
+        btns.forEach((x) => { const c = x.cloneNode(true); c.removeAttribute('id'); c.setAttribute('aria-hidden', 'true'); c.tabIndex = -1; track.appendChild(c); });
+        bar.appendChild(track); bar.dataset.mq = '1'; bar.classList.add('sp-ib-run');
     }
     function _onlyGirox() { return _menuOn('girox') && MENU_ORDER.filter(_menuOn).length === 1 && _casinoIsOpen(); }
     // #1042-m (owner): "modificá todo en la burbuja del chat de Girox". La burbuja abre el chat ENCIMA del juego, estilo WhatsApp, con
@@ -2868,7 +2912,7 @@
                     '<button type="button" class="casino-back ct-multi" onclick="VIP.ui.closeCasinoFrame()">‹ Volver</button>' +
                     // #1042-r (owner): con SÓLO Girox activo (todo en uno, body.menus-one) no hay Volver ni Menú: Telegram · Historias · [logo] ·
                     // Soporte · Info · Perfil (el orden lo pone pin.css con `order`).
-                    '<button type="button" class="tn-btn ct-one" id="ctSms" onclick="VIP.home.casinoSms()" title="Verificar tu celular por SMS"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/><path d="m9.5 10.5 1.8 1.8 3.4-3.6"/></svg></span><span class="tn-lbl" id="ctSmsLbl">Verificar SMS</span></button>' + // #1092 (owner): en el lugar del Telegram (que pasó al chat, al lado del nombre)
+                    '<button type="button" class="tn-btn ct-one" id="ctHelp" onclick="VIP.home.casinoHelp()" title="Soporte: elegí tu problema o hablá con un agente"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13.5" width="4.2" height="6.5" rx="1.6"/><rect x="16.8" y="13.5" width="4.2" height="6.5" rx="1.6"/></svg></span><span class="tn-lbl">Soporte</span></button>' + // #1134 (owner): arriba a la izquierda, donde estaba Verificar SMS (que sigue en la fila del chat y en Perfil) (que pasó al chat, al lado del nombre)
                     // #700/#701 (owner): accesos en UNA sola línea con el mismo formato de la barra principal (ícono + etiqueta chica):
                     // Historias · Menú · Info · Perfil. Sin el texto "Estás en Girox · para cambiar, salí" (#701: le sacaba lugar al juego).
                     // #703/#707 (owner): orden Volver · Menú · [PICA ROJA OFICIAL con el logo, bien centrado] · Historias · Info · Perfil
@@ -2879,6 +2923,8 @@
                     // cierran (–), queda la píldora "Sorteo mensual" en el medio, que lo vuelve a abrir. sorteos.js (paintCasino) maneja los dos.
                     '<span class="casino-brand" id="casinoBrand" aria-label="PICA ROJA oficial"><span class="cb-box"><img src="/icons/icon-192x192.png" alt=""><span class="cb-txt"><b>PICA ROJA</b><small>OFICIAL</small></span></span></span>' +
                     '<button type="button" class="casino-brand casino-srt" id="casinoSrtBtn" hidden onclick="VIP.sorteos.casinoPill()" aria-label="Sorteo"><span class="cb-box"><span class="cb-ico" data-srt-brand-ico>🏆</span><span class="cb-txt"><b data-srt-brand-title>Sorteo mensual</b><small data-srt-brand-sub>NOVEDAD</small></span></span></button>' +
+                    // #1134 (owner): con el chat CERRADO, en el medio (donde está Sorteo mensual) va grande y remarcado CARGA AQUÍ · Abrir chat; con el chat abierto vuelve lo de siempre (CSS por body.sp-casino)
+                    '<button type="button" class="casino-loadchat" id="ctLoadChat" onclick="VIP.home.casinoSupport()" aria-label="Carga aquí: abrir el chat"><span class="clc-ico" aria-hidden="true">💬</span><span class="clc-txt"><b>CARGA AQUÍ</b><small>Tocá para abrir el chat</small></span></button>' +
                     // #994 (owner): Soporte vive ARRIBA en la barra del casino (salió del panel de Carga rápida)
                     '<button type="button" class="tn-btn" id="ctSupport" onclick="VIP.home.casinoSupport()" title="Carga aquí: cargas, retiros y bonos"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12.5a7.5 7.5 0 0 1-11 6.6L4 20l1.2-4.4A7.5 7.5 0 1 1 20 12.5z"/><path d="M8.5 11.5h7M8.5 14.5h4.5"/></svg></span><span class="tn-lbl">Carga aquí</span></button>' +
                     '<button type="button" class="tn-btn tn-stories" id="ctStories" onclick="VIP.stories.open()" title="Historias"><span class="tn-ico st-ring"><span class="st-core">▶</span><span class="st-badge" id="ctStoriesBadge" style="display:none">1</span></span><span class="tn-lbl">Historias</span></button>' +
@@ -3207,7 +3253,7 @@
         playToggle, pvFold, pvPick, // #1032
         casinoChatToggle, spGreetMsg, // #1042-x
         menuNow, chatNow, // #1042-y
-        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, casinoHelp, spHelpMenu, spHelpPick, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,

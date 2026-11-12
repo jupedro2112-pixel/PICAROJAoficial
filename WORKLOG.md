@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1133)
+> **Última actualización: 2026-11-12** (#1134)
 
 ## Sesión 2026-11-09
 
@@ -14806,4 +14806,22 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - `public/js/withdraw.js` `_paintRollover`: si hay ítems `kind:'bonus'` con rollover pendiente, cartel rojo bajo "Qué te falta para liberar el resto":
   "si retirás tu saldo disponible, el bono … se cancela y lo perdés". Al tocar Continuar, `confirm` con el monto del bono (cancelar = no retira).
 - No se cambió el cálculo de lo retirable ni el servidor. Es comportamiento de 1girox (según lo informado por el cliente; no figura en la doc de la Partner API).
+
+## #1134 — 2026-11-12 · Chat de Girox: 🎧 Soporte arriba a la izquierda, CARGA AQUÍ en el medio, fila que se desliza, CBU una vez — app v723
+- Owner: "donde está verificación de SMS arriba a la izquierda ponemos el soporte … que puedan elegir qué tipo de problema tienen … directo en el chat
+  … botón hablar con un agente; sacá del deslizante el otro problema; reembolsos, sorteos, etc. que vaya deslizándose como el bono; está mandando
+  constantemente los datos del CBU, eso cuando apenas entran 1 vez y después una charla más IA que no moleste tanto; aclarar simplificado que para
+  cargar tienen que apretar depositar y para retirar abajo del nombre; depositar en verde y retirar en rojo" · "el carga aquí, si lo cierran, que quede en
+  el medio donde está el sorteo mensual, grande y remarcado" · "si se abre, que aparezca abajo como globo (no cambia) y vuelve a verse el sorteo".
+- Barra del casino (sólo Girox): `#ctSms` → **`#ctHelp` 🎧 Soporte** (`casinoHelp`): abre el chat y agrega un mensaje LOCAL `#spHelpMsg` (`spHelpMenu`) con
+  Carga / Retiro / Reembolso / Bono / Otra cosa (`supportQuick` de siempre) + **👤 Hablar con un agente** (`supportQuick('problema')` ⇒ `_supportHandoffNow`).
+  Verificar celular sigue en la fila del chat (ya no se esconde) y en Perfil. Con el chat CERRADO, en el medio va **`#ctLoadChat` CARGA AQUÍ · Tocá para abrir
+  el chat** (verde, late); con el chat abierto (`body.sp-casino`) vuelve el Sorteo mensual / PICA ROJA (sólo CSS).
+- Fila de servicio `#spInfoBar`: sin "🆘 Otro problema"; `_ibMarquee` la duplica una vez y se desliza sola (se frena al tocarla; nada con reducir movimiento).
+- Datos para transferir (`#spBankMsg`): UNA vez por apertura de la app (`_sbmShown`); si el chat se redibuja vuelve debajo del saludo, nunca al final otra vez.
+- DEPOSITAR verde, RETIRAR rojo, REEMBOLSOS neutro + línea "Para cargar tocá DEPOSITAR · para retirar tocá RETIRAR. Siempre están acá, abajo del nombre."
+- Bot: botón del handoff "👤 Hablar con un agente"; `/sys_support_to_button` nuevo (migra el texto de #1060 si no lo editaron); prompt: no escribe CBU/alias/titular,
+  no empuja a cargar en cada mensaje, "sin carga" = una vez sin insistir, mapa nuevo (🎧 Soporte, CARGA AQUÍ, colores).
+- Tests: `test-support-bot` 18/18 (actualizado), `test-vip-exports` OK, resto OK. **Necesita deploy EB.**
+  PROBAR: abrir Girox con el chat cerrado ⇒ CARGA AQUÍ en el medio; tocar 🎧 ⇒ chat con el cuadro de problemas; "Hablar con un agente" ⇒ chat abierto en Soporte.
 
