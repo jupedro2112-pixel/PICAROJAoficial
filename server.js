@@ -14188,6 +14188,8 @@ async function initializeData() {
     } catch (e) { console.warn('[startup-migration] soporte #599:', e.message); }
     // #1060 (owner): el botón ahora se llama "🆘 Otro problema" y va primero ⇒ el texto que lo nombra, si quedó el de antes sin editar.
     try { await Command.updateOne({ name: '/sys_support_to_button', response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Tengo otro problema y te pasamos enseguida.' }, { $set: { response: 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.' } }); } catch (_) {}
+    // #1135: saludo que invita a charlar (si quedó el de #1042-x sin editar).
+    try { await Command.updateOne({ name: '/sys_support_greet', response: SUPPORT_GREET_OLD1042X }, { $set: { response: SUPPORT_GREET_DEFAULT } }); } catch (_) {}
     // #1134 (owner): "Otro problema" pasó a 🎧 Soporte → Hablar con un agente ⇒ el texto que lo nombra, si quedó el de #1060 sin editar.
     try { await Command.updateOne({ name: '/sys_support_to_button', response: SUPPORT_TO_BUTTON_DEFAULT_OLD1060 }, { $set: { response: SUPPORT_TO_BUTTON_DEFAULT } }); } catch (_) {}
     // #1042-w (owner): "Tengo otro problema" ⇒ "Ya te paso con una persona del equipo, un segundo" (si quedó el texto anterior sin editar).
@@ -15209,7 +15211,7 @@ async function initializeData() {
       name: '/sys_support_greet',
       description: 'CHAT NUEVO (#1042-x): saludo que ve el cliente en el chat CADA VEZ que entra a la app (no se guarda, no manda push). Variable: {usuario}. Vacío = sin saludo.',
       type: 'message',
-      response: '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀'
+      response: SUPPORT_GREET_DEFAULT
     },
     {
       name: '/sys_support_to_button',
@@ -16471,7 +16473,8 @@ async function _supportAutoReply(userId, username) {
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
 const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 20, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
 // #1042-v: ¿le llegó al cliente alguna respuesta (bot, automático o persona) desde `since`?
-const SUPPORT_GREET_DEFAULT = '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀'; // #1042-x
+const SUPPORT_GREET_OLD1042X = '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀';
+const SUPPORT_GREET_DEFAULT = '¡Buenas, {usuario}! 👋 Escribime lo que necesites y te respondo al toque: cargas, retiros, bonos o cualquier duda 💬'; // #1042-x · #1135 (owner: "más diálogo, que la gente pueda hablar con la IA")
 const SUPPORT_TO_BUTTON_DEFAULT_OLD1060 = 'Eso lo ve una persona del equipo 🙌 Tocá el botón 🆘 Otro problema (arriba de todo) y te pasamos enseguida.';
 const SUPPORT_TO_BUTTON_DEFAULT = 'Eso lo ve una persona del equipo 🙌 Tocá 🎧 Soporte (arriba a la izquierda) y después "Hablar con un agente".'; // #1042-x · #1134: el botón ahora es 🎧 Soporte → Hablar con un agente (abajo del mensaje del bot también va el botón)
 async function _supportSentSince(userId, since) {

@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1134)
+> **Última actualización: 2026-11-12** (#1135)
 
 ## Sesión 2026-11-09
 
@@ -14824,4 +14824,16 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   no empuja a cargar en cada mensaje, "sin carga" = una vez sin insistir, mapa nuevo (🎧 Soporte, CARGA AQUÍ, colores).
 - Tests: `test-support-bot` 18/18 (actualizado), `test-vip-exports` OK, resto OK. **Necesita deploy EB.**
   PROBAR: abrir Girox con el chat cerrado ⇒ CARGA AQUÍ en el medio; tocar 🎧 ⇒ chat con el cuadro de problemas; "Hablar con un agente" ⇒ chat abierto en Soporte.
+
+## #1135 — 2026-11-12 · Chat de Girox: hora sin pisar el texto, datos fijos, CARGA AQUÍ con los datos primero, fila que se arrastra, más diálogo — app v724
+- Owner: "se está sobreponiendo el horario sobre el texto … más diálogo, que la gente pueda hablar con la IA … cuando entran el recuadro blanco de CBU / titular,
+  después si sigue la charla no lo sigue enviando, pero dejalo fijado para que se vean siempre los datos para copiar … el deslizante que se pueda mover con la
+  mano" · "siempre que aprietan CARGA AQUÍ que aparezcan los datos de dónde enviar primero".
+- Hora: en la burbuja el padding de abajo se perdía (`padding: 7px 10px 6px !important`) y `.message-time` es absoluta ⇒ ahora va en su propia línea a la derecha.
+- Datos: el cuadro blanco (#spBankMsg) sigue una vez al entrar (#1134) y además `#spBank` vuelve FIJO arriba del chat en la burbuja, compacto (Titular + Alias/CBU
+  con Copiar), pintado por `spBankPaint` en cada apertura. CARGA AQUÍ ⇒ `casinoLoadChat` (abre el chat y `spBankMsgShow` baja el cuadro al final).
+- Fila de servicio: ya no es animación CSS; `_ibMarquee` la mueve por `scrollLeft` (se arrastra para los dos lados, al soltar sigue a los 3 s, vuelta continua).
+- Más diálogo: saludo `/sys_support_greet` nuevo ("Escribime lo que necesites…", migra el de #1042-x si no lo editaron), caja "Escribí tu consulta, te respondemos
+  al toque…", prompt: charla cálida y, si la consulta es abierta, UNA pregunta corta para seguir.
+- Tests: todos OK (boot sólo frena por JWT_SECRET local). **Necesita deploy EB.**
 

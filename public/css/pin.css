@@ -3372,7 +3372,8 @@ html[data-theme="dark"] #infoMsg .im-card.open { box-shadow: 0 6px 20px rgba(0,0
 
 /* ── #1082 (owner): sin el cartel rojo del bono ni la caja del banco ARRIBA del chat (se gana chat); los datos y el bono vigente van como el
    ÚLTIMO mensaje del chat (#spBankMsg, lo mantiene home.js), con Copiar y Adjuntar. Modo normal (sp-classic) no lo muestra. */
-#spBonusNow, #spBank { display: none !important; }
+#spBonusNow { display: none !important; }
+#supportPanel:not(.sp-in-casino) #spBank { display: none !important; } /* #1135: en la burbuja vuelve, compacto (abajo) */
 body.sp-classic #spBankMsg { display: none !important; }
 #spBankMsg .sp-bankmsg { width: 92% !important; max-width: 340px !important; padding: 0 !important; overflow: hidden; display: flex; flex-direction: column; font: 400 12.5px/1.35 var(--p-font);
   background: var(--p-card) !important; color: var(--p-text) !important; border: 1px solid var(--p-border) !important; border-radius: 14px !important; }
@@ -3470,12 +3471,9 @@ html[data-theme="dark"] #casinoOverlay > #supportPanel.sp-in-casino .sp-ticker {
    DEPOSITAR / RETIRAR + CARGA AQUÍ grande en el medio cuando el chat está cerrado. */
 body:not(.sp-classic) .sp-acts-hint { display: block; margin-top: 5px; font: 600 10.5px/1.3 var(--p-font); color: var(--p-muted); text-align: center; }
 body:not(.sp-classic) .sp-acts-hint b { color: var(--p-text); font-weight: 800; }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar.sp-ib-run { overflow: hidden !important; display: block !important; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track { display: flex; gap: 6px; width: max-content; animation: spIbRun 32s linear infinite; }
-#casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track:active, #casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track:hover { animation-play-state: paused; }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-infobar.sp-ib-run { overflow-x: auto !important; overscroll-behavior-x: contain; touch-action: pan-x; display: block !important; -webkit-mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
+#casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track { display: flex; gap: 6px; width: max-content; padding-right: 6px; } /* #1135: se mueve por scroll (JS), se puede arrastrar */
 #casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track button { flex: 0 0 auto; border: 1px solid var(--p-border); background: var(--p-card); color: var(--p-text); border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
-@keyframes spIbRun { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 3px)); } }
-@media (prefers-reduced-motion: reduce) { #casinoOverlay > #supportPanel.sp-in-casino .sp-ib-track { animation: none; } #casinoOverlay > #supportPanel.sp-in-casino .sp-infobar.sp-ib-run { overflow-x: auto !important; } }
 .sp-helpmsg { max-width: 92% !important; padding: 10px !important; }
 .sp-helpmsg .shm-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
 .sp-helpmsg .shm-head b { font: 800 13.5px var(--p-font); color: var(--p-text); }
@@ -3494,4 +3492,17 @@ body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-brand, body:not(.sp
 @keyframes clcPulse { 0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, .55); } 70% { box-shadow: 0 0 0 9px rgba(22, 163, 74, 0); } 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); } }
 @media (prefers-reduced-motion: reduce) { .casino-loadchat { animation: none !important; } }
 @media (max-width: 360px) { .casino-loadchat .clc-txt small { display: none; } }
+
+/* #1135 (owner): la hora se montaba sobre el texto en el chat de la burbuja (el padding de abajo que le deja lugar se perdía): la hora va en su
+   propia línea, a la derecha, como WhatsApp. */
+body:not(.sp-classic) #supportPanel.sp-in-casino .message > .message-time { position: static !important; display: flex !important; justify-content: flex-end; margin: 3px -2px -2px 12px; line-height: 1; }
+/* #1135 (owner): los datos para transferir FIJOS arriba del chat (una línea con Titular y dos botones Copiar), siempre a la vista. */
+#casinoOverlay > #supportPanel.sp-in-casino #spBank:not([hidden]) { display: grid !important; grid-template-columns: 1fr 1fr; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBank .sp-bk-head, #casinoOverlay > #supportPanel.sp-in-casino #spBank .sp-bk-attach { display: none !important; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBank .sp-bk-tit { grid-column: 1 / -1; padding: 3px 10px; font-size: 11px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBank .sp-bk-tit span { flex: 0 0 auto; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBank button.sp-bk-row { padding: 4px 6px 4px 9px; gap: 5px; font-size: 11.5px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBank button.sp-bk-row + button.sp-bk-row { border-left: 1px solid var(--p-border); }
+#casinoOverlay > #supportPanel.sp-in-casino #spBank button.sp-bk-row span { flex: 0 0 auto; font-size: 10px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBank button.sp-bk-row i { padding: 2px 7px; font-size: 10px; }
 
