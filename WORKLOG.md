@@ -14847,5 +14847,7 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   de la landing y de la entrada rápida. Env NUEVA `SITE_URL` (en cada AWS, ej. `https://rapidogirox.com`) = dominio de ESTE servidor; gana sobre el
   panel (`Config['publicBaseUrl']`, que se comparte si las dos usan la misma base). Panel: `buildCampaignLink` usa el dominio desde el que se abrió
   el panel (si es un dominio real). Sin SITE_URL, picaroja.com queda igual que antes.
+- Bases de datos DIFERENTES (owner). Telegram: el webhook de los bots (canal y comprobantes) = link del panel > env `TG_WEBHOOK_BASE` > `SITE_URL` > picaroja.com,
+  así un bot del segundo servidor no se registra en picaroja.com.
 - Tests: todos OK. **Necesita deploy en los dos AWS** + `SITE_URL=https://rapidogirox.com` en el segundo.
 
