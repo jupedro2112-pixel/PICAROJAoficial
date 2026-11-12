@@ -12087,8 +12087,14 @@ function buildCampaignLink(code) {
     // Si el placeholder no fue reemplazado (dev local sin server render),
     // fallback al dominio público hardcodeado.
     if (!baseUrl || baseUrl.indexOf('PLACEHOLDER') !== -1) {
-        baseUrl = 'https://vipcargas.com';
+        baseUrl = 'https://picaroja.com';
     }
+    // #1136 (owner): el mismo sistema corre en dos AWS (picaroja.com y rapidogirox.com) ⇒ si el panel se abrió desde un dominio real, el link de
+    // la landing es de ESE dominio (cada página reparte sus propios links). Desde el dominio interno de AWS sigue usando la URL pública.
+    try {
+        const h = String(location.hostname || '').toLowerCase();
+        if (location.protocol === 'https:' && /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(h) && !/\.(elasticbeanstalk\.com|amazonaws\.com|onrender\.com)$/.test(h)) baseUrl = location.origin;
+    } catch (_) {}
     baseUrl = baseUrl.replace(/\/$/, '');
     return `${baseUrl}/${encodeURIComponent(code)}`;
 }

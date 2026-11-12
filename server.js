@@ -5945,7 +5945,7 @@ async function _landingSignupHandler(req, res) {
     //    acá" adentro del casino.
     let accessUrl = null;
     try {
-      accessUrl = (await issueAccessLinkFor(newUser.id)) + '&ir=girox'; // #704 (owner): entra DIRECTO a la pantalla de Girox (casino con Carga rápida) y desde Menú elige después // #581: antes ir=cargar
+      accessUrl = (await issueAccessLinkFor(newUser.id)).replace(getPublicBaseUrl(), _reqSiteUrl(req)) + '&ir=girox'; // #1136: al dominio de la landing // #704 (owner): entra DIRECTO a la pantalla de Girox (casino con Carga rápida) y desde Menú elige después // #581: antes ir=cargar
       // 🪦 #224: antes se agregaba `ir=casino` (abría el casino directo). Ahora el cliente
       // entra al SISTEMA DE CARGAS (home 2.0) — el owner quiere que vea la carga primero.
     } catch (linkErr) {
@@ -6251,7 +6251,7 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
     if (smsRequired && !verifiedPhone) return res.status(400).json({ code: 'SMS_REQUIRED', error: 'Verificá tu celular por SMS para crear la cuenta.' });
     if (mode !== 'quick' && !isAdLink && !verifiedPhone) return res.status(410).json({ error: 'La entrada rápida no está activa. Registrate con tu teléfono.' });
     req._allowNoApi = process.env.TESTER_ADMIN_PROMOTE === '1'; // #426: sólo entorno de prueba · #779: nunca por RENDER (base compartida)
-    req.body = { name, referralCode: (req.body && req.body.referralCode) || null, campaignCode: code || 'INGRESO', landingUrl: (req.body && req.body.landingUrl) || (getPublicBaseUrl() + '/'), utm: (req.body && req.body.utm) || null, fbc: (req.body && req.body.fbc) || null, fbp: (req.body && req.body.fbp) || null };
+    req.body = { name, referralCode: (req.body && req.body.referralCode) || null, campaignCode: code || 'INGRESO', landingUrl: (req.body && req.body.landingUrl) || (_reqSiteUrl(req) + '/'), utm: (req.body && req.body.utm) || null, fbc: (req.body && req.body.fbc) || null, fbp: (req.body && req.body.fbp) || null };
     const out = await new Promise((resolve) => {
       const fake = { _c: 200, status(c) { this._c = c; return this; }, json(b) { resolve({ code: this._c, body: b }); }, set() { return this; }, setHeader() { return this; }, cookie() { return this; }, end() { resolve({ code: this._c, body: {} }); } };
       Promise.resolve(_landingSignupHandler(req, fake)).catch((e) => resolve({ code: 500, body: { error: e.message } }));
@@ -13407,8 +13407,20 @@ app.post('/api/admin/send-notification', authMiddleware, adminMiddleware, async 
 // #589 (owner): la "Página de la app" (links de referidos, de acceso, Perfil, landing) se edita desde el panel (Configuración →
 // 🌐 Página de la app, Config['publicBaseUrl']); panel > env PUBLIC_BASE_URL > default picaroja.com (el dominio de ESTE backend).
 let _publicBaseUrlOverride = null;
+// #1136 (owner): el MISMO zip corre en DOS AWS (picaroja.com y rapidogirox.com). SITE_URL (env de cada AWS, ej. https://rapidogirox.com) = el dominio
+// de ESTE servidor y gana sobre el panel (Config['publicBaseUrl'] puede venir de la otra página si comparten base). Sin SITE_URL, todo igual que antes.
+function _siteUrlEnv() { const v = String(process.env.SITE_URL || '').trim().replace(/\/+$/, ''); return /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}$/i.test(v) ? v : null; }
 function getPublicBaseUrl() {
-  return (_publicBaseUrlOverride || process.env.PUBLIC_BASE_URL || 'https://picaroja.com').replace(/\/$/, '');
+  return (_siteUrlEnv() || _publicBaseUrlOverride || process.env.PUBLIC_BASE_URL || 'https://picaroja.com').replace(/\/$/, '');
+}
+// #1136: el link de entrada que da la LANDING vuelve al MISMO dominio desde el que se registró (la landing siempre habla con su propio servidor):
+// sólo afecta la respuesta de quien se registra. IPs / localhost / dominios raros ⇒ el de siempre.
+function _reqSiteUrl(req) {
+  try {
+    const h = String((req && req.get && req.get('host')) || '').trim().toLowerCase().replace(/:\d+$/, '');
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(h) && !/\.(elasticbeanstalk\.com|amazonaws\.com|onrender\.com)$/.test(h)) return 'https://' + h;
+  } catch (_) {}
+  return getPublicBaseUrl();
 }
 async function _loadPublicBaseUrlOverride() {
   try { const v = await getConfig('publicBaseUrl', null); _publicBaseUrlOverride = (typeof v === 'string' && /^https:\/\/[^\s/]+$/i.test(v.trim())) ? v.trim().replace(/\/$/, '') : null; } catch (_) { _publicBaseUrlOverride = null; }

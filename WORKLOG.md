@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1135)
+> **Última actualización: 2026-11-12** (#1136)
 
 ## Sesión 2026-11-09
 
@@ -14836,4 +14836,16 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Más diálogo: saludo `/sys_support_greet` nuevo ("Escribime lo que necesites…", migra el de #1042-x si no lo editaron), caja "Escribí tu consulta, te respondemos
   al toque…", prompt: charla cálida y, si la consulta es abierta, UNA pregunta corta para seguir.
 - Tests: todos OK (boot sólo frena por JWT_SECRET local). **Necesita deploy EB.**
+
+## #1136 — 2026-11-12 · El mismo sistema en DOS AWS: la landing funciona en las dos (picaroja.com y rapidogirox.com) — panel v314
+- Owner: "tengo el mismo archivo en 2 Amazon diferentes y la landing sólo funciona para el principal; que funcione en ambos; el link de la segunda
+  landing tiene que apuntar a rapidogirox.com".
+- Causa: al registrarse, el link de entrada (`issueAccessLinkFor`) salía SIEMPRE con `getPublicBaseUrl()` (panel > env PUBLIC_BASE_URL > picaroja.com)
+  ⇒ desde la segunda página el cliente terminaba en picaroja.com (otro servidor / otra base ⇒ el link no entraba). El panel armaba los links de la
+  landing con la misma URL.
+- Arreglo: `_reqSiteUrl(req)` = el dominio desde el que se registró (Host real; ignora IPs y dominios internos de AWS/Render) para el link de entrada
+  de la landing y de la entrada rápida. Env NUEVA `SITE_URL` (en cada AWS, ej. `https://rapidogirox.com`) = dominio de ESTE servidor; gana sobre el
+  panel (`Config['publicBaseUrl']`, que se comparte si las dos usan la misma base). Panel: `buildCampaignLink` usa el dominio desde el que se abrió
+  el panel (si es un dominio real). Sin SITE_URL, picaroja.com queda igual que antes.
+- Tests: todos OK. **Necesita deploy en los dos AWS** + `SITE_URL=https://rapidogirox.com` en el segundo.
 

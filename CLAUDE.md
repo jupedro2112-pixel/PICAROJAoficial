@@ -38,7 +38,7 @@ notificaciones push (FCM).
 
 **Stack:** Node 20 · Express · MongoDB (Atlas) · Mongoose · Socket.IO (+ Redis adapter
 para multi-instancia en AWS EB) · Firebase Admin (FCM) · AWS SNS (SMS OTP).
-Deploy: AWS Elastic Beanstalk (despliegue INMUTABLE sin caída, `.ebextensions/01-sin-caidas.config`, #1083 — no sacarlo). **Dominio público de ESTE backend: picaroja.com** (#570; vipcargas.com es OTRA página, VIPCARGAS).
+Deploy: AWS Elastic Beanstalk (despliegue INMUTABLE sin caída, `.ebextensions/01-sin-caidas.config`, #1083 — no sacarlo). **El MISMO zip corre en DOS AWS (#1136): picaroja.com y rapidogirox.com**; cada uno con env `SITE_URL` (su dominio). Un link absoluto NUEVO que vea el cliente sale de `getPublicBaseUrl()` o, si responde a un pedido, de `_reqSiteUrl(req)`; nunca picaroja.com fijo. **Dominio público de ESTE backend: picaroja.com** (#570; vipcargas.com es OTRA página, VIPCARGAS).
 Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: jupedro2112-pixel.
 
 ## Estructura
