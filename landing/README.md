@@ -11,6 +11,9 @@ con título, barra de progreso y entrada DIRECTA a la sesión (sin pantalla de c
 archivos reales, `img/` incluido). ⚠️ NO subir el `vercel.json`/`blank.html` del zip original: mandaban a una página en blanco a todo visitante fuera de Argentina (y a quien
 entra por VPN/Tor, como el owner desde Tails). Se sacaron el 2026-10-19 (#543).
 
+**#1136: dos páginas.** La misma landing sirve para picaroja.com y rapidogirox.com: si el dominio de la landing tiene "rapido" usa
+rapidogirox.com; si no, `API_BASE_DEFAULT`. Para la segunda página se puede subir una copia con `API_BASE_DEFAULT = 'https://rapidogirox.com'`.
+
 Antes de subir, revisá en `index.html`:
 - `API_BASE_DEFAULT` = `https://picaroja.com` (backend real de PICA ROJA, #570). NO `vipcargas.com` (es VIPCARGAS, otra página) ni
   `chat1girox.com` ni el host `.elasticbeanstalk.com` (sólo HTTP).

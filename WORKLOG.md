@@ -14851,3 +14851,10 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   así un bot del segundo servidor no se registra en picaroja.com.
 - Tests: todos OK. **Necesita deploy en los dos AWS** + `SITE_URL=https://rapidogirox.com` en el segundo.
 
+## #1136-c — 2026-11-12 · Landing de VERCEL también para rapidogirox.com
+- Owner: "sigue sin funcionar lo de la landing de rapidogirox". La landing de Vercel (`landing/`) tenía el servidor FIJO en picaroja.com
+  (`API_BASE_DEFAULT`) ⇒ el registro se creaba en la base de picaroja y mandaba a picaroja.com.
+- Ahora: dominio de la landing con "rapido" ⇒ `https://rapidogirox.com`; o `?api=` sólo entre picaroja.com / rapidogirox.com. Además se entregó
+  `landing-rapidogirox.zip` (copia con `API_BASE_DEFAULT = https://rapidogirox.com`) para el proyecto de Vercel de la segunda página.
+- El CORS de `/api/landing/*` ya estaba abierto a cualquier origen (sin credenciales): no hay que tocar ALLOWED_ORIGINS.
+

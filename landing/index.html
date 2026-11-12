@@ -308,6 +308,15 @@
   // archivo): agregá ?api=https://tuapp.onrender.com a la URL. Sin ese parámetro
   // usa el backend de producción. Solo se acepta https://.
   var API_BASE = API_BASE_DEFAULT;
+  // #1136 (owner): la MISMA landing se usa para dos páginas (dos AWS con bases distintas): picaroja.com y rapidogirox.com. El servidor sale del
+  // dominio de la landing (si tiene "rapido" ⇒ rapidogirox.com) o de ?api= (sólo estos dominios). Así el registro se crea en la página correcta.
+  var API_BACKENDS = ['https://picaroja.com', 'https://rapidogirox.com'];
+  try {
+    var _h = String(location.hostname || '').toLowerCase();
+    if (_h.indexOf('rapido') !== -1) API_BASE = 'https://rapidogirox.com';
+    var _apiQ = String(new URLSearchParams(location.search).get('api') || '').replace(/\/+$/, '');
+    if (API_BACKENDS.indexOf(_apiQ) !== -1) API_BASE = _apiQ;
+  } catch (e) {}
   try {
     // #553 (seguridad): el override sólo acepta el entorno de PRUEBA conocido; antes aceptaba cualquier https:// y la landing
     // podía usarse como fachada para mandar los datos a otro servidor y redirigir a donde quisiera.
