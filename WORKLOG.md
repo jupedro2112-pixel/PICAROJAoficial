@@ -14857,4 +14857,6 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Ahora: dominio de la landing con "rapido" ⇒ `https://rapidogirox.com`; o `?api=` sólo entre picaroja.com / rapidogirox.com. Además se entregó
   `landing-rapidogirox.zip` (copia con `API_BASE_DEFAULT = https://rapidogirox.com`) para el proyecto de Vercel de la segunda página.
 - El CORS de `/api/landing/*` ya estaba abierto a cualquier origen (sin credenciales): no hay que tocar ALLOWED_ORIGINS.
+- #1136-d: la landing de rapidogirox está en **www.autogiroxcomp.com** (Vercel). Seguía mandando el registro a picaroja.com (campaña PR500 existe
+  sólo en rapidogirox ⇒ "Código de pauta inválido o inactivo"). Dominio con "autogirox" ⇒ rapidogirox.com; `landing-rapidogirox.zip` rehecho.
 
