@@ -3625,3 +3625,9 @@ body #supportPanel #spHelpMsg .shm-wa .message.sp-helpmsg { width: 100% !importa
   box-shadow: 0 1px .5px rgba(11, 20, 26, .13); }
 #spHelpMsg .shm-btns button:active { background: var(--p-wa-line); }
 #spHelpMsg .shm-btns .shm-person { background: var(--p-wa-out); color: #fff; font-weight: 800; }
+/* #1137-q (owner: "en modo día, la parte de arriba y de abajo en NEGRO completando la página, así no se ve cortado; el recuadro de Historias /
+   Info / Perfil en blanco"): con Girox abierto, el fondo del casino es negro (se ve abajo de la barra Inicio / Live / Deportes de Girox, en la zona del
+   gesto) y la franja de arriba (debajo de la hora / batería) también; la barra con Historias · Info · Perfil queda blanca. El color de las barras del
+   teléfono (theme-color) pasa a negro con el casino abierto (index.html). */
+#casinoOverlay { background: #000 !important; }
+.casino-topbar { background: linear-gradient(to bottom, #000 0, #000 var(--sat, env(safe-area-inset-top, 0px)), var(--p-card) var(--sat, env(safe-area-inset-top, 0px))) !important; }
