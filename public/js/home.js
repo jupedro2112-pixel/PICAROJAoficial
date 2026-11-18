@@ -2643,6 +2643,21 @@
         try { _sbmEl.classList.remove('sbm-flash'); void _sbmEl.offsetWidth; _sbmEl.classList.add('sbm-flash'); } catch (_) {}
         setTimeout(() => { try { VIP.chat.scrollToBottom(); } catch (_) {} }, 120);
     }
+    // #1137-n (owner: "si está abierto el chat, que no se tapen los sorteos"): la burbuja nunca sube por encima de la barra de arriba del casino
+    // (logo / Sorteo mensual + el banner del sorteo #casinoSrtBar). Se mide la barra y se achica el alto del chat si hace falta.
+    let _spFitObs = null, _spFitRaf = 0;
+    function _spFitCasino() {
+        if (_spFitRaf) return;
+        _spFitRaf = requestAnimationFrame(() => {
+            _spFitRaf = 0;
+            const p = _el('supportPanel'), bar = _el('casinoTopBar'); if (!p || !_spCasino) return;
+            p.style.removeProperty('height');
+            if (!bar || !bar.offsetParent) return;
+            const top = bar.getBoundingClientRect().bottom + 8, r = p.getBoundingClientRect();
+            if (r.top < top) p.style.setProperty('height', Math.max(260, Math.floor(r.bottom - top)) + 'px', 'important');
+        });
+    }
+    try { window.addEventListener('resize', () => { if (_spCasino) _spFitCasino(); }, { passive: true }); } catch (_) {}
     function _supportIntoCasino() {
         try { _casUnread = 0; const b = _el('casinoChatBadge'); if (b) b.style.display = 'none'; } catch (_) {}
         const ov = _el('casinoOverlay'), p = _el('supportPanel'); if (!ov || !p) return false;
@@ -2657,6 +2672,7 @@
         try { const u = (VIP.state && VIP.state.currentUser) || {}; document.querySelectorAll('#spInfoBar .ib-sms').forEach((b) => { b.style.display = u.phoneVerified === true ? 'none' : ''; }); } catch (_) {} try { _ibMarquee(); } catch (_) {} // #1042-r
         try { _paintCtSms(); } catch (_) {} // #1092
         _open = true; _unread = 0; _paintBadge();
+        try { _spFitCasino(); const bar = _el('casinoTopBar'); if (bar && !_spFitObs) { _spFitObs = new MutationObserver(() => { if (_spCasino) _spFitCasino(); }); _spFitObs.observe(bar, { attributes: true, childList: true, subtree: true }); } } catch (_) {} // #1137-n
         try { VIP.chat.scrollToBottom(); } catch (_) {}
         setTimeout(() => { try { spPromoPaint(); } catch (_) {} try { VIP.chat.markReceivedAsRead(); } catch (_) {} try { VIP.chat.scrollToBottom(); } catch (_) {} }, 60); // #1042-q: primero se muestra, después se pinta lo demás
         return true;
@@ -2665,7 +2681,7 @@
         const p = _el('supportPanel'); if (!p || !_spCasino) return false;
         const s = _spCasino; _spCasino = null;
         try { if (s.next && s.next.parentNode === s.parent) s.parent.insertBefore(p, s.next); else s.parent.appendChild(p); } catch (_) {}
-        p.classList.remove('sp-in-casino'); document.body.classList.remove('sp-casino');
+        p.classList.remove('sp-in-casino'); document.body.classList.remove('sp-casino'); p.style.removeProperty('height'); // #1137-n
         try { const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm && nm.dataset.prev) nm.textContent = nm.dataset.prev; if (stt && stt.dataset.prev) stt.textContent = stt.dataset.prev; } catch (_) {}
         if (s.wasHidden) p.classList.add('hidden');
         try { if (_sbmEl && _sbmEl.querySelector('.sbmw')) spBankMsgPaint(); } catch (_) {} // #1137: fuera de la burbuja vuelve el cuadro de siempre
