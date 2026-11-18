@@ -3605,4 +3605,12 @@ body:not(.sp-classic) #ctHelp { display: none !important; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help { display: inline-flex !important; align-items: center; gap: 5px; flex: 0 0 auto; padding: 6px 11px 6px 9px; border: 0; border-radius: 999px;
   background: rgba(255, 255, 255, .18); color: var(--p-wa-head-text); font: 700 12.5px/1 var(--p-font); cursor: pointer; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help:active { background: rgba(255, 255, 255, .3); }
-@media (max-width: 340px) { body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help span { display: none; } }
+@media (max-width: 340px) { body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help .whh-txt small { display: none; } }
+/* #1137-k (owner): debajo de "Soporte", en chico: "Problemas con tu carga" */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help { padding: 5px 10px 5px 8px; border-radius: 12px; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help .whh-txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; text-align: left; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help .whh-txt b { font-size: 12.5px; font-weight: 800; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help .whh-txt small { font-size: 9.5px; font-weight: 600; color: var(--p-wa-head-muted); white-space: nowrap; }
+/* #1137-k: con "Soporte · Problemas con tu carga" al lado, el nombre baja a dos renglones antes que cortarse ("Pica Roja / Argentina") */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-name { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; font-size: 14.5px !important; line-height: 1.15 !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head { gap: 8px !important; }
