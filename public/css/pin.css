@@ -3596,3 +3596,6 @@ body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt b { font-size: 12.5px; font-weight: 800; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt small { font-size: 11px; font-weight: 600; opacity: .92; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow i { flex: 0 0 auto; font-style: normal; font-size: 20px; font-weight: 700; opacity: .9; }
+/* #1137-i (owner: "poné la foto de perfil de PICA ROJA"): el avatar de la cabecera de la burbuja es el logo de la app (no la "P"). */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-avatar { background: #0d0d1a url('/icons/icon-192x192.png') center / cover no-repeat !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-avatar::before { content: none !important; }
