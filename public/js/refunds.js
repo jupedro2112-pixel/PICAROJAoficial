@@ -473,22 +473,26 @@ VIP.refunds = (function () {
     // #497 (owner): el selector de reembolsos es una lista prolija: título, el % como detalle, el estado real de ese período y
     // RECLAMAR directo desde ahí (sin pasar por el modal de detalle). "Ver detalle" abre el modal de siempre.
     const _money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+    // #1137-s (owner: "que se entienda, básico, sin fricción"): cada tarjeta dice en castellano simple qué te devolvemos, si HOY hay plata
+    // para cobrar (botón grande) o cuándo se puede; las que tienen plata van PRIMERO. Nada de "NETWIN". "¿Cómo se calcula?" abre el detalle de siempre.
     function paintRefundPicker() {
         const box = document.getElementById('urList'); if (!box) return;
         const st = VIP.state.refundStatus || {};
-        const defs = [['daily', 'Reembolso diario', 'de tu NETWIN de ayer', 'Todos los días'], ['weekly', 'Reembolso semanal', 'de tu NETWIN de la semana pasada', 'Lunes y martes'], ['monthly', 'Reembolso mensual', 'de tu NETWIN del mes pasado', 'Primeros días del mes']];
-        box.innerHTML = defs.map(([t, title, sub, days]) => {
-            const d = st[t] || {}; const pct = d.percentage != null ? d.percentage : { daily: 25, weekly: 3, monthly: 1 }[t];
+        const defs = [['daily', 'Diario', 'de lo que perdiste ayer', 'todos los días', 'D'], ['weekly', 'Semanal', 'de lo que perdiste la semana pasada', 'lunes y martes', 'S'], ['monthly', 'Mensual', 'de lo que perdiste el mes pasado', 'los primeros días del mes', 'M']];
+        const rows = defs.map(([t, title, sub, days, ini]) => {
+            const d = st[t] || {}; const pct = d.percentage != null ? d.percentage : { daily: 10, weekly: 3, monthly: 1 }[t];
             const amt = Number(d.potentialAmount) || 0; const can = !!d.canClaim && amt > 0 && !d.belowMinimum;
             let state, cls;
-            if (can) { state = 'Tenés <b>' + _money(amt) + '</b> para reclamar'; cls = 'ok'; }
-            else if (d.canClaim && amt <= 0) { state = 'Hoy no tenés pérdida para reembolsar'; cls = 'none'; }
-            else if (d.belowMinimum) { state = 'Reembolso menor al mínimo'; cls = 'none'; }
-            else { const nx = d.nextClaim ? new Date(d.nextClaim) : null; state = 'Se reclama ' + (d.availableDays || days).toLowerCase() + (nx ? ' · próximo ' + nx.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : ''); cls = 'wait'; }
-            return '<div class="ur-card ' + cls + '"><div class="ur-head"><i class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></i><div><b>' + title + '</b><small><em>' + pct + '%</em> ' + sub + '</small></div></div>' +
+            if (can) { state = '✅ Tenés <b>' + _money(amt) + '</b> para cobrar ahora'; cls = 'ok'; }
+            else if (d.canClaim && amt <= 0) { state = 'Ahora no hay nada para cobrar'; cls = 'none'; }
+            else if (d.belowMinimum) { state = 'Todavía es menos del mínimo para cobrar'; cls = 'none'; }
+            else { const nx = d.nextClaim ? new Date(d.nextClaim) : null; state = '🕒 Se cobra ' + (d.availableDays ? String(d.availableDays).toLowerCase() : days) + (nx ? ' · el próximo es el ' + nx.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : ''); cls = 'wait'; }
+            const html = '<div class="ur-card ' + cls + '"><div class="ur-head"><i class="li ur-ini">' + ini + '</i><div><b>' + title + ' · ' + pct + '%</b><small>Te devolvemos el ' + pct + '% ' + sub + '</small></div></div>' +
                 '<div class="ur-state">' + state + '</div>' +
-                '<div class="ur-actions">' + (can ? '<button type="button" class="btn btn-primary ur-claim" onclick="VIP.refunds.claimFromPicker(\'' + t + '\', this)">Reclamar ' + _money(amt) + '</button>' : '') + '<button type="button" class="ur-detail" onclick="VIP.refunds.showRefundModal(\'' + t + '\');VIP.ui.hideModal(\'unifiedRefundModal\');">Ver detalle ›</button></div></div>';
-        }).join('');
+                '<div class="ur-actions">' + (can ? '<button type="button" class="btn btn-primary ur-claim" onclick="VIP.refunds.claimFromPicker(\'' + t + '\', this)">Cobrar ' + _money(amt) + '</button>' : '') + '<button type="button" class="ur-detail" onclick="VIP.refunds.showRefundModal(\'' + t + '\');VIP.ui.hideModal(\'unifiedRefundModal\');">¿Cómo se calcula?</button></div></div>';
+            return { can, html };
+        });
+        box.innerHTML = rows.filter(r => r.can).concat(rows.filter(r => !r.can)).map(r => r.html).join('');
     }
     async function claimFromPicker(type, btn) {
         if (btn) { btn.disabled = true; btn.textContent = 'Procesando…'; }

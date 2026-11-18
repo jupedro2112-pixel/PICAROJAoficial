@@ -3648,3 +3648,27 @@ body:not(.sp-classic) #casinoOverlay #casinoSupportBubble::before {
 }
 body:not(.sp-classic) #casinoOverlay #casinoSupportBubble::after { content: "Cargas"; color: #fff; font: 800 9.5px/1 system-ui, sans-serif; letter-spacing: .2px; }
 body:not(.sp-classic) #casinoOverlay #casinoSupportBubble #casinoChatBadge { top: -4px !important; right: -4px !important; }
+/* #1137-s: reembolsos simples — letra D / S / M en vez del mismo calendario, botón Cobrar a lo ancho, "¿Cómo se calcula?" chico abajo */
+.ur-head .li.ur-ini { font: 900 17px var(--p-font); font-style: normal; }
+.ur-card.ok { border-color: var(--p-green) !important; }
+.ur-actions { flex-wrap: wrap; }
+.ur-actions .ur-claim { flex: 1 1 100%; }
+.ur-actions .ur-detail { margin-left: 0 !important; padding: 6px 2px 0 !important; font-weight: 700 !important; color: var(--p-muted) !important; text-decoration: underline; }
+/* #1137-s: misiones simples */
+#missionsList .ms-count { font: 700 14px var(--p-font); color: var(--p-text); text-align: center; margin: 2px 0 10px; }
+#missionsList .ms-count b { color: var(--p-red); }
+#missionsList .ms-level { margin-top: 10px; }
+#missionsList .ms-roll { font: 600 11.5px var(--p-font); color: var(--p-muted); text-align: center; margin: 8px 0 0; }
+/* #1137-s: sorteos simples — 3 pasos arriba, requisitos cumplidos escondidos, detalle largo plegado; arreglo de "Tu puesto" (la línea "Te faltan…"
+   ocupaba la columna del número y aplastaba el texto) */
+.srt-me .srt-gap { grid-column: 1 / -1 !important; }
+.srt-steps { display: grid; gap: 6px; margin: 0 0 10px; }
+.srt-steps > div { display: flex; align-items: center; gap: 10px; background: var(--srt-soft, var(--p-surface)); border: 1px solid var(--srt-line, var(--p-border)); border-radius: 12px; padding: 8px 10px; font: 600 13px var(--p-font); color: var(--p-text); }
+.srt-steps i { flex: 0 0 26px; height: 26px; border-radius: 50%; background: var(--srt-g, var(--p-red)); color: #fff; font: 900 13px/26px var(--p-font); font-style: normal; text-align: center; }
+.srt-join.srt-simple .srt-req li.ok { display: none; }
+details.srt-more { margin: 0 0 10px; border: 1px solid var(--srt-line, var(--p-border)); border-radius: 14px; background: var(--p-card); }
+details.srt-more > summary { list-style: none; cursor: pointer; padding: 11px 12px; font: 800 13px var(--p-font); color: var(--p-text); display: flex; justify-content: space-between; gap: 8px; }
+details.srt-more > summary::-webkit-details-marker { display: none; }
+details.srt-more > summary i { font-style: normal; color: var(--p-muted); font-weight: 700; }
+details.srt-more[open] > summary i { visibility: hidden; }
+details.srt-more > :not(summary) { margin: 0 10px 10px; }

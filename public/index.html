@@ -1244,7 +1244,7 @@
                 <button type="button" class="ev-sec-t pv-fold" id="pvSvcHead" onclick="VIP.home.pvFold('svc')" aria-expanded="true"><b>Todo lo que ofrecemos 100% para vos</b><small>Tocá cada uno para ver más ›</small><i class="pv-chev" aria-hidden="true">⌄</i></button><!-- #1032: resumible -->
                 <div class="ev-services" id="entryServices">
                     <button type="button" class="ev-svc svc-refund" onclick="VIP.home.svcRefund()" title="Reembolsos por lo que perdés">
-                        <b><i class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg></i>Reembolso</b><small id="evSvcRefund">de tu NETWIN</small>
+                        <b><i class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg></i>Reembolso</b><small id="evSvcRefund">de lo que perdiste</small>
                     </button>
                     <button type="button" class="ev-svc svc-roulette" onclick="VIP.home.svcRoulette()" title="Ruleta diaria">
                         <b><i class="li"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg></i>Ruleta diaria</b><small>con <b class="rl-min">$10.000</b> cargados en el día</small>
@@ -1321,7 +1321,7 @@
                 <div class="ez-grid">
                     <button type="button" class="ez-btn ez-refund" onclick="VIP.home.svcRefund()" title="Reembolsos">
                         <span class="ez-badge" id="easyRefundBadge" style="display:none"></span>
-                        <span class="ez-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg></span><b>Reembolso</b><small id="easyRefundSub">de tu NETWIN</small><small class="refund-promo" hidden></small>
+                        <span class="ez-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg></span><b>Reembolso</b><small id="easyRefundSub">de lo que perdiste</small><small class="refund-promo" hidden></small>
                     </button>
                     <button type="button" class="ez-btn ez-missions" id="ezMissions" onclick="VIP.home.openMissions()" title="Misiones de la semana" hidden>
                         <span class="ez-badge" id="ezMissionsBadge" style="display:none"></span>
@@ -1818,7 +1818,7 @@
             <!-- #504: modal de MISIONES semanales -->
             <div id="missionsModal" class="modal hidden refund-simple profile-modal" onclick="if(event.target === this) hideModal('missionsModal')">
                 <div class="modal-content" style="max-width:400px;" onclick="event.stopPropagation()">
-                    <div class="modal-header"><h2>🎯 Misiones de la semana</h2><p id="missionsSub">Lunes a domingo · el premio se acredita solo cuando cumplís la meta</p></div>
+                    <div class="modal-header"><h2>🎯 Misiones de la semana</h2><p id="missionsSub">Cumplí cada meta de la semana y el premio te entra solo.</p></div>
                     <div id="missionsList" class="ms-list"></div>
                     <div class="modal-actions" style="margin-top:10px;"><button type="button" class="btn btn-primary" style="width:100%;" onclick="hideModal('missionsModal');VIP.home.easyLoad()">Cargar ahora ›</button><button type="button" class="btn btn-secondary" style="width:100%;margin-top:6px;" onclick="hideModal('missionsModal')">Cerrar</button></div>
                 </div>
@@ -2520,7 +2520,7 @@
             <button onclick="hideModal('unifiedRefundModal')" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#888;font-size:22px;cursor:pointer;z-index:10;line-height:1;">✕</button>
             <div class="modal-header">
                 <h2>Reembolsos</h2>
-                <p style="font-size:12px;color:#aaa;">Reclamá acá mismo o mirá el detalle de cada uno</p>
+                <p style="font-size:12.5px;color:#777;">Si perdiste, te devolvemos una parte. Cuando hay plata para cobrar, tocá <b>Cobrar</b> y entra al toque.</p>
                 <p class="refund-promo" hidden></p>
             </div>
             <!-- #497 (owner): tarjetas prolijas por período (título, % como detalle, estado) con RECLAMAR directo. Las pinta refunds.js (paintRefundPicker). -->
@@ -2797,7 +2797,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v738</div>
+                    <div class="pf-build" id="appBuildTag">app v739</div>
                 </div>
             </div>
             <div class="pf-actions pf-actions-top">
@@ -2826,7 +2826,7 @@
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v738</div> <!-- #790: espejo de #appBuildTag -->
+                <div class="pf-build pf-build-min" id="pfBuildMini">app v739</div> <!-- #790: espejo de #appBuildTag -->
                 <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
                 <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>

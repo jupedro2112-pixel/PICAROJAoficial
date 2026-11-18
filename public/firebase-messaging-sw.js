@@ -34,7 +34,7 @@ try {
 // ============================================
 // CONFIGURACIÓN DE CACHÉ
 // ============================================
-const CACHE_VERSION = 'v738'; // v738: burbuja 'Cargas' redonda estilo WhatsApp, fija (no se saca) (#1137-r)
+const CACHE_VERSION = 'v739'; // v739: reembolsos, misiones, ruleta y sorteos más simples (#1137-s)
 // v115: // v115: ruleta diaria con premios en % y tabla de probabilidades + bonos pendientes se aplican solos en la carga + sin bono de bienvenida para registros manuales
 // v114: // v114: el cartel del bono por instalar la app toma el % y los textos del server (editables en COMANDOS) — chau 100% fijo
 // v113: // v113: REEMBOLSO ACUMULATIVO de por vida en el perfil (tarjeta + reclamar + actualizar) — ESPEC-REEMBOLSO-1GIROX

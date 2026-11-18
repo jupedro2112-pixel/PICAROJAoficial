@@ -203,11 +203,12 @@
         // #1010: giro GRATIS (sólo % para la carga de hoy) o DORADO (con la carga del día, premios en plata).
         const isFree = _state.mode === 'free';
         const topCash = (_state.goldPrizes || _state.prizes || []).filter((p) => p.type === 'cash' && Number(p.value) > 0).sort((a, b) => b.value - a.value)[0];
-        const topHtml = topCash ? '<div class="rl-top"><span class="rl-top-k">🏆 Premio mayor' + (isFree ? ' (giro dorado)' : '') + '</span><b>$' + _fmt(topCash.value) + '</b></div>' : '';
+        // #1137-s (owner: "básico, sin fricción"): en el giro GRATIS no se muestra el premio mayor del DORADO arriba (confundía: ese giro no lo puede ganar); va en el tip de abajo.
+        const topHtml = (topCash && !isFree) ? '<div class="rl-top"><span class="rl-top-k">🏆 Premio mayor' + (isFree ? ' (giro dorado)' : '') + '</span><b>$' + _fmt(topCash.value) + '</b></div>' : '';
         const subTxt = isFree
-            ? 'Todos los días tenés <b>1 giro GRATIS</b> con % extra para tu carga de hoy. Si cargás <b>$' + _fmt(minDep) + '</b> en el día antes de girar, tu giro es <b>DORADO</b>: premios en plata.'
+            ? 'Tenés <b>1 giro gratis</b> por día. Si ganás, tu carga de hoy tiene <b>% extra</b>.'
             : (_state.mode === 'gold' ? '<b>Giro DORADO</b> desbloqueado con tu carga de hoy · si ganás, se acredita solo'
-                : 'Se desbloquea con <b>$' + _fmt(minDep) + '</b> cargados en el día (podés sumar cargas) · 1 giro por día · si ganás, se acredita solo');
+                : 'Cargá <b>$' + _fmt(minDep) + '</b> en el día (podés sumar cargas) y tenés 1 giro. Si ganás, se acredita solo.');
         let html = '<div class="rl-card">';
         html += '<button type="button" class="rl-x" onclick="VIP.roulette.close()" aria-label="Cerrar">✕</button>';
         html += '<div class="rl-head"><div class="rl-kicker">Todos los días</div><h2 class="rl-title">Ruleta diaria</h2><p class="rl-sub">' + subTxt + '</p></div>';
@@ -255,9 +256,9 @@
             html += pendingHtml;
             html += '<div id="rouletteResultBox" class="rl-hero"><div class="rl-emoji rl-emoji-swing">🎰</div>' +
                 '<div class="rl-hero-t">' + (isFree ? 'Tu giro GRATIS de hoy te espera' : (_state.mode === 'gold' ? '✨ Tu giro DORADO te espera' : 'Tu giro de hoy te espera')) + '</div>' +
-                '<div class="rl-hero-s">' + (isFree ? 'Tocá <b>Girar</b>: si ganás, tu carga de hoy lleva % extra automático.' : 'Tocá <b>Girar</b> y la suerte decide. Si ganás, se acredita solo.') + '</div>' +
+                '<div class="rl-hero-s">' + (isFree ? 'Si ganás, el extra se suma solo cuando cargues hoy.' : 'Tocá <b>Girar</b> y la suerte decide. Si ganás, se acredita solo.') + '</div>' +
                 '<button type="button" id="rouletteSpinBtn" class="rl-spin" onclick="VIP.roulette.spin()">Girar</button>' +
-                (isFree ? '<button type="button" class="rl-more" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.setHomeMode(\'full\');">💡 Cargar $' + _fmt(minDep) + ' y girar DORADO ›</button>' : '') + '</div>';
+                (isFree ? '<button type="button" class="rl-more" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.setHomeMode(\'full\');">💡 Si cargás $' + _fmt(minDep) + ' hoy, el giro es DORADO' + (topCash ? ': plata hasta $' + _fmt(topCash.value) : '') + ' ›</button>' : '') + '</div>';
             html += prizesHtml;
         }
 

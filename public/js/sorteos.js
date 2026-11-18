@@ -186,7 +186,10 @@
         if (me.joined) return '<div class="srt-reg">✅ Registrado en el ' + esc(s.title) + '<small> · desde el ' + esc(fday(me.joinedAt)) + '</small></div>';
         const row = (k, ok, txt, extra) => (req[k] === false ? '' : '<li class="' + (ok ? 'ok' : 'no') + '"><i>' + (ok ? '✅' : '⬜') + '</i><span>' + txt + (extra || '') + '</span></li>');
         const tg = _data && _data.telegramUrl ? ' <button type="button" class="srt-link" onclick="VIP.sorteos.tgOpen()">Unirme ›</button>' : '';
-        return '<div class="srt-join' + cls + '"><b>📝 Anotate al ' + esc(s.title) + '</b><small>Es gratis y vale sólo para este sorteo. Para poder ganar tenés que cumplir esto:</small><ul class="srt-req">' +
+        // #1137-s (owner: "básico, sin fricción"): se muestran SÓLO los requisitos que faltan; los cumplidos quedan en una línea ("✅ 5 listos")
+        const _rq = ['app', 'notif', 'phone', 'deposit'].filter((k) => req[k] !== false).map((k) => !!ck[k]).concat([ck.week !== false]).concat(req.telegram === false ? [] : [!!ck.telegram]);
+        const _ok = _rq.filter(Boolean).length, _miss = _rq.length - _ok;
+        return '<div class="srt-join srt-simple' + cls + '"><b>📝 Anotate gratis</b><small>' + (_miss ? 'Te ' + (_miss === 1 ? 'falta 1 cosa' : 'faltan ' + _miss + ' cosas') + ' para poder anotarte' + (_ok ? ' · ✅ ' + _ok + ' ya ' + (_ok === 1 ? 'lista' : 'listas') : '') + ':' : '✅ Ya cumplís todo. Tocá el botón y listo.') + '</small><ul class="srt-req">' +
             row('app', ck.app, 'Tener la app de PICA ROJA instalada', ck.app ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.home.installGiftOpen&&VIP.home.installGiftOpen()}catch(_){}">¿Cómo? ›</button>') +
             row('notif', ck.notif, 'Notificaciones activadas', ck.notif ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.notifications&&VIP.notifications.requestNotificationPermission&&VIP.notifications.requestNotificationPermission()}catch(_){}">Activar ›</button>') +
             row('phone', ck.phone, 'Tu número de celular cargado en el Perfil', ck.phone ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.openProfile()}catch(_){}">Cargarlo ›</button>') +
@@ -213,14 +216,20 @@
         if (t) t.textContent = s.emoji + ' ' + s.title;
         const rt = (s.rules && s.rules.text) || {};
         let h = strip(s);                 // 1) inicio, chico
+        // #1137-s: cómo funciona en 3 pasos, antes que nada
+        h += '<div class="srt-steps"><div><i>1</i><span><b>Anotate</b> gratis acá abajo</span></div><div><i>2</i><span><b>Cargá y jugá</b>: sumás tickets y puntos solo</span></div><div><i>3</i><span>El <b>' + esc(fday(s.publishAt)) + '</b> sorteamos y te avisamos</span></div></div>';
         h += joinBlock(s, true);          // 2) anotarse, compacto
         h += hero(s);                     // 3) premios y cómo se gana cada uno
         // 4) #981: cómo ganás, en tres líneas
+        h += '<details class="srt-more"><summary>📖 ¿Cómo se gana cada premio? <i>Ver ▾</i></summary>'; // #1137-s: el detalle largo queda plegado
         h += '<div class="srt-how"><div><i>🎟️</i><b>1° premio</b><span>Se sortea entre todos los tickets de los anotados. Más tickets, más chances; todos tienen alguna.</span></div><div><i>📊</i><b>2° y 3°</b><span>Para los dos anotados con más puntos al cierre.</span></div>' + (s.extra && s.extra.enabled ? '<div><i>🎁</i><b>' + esc(s.extra.title || 'SORTEO EXTRA') + '</b><span>' + num(s.extra.winners) + ' premios de ' + money(s.extra.amount) + ' al azar entre los que hacen ' + num(s.extra.minDeposits) + ' cargas o más.</span></div>' : '') + '</div>';
+        h += '</details>';
         h += ticketsBlock(s);             // 5) mis tickets
         // 6) cómo sumás puntos
+        h += '<details class="srt-more"><summary>🧮 ¿Cómo sumo puntos y cómo se sortea? <i>Ver ▾</i></summary>';
         h += '<div class="srt-sec"><h3>🧮 Cómo sumás puntos</h3><ul class="srt-rules"><li>🎰 <b>1 punto</b> por cada <b>$1.000</b> apostados con plata real · cuentan hasta <b>' + money(s.rules.dayCapArs) + '</b> por día</li><li>📅 <b>+' + num(s.rules.dayDepositPts) + ' pts</b> por cada día que cargás ' + money(s.rules.dayDepositMin) + ' o más</li><li>🗓️ <b>+' + num(s.rules.weekPts) + ' pts</b> por cada semana con ' + num(s.rules.weekActiveDays) + ' días con carga</li>' + (s.rules.missionWeekPct ? '<li>🎯 <b>+' + num(s.rules.missionWeekPct) + '%</b> de tus puntos de juego por cada semana con misiones cumplidas</li>' : '') + '<li>🎁 Los bonos no suman: cuenta la parte de lo apostado proporcional a tus cargas reales</li></ul><p class="srt-p srt-muted">El techo diario hace que jugar seguido valga más que una sola noche fuerte.</p></div>';
         h += drawsBlock(s);               // 7) sorteos (huella / semilla / ganadores)
+        h += '</details>';
         h += rankingBlock(s);             // 8) ranking
         h += '<div class="srt-sec srt-tc-sec"><button type="button" class="srt-tc-toggle" onclick="VIP.sorteos.tcToggle(this)" aria-expanded="false"><span>📜 Bases y condiciones · ' + esc(s.title) + '</span><i>Maximizar ▾</i></button><ol class="srt-tc" hidden>' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol></div>';
         b.innerHTML = h; try { b.scrollTop = 0; } catch (_) {}

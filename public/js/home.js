@@ -384,10 +384,12 @@
         if (btn) { btn.hidden = false; const bd = _el('ezMissionsBadge'); if (bd) { bd.textContent = done + '/' + ms.length; bd.style.display = ''; } const sub = _el('ezMissionsSub'); if (sub) sub.textContent = (nivelTxt ? 'Nivel ' + nivelTxt + ' · ' : '') + (done === ms.length ? '¡Todas cumplidas!' : done + ' de ' + ms.length + ' cumplidas'); const bars = _el('ezMissionsBars'); if (bars) bars.innerHTML = ms.map((m) => '<i class="' + (m.done ? 'ok' : '') + '" style="--w:' + Math.min(100, Math.round((m.value / m.target) * 100)) + '%"></i>').join(''); }
         try { const ev = _el('evSvcMissions'); if (ev) ev.textContent = done + ' de ' + ms.length + ' cumplidas'; } catch (_) {} // #524
         if (card) { card.hidden = false; const cs = _el('missionsCardSub'); if (cs) cs.textContent = (nivelTxt ? nivelTxt + ' · ' : '') + done + ' de ' + ms.length + ' cumplidas'; const cl = _el('missionsCardList'); if (cl) cl.innerHTML = ms.map(_msBar).join(''); const nt = _el('missionsCardNote'); if (nt) nt.textContent = (d.rolloverX > 0 ? 'El premio se juega x' + d.rolloverX + ' antes de poder retirarlo. ' : '') + (d.maxRewardPct > 0 ? 'Premio hasta el ' + d.maxRewardPct + '% de lo cargado en la semana.' : ''); let op = '0'; try { op = localStorage.getItem('vip_ms_open') || '0'; } catch (_) {} toggleMissionsCard(op === '1'); }
-        const list = _el('missionsList'); if (list) list.innerHTML = (nv ? '<div class="ms-level"><b>' + _esc(nivelTxt) + '</b><small>' + _esc(subeTxt) + '</small></div>' : '') + ms.map(_msBar).join('');
+        // #1137-s (owner: "básico y entendible"): arriba cuántas llevás, después las metas, y el nivel en UNA línea corta (sin el nivel VIP al lado, que confundía)
+        const lvlTxt = nv ? (nv.next ? (nv.todasCumplidas ? '¡Completaste todas! La semana que viene subís a ' + nv.next.emoji + ' ' + nv.next.name + '.' : 'Si completás las ' + ms.length + ', la semana que viene subís a ' + nv.next.emoji + ' ' + nv.next.name + ' (premios más grandes).') : 'Estás en el nivel más alto.') : '';
+        const list = _el('missionsList'); if (list) list.innerHTML = '<div class="ms-count">' + (done === ms.length ? '🎉 ¡Cumpliste todas las metas!' : 'Llevás <b>' + done + ' de ' + ms.length + '</b> metas cumplidas') + '</div>' + ms.map(_msBar).join('') + (nv ? '<div class="ms-level"><b>Tu nivel: ' + _esc(nivelTxt) + '</b><small>' + _esc(lvlTxt) + '</small></div>' : '') + (d.rolloverX > 0 ? '<p class="ms-roll">El premio se juega x' + d.rolloverX + ' antes de poder retirarlo.</p>' : '');
         // #518: la sección de misiones del modal Info toma los números reales
         try { const r1 = _el('infoMsRoll'); if (r1 && d.rolloverX != null) r1.textContent = d.rolloverX; const c1 = _el('infoMsCap'); if (c1 && d.maxRewardPct != null) c1.textContent = d.maxRewardPct; const mine = _el('infoMsMine'); if (mine) { if (nv) { mine.style.display = ''; mine.innerHTML = '<b>Vos hoy:</b> nivel ' + _esc(nivelTxt) + ' · ' + done + ' de ' + ms.length + ' cumplidas esta semana' + (nv.next ? ' · si completás todas pasás a ' + _esc(nv.next.emoji + ' ' + nv.next.name) : '') + '. Premios de tu nivel: ' + ms.map((m) => _m$(m.rewardArs)).join(' · ') + '.'; } else mine.style.display = 'none'; } } catch (_) {}
-        const msub = _el('missionsSub'); if (msub && d.weekEndsAt) msub.textContent = 'Lunes a domingo · termina el ' + new Date(d.weekEndsAt).toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: '2-digit' }) + ' · el premio se acredita solo' + (d.rolloverX > 0 ? ' y se juega x' + d.rolloverX + ' antes de retirarlo' : '');
+        const msub = _el('missionsSub'); if (msub && d.weekEndsAt) msub.textContent = 'Cumplí cada meta antes del ' + new Date(d.weekEndsAt).toLocaleDateString('es-AR', { weekday: 'long', day: '2-digit', month: '2-digit' }) + ' y el premio te entra solo.'; // #1137-s
     }
     async function loadStrategy(force) {
         const tok = VIP.state && VIP.state.currentToken; if (!tok) return;
@@ -740,7 +742,7 @@
                 if (mx(tbp.daily)) parts.push('Diario ' + mx(tbp.daily) + '%');
                 if (mx(tbp.weekly)) parts.push('semanal');
                 if (mx(tbp.monthly)) parts.push('mensual');
-                const el = _el('easyRefundSub'); if (el && parts.length) el.textContent = parts.join(' · ') + ' de tu NETWIN'; // #458
+                const el = _el('easyRefundSub'); if (el && parts.length) el.textContent = parts.join(' · ') + ' de lo que perdiste'; // #458 · #1137-s: sin 'NETWIN'
                 let claim = 0;
                 ['daily', 'weekly', 'monthly'].forEach((k) => { const d = s[k]; if (d && d.canClaim && Number(d.potentialAmount) > 0) claim += Number(d.potentialAmount); });
                 const bd = _el('easyRefundBadge');
