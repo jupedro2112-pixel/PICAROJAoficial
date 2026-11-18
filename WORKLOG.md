@@ -14880,3 +14880,4 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   PROBAR: abrir Girox → burbuja ⇒ cabecera verde "Pica Roja Argentina · en línea"; tocar CARGAR ⇒ datos + 3 botones al final del chat; copiar y subir comprobante.
 - **#1137-d (app v726):** owner: "donde se escribe poné solamente 'Escribí un mensaje...'" ⇒ placeholder de `#messageInput` (index.html; ningún JS lo pisa).
 - **#1137-e (app v727):** con capturas de prueba el nombre salía cortado ("Pica R…") por el botón de Telegram ⇒ en la burbuja el botón dice sólo "Telegram" (sin subtítulo; <360 px sólo el ícono) y el nombre a 15 px. Fotos de muestra hechas con Tor Browser headless sobre una maqueta con el CSS real.
+- **#1137-f (app v728):** owner: "en la punta del chat poné un cierre estilo WhatsApp" ⇒ `#spCasinoX` con una X en SVG (el ✕ de texto salía como cuadradito), arriba a la derecha, círculo suave al tocar.

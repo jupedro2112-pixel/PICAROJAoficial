@@ -3581,3 +3581,7 @@ body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .send-btn { fl
 #casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-btns button:active { background: var(--p-wa-line); }
 :root { --p-wa-link: #027eb5; }
 html[data-theme="dark"] { --p-wa-link: #027eb5; }
+/* #1137-f (owner: "en la punta del chat poné un cierre estilo WhatsApp"): ✕ en SVG, arriba a la derecha, círculo suave al tocar. */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .sp-casino-x { order: 99; margin-left: 4px !important; margin-right: -4px; width: 36px !important; height: 36px !important; padding: 0 !important;
+  border-radius: 50% !important; display: inline-flex !important; align-items: center; justify-content: center; flex: 0 0 36px; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .sp-casino-x:active { background: rgba(255, 255, 255, .18) !important; }

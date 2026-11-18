@@ -2651,7 +2651,7 @@
         p.classList.remove('hidden'); p.classList.add('sp-in-casino'); document.body.classList.add('sp-casino');
         try {
             const h = _el('waHead');
-            if (h && !_el('spCasinoX')) h.insertAdjacentHTML('beforeend', '<button type="button" class="wa-head-btn sp-casino-x" id="spCasinoX" onclick="VIP.home.closeSupport()" aria-label="Cerrar el chat">✕</button>');
+            if (h && !_el('spCasinoX')) h.insertAdjacentHTML('beforeend', '<button type="button" class="wa-head-btn sp-casino-x" id="spCasinoX" onclick="VIP.home.closeSupport()" aria-label="Cerrar el chat"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>');
             const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; } if (stt) { stt.dataset.prev = stt.textContent; } _spCasinoHead();
         } catch (_) {}
         try { const u = (VIP.state && VIP.state.currentUser) || {}; document.querySelectorAll('#spInfoBar .ib-sms').forEach((b) => { b.style.display = u.phoneVerified === true ? 'none' : ''; }); } catch (_) {} try { _ibMarquee(); } catch (_) {} // #1042-r
