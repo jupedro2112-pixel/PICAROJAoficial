@@ -1413,6 +1413,34 @@ VIP.ui._showCasinoFrame = function() {
       '';
     document.body.appendChild(overlay);
 
+    // #1137-t (owner: "que el perfil de adentro de Girox no se vea, la gente se pierde y ve dos perfiles; sólo el saldo"): la página de 1girox es de
+    // otro dominio (no se puede tocar por dentro), así que se TAPA el círculo de "Mi cuenta" de su barra de arriba (a la derecha, al lado del saldo)
+    // con un recuadro del mismo color de esa barra (#0a0a10). El saldo queda a la vista. Tocar la tapa abre NUESTRO Perfil.
+    // Medidas de 1girox (app.css): barra fija de 80 px; a la derecha 12 px de margen + círculo de 40 px (≤430 px de ancho) o 47 px, y el saldo 7-10 px antes.
+    // Si 1girox cambia su barra, ajustar acá. Sólo con 1girox abierto (no en Ganamos ni en el casino simulado).
+    (function _gxProfileCover() {
+      const fr = overlay.querySelector('#casinoFrame'); if (!fr) return;
+      const cv = document.createElement('button');
+      cv.type = 'button'; cv.id = 'gxProfileCover'; cv.setAttribute('aria-label', 'Tu perfil'); cv.hidden = true;
+      cv.style.cssText = 'position:absolute;z-index:5;background:#0a0a10;border:0;padding:0;margin:0;border-radius:0;cursor:pointer;-webkit-tap-highlight-color:transparent;';
+      cv.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); try { VIP.home.openProfile(); } catch (_) {} });
+      overlay.appendChild(cv);
+      const place = function () {
+        try {
+          const src = fr.getAttribute('src') || '';
+          const on = fr.style.display === 'block' && /girox/i.test(src) && !/casino-sim/.test(src);
+          cv.hidden = !on; if (!on) return;
+          const w = fr.offsetWidth || window.innerWidth, narrow = w <= 430;
+          cv.style.top = (fr.offsetTop + 12) + 'px'; cv.style.height = '56px';
+          cv.style.right = '8px'; cv.style.width = (narrow ? 50 : 57) + 'px';
+        } catch (_) {}
+      };
+      try { new MutationObserver(place).observe(fr, { attributes: true, attributeFilter: ['style', 'src'] }); } catch (_) {}
+      window.addEventListener('resize', place); fr.addEventListener('load', place);
+      try { const tb = overlay.querySelector('#casinoTopBar'); if (tb && window.ResizeObserver) new ResizeObserver(place).observe(tb); } catch (_) {}
+      place();
+    })();
+
     // Cuando el casino termina de cargar, se esconde el "cargando" y se muestra el juego.
     const frame = overlay.querySelector('#casinoFrame');
     frame.addEventListener('load', function() {
