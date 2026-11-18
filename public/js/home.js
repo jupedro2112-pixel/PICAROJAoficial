@@ -2539,6 +2539,8 @@
     function _giroxNewsShow() {
         const ov = _el('casinoOverlay'); if (!ov) return;
         const gn = _platforms && _platforms.giroxNews; const old = _el('giroxNews');
+        // #1137-o (owner: que entrar no sea invasivo): con el chat nuevo el cartel "¡Actualizamos!" ya no sale solo al abrir Girox.
+        if (!document.body.classList.contains('sp-classic')) { if (old) old.remove(); return; }
         if (!gn || !gn.show || !gn.text) { if (old) old.remove(); return; }
         const key = _gnHash(gn.text); let closed = null; try { closed = localStorage.getItem('vip_gnews_x'); } catch (_) {}
         if (closed === key) { if (old) old.remove(); return; }
@@ -2683,9 +2685,14 @@
         try { if (s.next && s.next.parentNode === s.parent) s.parent.insertBefore(p, s.next); else s.parent.appendChild(p); } catch (_) {}
         p.classList.remove('sp-in-casino'); document.body.classList.remove('sp-casino'); p.style.removeProperty('height'); // #1137-n
         try { const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm && nm.dataset.prev) nm.textContent = nm.dataset.prev; if (stt && stt.dataset.prev) stt.textContent = stt.dataset.prev; } catch (_) {}
-        if (s.wasHidden) p.classList.add('hidden');
+        // #1137-p (owner: "cuando cierro el chat [✕] aparece Carga rápida y otro chat en otro formato; quiero un solo formato, el de WhatsApp"): con Girox
+        // abierto, cerrar la burbuja deja SÓLO el juego: el panel vuelve a su lugar OCULTO (antes, si estaba visible en el Inicio, quedaba a la vista
+        // con el formato viejo) y la Carga rápida cerrada.
+        const stillCasino = _casinoIsOpen() && !document.body.classList.contains('sp-classic');
+        if (s.wasHidden || stillCasino) p.classList.add('hidden');
+        if (stillCasino) { document.body.classList.remove('support-open'); try { toggleCasinoLoad(false); } catch (_) {} }
         try { if (_sbmEl && _sbmEl.querySelector('.sbmw')) spBankMsgPaint(); } catch (_) {} // #1137: fuera de la burbuja vuelve el cuadro de siempre
-        _open = !s.wasHidden;
+        _open = !(s.wasHidden || stillCasino);
         try { const i = _el('messageInput'); if (i) i.blur(); } catch (_) {}
         return true;
     }
