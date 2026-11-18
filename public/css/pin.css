@@ -3696,3 +3696,20 @@ body:not(.sp-classic) #casinoOverlay #casinoSupportBubble::after {
   body:not(.sp-classic) #casinoOverlay #casinoSupportBubble:not([data-dragging]) { animation: cqPulse 2.8s ease-out infinite; }
   @keyframes cqPulse { 0%, 70%, 100% { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 4px rgba(37,211,102,.22); } 35% { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 9px rgba(37,211,102,0); } }
 }
+/* #1137-v (owner: "que todo quede centrado abajo, achicado, porque se me queda todo encimado arriba y no puedo cerrar las cosas"): con Girox abierto
+   TODA ventana que se muda adentro del casino (Reembolsos, Misiones, Sorteos, Ruleta, ayudas…) se apoya ABAJO y centrada, más angosta, y nunca sube
+   más allá de la barra de arriba (+ la franja de la hora): la ✕ siempre queda a la vista y al alcance. Si el contenido es largo, se desplaza adentro. */
+#casinoOverlay > .modal, #casinoOverlay > #rouletteModal, #casinoOverlay > #srtModal {
+  align-items: flex-end !important; justify-content: center !important; box-sizing: border-box !important; overflow: hidden !important;
+  padding: calc(var(--sat, env(safe-area-inset-top, 0px)) + 62px) 10px calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 10px) !important;
+}
+#casinoOverlay > .modal > .modal-content { width: 100% !important; max-width: 400px !important; max-height: 100% !important; overflow-y: auto !important; margin: 0 !important; box-sizing: border-box !important; }
+#casinoOverlay > #rouletteModal > .rl-card { width: 100% !important; max-width: 400px !important; max-height: 100% !important; overflow-y: auto !important; margin: 0 auto !important; box-sizing: border-box !important; }
+#casinoOverlay > #srtModal .srt-win { max-width: 420px !important; max-height: 100% !important; border-radius: 22px !important; }
+/* #1137-v (owner: "la parte inferior sigue en blanco"): con Girox abierto el fondo de la página entera (html/body) también es negro, así ninguna franja
+   del borde de abajo (la del gesto o la barra del teléfono) muestra el blanco de la app que queda detrás. */
+html:has(body.casino-open), body.casino-open { background: #000 !important; }
+/* #1137-v (owner: "el chat un poco más grande cuando está abierto, sin tapar la página"): 360 × 560 (antes 340 × 480); sigue arriba de la burbuja
+   Cargas y _spFitCasino lo achica si llegara a tocar la barra de arriba. */
+#casinoOverlay > #supportPanel.sp-in-casino { width: min(360px, calc(100vw - 20px)) !important; height: min(560px, calc(100vh - 170px - var(--sat, 0px))) !important; }
+@supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: min(560px, calc(100dvh - 170px - var(--sat, 0px))) !important; } }
