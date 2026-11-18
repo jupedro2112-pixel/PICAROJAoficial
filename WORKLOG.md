@@ -14878,3 +14878,4 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   debajo recuadros-botón 📋 Copiar CBU · 📋 Copiar alias · 📎 Subir comprobante (`pickReceipt('chat')`). Sin datos de la cuenta ⇒ CARGAR abre la guía del comprobante.
 - Tests: `test-vip-exports` OK, `test-support-bot` 18/18, `node --check`. **Necesita deploy en los dos AWS.**
   PROBAR: abrir Girox → burbuja ⇒ cabecera verde "Pica Roja Argentina · en línea"; tocar CARGAR ⇒ datos + 3 botones al final del chat; copiar y subir comprobante.
+- **#1137-d (app v726):** owner: "donde se escribe poné solamente 'Escribí un mensaje...'" ⇒ placeholder de `#messageInput` (index.html; ningún JS lo pisa).
