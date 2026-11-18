@@ -3713,3 +3713,23 @@ html:has(body.casino-open), body.casino-open { background: #000 !important; }
    Cargas y _spFitCasino lo achica si llegara a tocar la barra de arriba. */
 #casinoOverlay > #supportPanel.sp-in-casino { width: min(360px, calc(100vw - 20px)) !important; height: min(560px, calc(100vh - 170px - var(--sat, 0px))) !important; }
 @supports (height: 100dvh) { #casinoOverlay > #supportPanel.sp-in-casino { height: min(560px, calc(100dvh - 170px - var(--sat, 0px))) !important; } }
+/* #1137-w (owner: "no quiero que la gente entre a Info o donde sea y no pueda cerrar; que la parte de arriba quede centrada y no se tape con las
+   barras del teléfono; depende el teléfono se traban"): TODAS las ventanas de la app (con o sin Girox abierto) dejan libre la franja de la hora
+   (--sat, medida por teléfono en index.html) y la barra de gestos de abajo (--sab), quedan centradas y, si el contenido es largo, se desplaza ADENTRO
+   de la ventana: la ✕ de arriba nunca queda tapada ni fuera de la pantalla. Con Girox abierto manda la regla de #1137-v (apoyadas abajo). */
+/* (.sp-faq-modal ya tenía sus márgenes propios de #1042: no se tocan) */
+.modal, .srt-modal {
+  box-sizing: border-box !important;
+  padding-top: calc(var(--sat, env(safe-area-inset-top, 0px)) + 12px) !important;
+  padding-bottom: calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 12px) !important;
+  padding-left: max(10px, env(safe-area-inset-left, 0px)) !important; padding-right: max(10px, env(safe-area-inset-right, 0px)) !important;
+}
+.modal > .modal-content { max-height: 100% !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; margin-top: auto !important; margin-bottom: auto !important; box-sizing: border-box !important; }
+.srt-modal > .srt-win { max-height: 100% !important; border-radius: 22px !important; }
+#rouletteModal { box-sizing: border-box !important; padding-top: calc(var(--sat, env(safe-area-inset-top, 0px)) + 12px) !important; padding-bottom: calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 12px) !important; }
+#rouletteModal > .rl-card { max-height: 100% !important; overflow-y: auto !important; margin-top: auto !important; margin-bottom: auto !important; box-sizing: border-box !important; }
+/* #1137-w: en Info el botón "Ver más ›" pisaba el final de los títulos largos ("Cargas y retiros (antifraude)", "La plataforma que quieras"):
+   cerrado es un circulito "›" (abierto vuelve a decir "Minimizar ▴") y el título usa todo el ancho. */
+.info-msg.im-compact .im-sec { padding-right: 52px !important; }
+.info-msg.im-compact .im-sec:not(.open) + .im-more { font-size: 0 !important; width: 32px; height: 32px; padding: 0 !important; margin-top: -46px !important; margin-bottom: 14px !important; display: flex !important; align-items: center; justify-content: center; }
+.info-msg.im-compact .im-sec:not(.open) + .im-more::after { content: "›"; font: 900 20px/1 var(--p-font); color: var(--p-red); margin-top: -2px; }

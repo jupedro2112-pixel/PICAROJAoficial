@@ -34,7 +34,7 @@ try {
 // ============================================
 // CONFIGURACIÓN DE CACHÉ
 // ============================================
-const CACHE_VERSION = 'v742'; // v742: ventanas abajo y centradas en Girox, fondo negro abajo, chat más grande (#1137-v)
+const CACHE_VERSION = 'v743'; // v743: toda ventana respeta las barras del teléfono (la X siempre a mano); Info con ›  (#1137-w)
 // v115: // v115: ruleta diaria con premios en % y tabla de probabilidades + bonos pendientes se aplican solos en la carga + sin bono de bienvenida para registros manuales
 // v114: // v114: el cartel del bono por instalar la app toma el % y los textos del server (editables en COMANDOS) — chau 100% fijo
 // v113: // v113: REEMBOLSO ACUMULATIVO de por vida en el perfil (tarjeta + reclamar + actualizar) — ESPEC-REEMBOLSO-1GIROX
