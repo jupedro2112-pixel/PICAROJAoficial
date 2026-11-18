@@ -3614,3 +3614,14 @@ body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help 
 /* #1137-k: con "Soporte · Problemas con tu carga" al lado, el nombre baja a dos renglones antes que cortarse ("Pica Roja / Argentina") */
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-name { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; font-size: 14.5px !important; line-height: 1.15 !important; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head { gap: 8px !important; }
+/* #1137-l: menú de 🎧 Soporte como mensaje con botones de WhatsApp (burbuja blanca + botones apilados, el último "Quiero hablar con una persona") */
+#spHelpMsg .shm-wa { display: flex; flex-direction: column; gap: 3px; width: 86%; max-width: 290px; }
+body #supportPanel #spHelpMsg .shm-wa .message.sp-helpmsg { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 8px 10px !important; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
+  background: var(--p-wa-in) !important; color: var(--p-wa-in-text) !important; border: 0 !important; border-radius: 0 12px 12px 12px !important; box-shadow: 0 1px .5px rgba(11, 20, 26, .13); }
+#spHelpMsg .shm-t { font: 800 14px/1.3 var(--p-font); color: var(--p-wa-in-text); }
+#spHelpMsg .shm-q { font: 500 13.5px/1.35 var(--p-font); color: var(--p-wa-in-text); }
+#spHelpMsg .shm-btns { display: flex; flex-direction: column; gap: 3px; }
+#spHelpMsg .shm-btns button { width: 100%; padding: 10px 8px; border: 0; border-radius: 10px; background: var(--p-wa-in); color: var(--p-wa-link); font: 600 14px/1.2 var(--p-font); text-align: center; cursor: pointer;
+  box-shadow: 0 1px .5px rgba(11, 20, 26, .13); }
+#spHelpMsg .shm-btns button:active { background: var(--p-wa-line); }
+#spHelpMsg .shm-btns .shm-person { background: var(--p-wa-out); color: #fff; font-weight: 800; }

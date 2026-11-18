@@ -2708,9 +2708,11 @@
         if (!_shEl) {
             _shEl = document.createElement('div'); _shEl.className = 'message-wrapper sp-helpmsg-w'; _shEl.id = 'spHelpMsg';
             const b = (k, t) => '<button type="button" onclick="VIP.home.spHelpPick(\'' + k + '\')">' + t + '</button>';
-            _shEl.innerHTML = '<div class="message agente sp-helpmsg"><div class="shm-head"><b>🎧 Soporte</b><small>¿Qué problema tenés? Elegí una opción</small></div>' +
-                '<div class="shm-opts">' + b('carga', '💳 Con una carga') + b('retiro', '💸 Con un retiro') + b('reembolso', '🎁 Con un reembolso') + b('bono', '🎰 Con el bono') + b('otro', '❓ Otra cosa') + '</div>' +
-                '<button type="button" class="shm-agent" onclick="VIP.home.spHelpPick(\'problema\')">👤 Hablar con un agente</button></div>';
+            // #1137-l (owner: "cuando aprietan Soporte, que tengan las opciones en el chat tipo WhatsApp, algo sencillo… y que adentro diga quiero hablar
+            // con una persona"): burbuja con la pregunta y abajo los botones apilados, como un mensaje con botones de WhatsApp.
+            _shEl.innerHTML = '<div class="shm-wa"><div class="message agente sp-helpmsg"><b class="shm-t">🎧 Soporte</b><span class="shm-q">¿Con qué te ayudamos? Tocá una opción 👇</span></div>' +
+                '<div class="shm-btns">' + b('carga', '💳 Mi carga no llegó') + b('retiro', '💸 Problema con un retiro') + b('reembolso', '🎁 Reembolsos') + b('bono', '🎰 Bonos') + b('otro', '❓ Otra consulta') +
+                '<button type="button" class="shm-person" onclick="VIP.home.spHelpPick(\'problema\')">👤 Quiero hablar con una persona</button></div></div>';
         }
         _shUntil = Date.now() + 3 * 60 * 1000;
         list.appendChild(_shEl);
