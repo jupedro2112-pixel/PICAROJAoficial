@@ -3599,3 +3599,10 @@ body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow i { 
 /* #1137-i (owner: "poné la foto de perfil de PICA ROJA"): el avatar de la cabecera de la burbuja es el logo de la app (no la "P"). */
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-avatar { background: #0d0d1a url('/icons/icon-192x192.png') center / cover no-repeat !important; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-avatar::before { content: none !important; }
+/* #1137-j (owner: "el Soporte ponelo dentro del chat de WhatsApp al lado de Pica Roja Argentina; el de arriba sacalo") */
+.wa-head-help { display: none; }
+body:not(.sp-classic) #ctHelp { display: none !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help { display: inline-flex !important; align-items: center; gap: 5px; flex: 0 0 auto; padding: 6px 11px 6px 9px; border: 0; border-radius: 999px;
+  background: rgba(255, 255, 255, .18); color: var(--p-wa-head-text); font: 700 12.5px/1 var(--p-font); cursor: pointer; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help:active { background: rgba(255, 255, 255, .3); }
+@media (max-width: 340px) { body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-help span { display: none; } }
