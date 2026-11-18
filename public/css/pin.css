@@ -3585,3 +3585,14 @@ html[data-theme="dark"] { --p-wa-link: #027eb5; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .sp-casino-x { order: 99; margin-left: 4px !important; margin-right: -4px; width: 36px !important; height: 36px !important; padding: 0 !important;
   border-radius: 50% !important; display: inline-flex !important; align-items: center; justify-content: center; flex: 0 0 36px; }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .sp-casino-x:active { background: rgba(255, 255, 255, .18) !important; }
+/* #1137-g (owner): Telegram ya no va en la cabecera de la burbuja: va abajo de la fila de beneficios, a lo ancho. */
+.sp-tgrow { display: none; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg { display: none !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow { display: flex !important; align-items: center; gap: 9px; width: 100%; margin-top: 6px; padding: 6px 10px 6px 6px; box-sizing: border-box;
+  border: 0; border-radius: 12px; background: var(--p-tg); color: #fff; font-family: var(--p-font); text-align: left; cursor: pointer; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow:active { transform: scale(.98); }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-ico { flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, .22); display: inline-flex; align-items: center; justify-content: center; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt b { font-size: 12.5px; font-weight: 800; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt small { font-size: 11px; font-weight: 600; opacity: .92; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow i { flex: 0 0 auto; font-style: normal; font-size: 20px; font-weight: 700; opacity: .9; }
