@@ -14879,3 +14879,4 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Tests: `test-vip-exports` OK, `test-support-bot` 18/18, `node --check`. **Necesita deploy en los dos AWS.**
   PROBAR: abrir Girox → burbuja ⇒ cabecera verde "Pica Roja Argentina · en línea"; tocar CARGAR ⇒ datos + 3 botones al final del chat; copiar y subir comprobante.
 - **#1137-d (app v726):** owner: "donde se escribe poné solamente 'Escribí un mensaje...'" ⇒ placeholder de `#messageInput` (index.html; ningún JS lo pisa).
+- **#1137-e (app v727):** con capturas de prueba el nombre salía cortado ("Pica R…") por el botón de Telegram ⇒ en la burbuja el botón dice sólo "Telegram" (sin subtítulo; <360 px sólo el ícono) y el nombre a 15 px. Fotos de muestra hechas con Tor Browser headless sobre una maqueta con el CSS real.

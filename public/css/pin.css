@@ -3528,7 +3528,12 @@ body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat
 /* #1137-c (owner: "al lado dejá el Telegram, respetando el chat estilo WhatsApp"): el botón de Telegram de siempre, sobre la cabecera verde */
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg { margin-left: 0; flex: 0 0 auto; background: rgba(255, 255, 255, .16); }
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt small { color: var(--p-wa-head-muted); }
-@media (max-width: 380px) { body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt small { display: none; } }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt small { display: none !important; } /* sólo "Telegram": que entre el nombre entero */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt b { font-size: 0 !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt b::after { content: 'Telegram'; font-size: 11.5px; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg { padding: 3px 9px 3px 3px; gap: 5px; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-name { font-size: 15px !important; }
+@media (max-width: 360px) { body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt { display: none !important; } } /* pantallas chicas: sólo el ícono */
 body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .sp-casino-x { margin-left: 2px !important; width: 34px; height: 34px; background: transparent !important; color: var(--p-wa-head-text) !important;
   font-size: 22px !important; font-weight: 400 !important; border: 0 !important; }
 /* arriba: sólo la cinta y la fila de servicios, sobre el fondo del chat */
