@@ -521,12 +521,12 @@
     // #1082 (owner: "el bono vigente de arriba no lo quiero ahí; dejalo en el chat siempre: que el ÚLTIMO mensaje sea el de los datos, que se pueda
     // copiar desde el chat y, si hay bono vigente, que aparezca ahí con los datos; sacando lo rojo de arriba se gana chat"). Mensaje LOCAL (no se guarda)
     // que un observador mantiene siempre al final de #chatMessages. Datos: GET /api/config/cbu (ensureCbu) + bono: GET /api/bonus/vigente.
-    let _sbmEl = null, _sbmObs = null, _sbmShown = false;
+    let _sbmEl = null, _sbmObs = null, _sbmShown = false, _sbmLastUntil = 0; // #1137: tras CARGAR los datos quedan al final un rato
     function _sbmPlace(first) { // #1134: primera vez al final; si el chat se vuelve a dibujar, vuelve debajo del saludo (nunca al final otra vez)
         const list = _el('chatMessages'); if (!list || !_sbmEl) return;
         if (document.body.classList.contains('sp-classic')) { if (_sbmEl.parentNode) _sbmEl.remove(); return; }
         if (first) list.appendChild(_sbmEl);
-        if (!_sbmObs) { try { _sbmObs = new MutationObserver(() => { if (!_sbmEl || document.body.classList.contains('sp-classic') || list.contains(_sbmEl)) return; const g = list.querySelector('[data-message-id="local-greet"]'); if (g) g.after(_sbmEl); }); _sbmObs.observe(list, { childList: true }); } catch (_) {} }
+        if (!_sbmObs) { try { _sbmObs = new MutationObserver(() => { if (!_sbmEl || document.body.classList.contains('sp-classic') || list.contains(_sbmEl)) return; if (Date.now() < _sbmLastUntil) { list.appendChild(_sbmEl); return; } const g = list.querySelector('[data-message-id="local-greet"]'); if (g) g.after(_sbmEl); }); _sbmObs.observe(list, { childList: true }); } catch (_) {} }
     }
     function _sbmKeepLast() {
         const list = _el('chatMessages'); if (!list || !_sbmEl) return;
@@ -534,7 +534,7 @@
         if (list.lastElementChild !== _sbmEl) list.appendChild(_sbmEl);
         if (!_sbmObs) { try { _sbmObs = new MutationObserver(() => { if (_sbmEl && !document.body.classList.contains('sp-classic') && list.lastElementChild !== _sbmEl) list.appendChild(_sbmEl); }); _sbmObs.observe(list, { childList: true }); } catch (_) {} }
     }
-    async function spBankMsgPaint() {
+    async function spBankMsgPaint(show) { // show = CARGAR / CARGA AQUÍ ⇒ al final y a la vista
         try {
             const tok = VIP.state && VIP.state.currentToken; if (!tok) return;
             const [c, j] = await Promise.all([
@@ -547,6 +547,17 @@
             // #1082-b (owner, con captura): estilo "Depositar · Paso 1 de 2", chiquito, CBU y alias con Copiar verde, titular + mínimo y "Subir comprobante"
             const md = _platforms && Number(_platforms.minDepositArs) > 0 ? '$' + Math.round(_platforms.minDepositArs).toLocaleString('es-AR') : '';
             const row = (k, v, w) => '<div class="sbm-r"><div class="sbm-kv"><small>' + k + '</small><code>' + e(v) + '</code></div><button type="button" class="sbm-cp" onclick="VIP.home.spCopy(\'' + w + '\')">Copiar</button></div>';
+            // #1137 (owner): en la burbuja de Girox, estilo WhatsApp — burbuja blanca con los datos y abajo los recuadros-botón (Copiar CBU · Copiar alias ·
+            // Subir comprobante), como los mensajes con botones de WhatsApp.
+            if (_spCasino && !document.body.classList.contains('sp-classic')) {
+                const ln = (k, v) => v ? '<div class="sbmw-l"><small>' + k + '</small><code>' + e(v) + '</code></div>' : '';
+                const bt = (on, t) => '<button type="button" onclick="' + on + '">' + t + '</button>';
+                _sbmEl.innerHTML = '<div class="sbmw"><div class="message agente sp-bankmsg sbm-wa">' + bono + '<div class="sbmw-t">🏦 Datos para cargar</div>' +
+                    ln('CBU / CVU', c.number) + ln('Alias', c.alias) + ln('Titular', c.titular) +
+                    '<div class="sbmw-n">Transferí desde tu cuenta bancaria y subí el comprobante acá.' + (md ? ' Mínimo <b>' + md + '</b>.' : '') + '</div></div>' +
+                    '<div class="sbmw-btns">' + (c.number ? bt("VIP.home.spCopy('cbu')", '📋 Copiar CBU') : '') + (c.alias ? bt("VIP.home.spCopy('alias')", '📋 Copiar alias') : '') +
+                    bt("VIP.autoload.pickReceipt('chat')", '📎 Subir comprobante') + '</div></div>';
+            } else
             _sbmEl.innerHTML = '<div class="message agente sp-bankmsg">' + bono +
                 '<div class="sbm-head"><b>Depositar</b><small>Paso 1 de 2 · hacé la transferencia</small></div>' +
                 (c.number ? row('CBU / CVU', c.number, 'cbu') : '') + (c.alias ? row('ALIAS', c.alias, 'alias') : '') +
@@ -554,7 +565,9 @@
                 '<button type="button" class="sbm-attach" onclick="VIP.autoload.pickReceipt(\'chat\')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg> Subir comprobante</button></div>';
             // #1134 (owner: "está mandando constantemente los datos del CBU; eso cuando apenas entran, 1 vez"): se muestra UNA vez por apertura de
             // la app, en su lugar (debajo del saludo); después los mensajes nuevos quedan abajo y no vuelve a saltar al final.
-            if (!_sbmShown) { _sbmShown = true; _sbmPlace(true); try { VIP.chat.scrollToBottom(); } catch (_) {} }
+            // #1137 (owner): en la burbuja de Girox los datos aparecen SÓLO al tocar CARGAR (o CARGA AQUÍ), no solos al entrar.
+            if (show) { _sbmShown = true; _sbmPlace(true); try { VIP.chat.scrollToBottom(); } catch (_) {} }
+            else if (!_sbmShown && !_spCasino) { _sbmShown = true; _sbmPlace(true); try { VIP.chat.scrollToBottom(); } catch (_) {} }
         } catch (_) {}
     }
     // Revisión nocturna: al volver la app a primer plano se repintan los datos del chat (el CBU pudo cambiar con la app abierta).
@@ -899,6 +912,7 @@
             const m = _el('spMsg'); if (m && tx) m.textContent = tx;
             const s = _el('spSla'); if (s) { s.textContent = sla ? ('⏱ ' + sla) : ''; s.style.display = sla ? '' : 'none'; }
             const st = _el('waHeadStatus'); if (st) st.textContent = nm ? (nm + ' · en línea' + (sla ? ' · ' + sla.toLowerCase() : '')) : 'en línea';
+            _spCasinoHead(); // #1137: en la burbuja de Girox no se pisa
         } catch (_) {}
     }
     // #384 (owner): los chips MANDAN el mensaje solos. 'cargar' / 'retirar' reciben respuesta automática con botón al sector.
@@ -1590,7 +1604,7 @@
 
     function _paintWaHeadName() {
         // #305 (owner): la cabecera dice "Carga manual" (antes "Cargas <plataforma>") y el avatar es un asistente fijo.
-        try { const n = _el('waHeadName'); if (n) n.textContent = 'Carga aquí'; } catch (_) {} // #373: era "Carga manual" · #1059: 'Carga aquí'
+        try { const n = _el('waHeadName'); if (n) n.textContent = 'Carga aquí'; _spCasinoHead(); } catch (_) {} // #1137: en la burbuja de Girox no se pisa · #373: era "Carga manual" · #1059: 'Carga aquí'
     }
 
     // ---------------- SOPORTE (chat) ----------------
@@ -2613,6 +2627,22 @@
         return spDeposit();
     }
     function _modalsBackAll() { Array.from(_mHome.keys()).forEach(_modalBack); }
+    // #1137 (owner): en la burbuja de Girox la cabecera dice SIEMPRE "Pica Roja Argentina" y abajo "en línea" (nada la pisa mientras está abierta).
+    const SP_CASINO_NAME = 'Pica Roja Argentina', SP_CASINO_STATUS = 'en línea';
+    function _spCasinoHead() {
+        if (!_spCasino) return;
+        const nm = _el('waHeadName'), stt = _el('waHeadStatus');
+        if (nm && nm.textContent !== SP_CASINO_NAME) nm.textContent = SP_CASINO_NAME;
+        if (stt && stt.textContent !== SP_CASINO_STATUS) stt.textContent = SP_CASINO_STATUS;
+    }
+    // #1137 (owner): CARGAR (abajo del chat de la burbuja) ⇒ en el chat aparecen los datos para copiar (CBU / alias) + "Subir comprobante".
+    async function spCargar() {
+        if (_casinoIsOpen() && !_spCasino) _supportIntoCasino();
+        try { await spBankMsgShow(); } catch (_) {}
+        if (!_sbmEl || !_sbmEl.isConnected) { try { VIP.autoload.pickReceipt('depositar'); } catch (_) {} return; } // sin datos de la cuenta ⇒ como antes
+        try { _sbmEl.classList.remove('sbm-flash'); void _sbmEl.offsetWidth; _sbmEl.classList.add('sbm-flash'); } catch (_) {}
+        setTimeout(() => { try { VIP.chat.scrollToBottom(); } catch (_) {} }, 120);
+    }
     function _supportIntoCasino() {
         try { _casUnread = 0; const b = _el('casinoChatBadge'); if (b) b.style.display = 'none'; } catch (_) {}
         const ov = _el('casinoOverlay'), p = _el('supportPanel'); if (!ov || !p) return false;
@@ -2622,7 +2652,7 @@
         try {
             const h = _el('waHead');
             if (h && !_el('spCasinoX')) h.insertAdjacentHTML('beforeend', '<button type="button" class="wa-head-btn sp-casino-x" id="spCasinoX" onclick="VIP.home.closeSupport()" aria-label="Cerrar el chat">✕</button>');
-            const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; nm.textContent = (_el('spName') && _el('spName').textContent) || 'Soporte'; } if (stt) { stt.dataset.prev = stt.textContent; stt.textContent = 'En línea'; }
+            const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm) { nm.dataset.prev = nm.textContent; } if (stt) { stt.dataset.prev = stt.textContent; } _spCasinoHead();
         } catch (_) {}
         try { const u = (VIP.state && VIP.state.currentUser) || {}; document.querySelectorAll('#spInfoBar .ib-sms').forEach((b) => { b.style.display = u.phoneVerified === true ? 'none' : ''; }); } catch (_) {} try { _ibMarquee(); } catch (_) {} // #1042-r
         try { _paintCtSms(); } catch (_) {} // #1092
@@ -2638,6 +2668,7 @@
         p.classList.remove('sp-in-casino'); document.body.classList.remove('sp-casino');
         try { const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm && nm.dataset.prev) nm.textContent = nm.dataset.prev; if (stt && stt.dataset.prev) stt.textContent = stt.dataset.prev; } catch (_) {}
         if (s.wasHidden) p.classList.add('hidden');
+        try { if (_sbmEl && _sbmEl.querySelector('.sbmw')) spBankMsgPaint(); } catch (_) {} // #1137: fuera de la burbuja vuelve el cuadro de siempre
         _open = !s.wasHidden;
         try { const i = _el('messageInput'); if (i) i.blur(); } catch (_) {}
         return true;
@@ -2665,9 +2696,8 @@
         setTimeout(() => { try { spBankMsgShow(); } catch (_) {} }, 300);
     }
     async function spBankMsgShow() {
-        if (!_sbmEl) { await spBankMsgPaint(); return; }
-        const list = _el('chatMessages'); if (!list) return;
-        list.appendChild(_sbmEl); try { VIP.chat.scrollToBottom(); } catch (_) {}
+        _sbmLastUntil = Date.now() + 5 * 60 * 1000;
+        await spBankMsgPaint(true); // #1137: se vuelve a armar con el estilo del lugar (burbuja WhatsApp o chat normal) y baja al final
     }
     function spHelpPick(kind) {
         _shUntil = 0; if (_shEl) _shEl.remove();
@@ -3285,7 +3315,7 @@
         playToggle, pvFold, pvPick, // #1032
         casinoChatToggle, spGreetMsg, // #1042-x
         menuNow, chatNow, // #1042-y
-        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, casinoHelp, casinoLoadChat, spHelpMenu, spHelpPick, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, casinoHelp, casinoLoadChat, spCargar, spHelpMenu, spHelpPick, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,

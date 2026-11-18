@@ -14860,3 +14860,21 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - #1136-d: la landing de rapidogirox está en **www.autogiroxcomp.com** (Vercel). Seguía mandando el registro a picaroja.com (campaña PR500 existe
   sólo en rapidogirox ⇒ "Código de pauta inválido o inactivo"). Dominio con "autogirox" ⇒ rapidogirox.com; `landing-rapidogirox.zip` rehecho.
 
+
+## #1137 — 2026-11-18 · Chat de la burbuja de Girox con cara de WhatsApp: CARGAR / RETIRAR / REEMBOLSOS abajo y los datos sólo al tocar CARGAR — app v725
+- Owner (con captura de un chat de WhatsApp): "quiero que el chat sea así pero con todo lo que tenemos … en la parte inferior, arriba del chat, que esté cargar,
+  retirar, reembolsos, y cuando aprietan cargar que aparezcan en el chat los datos para copiar CBU, alias y un botón de subir comprobante" · "donde dice chat
+  que diga Pica Roja Argentina y abajo en línea siempre" · "sacá de arriba el titular y el alias … esos botones arriba de donde se escribe queden fijos" ·
+  "dejá con el mismo formato el deslizante con los beneficios y al lado dejá el Telegram, respetando el chat estilo WhatsApp".
+- Sólo la burbuja de Girox con el chat nuevo (`body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino`); Soporte normal y chat clásico sin cambios.
+- Cabecera verde WhatsApp (tokens `--p-wa-head*`, `--p-wa-ava`), avatar "P", **"Pica Roja Argentina" / "en línea"** fijos (`_spCasinoHead`, que también corre
+  cuando `_paintSupportIntro` / `_paintWaHeadName` reescriben la cabecera), botón de Telegram de siempre y la ✕. Sin sol/luna ni fueguito (ya estaban fuera).
+- Arriba quedan la cinta del bono y la fila deslizante de beneficios (igual que antes). Se ocultan DEPOSITAR/RETIRAR/REEMBOLSOS de arriba, la aclaración, el
+  bono fijo rojo y los datos fijos (`#spBank`).
+- Abajo, fijos sobre la caja: **`#spBotActs`** CARGAR (verde, `VIP.home.spCargar`) · RETIRAR (rojo, `spInfo('withdraw')`) · REEMBOLSOS (`spInfo('refund')`).
+  Caja: clip a la izquierda (`#attachBtn .ic-clip`; la cámara queda para el resto), sin botón CBU, enviar verde.
+- Datos: `#spBankMsg` ya NO aparece solo al entrar en la burbuja; sólo con CARGAR o CARGA AQUÍ (`spBankMsgPaint(true)`), al final del chat (y se mantiene al
+  final 5 min aunque el chat se redibuje, `_sbmLastUntil`). En la burbuja se arma estilo WhatsApp (`.sbmw`): burbuja blanca con CBU / Alias / Titular / mínimo y
+  debajo recuadros-botón 📋 Copiar CBU · 📋 Copiar alias · 📎 Subir comprobante (`pickReceipt('chat')`). Sin datos de la cuenta ⇒ CARGAR abre la guía del comprobante.
+- Tests: `test-vip-exports` OK, `test-support-bot` 18/18, `node --check`. **Necesita deploy en los dos AWS.**
+  PROBAR: abrir Girox → burbuja ⇒ cabecera verde "Pica Roja Argentina · en línea"; tocar CARGAR ⇒ datos + 3 botones al final del chat; copiar y subir comprobante.

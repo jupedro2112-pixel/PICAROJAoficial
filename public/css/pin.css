@@ -3506,3 +3506,73 @@ body:not(.sp-classic) #supportPanel.sp-in-casino .message > .message-time { posi
 #casinoOverlay > #supportPanel.sp-in-casino #spBank button.sp-bk-row span { flex: 0 0 auto; font-size: 10px; }
 #casinoOverlay > #supportPanel.sp-in-casino #spBank button.sp-bk-row i { padding: 2px 7px; font-size: 10px; }
 
+
+/* ── #1137 (owner, captura de WhatsApp: "que el chat sea así pero con todo lo que tenemos"): burbuja de Girox con cara de WhatsApp. Cabecera verde
+   con la "P", "Pica Roja Argentina" / "en línea" y la ✕; fondo crema; ABAJO, arriba de la caja: CARGAR (verde) · RETIRAR (rojo) · REEMBOLSOS; caja con
+   clip a la izquierda y enviar verde. Arriba quedan sólo la cinta del bono y la fila de servicios (los botones y el CBU fijo de arriba se van: CARGAR
+   deja los datos en el chat). Sólo la burbuja con el chat nuevo; la cabecera no cambia con el modo nocturno (el chat de la burbuja es siempre claro, #1092). */
+:root { --p-wa-head: #0b6b5c; --p-wa-head-text: #ffffff; --p-wa-head-muted: rgba(255, 255, 255, .8); --p-wa-ava: #1f9d87; --p-sba-dep: #1fa855; --p-sba-wd: #e60023; --p-wa-bar: #f0f2f5; }
+html[data-theme="dark"] { --p-wa-head: #0b6b5c; --p-wa-head-text: #ffffff; --p-wa-head-muted: rgba(255, 255, 255, .8); --p-wa-ava: #1f9d87; --p-sba-dep: #1fa855; --p-sba-wd: #e60023; --p-wa-bar: #f0f2f5; }
+#attachBtn .ic-clip { display: none; }
+.sp-botacts { display: none; }
+/* cabecera */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head { background: var(--p-wa-head) !important; color: var(--p-wa-head-text) !important; padding: 10px 12px !important; gap: 10px !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-avatar { width: 38px !important; height: 38px !important; flex: 0 0 38px !important; border-radius: 50% !important;
+  background: var(--p-wa-ava) !important; display: inline-flex !important; align-items: center; justify-content: center; overflow: hidden; border: 0 !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-avatar svg { display: none !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-avatar::before { content: 'P'; color: var(--p-wa-head-text); font: 800 17px/1 var(--p-font); }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-info { flex: 1 1 auto !important; min-width: 0; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-name { color: var(--p-wa-head-text) !important; font: 700 15.5px/1.2 var(--p-font) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-status { color: var(--p-wa-head-muted) !important; font: 500 12px/1.2 var(--p-font) !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .chat-topbar-dot { display: none !important; }
+/* #1137-c (owner: "al lado dejá el Telegram, respetando el chat estilo WhatsApp"): el botón de Telegram de siempre, sobre la cabecera verde */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg { margin-left: 0; flex: 0 0 auto; background: rgba(255, 255, 255, .16); }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt small { color: var(--p-wa-head-muted); }
+@media (max-width: 380px) { body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head-tg .wht-txt small { display: none; } }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .wa-head .sp-casino-x { margin-left: 2px !important; width: 34px; height: 34px; background: transparent !important; color: var(--p-wa-head-text) !important;
+  font-size: 22px !important; font-weight: 400 !important; border: 0 !important; }
+/* arriba: sólo la cinta y la fila de servicios, sobre el fondo del chat */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-actbar { background: var(--p-wa-bg) !important; border-bottom: 0 !important; padding: 6px 8px 2px !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-acts, body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-acts-hint,
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino #spBank, body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino #spBonusNow { display: none !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-ticker { margin-top: 0 !important; }
+/* abajo: CARGAR · RETIRAR · REEMBOLSOS */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-botacts { display: flex !important; flex: 0 0 auto; gap: 6px; padding: 6px 8px 2px; background: var(--p-wa-bar); }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-botacts button { flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px; padding: 0 6px;
+  border: 1px solid transparent; border-radius: 18px; font: 800 12.5px/1 var(--p-font); letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-botacts .sba-dep { background: var(--p-sba-dep); color: #fff; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-botacts .sba-wd { background: var(--p-sba-wd); color: #fff; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-botacts .sba-rf { background: var(--p-wa-in); color: var(--p-wa-in-text); border-color: var(--p-wa-line); }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-botacts button:active { transform: scale(.97); }
+@media (max-width: 340px) { body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-botacts svg { display: none; } }
+/* caja de escribir: clip a la izquierda, caja redonda, enviar verde (el CBU lo da CARGAR) */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .chat-input-container { background: var(--p-wa-bar) !important; padding: 6px 8px 8px !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .chat-input { flex-wrap: nowrap !important; gap: 6px !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino #cbuChatBtn { display: none !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino #attachBtn { order: -1; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino #attachBtn .ic-cam { display: none; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino #attachBtn .ic-clip { display: block; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino #messageInput { flex: 1 1 auto; min-width: 0; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .send-btn { flex: 0 0 42px; width: 42px !important; height: 42px !important; }
+/* CARGAR: el cuadro de los datos se marca al aparecer */
+@keyframes sbmFlash { 0% { box-shadow: 0 0 0 0 rgba(31, 168, 85, .7); } 100% { box-shadow: 0 0 0 10px rgba(31, 168, 85, 0); } }
+#supportPanel #spBankMsg.sbm-flash .sp-bankmsg { animation: sbmFlash 1s ease-out 2; }
+@media (prefers-reduced-motion: reduce) { #supportPanel #spBankMsg.sbm-flash .sp-bankmsg { animation: none; } }
+/* #1137-b (owner: "sacá de arriba el titular y el alias; que sólo aparezcan los datos al apretar CARGAR, con un recuadro de botones estilo WhatsApp"):
+   burbuja blanca con los datos y debajo los recuadros-botón separados (como los mensajes con botones de WhatsApp). */
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw { display: flex; flex-direction: column; gap: 3px; width: 86%; max-width: 280px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw .sp-bankmsg.sbm-wa { width: 100% !important; max-width: none !important; padding: 8px 10px 7px !important; border: 0 !important;
+  border-radius: 0 12px 12px 12px !important; font-size: 13px !important; box-sizing: border-box; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbm-wa .sbm-bonus { margin: 0 0 6px; border-radius: 8px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-t { font: 800 13.5px/1.3 var(--p-font); color: var(--p-sbm-text); margin-bottom: 4px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-l { display: flex; flex-direction: column; padding: 3px 0; border-top: 1px solid var(--p-sbm-line); }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-l small { font: 700 10px/1.2 var(--p-font); color: var(--p-sbm-muted); text-transform: uppercase; letter-spacing: .04em; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-l code { font: 700 13px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--p-sbm-text); word-break: break-all; background: none; padding: 0; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-n { margin-top: 5px; font: 500 11.5px/1.35 var(--p-font); color: var(--p-sbm-muted); }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-n b { color: var(--p-sbm-text); }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-btns { display: flex; flex-direction: column; gap: 3px; }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-btns button { width: 100%; padding: 10px 8px; border: 0; border-radius: 10px; background: var(--p-wa-in); color: var(--p-wa-link);
+  font: 600 14px/1.2 var(--p-font); text-align: center; cursor: pointer; box-shadow: 0 1px .5px rgba(11, 20, 26, .13); }
+#casinoOverlay > #supportPanel.sp-in-casino #spBankMsg .sbmw-btns button:active { background: var(--p-wa-line); }
+:root { --p-wa-link: #027eb5; }
+html[data-theme="dark"] { --p-wa-link: #027eb5; }
