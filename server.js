@@ -9689,10 +9689,11 @@ app.get('/api/messages/:userId', authMiddleware, async (req, res) => {
       // fechas y ve el aviso "chat cerrado" (metadata.kind support_closed) fijado abajo de las opciones. `supportSessionSince`
       // sigue marcando el último cierre para el panel / cron, pero no filtra acá.
       if (since) matchStage.timestamp = Object.assign({}, matchStage.timestamp || {}, { $gte: since });
-      // #1042-x (owner: "que el chat después de un día se borre para el cliente"): con el chat nuevo el cliente ve sólo las últimas 24 h
-      // (el panel sigue viendo todo). Modo normal / clásico ⇒ como antes.
+      // #1042-x (owner: "que el chat después de un día se borre para el cliente"): con el chat nuevo el cliente veía sólo las últimas 24 h.
+      // #1137-m (owner 2026-11-18: "si quedó un chat anterior, dejar el chat como estaba para tener historial") ⇒ APAGADO: el cliente ve su chat
+      // anterior (lo que queda de los 3 días del TTL de Message). Para volver al corte de 24 h: SUPPORT_CHAT_24H=1.
       try {
-        if (!(await getSupportBotConfig()).classic) {
+        if (process.env.SUPPORT_CHAT_24H === '1' && !(await getSupportBotConfig()).classic) {
           const d24 = new Date(Date.now() - 24 * 3600 * 1000);
           const cur = matchStage.timestamp && matchStage.timestamp.$gte;
           if (!cur || new Date(cur) < d24) matchStage.timestamp = Object.assign({}, matchStage.timestamp || {}, { $gte: d24 });

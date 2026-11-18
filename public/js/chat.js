@@ -397,7 +397,7 @@ VIP.chat = (function () {
 
 
             const response = await fetch(
-                `${VIP.config.API_URL}/api/messages/${VIP.state.currentUser.userId}?limit=15`,
+                `${VIP.config.API_URL}/api/messages/${VIP.state.currentUser.userId}?limit=60` /* #1137-m: historial (antes 15) */,
                 {
                     headers: { 'Authorization': `Bearer ${VIP.state.currentToken}` },
                     signal: controller.signal
