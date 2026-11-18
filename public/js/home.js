@@ -2933,6 +2933,8 @@
     }
     function casinoQuickClose() { toggleCasinoLoad(false); }
     function dismissCasinoQuick() {
+        // #1137-r (owner): con el chat nuevo la burbuja "Cargas" NO se puede sacar (se mueve, pero queda siempre)
+        if (!document.body.classList.contains('sp-classic')) { _quickDismissed = false; const bb = _el('casinoSupportBubble'); if (bb) bb.style.display = ''; return; }
         _quickDismissed = true; _quickOpen = false;
         const b = _el('casinoSupportBubble'); if (b) b.style.display = 'none';
         const p = _el('casinoLoadPanel'); if (p) p.style.display = 'none';
