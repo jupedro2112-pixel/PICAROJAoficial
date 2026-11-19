@@ -14940,3 +14940,7 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 ### 1138-g. "Mi carga no llegó" ⇒ cómo mandar el comprobante + ejemplo (2026-11-19) — sólo server
 - Owner: "si tocan Mi carga no llegó y responde automático, que explique cómo enviar el comprobante y deje un ejemplo para que vean la captura que tienen que mandar con sus datos completos".
 - `/sys_support_topic_carga` nuevo de fábrica (captura ENTERA sin recortar: titular y CUIT, fecha y hora, monto, N° de operación + carga mínima); migración si tenía el texto anterior. Sale firmado por el turno (`_sendUserTurnNotice`) con el botón "🧾 Ver ejemplo y enviar comprobante" (`receipt_example` ⇒ guía con ejemplo y de ahí adjuntar) y ya sin el 2º mensaje genérico (/sys_support_detail) para ese tema.
+
+### 1138-h. Cinta "CARGÁ Y GANÁ" arriba de todo del chat de Girox (2026-11-19) — app v748
+- Owner (captura de la cinta debajo de la cabecera): "ponelo arriba de todo de ese chat, sin que moleste abajo y que se diferencie arriba".
+- `_supportIntoCasino` muda `#spTicker` como PRIMER hijo de `#supportPanel` (arriba de la cabecera verde) sólo con el chat nuevo; `_supportOutOfCasino` lo devuelve a su lugar (`_tkHome`). CSS: franja roja degradada, letras blancas, "VER" en píldora. Los ids no cambian (spPromoPaint sigue igual).

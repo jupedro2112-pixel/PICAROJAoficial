@@ -3790,3 +3790,9 @@ body.no-ref #infoMsg .ref-only { display: none !important; }
 /* #1138-e: UNA columna a lo ancho (en dos columnas los títulos se cortaban: "Ruleta diar…", "Misiones d…"). */
 #infoMsg.im-grid { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; }
 #infoMsg .im-card .im-sec > b:first-child { font-size: 14px !important; }
+/* #1138-h (owner): cinta "CARGÁ Y GANÁ" ARRIBA de todo del chat de la burbuja de Girox, como franja propia (roja, letras blancas), separada del resto. */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino > #spTicker { flex: 0 0 auto; margin: 0 !important; width: 100%; box-sizing: border-box; border-radius: 0 !important;
+  padding: 7px 12px !important; background: linear-gradient(90deg, var(--p-red, #d9001f), #ff4d5e) !important; color: #fff !important; font: 900 11.5px/1.2 var(--p-font) !important; letter-spacing: .02em; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino > #spTicker[hidden] { display: none !important; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino > #spTicker .sp-tk-dot { background: #fff; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino > #spTicker b { color: #fff; background: rgba(255, 255, 255, .22); padding: 2px 8px; border-radius: 999px; }

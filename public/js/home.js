@@ -2678,6 +2678,7 @@
         });
     }
     try { window.addEventListener('resize', () => { if (_spCasino) _spFitCasino(); }, { passive: true }); } catch (_) {}
+    let _tkHome = null; // #1138-h: lugar original de la cinta CARGÁ Y GANÁ
     function _supportIntoCasino() {
         try { _casUnread = 0; const b = _el('casinoChatBadge'); if (b) b.style.display = 'none'; } catch (_) {}
         const ov = _el('casinoOverlay'), p = _el('supportPanel'); if (!ov || !p) return false;
@@ -2691,6 +2692,9 @@
         } catch (_) {}
         try { const u = (VIP.state && VIP.state.currentUser) || {}; document.querySelectorAll('#spInfoBar .ib-sms').forEach((b) => { b.style.display = u.phoneVerified === true ? 'none' : ''; }); } catch (_) {} try { _ibMarquee(); } catch (_) {} // #1042-r
         try { _paintCtSms(); } catch (_) {} // #1092
+        // #1138-h (owner: "la cinta CARGÁ Y GANÁ ponela arriba de todo del chat, que no moleste abajo y que se diferencie"): en la burbuja de Girox
+        // va como franja propia ARRIBA de la cabecera; al salir vuelve a su lugar (debajo de los datos del banco).
+        try { const tk = _el('spTicker'); if (tk && tk.parentNode !== p && !document.body.classList.contains('sp-classic')) { _tkHome = { parent: tk.parentNode, next: tk.nextSibling }; p.insertBefore(tk, p.firstChild); } } catch (_) {}
         _open = true; _unread = 0; _paintBadge();
         try { _spFitCasino(); const bar = _el('casinoTopBar'); if (bar && !_spFitObs) { _spFitObs = new MutationObserver(() => { if (_spCasino) _spFitCasino(); }); _spFitObs.observe(bar, { attributes: true, childList: true, subtree: true }); } } catch (_) {} // #1137-n
         try { VIP.chat.scrollToBottom(); } catch (_) {}
@@ -2702,6 +2706,7 @@
         const s = _spCasino; _spCasino = null;
         try { if (s.next && s.next.parentNode === s.parent) s.parent.insertBefore(p, s.next); else s.parent.appendChild(p); } catch (_) {}
         p.classList.remove('sp-in-casino'); document.body.classList.remove('sp-casino'); p.style.removeProperty('height'); // #1137-n
+        try { const tk = _el('spTicker'); if (tk && _tkHome) { if (_tkHome.next && _tkHome.next.parentNode === _tkHome.parent) _tkHome.parent.insertBefore(tk, _tkHome.next); else _tkHome.parent.appendChild(tk); } _tkHome = null; } catch (_) {} // #1138-h
         try { const nm = _el('waHeadName'), stt = _el('waHeadStatus'); if (nm && nm.dataset.prev) nm.textContent = nm.dataset.prev; if (stt && stt.dataset.prev) stt.textContent = stt.dataset.prev; } catch (_) {}
         // #1137-p (owner: "cuando cierro el chat [✕] aparece Carga rápida y otro chat en otro formato; quiero un solo formato, el de WhatsApp"): con Girox
         // abierto, cerrar la burbuja deja SÓLO el juego: el panel vuelve a su lugar OCULTO (antes, si estaba visible en el Inicio, quedaba a la vista
