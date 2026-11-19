@@ -113,7 +113,8 @@ VIP.chat = (function () {
             const t = String(md.target || 'full');
             // #1042-p: retiro / reembolso / sorteo / misiones / ruleta / referidos pasan por VIP.home.spInfo (con Girox abierto, la ventana se abre adentro)
             const INFO_T = ['withdraw', 'refund', 'sorteo', 'misiones', 'ruleta', 'referidos', 'problema']; // #1042-x: + problema
-            const act = t === 'receipt' ? "VIP.autoload.sendReceipt()" /* #905: comprobante no válido ⇒ adjuntarlo de nuevo */
+            const act = t === 'receipt_example' ? "VIP.autoload.guideOpen('resend')" /* #1138-c: guía con EJEMPLO de comprobante y de ahí adjuntar */
+                : t === 'receipt' ? "VIP.autoload.sendReceipt()" /* #905: comprobante no válido ⇒ adjuntarlo de nuevo */
                 : t === 'terms' ? "VIP.home.openTerms()"
                 : INFO_T.includes(t) ? "VIP.home.spInfo('" + t + "')"
                 : "VIP.home.spDeposit()"; /* #1042-e: con Girox abierto ⇒ Carga rápida del casino; si no, la carga automática de siempre */

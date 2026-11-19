@@ -115,7 +115,9 @@ caso('IA sin saldo (400 credit balance / 402 / 401) ⇒ unavailable (el server p
   assert.ok(/if \(!r\.ok && r\.unavailable\) \{ _sbAiDownUntil = Date\.now\(\) \+ 30 \* 60000;/.test(S), 'pausa de 30 min');
   // primer mensaje de la charla ⇒ respuesta básica (tema o /sys_support_first) antes que la IA
   const qr = S.slice(S.indexOf('async function _supportQuickReply'), S.indexOf('async function _supportCannedReply'));
-  assert.ok(qr.indexOf("renderSystemCommand('/sys_support_first'") > -1 && qr.indexOf("renderSystemCommand('/sys_support_first'") < qr.lastIndexOf('_supportBotSchedule(userId, username)'), 'básica primero');
+  // #1138-c (owner): ya NO hay respuesta fija primero: el texto libre va directo a la IA (si no hay IA, `_supportBotRun` cae a las fijas).
+  assert.ok(qr.indexOf("renderSystemCommand('/sys_support_first'") === -1 && qr.indexOf('_supportBotSchedule(userId, username); return;') > -1, 'texto libre directo a la IA');
+  assert.ok(/if \(!r\.ok && !r\.handoff\) \{[\s\S]{0,300}_supportCannedReply\(/.test(S), 'sin IA ⇒ respuestas fijas');
   assert.ok(/Espero tu comprobante para realizar la carga/.test(S) && /name: '\/sys_support_first'/.test(S));
 });
 caso('Aprende: la IA devuelve pregunta/respuesta genéricas; con handoff o ignore no se aprende nada', async () => {
@@ -160,7 +162,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/lastUser\.type !== 'text'/.test(S), 'imágenes (comprobantes) no las contesta el bot');
   // #1042-d: tres escalones — tema detectado y no contestado ⇒ respuesta simple; si no ⇒ IA; tope de respuestas de la IA ⇒ agente
   const qr = S.slice(S.indexOf('async function _supportQuickReply'), S.indexOf('async function _supportCannedReply'));
-  assert.ok(qr.indexOf('const topic = _supportTopicFromText(text)') > -1 && qr.indexOf("return _supportCannedReply(userId, username, quick, text, false); // escalón 1") < qr.indexOf('_supportBotSchedule(userId, username); return; // escalón 2'), 'escalón 1 antes que la IA');
+  assert.ok(qr.indexOf("_supportCannedReply(userId, username, quick, text, false); if (await _supportSentSince") === -1, '#1138-c: sin escalón 1 fijo en el texto libre');
   assert.ok(/if \(aiReplies >= cfg\.aiMaxReplies\) \{\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'escalón 3: tope ⇒ agente');
   // #1042-e: todo adentro de Girox — Soporte se muda al casino, Volver vuelve al juego, DEPOSITAR usa la Carga rápida, el casino al cerrarse lo devuelve
   const H = fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8');
@@ -190,7 +192,8 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
       assert.strictEqual(f('claude-haiku-5-5', { input_tokens: 1e6, output_tokens: 1e6 }), 0.6);
       assert.strictEqual(f('otro', { input_tokens: 1e6 }), 4, 'modelo desconocido ⇒ precio de Opus'); }
     assert.ok(/Ya te paso con una persona del equipo, un segundo/.test(S), 'Tengo otro problema ⇒ "Ya te paso con una persona del equipo, un segundo"');
-    assert.ok(/async function _supportSentSince\(/.test(S) && (S.match(/if \(await _supportSentSince\(userId, _t0\)\) return;/g) || []).length === 2, 'palabra clave sin respuesta fija ⇒ contesta la IA (nunca un visto)');
+    // #1138-c: el texto libre va SIEMPRE a la IA (no hay respuesta fija que pueda faltar) ⇒ nunca un visto.
+    assert.ok(/_supportBotSchedule\(userId, username\); return; \/\/ escalón 2: la IA/.test(S), 'texto libre ⇒ siempre contesta la IA (nunca un visto)');
     assert.ok(!/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \},[^\n]*senderId:/.test(S) && (S.match(/senderId: \{ \$nin: \['support-bot', 'system', 'admin'\] \}/g) || []).length >= 5, 'agente reciente = sólo personas (sin claves repetidas)');
     assert.ok(/if \(quick === 'problema'\) \{[\s\S]{0,400}await _supportHandoffNow\(/.test(S) && fs.readFileSync(path.join(ROOT, 'public/js/home.js'), 'utf8').includes("VIP.home.spHelpPick(\\'problema\\')"), 'Hablar con un agente (🎧 Soporte, #1134) ⇒ directo a un agente');
     assert.ok((S.match(/_supportLearnFromAgent\(/g) || []).length >= 3 && /'metadata\.learned': \{ \$ne: true \}/.test(S) && /aiMaxReplies: 20, classic:/.test(S) && /mig1042vAiFree/.test(S), 'aprende del agente; la IA una sola vez (lo aprendido no cuenta)');
@@ -212,9 +215,10 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/status: 'open', closedAt: null/.test(S) && /kind: 'bot_handoff'/.test(S), 'handoff abre el chat con nota');
   assert.ok(/await _supportCannedReply\(userId, username, null, String\(lastUser\.content \|\| ''\), false\)/.test(S), 'si la IA falla, respuesta automática de siempre');
   // #1030: el botón del bot para adjuntar va por la GUÍA del comprobante (target receipt ⇒ VIP.autoload.sendReceipt ⇒ pickReceipt), nunca al selector directo
-  assert.ok(/kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante'/.test(S), 'el bot ofrece el botón de adjuntar');
+  assert.ok(/kind: 'go_section', target: 'receipt_example', label: '🧾 Ver ejemplo y enviar comprobante'/.test(S), 'el bot ofrece el botón con el ejemplo (#1138-c)');
   const C = fs.readFileSync(path.join(ROOT, 'public/js/chat.js'), 'utf8'), A = fs.readFileSync(path.join(ROOT, 'public/js/autoload.js'), 'utf8'), P = fs.readFileSync(path.join(ROOT, 'public/js/app.js'), 'utf8');
   assert.ok(/t === 'receipt' \? "VIP\.autoload\.sendReceipt\(\)"/.test(C), 'chat: receipt ⇒ sendReceipt');
+  assert.ok(/t === 'receipt_example' \? "VIP\.autoload\.guideOpen\('resend'\)"/.test(C), 'chat: receipt_example ⇒ guía con ejemplo');
   assert.ok(/function sendReceipt\(\) \{[\s\S]{0,300}pickReceipt\('button'\)/.test(A), 'sendReceipt ⇒ guía');
   assert.ok(/VIP\.autoload\.pickReceipt\('clip'\)/.test(P), 'la cámara del chat ⇒ guía');
   const routes = S.slice(S.indexOf("app.post('/api/admin/support-bot/test'"), S.indexOf("app.get('/api/admin/meta-pixels'"));

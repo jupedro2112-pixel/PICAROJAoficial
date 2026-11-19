@@ -14555,6 +14555,11 @@ async function initializeData() {
   // #906: el texto de "Comprobante no válido" pide los datos completos en la foto (sólo si nadie lo editó).
   try { if (!(await getConfig('mig906SqComp', null))) { await Command.updateOne({ name: '/sys_sq_comprobante', response: '📎 Tu comprobante no es válido o no se pudo leer. Volvé a adjuntarlo ENTERO (que se vean titular, monto, fecha y N° de operación) tocando el botón de abajo y tu carga se genera sola.' }, { $set: { response: '📎 Tu comprobante no es válido o no se pudo leer. Sacá la captura de nuevo con TODOS los datos completos y bien visibles en la foto (titular, CUIT, monto, fecha y hora y N° de operación), sin recortar, y adjuntala tocando el botón de abajo: tu carga se genera sola.' } }); await Config.set('mig906SqComp', new Date().toISOString(), 'mig#906'); } } catch (e) { console.warn('[startup-migration] #906:', e.message); }
   try { if (!(await getConfig('mig897MinDep2000', null))) { await Config.set('minDepositArs', 2000, 'mig#897'); const hg = (await getConfig('hgcash', null)) || {}; if (typeof hg === 'object' && Number(hg.minChargeARS) > 2000) await _hgcashSetFields({ minChargeARS: 2000 }); await Config.set('mig897MinDep2000', new Date().toISOString(), 'mig#897'); console.log('✅ #897: carga mínima $2.000'); } } catch (e) { console.warn('[startup-migration] #897:', e.message); }
+  // #1138-c (owner: "como con una persona, con demoras de 5/10 segundos"): si el bot seguía con la demora de fábrica 10-15 s ⇒ 5-10 s (una vez, por campo).
+  try { if (!(await getConfig('mig1138BotDelay', null))) { await Config.set('mig1138BotDelay', new Date().toISOString(), 'mig#1138');
+    const r = await getConfig('supportBot', null);
+    if (r && typeof r === 'object' && Number(r.delayMinSec) === 10 && Number(r.delayMaxSec) === 15) await Config.set('supportBot', Object.assign({}, r, { delayMinSec: 5, delayMaxSec: 10 }), 'mig#1138');
+  } } catch (e) { console.warn('[startup-mig #1138 bot] ' + e.message); }
   // #1138 (owner): textos nuevos de carga/retiro pendiente, rechazo y pago ⇒ sólo pisa los que siguen con el texto de fábrica anterior.
   for (const [n, o, v] of [['/sys_withdraw_delayed', WITHDRAW_DELAYED_OLD_1020, WITHDRAW_DELAYED_DEFAULT], ['/sys_deposit_pending_review', DEPOSIT_PENDING_REVIEW_OLD_1138, DEPOSIT_PENDING_REVIEW_DEFAULT],
     ['/sys_deposit_rejected', DEPOSIT_REJECTED_OLD_1138, DEPOSIT_REJECTED_DEFAULT], ['/sys_payout_done_chat', PAYOUT_DONE_CHAT_OLD_1138, PAYOUT_DONE_CHAT_DEFAULT], ['/sys_payout_paid', PAYOUT_PAID_OLD_1138, PAYOUT_PAID_DEFAULT]]) {
@@ -16456,24 +16461,9 @@ async function _supportQuickReply(userId, username, quick, text) {
         if (_ho) return;
       } catch (_) {}
       try { const mu = await mongoose.connection.collection('support_bot_mutes').findOne({ _id: userId }); if (mu && mu.until > new Date()) return; } catch (_) {} // silenciado: ni respuesta fija ni IA
-      const topic = _supportTopicFromText(text);
-      // #1042-f (owner): "la respuesta normal y básica SIEMPRE es al principio: espero tu comprobante para realizar la carga". Primer mensaje
-      // de la charla (nada nuestro en Soporte desde el corte / 2 h) ⇒ respuesta fija del tema o, si no hay tema, /sys_support_first (+ botón que
-      // abre la guía del comprobante). La IA recién entra en el mensaje siguiente.
-      try {
-        const uu = await User.findOne({ id: userId }).select('supportSessionSince').lean();
-        const since = new Date(Math.max(Date.now() - 2 * 3600 * 1000, uu && uu.supportSessionSince ? new Date(uu.supportSessionSince).getTime() : 0));
-        const ours = await Message.findOne({ receiverId: userId, adminOnly: { $ne: true }, timestamp: { $gte: since }, $or: [{ channel: 'support' }, { 'metadata.channel': 'support' }] }).select('_id').lean();
-        if (!ours) {
-          if (topic) { await _supportCannedReply(userId, username, quick, text, false); if (await _supportSentSince(userId, _t0)) return; return _supportBotSchedule(userId, username); }
-          const t = await renderSystemCommand('/sys_support_first', SUPPORT_FIRST_DEFAULT, { nombre: await getSupportAgentName() });
-          if (t) { await _sendUserSystemMessage(u, t, { metadata: { kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante', channel: 'support', topic: 'first' } }); return; }
-        }
-      } catch (_) {}
-      if (topic) {
-        const recent = await Message.findOne({ receiverId: userId, type: 'system', 'metadata.topic': topic, timestamp: { $gte: new Date(Date.now() - 2 * 3600 * 1000) } }).select('_id').lean();
-        if (!recent) { await _supportCannedReply(userId, username, quick, text, false); if (await _supportSentSince(userId, _t0)) return; } // escalón 1: respuesta simple; #1042-v: si no salió nada, la IA
-      }
+      // #1138-c (owner: "que responda el bot pero más amable y no tan automático, como con una persona, sacándole todas las dudas"): ya no
+      // sale la respuesta fija ("Espero tu comprobante…") en el primer mensaje ni la del tema por palabras: TODO texto libre lo contesta la IA
+      // (5-10 s, "escribiendo…"). Si la IA no está (sin saldo / tope), `_supportBotRun` cae a las respuestas fijas de siempre.
       _supportBotSchedule(userId, username); return; // escalón 2: la IA
     }
     return _supportCannedReply(userId, username, quick, text, explicit);
@@ -16536,7 +16526,7 @@ async function _supportAutoReply(userId, username) {
 // sale la respuesta automática de siempre. Config['supportBot'] (panel → Configuración → 🤖 Bot de soporte).
 // ════════════════════════════════════════════════════════════════════════════
 const SUPPORT_BOT_AFTER_DEP_DEFAULT = '¡Listo {username}! 🙌 Ya tenés tu carga. Acordate que tenés reembolso diario del {reembolso}% de lo que pierdas con tu plata, misiones semanales con premio y la ruleta diaria, todo desde el menú de la app.';
-const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 10, delayMaxSec: 15, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 20, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
+const SUPPORT_BOT_DEFAULT = { enabled: true, model: supportBot.DEFAULT_MODEL, effort: 'low', delayMinSec: 5, delayMaxSec: 10, pauseHours: 2, handoffPauseMin: 30, muteHours: 12, aiMaxReplies: 20, classic: false, learnedOnly: false, autoApproveAt: 0, extraInfo: '' };
 // #1042-v: ¿le llegó al cliente alguna respuesta (bot, automático o persona) desde `since`?
 const SUPPORT_GREET_OLD1042X = '¡Buenas, {usuario}! 👋 Esperamos tu carga para que pruebes tu suerte 🍀';
 const SUPPORT_GREET_OLD1135 = '¡Buenas, {usuario}! 👋 Escribime lo que necesites y te respondo al toque: cargas, retiros, bonos o cualquier duda 💬'; // #1042-x · #1135
@@ -16722,9 +16712,12 @@ const SB_INFO_BTN = {
   sorteo: { target: 'sorteo', label: 'ℹ️ Info del sorteo' }, misiones: { target: 'misiones', label: 'ℹ️ Misiones' }, ruleta: { target: 'ruleta', label: 'ℹ️ Ruleta diaria' },
   referidos: { target: 'referidos', label: 'ℹ️ Referidos' }
 };
-function _sbInfoButton(r, reply) {
+// #1138-c (owner): "cuando reclama que no le cargan: enviá el comprobante completo, que se vean bien tus datos, y un botón con un EJEMPLO de comprobante".
+const SB_NOT_CREDITED_RE = /no (me )?(lleg|acredit|carg|impact|entr|aparec|figur|sum)|no se (me )?(acredit|carg|sum)|todav[ií]a no|sigo esperando|cu[aá]ndo (me )?(cargan|acreditan|llega)|no tengo (las )?fichas|no (veo|tengo) (la carga|mi carga|el saldo|saldo)|no me cargaron/i;
+function _sbNotCredited(text) { const t = String(text || ''); return SB_NOT_CREDITED_RE.test(t) && !/retir|cobr|pago|pagaron|premio/i.test(t); }
+function _sbInfoButton(r, reply, userText) {
   if (r.handoff) return {};
-  if ((!r.infoTopic || r.infoTopic === 'carga') && /comprobante|captura|la foto/i.test(reply)) return { kind: 'go_section', target: 'receipt', label: '📸 Adjuntar comprobante' };
+  if (_sbNotCredited(userText) || ((!r.infoTopic || r.infoTopic === 'carga') && /comprobante|captura|la foto/i.test(reply))) return { kind: 'go_section', target: 'receipt_example', label: '🧾 Ver ejemplo y enviar comprobante' };
   const b = r.infoTopic && SB_INFO_BTN[r.infoTopic];
   return b ? { kind: 'go_section', target: b.target, label: b.label } : {};
 }
@@ -16825,7 +16818,7 @@ async function _supportBotRun(userId, username, token, t0) {
       io.to(`chat_${userId}`).emit('new_message', note);
     } catch (_) {}
   }
-  // Que no parezca instantáneo: espera hasta completar los 10-15 s desde el mensaje del cliente.
+  // Que no parezca instantáneo: espera hasta completar los 5-10 s (#1138, antes 10-15) desde el mensaje del cliente.
   const target = (cfg.delayMinSec + Math.random() * (cfg.delayMaxSec - cfg.delayMinSec)) * 1000;
   const wait = Math.max(0, t0 + target - Date.now());
   if (wait) await new Promise((res) => setTimeout(res, wait));
@@ -16843,7 +16836,7 @@ async function _supportBotRun(userId, username, token, t0) {
       content: reply, type: 'text', channel: 'support', timestamp: new Date(), read: false,
       // Si habla del comprobante, va con el botón "Adjuntar comprobante": abre la GUÍA de 3 pasos (#1030, VIP.autoload.sendReceipt ⇒ pickReceipt), nunca el selector directo.
       // #1042-p (owner): botón de INFO del tema que preguntó (la IA elige info_topic); con Girox abierto se abre adentro del casino.
-      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, r.learnedId ? { learned: true } : {}, r.toButton ? { kind: 'go_section', target: 'problema', label: '👤 Hablar con un agente' } : _sbInfoButton(r, reply)) });
+      metadata: Object.assign({ channel: 'support', agentName, agent: 'bot', bot: true }, r.learnedId ? { learned: true } : {}, r.toButton ? { kind: 'go_section', target: 'problema', label: '👤 Hablar con un agente' } : _sbInfoButton(r, reply, lastUser && lastUser.content)) });
     io.to(`user_${userId}`).emit('new_message', message);
     io.to(`chat_${userId}`).emit('new_message', message);
     notifyAdmins('new_message', { message, userId, username });
