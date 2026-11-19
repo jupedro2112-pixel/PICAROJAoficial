@@ -2355,6 +2355,27 @@ async function _sendUserSystemMessage(user, content, { metadata = null, senderUs
     return null;
   }
 }
+// #1138 (owner): avisos de CARGA y RETIRO (pendiente / acreditada / rechazada / pagado) escritos en el chat como la persona de
+// turno (igual que el bot), no como "Sistema". Quedan en el canal de Soporte ⇒ también se ven en el historial. senderId 'admin' +
+// metadata.bot ⇒ NO cuentan como respuesta de una persona (cierre de chats, handoff). Con "Modo normal" (chat clásico) sale como antes.
+async function _sendUserTurnNotice(user, content, { metadata = null, push = null } = {}) {
+  if (!user || !user.id || !content) return null;
+  let classic = true; try { classic = !(await _spNewChat()); } catch (_) {}
+  if (classic) return _sendUserSystemMessage(user, content, { metadata: Object.assign({ channel: 'support' }, metadata || {}), push });
+  try {
+    let agentName = 'Soporte'; try { agentName = (await getSupportAgentName()) || agentName; } catch (_) {}
+    const md = Object.assign({}, metadata || {}, { channel: 'support', agentName, agent: 'bot', bot: true, notice: true });
+    const msg = await Message.create({ id: uuidv4(), senderId: 'admin', senderUsername: agentName, senderRole: 'admin', receiverId: user.id, receiverRole: 'user',
+      content, type: 'text', channel: 'support', metadata: md, timestamp: new Date(), read: false });
+    const data = { id: msg.id, senderId: 'admin', senderUsername: agentName, senderRole: 'admin', receiverId: user.id, receiverRole: 'user', content,
+      timestamp: msg.timestamp, type: 'text', channel: 'support', metadata: md };
+    io.to(`user_${user.id}`).emit('new_message', data);
+    io.to(`chat_${user.id}`).emit('new_message', data);
+    notifyAdmins('new_message', { message: data, userId: user.id, username: user.username });
+    if (push && push.title) sendPushIfOffline(user, push.title, push.body || '', push.data || {}).catch(() => {});
+    return msg;
+  } catch (e) { logger.warn(`[turn-notice] no se pudo enviar a ${user && user.username}: ${e.message}`); return null; }
+}
 
 // ============================================================
 // #376 (owner 2026-10-18): CARGAS PENDIENTES — red de seguridad de la carga automática.
@@ -2446,10 +2467,12 @@ async function _receiptQueueForAgent(userId, username, compId, why, first) {
 }
 const RECEIPT_RECEIVED_DEFAULT = '✅ Recibimos tu comprobante{amount}. En breve tu carga será realizada: te avisamos acá apenas se acredite.'; // #811
 const RECEIPT_DUPLICATE_DEFAULT = '⚠️ Ese comprobante ya fue usado{amount}. Cada transferencia se acredita UNA sola vez. Si creés que es un error, contanos acá en Soporte y lo revisamos.';
-const DEPOSIT_PENDING_REVIEW_DEFAULT = '⏳ Tu carga{amount} sigue pendiente: un agente la está verificando ahora mismo. No hace falta que hagas nada, te avisamos acá en cuanto se acredite.';
+const DEPOSIT_PENDING_REVIEW_OLD_1138 = '⏳ Tu carga{amount} sigue pendiente: un agente la está verificando ahora mismo. No hace falta que hagas nada, te avisamos acá en cuanto se acredite.';
+const DEPOSIT_PENDING_REVIEW_DEFAULT = '⏳ Tu carga{amount} está en proceso: en breve será realizada y te avisamos por acá apenas se acredite. No hace falta que hagas nada 🙌';
 // #1020 (owner): "darle un aviso al cliente cuando carga, que va a tener que esperar por eso, para las próximas cargas".
 const DEPOSIT_AUTOLOAD_OFF_DEFAULT = '⏳ Recibimos tu comprobante{amount}. Como un comprobante que enviaste antes no se pudo validar, por ahora tus cargas las revisa una persona del equipo y van a demorar un poco más. No hace falta que hagas nada: te avisamos acá apenas se acredite.';
-const DEPOSIT_REJECTED_DEFAULT = '❌ No pudimos acreditar tu carga{amount}: {motivo}. Si tenés dudas, escribinos acá en Soporte.';
+const DEPOSIT_REJECTED_OLD_1138 = '❌ No pudimos acreditar tu carga{amount}: {motivo}. Si tenés dudas, escribinos acá en Soporte.';
+const DEPOSIT_REJECTED_DEFAULT = '❌ Revisamos tu carga{amount} y no la pudimos acreditar: {motivo}. Tu saldo no se tocó. Si tenés dudas o querés reenviar el comprobante, escribinos acá y lo vemos juntos 🙌';
 const DEPOSIT_REJECT_REASONS = { no_llego: 'la transferencia no entró en nuestra cuenta', duplicado: 'ese comprobante ya había sido acreditado', ilegible: 'el comprobante no se lee completo (mandalo de nuevo, entero)', monto: 'el monto no coincide con lo que entró', otro: 'no pudimos validarla' };
 async function getDepositReviewConfig() {
   const raw = await getConfig('depositReview', null);
@@ -2529,7 +2552,7 @@ async function _depositReviewEscalate(c, why, opts) {
     // #1020: cliente sin carga automática ⇒ aviso propio ("va a demorar porque un comprobante anterior no se pudo validar"); vacío ⇒ el común.
     let txt = (opts && opts.autoLoadOff) ? await renderSystemCommand('/sys_deposit_autoload_off', DEPOSIT_AUTOLOAD_OFF_DEFAULT, { amount: _amtStr(c.amount) }) : null;
     if (!txt) txt = await renderSystemCommand('/sys_deposit_pending_review', DEPOSIT_PENDING_REVIEW_DEFAULT, { amount: _amtStr(c.amount) });
-    if (txt) await _sendUserSystemMessage({ id: c.userId, username: c.username }, txt, { metadata: { kind: 'deposit_pending', comprobanteId: c.id, amount: c.amount || 0, escalated: true } });
+    if (txt) await _sendUserTurnNotice({ id: c.userId, username: c.username }, txt, { metadata: { kind: 'deposit_pending', comprobanteId: c.id, amount: c.amount || 0, escalated: true } });
     await _emitAdminOnlyChatNote(c.userId, c.username, `⏳ CARGA PENDIENTE${_amtStr(c.amount)} — ${why || 'sin acreditación automática'}. Revisala en "Cargas pendientes": confirmar (carga) o rechazar.`);
     _emitDepositReviewUpdate(c.userId, { action: 'escalated', id: c.id, username: c.username, amount: c.amount });
     logger.info(`[deposit-review] escalado ${c.id} user=${c.username} $${c.amount} (${why})`);
@@ -2622,7 +2645,7 @@ async function _receiptTrustedFallback({ userId, username, content, messageId, e
     imageHash, model: comprobanteAi.getModel(), trustedFallback: true, aiRetryPending: true, aiRetries: 0, bankMatchStatus: 'none', reviewStatus: 'pending', reviewQueuedAt: new Date(), createdAt: new Date() };
   await Comprobante.create(c);
   const ackTxt = await renderSystemCommand('/sys_receipt_received', RECEIPT_RECEIVED_DEFAULT, { amount: '' });
-  if (ackTxt) await _sendUserSystemMessage({ id: userId, username }, ackTxt, { metadata: { kind: 'deposit_pending', comprobanteId: c.id, amount: 0 } });
+  if (ackTxt) await _sendUserTurnNotice({ id: userId, username }, ackTxt, { metadata: { kind: 'deposit_pending', comprobanteId: c.id, amount: 0 } });
   await _emitAdminOnlyChatNote(userId, username, '🧾 La IA no pudo leer este comprobante (' + String(error || 'error').slice(0, 80) + '). Cliente de CONFIANZA ⇒ se acredita solo con la transferencia que llegue de su cuenta de siempre y la IA lo vuelve a revisar cuando se normalice. Si no llega, queda en Cargas pendientes.').catch(() => {});
   _emitDepositReviewUpdate(userId, { action: 'queued', id: c.id, username, amount: 0 });
   _chatAutoCloseIfHandled(userId, 'comprobante recibido (respaldo IA)').catch(() => {});
@@ -2776,7 +2799,7 @@ async function analyzeComprobanteFromMessage({ userId, username, content, messag
         await Comprobante.create({ ...base, reviewStatus: 'pending', reviewQueuedAt: new Date() });
         await _emitAdminOnlyChatNote(userId, username, '🧾 Comprobante recibido (sin lectura automática: la IA de comprobantes no está configurada en este entorno). Verificalo a mano en Cargas pendientes.');
         const ackTxt = await renderSystemCommand('/sys_receipt_received', RECEIPT_RECEIVED_DEFAULT, { amount: '' });
-        if (ackTxt) await _sendUserSystemMessage({ id: userId, username }, ackTxt, { metadata: { kind: 'deposit_pending', comprobanteId: base.id, amount: 0 } });
+        if (ackTxt) await _sendUserTurnNotice({ id: userId, username }, ackTxt, { metadata: { kind: 'deposit_pending', comprobanteId: base.id, amount: 0 } });
         _chatAutoCloseIfHandled(userId, 'comprobante recibido (sin IA)').catch(() => {}); // #895
         _emitDepositReviewUpdate(userId, { action: 'queued', id: base.id, username, amount: 0 });
       } catch (e) { logger.warn(`[comprobante] sin IA: ${e.message}`); }
@@ -2961,7 +2984,7 @@ async function analyzeComprobanteFromMessage({ userId, username, content, messag
         await _depositReviewEscalate({ ...base, status }, !hg.enabled ? 'banco automático apagado' : 'banco automático en modo sombra');
       } else {
         const ackTxt = await renderSystemCommand('/sys_receipt_received', RECEIPT_RECEIVED_DEFAULT, { amount: _amtStr(result.amount) });
-        if (ackTxt) await _sendUserSystemMessage({ id: userId, username }, ackTxt, { metadata: { kind: 'deposit_pending', comprobanteId: base.id, amount: result.amount || 0 } });
+        if (ackTxt) await _sendUserTurnNotice({ id: userId, username }, ackTxt, { metadata: { kind: 'deposit_pending', comprobanteId: base.id, amount: result.amount || 0 } });
         _emitDepositReviewUpdate(userId, { action: 'queued', id: base.id, username, amount: result.amount || 0 });
         _chatAutoCloseIfHandled(userId, 'comprobante recibido: lo acredita el banco automático').catch(() => {}); // #895 (si no entra, va a Cargas pendientes)
       }
@@ -3244,26 +3267,24 @@ async function ensureHgcashAccountIdSaved(accountId) {
   } catch (_) {}
 }
 
+// #1138 (owner): al pagar un retiro ⇒ felicitación en el chat + "lo esperamos nuevamente, Grupo PICA ROJA".
+const PAYOUT_DONE_CHAT_OLD_1138 = '✅ ¡Pago realizado con éxito! Te enviamos ${amount} a tu cuenta 💸';
+const PAYOUT_PAID_OLD_1138 = '💸✅ ¡Tu retiro de ${amount} fue enviado a tu cuenta! Puede tardar unos minutos en acreditarse.';
+const PAYOUT_DONE_CHAT_DEFAULT = '🎉 ¡Felicidades! Tu pago de ${amount} ya fue realizado y enviado a tu cuenta 💸 Lo esperamos aquí nuevamente. Grupo PICA ROJA ❤️';
+const PAYOUT_PAID_DEFAULT = PAYOUT_DONE_CHAT_DEFAULT;
 // Avisa al cliente (y a los admins) que su retiro fue pagado. El texto es editable
 // desde COMANDOS (/sys_payout_paid); si se vacía ese comando, no se envía nada.
 async function notifyPayoutPaid(payout) {
   try { if (payout && payout.userId) outboundWebhook.notify('retiro', { id: payout.userId }, { amount: Number(payout.amount), payoutId: payout.id, occurredAt: payout.paidAt || new Date() }); } catch (_) {} // #562 webhooks salientes (D)
   try {
-    let content = (await _spNewChat()) ? await renderSystemCommand('/sys_payout_done_chat', '✅ ¡Pago realizado con éxito! Te enviamos ${amount} a tu cuenta 💸', { amount: Number(payout.amount).toLocaleString('es-AR') }) : null; // #1042-t
+    let content = (await _spNewChat()) ? await renderSystemCommand('/sys_payout_done_chat', PAYOUT_DONE_CHAT_DEFAULT, { amount: Number(payout.amount).toLocaleString('es-AR') }) : null; // #1042-t
     if (!content) content = await renderSystemCommand(
       '/sys_payout_paid',
-      '💸✅ ¡Tu retiro de ${amount} fue enviado a tu cuenta! Puede tardar unos minutos en acreditarse.',
+      PAYOUT_PAID_DEFAULT,
       { amount: Number(payout.amount).toLocaleString('es-AR') }
     );
     if (!content) return; // comando vaciado a propósito → no enviar
-    const msg = await Message.create({
-      id: uuidv4(), senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin',
-      receiverId: payout.userId, receiverRole: 'user', content, type: 'system', timestamp: new Date(), read: false
-    });
-    const data = { id: msg.id, senderId: 'admin', senderUsername: 'Sistema', senderRole: 'admin', receiverId: payout.userId, receiverRole: 'user', content, timestamp: new Date(), type: 'system' };
-    io.to(`user_${payout.userId}`).emit('new_message', data);
-    io.to(`chat_${payout.userId}`).emit('new_message', data);
-    notifyAdmins('new_message', { message: data, userId: payout.userId, username: payout.username });
+    await _sendUserTurnNotice({ id: payout.userId, username: payout.username }, content, { metadata: { kind: 'payout_paid', payoutId: payout.id, amount: Number(payout.amount) || 0 } }); // #1138
   } catch (e) {
     logger.warn(`[hgcash-pay] notifyPayoutPaid falló: ${e.message}`);
   }
@@ -14514,6 +14535,11 @@ async function initializeData() {
   // #906: el texto de "Comprobante no válido" pide los datos completos en la foto (sólo si nadie lo editó).
   try { if (!(await getConfig('mig906SqComp', null))) { await Command.updateOne({ name: '/sys_sq_comprobante', response: '📎 Tu comprobante no es válido o no se pudo leer. Volvé a adjuntarlo ENTERO (que se vean titular, monto, fecha y N° de operación) tocando el botón de abajo y tu carga se genera sola.' }, { $set: { response: '📎 Tu comprobante no es válido o no se pudo leer. Sacá la captura de nuevo con TODOS los datos completos y bien visibles en la foto (titular, CUIT, monto, fecha y hora y N° de operación), sin recortar, y adjuntala tocando el botón de abajo: tu carga se genera sola.' } }); await Config.set('mig906SqComp', new Date().toISOString(), 'mig#906'); } } catch (e) { console.warn('[startup-migration] #906:', e.message); }
   try { if (!(await getConfig('mig897MinDep2000', null))) { await Config.set('minDepositArs', 2000, 'mig#897'); const hg = (await getConfig('hgcash', null)) || {}; if (typeof hg === 'object' && Number(hg.minChargeARS) > 2000) await _hgcashSetFields({ minChargeARS: 2000 }); await Config.set('mig897MinDep2000', new Date().toISOString(), 'mig#897'); console.log('✅ #897: carga mínima $2.000'); } } catch (e) { console.warn('[startup-migration] #897:', e.message); }
+  // #1138 (owner): textos nuevos de carga/retiro pendiente, rechazo y pago ⇒ sólo pisa los que siguen con el texto de fábrica anterior.
+  for (const [n, o, v] of [['/sys_withdraw_delayed', WITHDRAW_DELAYED_OLD_1020, WITHDRAW_DELAYED_DEFAULT], ['/sys_deposit_pending_review', DEPOSIT_PENDING_REVIEW_OLD_1138, DEPOSIT_PENDING_REVIEW_DEFAULT],
+    ['/sys_deposit_rejected', DEPOSIT_REJECTED_OLD_1138, DEPOSIT_REJECTED_DEFAULT], ['/sys_payout_done_chat', PAYOUT_DONE_CHAT_OLD_1138, PAYOUT_DONE_CHAT_DEFAULT], ['/sys_payout_paid', PAYOUT_PAID_OLD_1138, PAYOUT_PAID_DEFAULT]]) {
+    try { await Command.updateOne({ name: n, response: o }, { $set: { response: v } }); } catch (e) { console.warn('[startup-mig #1138] ' + n + ': ' + e.message); }
+  }
   try { await Command.updateOne({ name: '/sys_withdraw_delayed', response: WITHDRAW_DELAYED_OLD_890 }, { $set: { response: WITHDRAW_DELAYED_DEFAULT } }); } catch (e) { console.warn('[startup-migration] #1020:', e.message); } // #1020: sólo el texto viejo sin editar
   try { if (!(await getConfig('mig890NoFriction', null))) { const bs = (await getConfig('bankOutageSettings', null)) || {}; await Config.set('bankOutageSettings', Object.assign({}, BANK_SETTINGS_DEFAULT, typeof bs === 'object' ? bs : {}, { notifyFailedClient: false }), 'mig#890'); await Command.updateOne({ name: '/sys_withdraw_delayed', response: WITHDRAW_DELAYED_OLD_820 }, { $set: { response: WITHDRAW_DELAYED_DEFAULT } }); await Config.set('mig890NoFriction', new Date().toISOString(), 'mig#890'); } } catch (e) { console.warn('[startup-migration] #890:', e.message); }
   try { if (!(await getConfig('mig885FirePlazo', null))) { const fm = await getConfig('fireMilestones', null); if (Array.isArray(fm) && fm.length) await Config.set('fireMilestones', fm.map((m) => Object.assign({}, m, { depositDays: (parseInt(m.day, 10) || 15) * 2 })), 'mig#885'); await Config.set('firePlazoSince', new Date().toISOString(), 'mig#885'); await Config.set('mig885FirePlazo', new Date().toISOString(), 'mig#885'); } } catch (e) { console.warn('[startup-migration] #885:', e.message); }
@@ -15206,7 +15232,7 @@ async function initializeData() {
       name: '/sys_payout_paid',
       description: 'Mensaje automático "pago enviado" cuando un retiro se paga (pago automático por hgcash o "Pagar con otro banco"). Variables: ${amount}. Si lo dejás vacío, no se envía.',
       type: 'message',
-      response: '💸✅ ¡Tu retiro de ${amount} fue enviado a tu cuenta! Puede tardar unos minutos en acreditarse.'
+      response: PAYOUT_PAID_DEFAULT
     },
     {
       name: '/sys_withdraw_chat',
@@ -15218,7 +15244,7 @@ async function initializeData() {
       name: '/sys_payout_done_chat',
       description: 'CHAT NUEVO (#1042-t, sin "Modo normal"): mensaje en el chat cuando el retiro se PAGÓ (reemplaza a /sys_payout_paid). Variables: ${amount}. Si lo dejás vacío, se usa /sys_payout_paid.',
       type: 'message',
-      response: '✅ ¡Pago realizado con éxito! Te enviamos ${amount} a tu cuenta 💸'
+      response: PAYOUT_DONE_CHAT_DEFAULT
     },
     {
       name: '/sys_support_greet',
@@ -23865,7 +23891,7 @@ app.post('/api/admin/deposit-reviews/:id/reject', authMiddleware, depositorMiddl
       { $set: { reviewStatus: 'rejected', reviewResolution: 'rejected', reviewedBy: req.user.username || 'agente', reviewedAt: new Date(), reviewNote: (reason + (note ? ': ' + note : '')).slice(0, 200) } }, { new: true }).lean();
     if (!c) return res.status(409).json({ error: 'Esa carga ya no está pendiente.' });
     const txt = await renderSystemCommand('/sys_deposit_rejected', DEPOSIT_REJECTED_DEFAULT, { amount: _amtStr(c.amount), motivo: (reason === 'otro' && note) ? note : motivo });
-    if (txt) await _sendUserSystemMessage({ id: c.userId, username: c.username }, txt, { metadata: { kind: 'deposit_rejected', comprobanteId: id, amount: c.amount || 0, reason } });
+    if (txt) await _sendUserTurnNotice({ id: c.userId, username: c.username }, txt, { metadata: { kind: 'deposit_rejected', comprobanteId: id, amount: c.amount || 0, reason } });
     const reps = await _depositReviewCloseRepeats(c, req.user.username || 'agente', 'rechazó'); // #908
     await _emitAdminOnlyChatNote(c.userId, c.username, `❌ CARGA PENDIENTE rechazada por ${req.user.username}${_amtStr(c.amount)} — ${motivo}${note ? ' (' + note + ')' : ''}.${reps ? ` ${reps} envío(s) repetido(s) cerrados.` : ''}`);
     _emitDepositReviewUpdate(c.userId, { action: 'rejected', id });
@@ -25927,7 +25953,8 @@ function _payoutRetrySafe(r) {
 const WITHDRAW_DELAYED_OLD_820 = '⏳ Tu retiro de ${amount} está demorado. Ya lo está revisando un agente y te avisamos apenas salga. ¡Gracias por la paciencia!'; // #890: el de antes ("está demorado")
 const WITHDRAW_DELAYED_OLD_890 = '✅ Tu retiro de ${amount} fue procesado y lo estamos verificando. Aguardá un poquito: en breve lo vas a ver en tu cuenta y te avisamos por acá.'; // #890 (owner): "retiro procesado, estamos verificando"
 // #1020 (owner): "cuando la API falla para retiros, avisarle al cliente que por la gran cantidad de pagos dentro de un plazo de 20 minutos su pago será realizado".
-const WITHDRAW_DELAYED_DEFAULT = '⏳ Por la gran cantidad de pagos, tu retiro de ${amount} se va a realizar dentro de un plazo de 20 minutos. No tenés que hacer nada: te avisamos por acá apenas salga.';
+const WITHDRAW_DELAYED_OLD_1020 = '⏳ Por la gran cantidad de pagos, tu retiro de ${amount} se va a realizar dentro de un plazo de 20 minutos. No tenés que hacer nada: te avisamos por acá apenas salga.';
+const WITHDRAW_DELAYED_DEFAULT = '⏳ ¡Recibimos tu retiro de ${amount}! Tu pago está en proceso: en breve será realizado y te avisamos por acá apenas salga. No tenés que hacer nada 🙌';
 // Aviso ÚNICO por retiro (reserva atómica de clientDelayNotifiedAt: multi-instancia). Lo usan el pago automático que falló (banco) y el chequeo
 // antifraude que no respondió (_withdrawFraudGate 'unchecked'). Texto editable /sys_withdraw_delayed (vacío = no se manda).
 async function _notifyWithdrawDelayed(payoutId) {
@@ -25936,7 +25963,7 @@ async function _notifyWithdrawDelayed(payoutId) {
     if (!p) return;
     const u = await User.findOne({ id: p.userId }).select('id username fcmToken fcmTokens fcmTokenContext').lean();
     const txt = await renderSystemCommand('/sys_withdraw_delayed', WITHDRAW_DELAYED_DEFAULT, { amount: Number(p.amount || 0).toLocaleString('es-AR') });
-    if (u && txt) await _sendUserSystemMessage(u, txt, { metadata: { kind: 'withdraw_delayed', channel: 'support' }, push: { title: '⏳ Tu retiro sale en hasta 20 min', body: 'Por la gran cantidad de pagos, tu retiro se realiza dentro de los próximos 20 minutos.' } }); // sin hablar de fallas (#890)
+    if (u && txt) await _sendUserTurnNotice(u, txt, { metadata: { kind: 'withdraw_delayed', channel: 'support', payoutId: p.id }, push: { title: '⏳ Tu pago está en proceso', body: 'En breve se realiza tu pago. Te avisamos por acá apenas salga.' } }); // sin hablar de fallas (#890)
   } catch (e) { logger.warn('[pay-retry] aviso al cliente: ' + e.message); }
 }
 async function _payoutAutoFailNote(id, o) {
