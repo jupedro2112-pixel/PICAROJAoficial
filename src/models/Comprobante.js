@@ -91,6 +91,10 @@ const comprobanteSchema = new mongoose.Schema({
   aiRetries: { type: Number, default: 0 },
   aiRecheck: { type: mongoose.Schema.Types.Mixed, default: null },
   shiftReview: { type: mongoose.Schema.Types.Mixed, default: null }, // #1010: revisión del de turno (Para revisar)
+  // #1149 CARGA ADELANTADA (banco caído): se acreditó lo que dice el comprobante ANTES de ver la transferencia. { status: 'claiming' | 'unverified' |
+  // 'verified' | 'rejected', at, amount, bonus, why, txId, platform, by, verifiedAt, movementId, note }. null = camino normal. 'unverified' frena retiros.
+  advance: { type: mongoose.Schema.Types.Mixed, default: null },
+  advanceTries: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now, index: true }
 }, {
   timestamps: true
@@ -100,4 +104,5 @@ const comprobanteSchema = new mongoose.Schema({
 comprobanteSchema.index({ dedupeKey: 1, isComprobante: 1 });
 
 comprobanteSchema.index({ reviewStatus: 1, createdAt: 1 }); // #957: cola de Cargas pendientes
+comprobanteSchema.index({ 'advance.status': 1, createdAt: -1 }, { sparse: true }); // #1149
 module.exports = mongoose.models['Comprobante'] || mongoose.model('Comprobante', comprobanteSchema);

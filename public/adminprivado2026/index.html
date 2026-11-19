@@ -165,7 +165,7 @@ document.addEventListener('change', function (ev) {
 </a>
 <a href="#" class="nav-item" data-section="apiFailures" title="Cargas que entraron solas mientras la IA de comprobantes no andaba: buscalas en el banco y tildalas; si nadie las tilda, el sistema las verifica solo cuando vuelve la IA (#1020)">
 <span>🔌</span>
-<span>Comprobantes sin API a verificar</span>
+<span>Cargas sin verificar</span>
 <span id="apiFailuresBadge" style="display:none;background:#ff5050;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:8px;margin-left:6px;">0</span>
 </a>
 <a href="#" class="nav-item" data-section="payReview">
@@ -3632,7 +3632,7 @@ Responder 2xx. Con 5xx / timeout se reintenta; con 4xx no.</pre>
             <!-- #1020: FALLAS DE API (control automático) — loadApiFailures() -->
             <section id="apiFailuresSection" class="section">
                 <div class="panel-header">
-                    <h2>🔌 Comprobantes sin API a verificar</h2>
+                    <h2>🔌 Cargas sin verificar (adelantadas y sin leer)</h2>
                     <button class="refresh-btn" onclick="loadApiFailures()" title="Refrescar">🔄</button>
                 </div>
                 <div id="apiFailuresBox">Cargando…</div>

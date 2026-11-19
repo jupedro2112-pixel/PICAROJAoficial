@@ -7417,11 +7417,13 @@ async function loadApiFailures() {
             '<b>1.</b> Si tenés tiempo, buscá la transferencia en el banco con los datos de cada una (titular, CBU, hora).<br>' +
             '<b>2.</b> Si la ves, tocá <b>☑ Lo vi en el banco</b> y sale de la lista.<br>' +
             '<b>3.</b> Si nadie la tilda, no pasa nada: cuando vuelve la IA, <b>el sistema la verifica solo</b> y la saca. Si encuentra algo raro, aparece acá en <span style="color:var(--p-red,#d23a4e)"><b>rojo</b></span> y el cliente queda sin carga automática.</div></div>';
+        html += _advPanelHtml(j.adv, fm, fd); // #1149
         html += '<div class="cbu-form" style="margin-top:12px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between"><h3 style="margin:0">🧾 Para controlar ' + (j.pending ? '<span style="background:var(--p-red,#d23a4e);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px">' + j.pending + '</span>' : '') + '</h3>' +
             '<span style="font-size:12px"><select onchange="_apiFailHours=Number(this.value);loadApiFailures()">' + [24, 72, 168].map((h) => '<option value="' + h + '"' + (h === _apiFailHours ? ' selected' : '') + '>últimas ' + (h === 168 ? '7 días' : h + ' h') + '</option>').join('') + '</select> ' +
             '<label style="cursor:pointer"><input type="checkbox" style="width:auto"' + (_apiFailAll ? ' checked' : '') + ' onchange="_apiFailAll=this.checked;loadApiFailures()"> ver también los ya revisados</label></span></div>';
         const items = j.items || [];
         html += items.length ? items.map(function (c) {
+            if (c.kind === 'advance') return _advItemHtml(c, fm, fd, chip); // #1149
             const ia = c.iaState === 'waiting' ? chip('⏳ la IA lo verifica sola cuando vuelva') : c.iaState === 'ok' ? chip('✅ la IA lo verificó') : c.iaState === 'problem' ? chip('🚨 la IA encontró un problema: ' + escapeHtml(c.iaNote || ''), true) : chip('— ' + escapeHtml(c.iaNote || 'sin verificar'));
             const st = c.credited ? chip('💰 ya acreditado') : chip('⏳ todavía no se acreditó (está en Comprobantes a verificar)');
             const rv = c.review ? '<span style="font-size:12px;color:var(--p-muted,#767676)">' + (c.review.bankSeen ? '☑ Visto en el banco' : (c.review.verdict === 'ok' ? '✅ Verificado' : '⚠️ Marcado sospechoso')) + ' · ' + escapeHtml(c.review.by || '') + ' ' + fd(c.review.at) + '</span>' : '';
@@ -7437,6 +7439,60 @@ async function loadApiFailures() {
         box.innerHTML = html + '</div>';
     } catch (e) { box.innerHTML = '<div class="cbu-form">Error de conexión</div>'; }
 }
+// #1149 CARGA ADELANTADA (banco caído): estado + ajustes + ficha de cada carga con "Llegó / No llegó".
+function _advPanelHtml(a, fm, fd) {
+    if (!a) return '';
+    const c = a.cfg || {};
+    let h = '<div class="cbu-form" style="margin-top:12px"><h3 style="margin:0 0 6px">⚡ Carga adelantada (cuando el banco no avisa)</h3>' +
+        '<div style="font-size:13px;line-height:1.7">' + (!c.enabled ? '<b>⚪ Apagada</b>: con el banco caído las cargas esperan como siempre.' :
+            (a.down ? '<b style="color:var(--p-red,#d23a4e)">🏦 BANCO CAÍDO' + (a.manual ? ' (marcado a mano)' : '') + '</b>' + (a.since ? ' desde ' + fd(a.since) : '') + (a.why ? ' — ' + escapeHtml(a.why) : '') + '. <b>Se están adelantando cargas.</b>'
+                : '<b>✅ Banco normal</b>: no se adelanta nada' + (a.upAt ? ' (última caída resuelta ' + fd(a.upAt) + ')' : '') + '.')) +
+        '<br>Sin verificar ahora: <b>' + (a.openN || 0) + '</b> carga(s) por <b>' + fm(a.openArs) + '</b>' + (c.maxOpenArs ? ' (tope general ' + fm(c.maxOpenArs) + ')' : '') + '</div>' +
+        '<div style="font-size:12.5px;margin:8px 0 0;padding:10px 12px;border-radius:10px;background:var(--p-surface,#f1f1f1);line-height:1.6"><b>¿Qué es?</b> Si el banco deja de avisar las transferencias, al cliente que ya tuvo al menos una carga verificada (y no tiene marcas) se le acredita lo que dice su comprobante <b>sin esperar</b>, hasta lo máximo que ya cargó (techo ' + fm(c.capArs) + '). Una sola sin verificar por cliente; mientras tanto sus retiros esperan.<br>' +
+        '<b>Cuando el banco vuelve, el sistema busca cada transferencia y la verifica solo.</b> Si la ves antes en el banco tocá <b>✅ Llegó</b> (el cliente queda de confianza). Si no entró, <b>❌ No llegó</b>: el cliente queda en alerta y sin carga automática.</div>';
+    if (a.canEdit) {
+        const inp = (id, v, w) => '<input id="' + id + '" type="number" value="' + (v == null ? '' : v) + '" style="width:' + (w || 110) + 'px;display:inline-block">';
+        h += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12.5px">⚙️ Ajustes (sólo admin)</summary><div style="font-size:12.5px;line-height:2.3;margin-top:6px">' +
+            '<label style="cursor:pointer"><input id="advEnabled" type="checkbox" style="width:auto"' + (c.enabled ? ' checked' : '') + '> Adelantar cargas cuando el banco está caído</label><br>' +
+            'Techo por carga $ ' + inp('advCap', c.capArs) + ' · Esperar ' + inp('advWait', c.waitMinutes, 60) + ' min antes de adelantar<br>' +
+            'Tope general sin verificar $ ' + inp('advMaxOpen', c.maxOpenArs, 130) + '<br>' +
+            'Banco caído si no entra nada en ' + inp('advSilent', c.silentMinutes, 60) + ' min y hay ' + inp('advMinWait', c.minWaiting, 60) + ' clientes esperando<br>' +
+            '<button class="btn-primary btn-small" onclick="advSaveCfg()">💾 Guardar</button> ' +
+            (a.manual ? '<button class="btn-secondary btn-small" onclick="advForce(0)">✅ El banco ya anda (dejar de adelantar)</button>' : '<button class="btn-secondary btn-small" onclick="advForce(2)">🏦 El banco está caído: adelantar por 2 h</button>') + '</div></details>';
+    }
+    return h + '</div>';
+}
+function _advItemHtml(c, fm, fd, chip) {
+    const st = c.advStatus === 'unverified' ? chip('⏳ acreditada SIN verificar') : c.advStatus === 'verified' ? chip('✅ verificada · ' + escapeHtml(c.advBy || '') + ' ' + fd(c.advAt)) : c.advStatus === 'rejected' ? chip('❌ NO LLEGÓ · ' + escapeHtml(c.advBy || '') + ' ' + fd(c.advAt) + (c.advNote ? ' · ' + escapeHtml(c.advNote) : ''), true) : chip('⚠️ no se pudo adelantar: ' + escapeHtml(c.advNote || ''), true);
+    const btn = c.advStatus === 'unverified' ? '<button class="btn-primary btn-small" onclick="advVerdict(\'' + c.id + '\',\'ok\')">✅ Llegó</button> <button class="btn-secondary btn-small" onclick="advVerdict(\'' + c.id + '\',\'reject\')">❌ No llegó</button>' : '';
+    return '<div style="border-top:1px solid var(--p-border,#e2e2e2);padding:8px 0;font-size:12.5px' + (c.advStatus === 'verified' ? ';opacity:.6' : '') + (c.problem ? ';border-left:3px solid var(--p-red,#d23a4e);padding-left:8px' : '') + '">' +
+        '⚡ <b>' + escapeHtml(c.username || '') + '</b> · ' + fm(c.amount) + (c.bonus ? ' + bono ' + fm(c.bonus) : '') + ' · ADELANTADA · comprobante ' + fd(c.at) +
+        '<div style="color:var(--p-muted,#767676)">Para buscar en el banco: ' + (c.fromName ? escapeHtml(c.fromName) : 'titular —') + (c.fromCbuTail ? ' · CBU ' + escapeHtml(c.fromCbuTail) : '') + (c.operation ? ' · op. ' + escapeHtml(String(c.operation)) : '') + (c.movementAt ? ' · entró ' + fd(c.movementAt) : '') + '</div>' +
+        '<div>' + st + '</div><div style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button class="btn-secondary btn-small" onclick="openChatFromDelay(\'' + c.userId + '\')">💬 Chat</button> ' + btn + '</div></div>';
+}
+async function advVerdict(id, verdict) {
+    let note = '';
+    if (verdict === 'reject') { note = prompt('¿Qué viste en el banco? (el cliente queda EN ALERTA y sin carga automática)'); if (note === null) return; if (String(note).trim().length < 4) { showToast('Escribí el motivo', 'error'); return; } }
+    else if (!confirm('¿Confirmás que la transferencia ENTRÓ al banco? El cliente queda de confianza.')) return;
+    try {
+        const r = await authFetch('/api/admin/api-failures/' + encodeURIComponent(id) + '/advance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict: verdict, note: note }) });
+        const j = await r.json();
+        if (j && j.success) { showToast(verdict === 'ok' ? '✅ Verificada: cliente de confianza' : '❌ Marcada: cliente en alerta', verdict === 'ok' ? 'success' : 'info'); loadApiFailures(); } else showToast((j && j.error) || 'No se pudo marcar', 'error');
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+async function _advPost(body, okMsg) {
+    try {
+        const r = await authFetch('/api/admin/advance-load/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const j = await r.json();
+        if (j && j.success) { showToast(okMsg, 'success'); loadApiFailures(); } else showToast((j && j.error) || 'No se pudo guardar', 'error');
+    } catch (e) { showToast('Error de conexión', 'error'); }
+}
+function advSaveCfg() {
+    const v = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
+    _advPost({ enabled: !!(document.getElementById('advEnabled') || {}).checked, capArs: v('advCap'), waitMinutes: v('advWait'), maxOpenArs: v('advMaxOpen'), silentMinutes: v('advSilent'), minWaiting: v('advMinWait') }, '💾 Guardado');
+}
+function advForce(h) { if (h && !confirm('Se van a adelantar cargas durante 2 horas aunque el sistema no haya detectado la caída. ¿Seguro?')) return; _advPost({ forceHours: h }, h ? '🏦 Adelantando por 2 h' : '✅ Listo'); }
+window.advVerdict = advVerdict; window.advSaveCfg = advSaveCfg; window.advForce = advForce;
 async function apiFailBankSeen(id) { // un toque: queda registrado quién y cuándo (sin pedir nota)
     try {
         const r = await authFetch('/api/admin/api-failures/' + encodeURIComponent(id) + '/bank-seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });

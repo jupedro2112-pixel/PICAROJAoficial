@@ -683,6 +683,9 @@ const userSchema = new mongoose.Schema({
   // #1020: el comprobante acreditado SIN leer resultó falso al re-leerlo ⇒ sin carga automática (todo comprobante va a Cargas pendientes)
   // hasta que una persona lo marque Legítimo o borre la revisión en 🛡️ Antifraude.
   autoLoadOff: { at: { type: Date, default: null }, why: { type: String, default: null } },
+  // #1149: una persona (o el banco, al volver) confirmó una carga ADELANTADA de este cliente ⇒ queda DE CONFIANZA para la carga sin lectura (#1010).
+  // Se pierde si un agente le rechaza un comprobante por repetido / falso (ahí queda en alerta: autoLoadOff + observación).
+  receiptTrusted: { at: { type: Date, default: null }, by: { type: String, default: null } },
   phoneNoSms: { at: { type: Date, default: null }, phone: { type: String, default: null }, source: { type: String, default: null } }, // #1028: celular confirmado SIN SMS (interruptor apagado)
   fraudReview: { status: { type: String, default: null }, by: { type: String, default: null }, at: { type: Date, default: null }, note: { type: String, default: null }, priority: { type: String, default: null } }, // #996: priority 'high' = puntaje de bloqueo (decide una persona)
   // #993 ANTIFRAUDE AUTOMÁTICO: una persona lo desbloqueó o lo revisó ⇒ el motor automático ya no lo bloquea ni lo frena solo (el radar lo sigue mostrando).

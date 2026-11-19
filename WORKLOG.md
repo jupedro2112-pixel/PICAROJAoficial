@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1148)
+> **Última actualización: 2026-11-19** (#1149)
 
 ## Sesión 2026-11-09
 
@@ -15096,3 +15096,41 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   cargar: queda en reintento.
 - Queda para una persona: comprobante cuyo titular/monto no coincide con ninguna transferencia (ej. picaelias97), ilegibles, ambiguos.
 - Test `scripts/test-support-bot.js` 18/18 (se amplió la distancia del chequeo del pase). Sin probar en vivo.
+
+### 1149. Servicio más autónomo: carga ADELANTADA con el banco caído, confianza que sube y baja, soporte adelantado de la IA (2026-11-19) — panel v315
+- **Owner:** "quiero automatizar el servicio para no generar demoras, que la prioridad sea la gente: si falla la API que se le cargue de manera
+  automática; si después lo marcan OK (llegó la transferencia) que el cliente quede de confianza; si manda otro y el agente lo rechaza porque mandó
+  duplicado, lo dejamos en alerta para que no se le cargue solo; que la IA funcione con todo esto; si hay demoras en pagos: 'En breve sale su pago,
+  estamos validando'; en Soporte, antes de una persona, un soporte adelantado de la IA que pueda solucionar; si se traba, ahí sí se abre el chat al
+  agente; si puede sola, que avance y cierre; y una sección para verificar lo cargado sin verificación, que cuando vuelva la API revise sola".
+- **Decisiones del owner (preguntadas antes de escribir):** (1) se adelanta SÓLO con el banco caído, no en un día normal; (2) a cualquier cliente con
+  1+ carga verificada por el banco y sin marcas, "siempre y cuando después siga así" (cada adelantada se tiene que confirmar, a mano o por la API);
+  (3) tope = lo máximo que ya cargó verificado, con techo $50.000 (editable).
+- **Carga adelantada** (server.js, bloque #1149 antes de `analyzeComprobanteFromMessage`): `_advanceTick` (1 min, `_cronClaim`). Banco caído
+  (`_bankInboundState`) = la consulta al banco falla 3 veces seguidas (`_hgPollFails`, lo mantiene `_hgcashPollTick`), o no entra NINGUNA transferencia
+  hace `silentMinutes` (12) con `minWaiting` (5) clientes distintos esperando, o un admin lo marca a mano por 2 h; se levanta sola con la primera
+  transferencia que entra (estado en `Config['advanceLoadState']`). Con el banco caído, el comprobante YA leído y sin duplicado que lleva
+  `waitMinutes` (3) esperando se acredita por lo que dice (`_advanceCredit` → `_advanceFinish`, `_depositWithBonus`, reference `vip-adv-<comprobanteId>`,
+  Transaction `adminUsername:'auto-adelantada'`, `metadata.source:'advance_hgcash'`). Reserva atómica en `Comprobante.advance` (+ `autoCharged`, así
+  ningún otro camino lo carga); una reserva a medias se termina con la MISMA reference. Requisitos (`_advanceEligible`): sin marcas / observación /
+  `autoLoadOff`, sin otra adelantada sin verificar, sin comprobante rechazado o de otra cuenta en 30 días, monto ≤ tope, destino = nuestra cuenta (si
+  el comprobante lo muestra) y cuenta de ORIGEN que el cliente ya usó en una carga verificada. Tope general de adelantos sin verificar: `maxOpenArs`
+  ($2.000.000). El cliente recibe el mensaje de carga de siempre (no nota la diferencia).
+- **Verificación sola** (`_advanceReconcile`, en cada pasada): busca la transferencia de cada adelantada; con UNA que coincide la consume (candado
+  `HgcashCharge` de siempre, movimiento `auto_charged`) y queda `verified`. El cliente queda **de confianza** (`User.receiptTrusted`, que además le
+  saltea los 7 días / 5 cargas de la carga sin lectura #1010).
+- **Panel → 🔌 Cargas sin verificar** (antes "Comprobantes sin API a verificar"): estado del banco, ajustes (sólo admin, `POST /api/admin/advance-load/config`,
+  por campo) y cada adelantada con **✅ Llegó** / **❌ No llegó** (`POST /api/admin/api-failures/:id/advance`, admin / depositor / cajero; No llegó pide
+  motivo). No llegó ⇒ cliente en observación PRIORIDAD ALTA + sin carga automática + pierde la confianza (las fichas quedan: se descuentan a mano si corresponde).
+- **Rechazo por repetido en Cargas pendientes** (motivo `duplicado`) ⇒ `autoLoadOff` (sus próximas cargas las revisa una persona) y pierde la confianza;
+  `no_llego` / `monto` sólo quitan la confianza. Se devuelve con 🛡️ Antifraude → Legítimo, como siempre.
+- **Retiros:** con una adelantada sin verificar el retiro va a revisión (`_withdrawFraudGate`); al verificarse vuelve solo al re-chequeo automático.
+- **Soporte adelantado:** al tocar "Hablar con una persona" (1ª vez en 30 min, y si no fue el bot el que lo mandó al botón): retiro en proceso ⇒
+  "⏳ Tu pago … lo estamos validando y en breve sale" (`/sys_support_wd_progress`); recién pagado ⇒ `/sys_support_wd_paid`; sin nada detectable ⇒ la
+  IA pide que cuente qué pasó (`/sys_support_pre`) y lo intenta resolver; si no puede, `_supportBotRun` lo pasa DIRECTO a una persona (sin volver a
+  pedir el botón). Segunda vez ⇒ a una persona ya. La carga se sigue revisando sola antes (#1148). La IA recibe `askedHuman` y `bankDelay`.
+- Tests: nuevo `scripts/test-advance-load.js` (9/9); `test-support-bot` 18/18 (ahora 3 `_depositLuck`), `test-payout-auto` 8/8, `test-receipt-match` 11/11,
+  `test-security-1053` 9/9, `test-loss-fixes-1090` 13/13, `test-vip-exports` OK, `node --check`. **Sin probar en vivo. Necesita deploy en los dos AWS.**
+- ⚠️ A mirar tras el deploy: el cierre diario va a mostrar las adelantadas como cargas sin transferencia hasta que se verifiquen (no se tocó la
+  conciliación); el motivo `duplicado` ahora castiga (avisar a los agentes); la detección por "silencio" depende del volumen: de madrugada con poco
+  movimiento necesita 5 clientes esperando (ajustable en el panel) y, si hace falta, está el botón "🏦 El banco está caído: adelantar por 2 h".

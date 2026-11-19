@@ -456,6 +456,13 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   un posteo automático NUEVO del canal es un tipo más en `TG_SCHED_KINDS` + `_tgSchedPost`, nunca otro cron suelto (se duplicaría).
 - **📊 GRUPO PRIVADO DE REPORTES (#1046):** Telegram, vinculado con código de un solo uso desde el panel; sólo `telegramBot.adminChats` recibe datos; números de
   `Config['tgadminsnap']` (cron), nunca cálculos en el webhook. Por privado y en el canal, los links van SÓLO a la app (owner).
+- **⚡ CARGA ADELANTADA (#1149):** SÓLO con el banco caído (`_bankInboundState`: consulta fallando / silencio con clientes esperando / marcado a mano) el
+  comprobante ya leído de un cliente con 1+ carga verificada y sin marcas se acredita ANTES de ver la transferencia (`_advanceTick`, reference
+  `vip-adv-<comprobanteId>`, `Comprobante.advance`, tope = lo máximo que ya cargó con techo `Config['advanceLoad'].capArs`). Se verifica sola al volver el
+  banco (`_advanceReconcile`) o a mano en panel → 🔌 Cargas sin verificar (Llegó ⇒ `User.receiptTrusted`; No llegó ⇒ observación + `autoLoadOff`). Con una
+  adelantada sin verificar los retiros van a revisión. Un camino NUEVO que acredite sin ver la transferencia deja `Comprobante.advance`; nunca sacar el
+  `autoCharged:true` de la reserva (evita la doble carga). Rechazo `duplicado` en Cargas pendientes ⇒ `autoLoadOff`. **Soporte adelantado:** "Hablar con una
+  persona" pasa primero por la IA (`support_pre`, `_supportPayoutDiagnose`); si no puede, handoff DIRECTO. Test `scripts/test-advance-load.js`.
 - **BANCO AUTOMÁTICO BLINDADO (#1012):** `getConfig` devuelve el default si la base falla ⇒ NUNCA leer→mezclar→guardar `Config['hgcash']` entero
   (lo apagaba solo). Cambios puntuales con `_hgcashSetFields`; sólo el panel guarda el objeto (con `confirmOff` para apagar). `_hgcashGuardTick`
   restaura `Config['hgcashLastGood']` si aparece apagado sin `manualOff`. Misma trampa para cualquier Config crítica: usar $set de campo.

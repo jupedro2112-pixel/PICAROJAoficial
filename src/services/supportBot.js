@@ -188,6 +188,8 @@ function userFactsText(u, agentName) {
   if (u.pendingReceipts > 0) L.push(`- Tiene ${u.pendingReceipts} comprobante(s) de carga esperando acreditación.`);
   if (u.receiptInfo) L.push(`- ESTADO DE SU CARGA (dato real del sistema, usalo si reclama una carga; no inventes otro): ${u.receiptInfo}.`); // #1148
   if (u.payout) L.push(`- Último retiro: ${u.payout}.`);
+  if (u.bankDelay) L.push('- AHORA el banco está con demoras para avisarnos las transferencias: si reclama una carga, decile que ya la estamos validando y que en breve se acredita sola; no le pidas que reenvíe el comprobante si ya lo mandó.'); // #1149
+  if (u.askedHuman) L.push('- Este cliente PIDIÓ hablar con una persona y lo estás atendiendo vos primero: resolvele el problema YA con los datos de arriba, concreto y sin vueltas. Si con esos datos no podés resolverlo con certeza, o si insiste en hablar con una persona, devolvé handoff (pasa directo a un agente).'); // #1149
   if (u.blocked) L.push('- La cuenta está BLOQUEADA: no des detalles, decí que el equipo lo revisa y marcá handoff.');
   if (u.aiReplies > 0) L.push(`- Ya le respondiste ${u.aiReplies} vez/veces en esta charla${u.aiReplies >= 2 ? ': si sigue sin entender lo mismo, explicalo distinto y más simple, o marcá handoff' : ''}.`);
   return L.join('\n');

@@ -431,6 +431,7 @@ Prefijos en uso hoy:
 | `vip-rake-<fromDateStr>-<userId>` | Rakeback semanal VIP | lunes de la semana reclamada + userId (derivada del PERÍODO, igual que los reembolsos y por el mismo motivo) |
 | `vip-welcome-<userId>` | Bono sorpresa del código de bienvenida (tipo cash) | userId (uno por cuenta para siempre, como el de instalación) |
 | `vip-igift-<userId>` | Carga GRATIS por instalar la app (#283, ofrecida en la 1ª carga) | userId (una vez en la vida; Transaction `install_gift`) |
+| `vip-adv-<comprobanteId>` | Carga ADELANTADA con el banco caído (#1149) | id del Comprobante (reservado antes de llamar; el reintento usa la misma) |
 | `vip-cbk-<userId>-<día>-<seq>` | Reembolso ACUMULATIVO de por vida | userId + día ART + `seq` del índice único de CashbackClaim (un fallo borra el doc y el reintento recalcula el MISMO seq ⇒ misma reference) |
 
 ⚠️ **Por qué la del reembolso sale del período y no del id del claim** (`_refundReference`,
@@ -2170,3 +2171,33 @@ resultado (ingresosTotal/egresosTotal) pero no al arqueo del banco. Test `script
 - **Trampas:** `ipChain`/`details` pueden traer datos del cliente final (nombres, montos) — la sección es sólo del dueño por eso. Un endpoint de escritura NUEVO que
   reciba claves con un nombre raro (que no matchee `_AUDIT_SECRET_RX`: pass|token|secret|apikey|key$|otp|code$|pin|cookie|authorization) tiene que sumarlo a esa regex o
   la clave queda en el registro. El registro arranca vacío en el deploy: no hay IPs de antes.
+
+## ⚡ Carga adelantada con el banco caído + soporte adelantado (#1149, 2026-11-19)
+
+**Qué resuelve:** cuando el banco automático deja de avisar transferencias, los clientes con historial no esperan: se les acredita lo que dice el
+comprobante y se verifica después. Detalle de decisiones en WORKLOG #1149.
+
+- **Estado del banco** — `_bankInboundState(cfg)`: `down` si `Config['advanceLoad'].forceUntil` (a mano), si la consulta al banco falla
+  (`_hgPollFails >= 3`, variables por instancia que mantiene `_hgcashPollTick`) o si no hay `BankMovement` entrante hace `silentMinutes` con
+  `minWaiting` clientes distintos esperando. Persistido en `Config['advanceLoadState']` `{downSince, why, kind}`; vuelve con el primer movimiento
+  entrante posterior (o, si era por la consulta, cuando la consulta anda; o a las 6 h se re-evalúa).
+- **`Comprobante.advance`** (Mixed): `claiming` (reservado, `autoCharged:true`) → `unverified` (acreditado, `reviewStatus:'confirmed'`,
+  `reviewResolution:'advance'`) → `verified` (`by` = 'banco' o el agente, `movementId`) | `rejected`; `failed` (5 intentos sin poder cargar: vuelve al
+  camino normal) y `skipped` (no cumplía: sigue el camino normal). Reference de plata: `vip-adv-<comprobanteId>` (está en la tabla de §4.4).
+- **Por qué no se carga dos veces:** el comprobante adelantado queda `autoCharged` ⇒ `hgcashMatchFromMovement` / `hgcashAutoCarga` /
+  `_hgcashRecoveryPass` no lo toman; cuando la transferencia llega queda `pending` "sin match" y `_advanceReconcile` la consume con el candado
+  `HgcashCharge` (misma `chargeKey` que usaría la carga normal).
+- **Config** `Config['advanceLoad']`: `enabled` (default true), `capArs` 50000, `waitMinutes` 3, `maxOpenArs` 2000000, `silentMinutes` 12,
+  `minWaiting` 5, `forceUntil`. Se escribe POR CAMPO (`Config.updateOne({ key: 'advanceload' }, { $set: { 'value.x': … } })`).
+- **Confianza:** `User.receiptTrusted {at, by}` se pone al verificarse una adelantada y se borra con un rechazo; `_receiptTrust` (#1010) la acepta en
+  lugar de los 7 días / 5 cargas. `autoLoadOff` + `fraudReview.watch` = alerta (No llegó, o rechazo `duplicado` en Cargas pendientes).
+- **Retiros:** `_withdrawFraudGate` frena con una adelantada `claiming`/`unverified`; `_advanceVerify` devuelve esos retiros a `fraudRecheck`.
+- **Panel:** `GET /api/admin/api-failures` suma `adv` (estado + config) e ítems `kind:'advance'`; `POST /api/admin/api-failures/:id/advance`
+  `{verdict:'ok'|'reject', note}`; `POST /api/admin/advance-load/config` (sólo admin). Front: `_advPanelHtml`, `_advItemHtml`, `advVerdict`,
+  `advSaveCfg`, `advForce` (admin.js).
+- **Soporte adelantado:** `_supportQuickReply('problema')` → (carga: `_supportReceiptDiagnose`, #1148) → `_supportPayoutDiagnose` /
+  `SUPPORT_PRE_TEXTS` (mensaje con `metadata.kind:'support_pre'`) → recién después `_supportHandoffNow`. `_supportPreActive(userId)` (30 min) hace que
+  un handoff de la IA sea DIRECTO en `_supportBotRun` (no vuelve al botón) y le pasa `askedHuman` al prompt (`supportBot.userFactsText`).
+- **Trampas:** (1) un flujo nuevo que acredite sin ver la transferencia tiene que dejar `Comprobante.advance`; (2) no sacar `autoCharged:true` de la
+  reserva (es lo que evita la doble carga); (3) el cierre diario todavía no distingue las adelantadas sin verificar (figuran como carga sin entrada
+  del banco hasta que se verifican); (4) test `scripts/test-advance-load.js`.
