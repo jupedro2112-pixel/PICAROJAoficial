@@ -6832,7 +6832,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 app.post('/api/auth/logout', async (req, res) => {
   try {
     // #826: al cerrar sesión se borra el token de instalación del navegador (si no, instalar después abriría la cuenta anterior).
-    try { res.setHeader('Set-Cookie', 'vip_inst=; Max-Age=0; Path=/manifest.json; SameSite=Lax; HttpOnly'); } catch (_) {}
+    try { res.setHeader('Set-Cookie', ['vip_inst=; Max-Age=0; Path=/manifest.json; SameSite=Lax; HttpOnly', 'vip_inst2=; Max-Age=0; Path=/api/auth/access-link; SameSite=Lax; HttpOnly']); } catch (_) {}
     const fcmToken = (req.body && req.body.fcmToken) || (req.query && req.query.fcmToken) || null;
 
     // Intentar identificar al usuario por el JWT. Si está expirado o ausente,
@@ -25642,7 +25642,10 @@ app.post('/api/auth/install-link', authMiddleware, async (req, res) => {
     const u = await User.findOneAndUpdate({ id: req.user.userId }, { $push: { installLinks: { $each: [{ hash, createdAt: new Date() }], $slice: -5 } } }, { new: true }).select('username').lean();
     if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
     const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-    res.setHeader('Set-Cookie', `vip_inst=${token}.${encodeURIComponent(u.username)}; Max-Age=${INSTALL_LINK_TTL_MS / 1000}; Path=/manifest.json; SameSite=Lax; HttpOnly${secure}`);
+    // #1138-o: la MISMA llave también para el canje (Path=/api/auth/access-link): si el iPhone abre la app instalada sin el ?acceso= del manifest
+    // pero llevó las cookies de Safari, la app la canjea sola (POST sin token) y entra con la sesión.
+    res.setHeader('Set-Cookie', [`vip_inst=${token}.${encodeURIComponent(u.username)}; Max-Age=${INSTALL_LINK_TTL_MS / 1000}; Path=/manifest.json; SameSite=Lax; HttpOnly${secure}`,
+      `vip_inst2=${token}.${encodeURIComponent(u.username)}; Max-Age=${INSTALL_LINK_TTL_MS / 1000}; Path=/api/auth/access-link; SameSite=Lax; HttpOnly${secure}`]);
     res.json({ success: true, token, username: u.username });
   } catch (e) { logger.warn(`[install-link] ${e.message}`); res.status(500).json({ error: 'Error del servidor' }); }
 });
@@ -25684,7 +25687,13 @@ app.post('/api/admin/users/:userId/access-link', authMiddleware, adminMiddleware
 // PWA le muestra el recuadro de crear su contraseña nueva (flujo ya existente).
 app.post('/api/auth/access-link', authLimiter, async (req, res) => {
   try {
-    const token = String((req.body && req.body.token) || '').trim();
+    let token = String((req.body && req.body.token) || '').trim();
+    // #1138-o: sin token en el body ⇒ la llave de instalación de la cookie vip_inst2 (sólo sirve contra installLinks: un link de agente nunca va en cookie).
+    let _fromCookie = false;
+    if (!token) {
+      const ck = (String(req.headers.cookie || '').split(';').map((x) => x.trim()).find((x) => x.startsWith('vip_inst2=')) || '').slice(10);
+      const dot = ck.indexOf('.'); if (dot > 0) { token = ck.slice(0, dot); _fromCookie = true; }
+    }
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) {
       return res.status(400).json({ error: 'Este link de acceso no es válido.' });
     }
@@ -25694,7 +25703,7 @@ app.post('/api/auth/access-link', authLimiter, async (req, res) => {
     // El cambio de clave NO se fuerza acá: depende del origen de la cuenta (abajo).
     // #831: los links de alta por LANDING y de instalación dejan 30 min de gracia (mismo link vuelve a entrar); los del agente siguen de un solo uso.
     const _graceSet = { accessLinkGraceHash: hash, accessLinkGraceUntil: new Date(Date.now() + ACCESS_LINK_GRACE_MS) };
-    let user = await User.findOneAndUpdate(
+    let user = _fromCookie ? null : await User.findOneAndUpdate(
       { accessLinkHash: hash, role: 'user', isActive: { $ne: false }, isBlocked: { $ne: true }, $or: [{ accessLinkCreatedAt: null }, { accessLinkCreatedAt: { $gte: new Date(Date.now() - 48 * 3600 * 1000) } }] }, // #956: 48 h
       { $set: { accessLinkHash: null, lastLogin: new Date() } },
       { new: false } // #673: con el doc ANTERIOR se lee accessLinkPurpose (el hash ya quedó borrado atómicamente igual)

@@ -503,7 +503,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   (token de acceso de un solo uso con `accessLinkPurpose:'install'`, no fuerza cambio de clave) + home.js `installManifestSync` + auth.js
   `tryAccessLink` (ignora `?acceso=` si ya hay `userToken`). No mover la ruta del manifest después del static ni tocar `start_url` a mano.
   **#826:** el token de instalación va en `User.installLinks` (NO en `accessLinkHash`, que es del link del agente) y también en la cookie
-  `vip_inst` (Path=/manifest.json, el link del manifest va con `crossorigin="use-credentials"`); start_url lleva `&u=` para dejar el usuario escrito si falla.
+  `vip_inst` (Path=/manifest.json, el link del manifest va con `crossorigin="use-credentials"`); start_url lleva `&u=` para dejar el usuario escrito si falla. **#1138-o:** la llave también va en la cookie `vip_inst2` (Path=/api/auth/access-link): la app instalada sin sesión ni `?acceso=` hace `POST /api/auth/access-link` sin token y la canjea; y antes de la guía de iPhone se recarga UNA vez si la página cargó sin la llave (`installNeedsReload`, `localStorage vip_inst_ck`).
 - **FUEGUITO: PLAZO por hito (#885):** `milestone.depositDays` = días para llegar a los fueguitos Y completar el rollover (día×2 por defecto);
   vencido, el premio pendiente se pierde y arranca un tramo nuevo (`_fireDeadline`, gracia desde `Config['firePlazoSince']`).
 - **FUEGUITO por ROLLOVER (#654, 2026-10-20):** el premio de cada hito se cobra habiendo APOSTADO `milestone.rollover` (stats de la

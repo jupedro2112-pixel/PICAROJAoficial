@@ -789,6 +789,8 @@ VIP.ui = (function () {
     }
 
     function showInstallInstructions(platform) {
+        // #1138-o: iPhone ⇒ si la página cargó antes de que existiera la llave de instalación, se recarga una vez con la llave y la guía vuelve sola.
+        try { if (platform === 'ios' && VIP.home && VIP.home.installNeedsReload && VIP.home.installNeedsReload()) { VIP.home.installReloadThenGuide(); return; } } catch (_) {}
         try { if (VIP.home && VIP.home.installManifestSync) VIP.home.installManifestSync(); } catch (_) {} // #826: token fresco antes de "Agregar a inicio"
         const modal = document.createElement('div');
         modal.className = 'ios-install-modal';

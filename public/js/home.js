@@ -892,6 +892,8 @@
         _mirrorHeadBits();
         _watchHeadBits();
         setTimeout(installManifestSync, 1500); // #673
+        // #1138-o: volvió de la recarga previa a "Agregar a inicio" ⇒ la guía de instalación se abre sola.
+        try { if (sessionStorage.getItem('vip_reopen_ios_install')) { sessionStorage.removeItem('vip_reopen_ios_install'); setTimeout(() => { try { VIP.ui.showInstallInstructions('ios'); } catch (_) {} }, 1800); } } catch (_) {}
     }
     // Cartel: el texto ya viene renderizado del server ({pct} resuelto). text === null ⇒ vaciado en
     // COMANDOS → sólo el título. El "N%" se resalta en verde.
@@ -2578,6 +2580,26 @@
     // (que iOS captura al instalar) lleva un token de acceso de un solo uso del propio cliente + el menú elegido, y la app instalada
     // arranca logueada (auth.js tryAccessLink) con el mismo menú; Girox abre con SSO. Token cacheado 7 días por usuario.
     function _isIOS() { try { return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; } catch (_) { return false; } }
+    // #1138-o (iPhone): Safari puede leer el manifest UNA vez, al cargar la página. Si en ese momento todavía no existía la llave de instalación
+    // (cookie vip_inst, recién se crea después del login), la app instalada abre SIN sesión. `_instCkAtLoad` = para qué usuario ya existía la
+    // llave cuando cargó esta página; si no coincide, antes de mostrar "Agregar a inicio" se recarga UNA vez (con la llave ya puesta) y se vuelve
+    // a abrir la guía sola.
+    let _instCkAtLoad = null; try { _instCkAtLoad = localStorage.getItem('vip_inst_ck'); } catch (_) {}
+    function installNeedsReload() {
+        try {
+            if (!_isIOS() || _isStandalone()) return false;
+            const u = VIP.state && VIP.state.currentUser && VIP.state.currentUser.username; if (!u) return false;
+            if (_instCkAtLoad === u) return false;
+            if (sessionStorage.getItem('vip_ios_inst_reloaded')) return false; // nunca más de una recarga por pestaña
+            return true;
+        } catch (_) { return false; }
+    }
+    async function installReloadThenGuide() {
+        try { sessionStorage.removeItem('vip_install_tok2'); } catch (_) {}
+        await installManifestSync();
+        try { sessionStorage.setItem('vip_ios_inst_reloaded', '1'); sessionStorage.setItem('vip_reopen_ios_install', '1'); } catch (_) {}
+        location.reload();
+    }
     async function installManifestSync() {
         try {
             if (!_isIOS() || _isStandalone()) return;
@@ -2591,6 +2613,7 @@
                 const r = await fetch(VIP.config.API_URL + '/api/auth/install-link', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tk }, credentials: 'same-origin' });
                 const j = await r.json(); if (!r.ok || !j.token) return;
                 c = { u, t: j.token, at: Date.now() }; try { sessionStorage.setItem('vip_install_tok2', JSON.stringify(c)); } catch (_) {}
+                try { localStorage.setItem('vip_inst_ck', u); } catch (_) {} // #1138-o: la cookie con la llave ya existe para este usuario
             }
             const pref = _menuOn('girox') ? 'girox' : getMenuPref(), fixed = isMenuFixed(); // #937: la app instalada arranca en Girox
             const href = '/manifest.json?a=' + encodeURIComponent(c.t) + '&u=' + encodeURIComponent(u) + (pref ? '&menu=' + pref + (fixed ? '&fixed=1' : '') + (_userPickedMenu() ? '&picked=1' : '') : ''); // #980
@@ -3372,6 +3395,7 @@
         notifCtaGo: notifCtaGo, notifCtaClose: notifCtaClose, // #892
         get platformsData() { return _platforms; } };
     VIP.home.installManifestSync = installManifestSync; // #826
+    VIP.home.installNeedsReload = installNeedsReload; VIP.home.installReloadThenGuide = installReloadThenGuide; // #1138-o
     VIP.home.casinoSms = casinoSms; VIP.home.paintCtSms = _paintCtSms; // #1092
     VIP.home.modalIntoCasino = _modalIntoCasino; // #1091: el sorteo (Anotate desde la hoja chica de Girox) se abre ADENTRO del casino
     Object.assign(VIP.home, { favOpenPicker, favClosePicker, favSearch, favMore, favToggle, favToggleTop, favPlay }); // #840

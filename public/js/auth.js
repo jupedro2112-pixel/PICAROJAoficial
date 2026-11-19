@@ -717,10 +717,18 @@ VIP.auth = (function () {
         } catch (e) {}
         // #1044-d: botón "Anotarme gratis" del canal de Telegram (?ir=sorteo, sin token de acceso): abre Sorteos al entrar. Se saca de la URL.
         try { const _sp = new URLSearchParams(window.location.search); if (_sp.get('ir') === 'sorteo') { VIP.state._openSorteoAfterLogin = true; _sp.delete('ir'); history.replaceState(null, '', window.location.pathname + (_sp.toString() ? '?' + _sp.toString() : '') + window.location.hash); } } catch (e) {}
-        if (!token) return false;
+        // #1138-o (owner: "instalo la app en Safari del iPhone y no queda iniciada"): app INSTALADA sin sesión y sin ?acceso= ⇒ se prueba la llave
+        // de instalación que dejó Safari en la cookie vip_inst2 (si el iPhone copió las cookies al instalar). Sin cookie ⇒ sigue al login, sin aviso.
+        let _ck = false;
+        if (!token) {
+            let sa = false; try { sa = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; } catch (_) {}
+            if (!sa || localStorage.getItem('userToken')) return false;
+            try { if (sessionStorage.getItem('vip_ck_tried')) return false; sessionStorage.setItem('vip_ck_tried', '1'); } catch (_) {}
+            _ck = true;
+        }
         // #673: la app instalada abre SIEMPRE con el mismo ?acceso= (start_url): si ya tiene sesión propia, el token ya se canjeó →
         // se ignora en silencio (sin toast de "link usado") y sigue con la sesión guardada.
-        if (localStorage.getItem('userToken')) { try { history.replaceState(null, '', window.location.pathname); } catch (e) {} return false; }
+        if (!_ck && localStorage.getItem('userToken')) { try { history.replaceState(null, '', window.location.pathname); } catch (e) {} return false; }
 
         // `ir=casino` (link de la landing): abrir el casino DIRECTO al loguear.
         // Se lee ANTES de limpiar la URL; verifyToken() lo consume tras showChatScreen.
@@ -734,7 +742,7 @@ VIP.auth = (function () {
 
         // Sacar el token de la URL YA MISMO: es de un solo uso y no tiene que
         // quedar en el historial ni compartirse por accidente.
-        try { history.replaceState(null, '', window.location.pathname); } catch (e) {}
+        if (!_ck) { try { history.replaceState(null, '', window.location.pathname); } catch (e) {} }
 
         // #831 (owner: "la gente nueva que se registre tiene que entrar logueada"): corte de red, servidor ocupado (429/5xx) o respuesta que
         // no es JSON (página de Cloudflare) ⇒ se reintenta solo hasta 5 veces antes de rendirse. Un 401/400 (link inválido) no se reintenta.
@@ -746,7 +754,8 @@ VIP.auth = (function () {
                 const response = await fetch(`${VIP.config.API_URL}/api/auth/access-link`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token })
+                    credentials: 'same-origin',
+                    body: JSON.stringify(_ck ? {} : { token })
                 });
                 let data = null; try { data = await response.json(); } catch (_) { data = null; }
                 if (response.ok && data && data.token) {
@@ -760,6 +769,7 @@ VIP.auth = (function () {
                 lastErr = 'retry';
             } catch (e) { lastErr = 'retry'; }
         }
+        if (_ck) return false; // #1138-o: sin llave ⇒ login normal, sin cartel
         // #831: último recurso — recién registrado desde la landing de este mismo dominio: entra con el usuario y la clave que acaba de recibir.
         if (await _loginWithSignupCreds()) return true;
         // #826: en la app recién instalada (trae ?u=) no se muestra "link usado": el login ya tiene el usuario escrito y pide la clave.
