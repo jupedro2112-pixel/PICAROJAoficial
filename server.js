@@ -2541,6 +2541,7 @@ async function _hgcashRecoveryPass() {
     _hgcashRecoveryAt = Date.now();
     const cfg = await getHgcashConfig();
     if (!cfg.enabled) return;
+    try { await _hgcashReviveFalseDuplicates(); } catch (e) { logger.warn(`[hgcash] revivir falsos duplicados: ${e.message}`); } // #1145
     const since = new Date(Date.now() - (cfg.windowMinutes || 60) * 60 * 1000);
     const pend = await Comprobante.find({ isComprobante: true, autoCharged: { $ne: true }, status: { $ne: 'duplicate' }, reviewStatus: 'pending',
       bankMatchStatus: { $in: ['none', 'pending'] }, amount: { $gt: 0 }, createdAt: { $gte: since, $lte: new Date(Date.now() - 60 * 1000) } }).sort({ createdAt: 1 }).limit(120) /* #1144: ponerse al día tras una caída (antes 30 por pasada) */.lean();
@@ -3882,6 +3883,38 @@ async function _platformChoiceTick() {
 // NO tiene API conectada (ej. Ganamos hoy) → `_platformRedirectUser` (link externo,
 // NO se mueve plata acá). Si la tiene → candado por coelsa + red de seguridad +
 // depósito por el ADAPTADOR de esa plataforma (misma reference `vip-hg-*`).
+// #1145: ¿el candado `HgcashCharge` de esta transferencia corresponde a una carga que de verdad SE HIZO? Si la carga quedó colgada (reinicio,
+// plataforma sin responder) el candado queda puesto sin carga y todo reintento caía en "DUPLICADO bloqueado" sin haber acreditado nunca.
+// Hay rastro si: algún movimiento de esa transferencia quedó acreditado (auto o a mano), o el cliente recibió una carga del mismo monto
+// desde que se puso el candado (también cubre al agente que la cargó a mano mientras tanto). Sin rastro y con +5 min ⇒ candado huérfano.
+const HG_LOCK_STALE_MS = 5 * 60 * 1000;
+async function _hgChargeLockOrphan(chargeKey, lock) {
+  if (!chargeKey || !lock) return false;
+  const at = new Date(lock.updatedAt || lock.createdAt || 0).getTime();
+  if (!at || Date.now() - at < HG_LOCK_STALE_MS) return false; // puede estar cargándose ahora mismo
+  const or = [{ coelsaCode: chargeKey }, { externalId: chargeKey }];
+  if (lock.movementId) or.push({ movementId: lock.movementId });
+  if (await BankMovement.exists({ matchStatus: { $in: ['auto_charged', 'manual_charged'] }, $or: or })) return false;
+  const since = new Date(new Date(lock.createdAt || at).getTime() - 60 * 1000);
+  if (lock.userId && await Transaction.exists({ userId: lock.userId, type: 'deposit', amount: Number(lock.amount), timestamp: { $gte: since } })) return false;
+  return true;
+}
+// Movimientos que quedaron marcados 'duplicate' por un candado huérfano vuelven a pendiente (los toma la recuperación de cada 3 min).
+async function _hgcashReviveFalseDuplicates() {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await BankMovement.find({ direction: 'Inbound', matchStatus: 'duplicate', chargeError: /^duplicado: coelsa/, updatedAt: { $gte: since, $lte: new Date(Date.now() - HG_LOCK_STALE_MS) } }).sort({ updatedAt: 1 }).limit(200).lean();
+  let n = 0;
+  for (const m of rows) {
+    const key = String(m.coelsaCode || m.externalId || '').trim(); if (!key) continue;
+    const lock = await HgcashCharge.findOne({ chargeKey: key }).lean();
+    if (!lock || !(await _hgChargeLockOrphan(key, lock))) continue;
+    const r = await BankMovement.updateOne({ movementId: m.movementId, matchStatus: 'duplicate' }, { $set: { matchStatus: 'pending', chargeError: null } });
+    if (!(r.modifiedCount || r.nModified)) continue;
+    if (m.matchedComprobanteId) await Comprobante.updateOne({ id: m.matchedComprobanteId, autoCharged: { $ne: true }, bankMatchStatus: 'duplicate' }, { $set: { bankMatchStatus: 'pending' } });
+    n++;
+  }
+  if (n) logger.warn(`[hgcash] recuperación: ${n} transferencia(s) marcadas "duplicado" SIN haberse acreditado vuelven a pendiente`);
+}
 async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId, by = 'direct' }) {
   const amount = movement.amount;
   const opDesc = `op. hgcash ${movement.coelsaCode || movement.externalId || movement.movementId}`;
@@ -3918,6 +3951,18 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
       chargeLocked = true;
     } catch (lockErr) {
       if (lockErr && lockErr.code === 11000) {
+        // #1145: candado HUÉRFANO (la carga anterior quedó colgada y nunca acreditó) ⇒ esta pasada lo toma y carga. Es seguro: la reference
+        // `vip-hg-<chargeKey>` es la misma, así que si 1girox ya la tenía responde duplicate y no acredita dos veces.
+        try {
+          const old = await HgcashCharge.findOne({ chargeKey }).lean();
+          if (old && await _hgChargeLockOrphan(chargeKey, old)) {
+            const took = await HgcashCharge.findOneAndUpdate({ chargeKey, updatedAt: old.updatedAt },
+              { $set: { userId: user.id, username: user.username, amount: Number(amount), movementId: movement.movementId, comprobanteId: comprobante.id, platform: pid } }, { new: true });
+            if (took) { chargeLocked = true; logger.warn(`[hgcash] candado huérfano retomado coelsa=${chargeKey} user=${user.username} (la carga anterior nunca se acreditó)`); }
+          }
+        } catch (e) { logger.warn(`[hgcash] chequeo de candado huérfano falló: ${e.message}`); }
+      }
+      if (!chargeLocked && lockErr && lockErr.code === 11000) {
         // Esta transferencia YA fue acreditada → NO recargar (duplicado real).
         await BankMovement.updateOne({ movementId: movement.movementId },
           { $set: { matchStatus: 'duplicate', matchedUserId: user.id, matchedUsername: user.username, matchedComprobanteId: comprobante.id, chargeError: `duplicado: coelsa ${chargeKey} ya acreditada` } });
@@ -3928,7 +3973,7 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
         return;
       }
       // Otro error de DB: no bloqueamos la carga por eso (la red de seguridad de abajo igual protege).
-      logger.warn(`[hgcash] no se pudo crear el candado de carga (coelsa=${chargeKey}): ${lockErr.message}`);
+      if (!chargeLocked) logger.warn(`[hgcash] no se pudo crear el candado de carga (coelsa=${chargeKey}): ${lockErr.message}`);
     }
   }
 

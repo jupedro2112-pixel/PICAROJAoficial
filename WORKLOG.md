@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1144)
+> **Última actualización: 2026-11-19** (#1145)
 
 ## Sesión 2026-11-09
 
@@ -15047,3 +15047,17 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Para lo atrasado de más de 1 h: ampliar un rato la ventana en Comandos → Banco automático (hasta 1440 min) y volverla a 60 cuando la cola quede en 0.
 - El 20 % de disculpa: con lo que ya hay (panel → Notificaciones → Lote con regalo, audiencia "cargadores" del día, % en la próxima carga, texto de disculpa);
   no se agregó un regalo automático nuevo en medio del incidente.
+
+### 1145. Transferencias marcadas "DUPLICADO" sin haberse acreditado nunca (candado huérfano) — sólo server
+- Owner: "mucho está rechazando el cargar automático porque lo toma como duplicado"; "por esta vez liberá el duplicado, pero después que quede como antes".
+- Logs: 59 `[hgcash] DUPLICADO bloqueado coelsa=…` entre 03:00 y 04:00 UTC, justo desde que dejaron de salir las cargas. Mecanismo: la carga pone el candado
+  `HgcashCharge` y DESPUÉS llama a 1girox; al quedar colgada (#1143) o cortarse por un reinicio, el candado quedaba puesto sin carga. A los 10 min el movimiento
+  volvía a pendiente, chocaba con su propio candado y quedaba `duplicate` "ya acreditada" (nunca lo estuvo), fuera de toda recuperación.
+- Arreglo (queda fijo, no hace falta "volver a como antes": el duplicado REAL se sigue bloqueando igual):
+  · `_hgChargeLockOrphan(chargeKey, lock)`: candado de +5 min SIN rastro de carga (ningún movimiento de esa transferencia acreditado auto/manual, ni una carga
+    del mismo monto al cliente desde que se puso el candado, lo que cubre al agente que cargó a mano) ⇒ huérfano.
+  · En `_hgcashCreditToPlatform`, un 11000 con candado huérfano lo retoma (atómico por `updatedAt`) y carga con la MISMA reference `vip-hg-*` (1girox no duplica).
+  · `_hgcashReviveFalseDuplicates` (en la recuperación de cada 3 min): los movimientos `duplicate` de las últimas 24 h con candado huérfano vuelven a `pending`
+    junto con su comprobante ⇒ se acreditan solos.
+- Regla: un paso NUEVO entre el candado `HgcashCharge` y la carga no puede dejar el candado puesto si no se acreditó.
+- Sólo `node --check`; sin probar en vivo.
