@@ -42,7 +42,7 @@ caso('Plata: reserva atómica antes de cargar, reference estable vip-adv-<compro
 });
 caso('Verificación: sola cuando entra la transferencia (candado HgcashCharge), o a mano; el cliente queda de confianza y sus retiros se re-chequean', () => {
   const v = fn('_advanceVerify'), r = fn('_advanceReconcile');
-  assert.ok(/ms\.length === 1 && await _advanceVerify/.test(r), 'sólo con UNA transferencia que coincide');
+  assert.ok(/ms\.length === 1 && await _advanceVerify/.test(r) && /_advanceMovementFits\(c, m, hg\)/.test(r), 'sólo con UNA transferencia que coincide y de la época del comprobante');
   assert.ok(/matchStatus: 'pending' \}, \{ \$set: \{ matchStatus: 'claiming'/.test(v) && /HgcashCharge\.create/.test(v) && /matchStatus: 'auto_charged'/.test(v), 'consume el movimiento con el candado');
   assert.ok(/receiptTrusted: \{ at: new Date\(\), by \}/.test(v), 'queda de confianza');
   assert.ok(/reviewReason: \/ADELANTADA\//.test(v) && /fraudRecheck: \{ n: 0/.test(v), 'retiros frenados vuelven al re-chequeo');
@@ -74,7 +74,7 @@ caso('#1150 No llegó + OTRA cuenta (o "Trucho") ⇒ cuenta cerrada y celular bl
   assert.ok(/const link = await _advanceOtherAccount\(c\.userId\);/.test(j) && /if \(link \|\| \(opts && opts\.close\)\) closed = await _advanceCloseAccount/.test(j));
   assert.ok(/_dupAccountCheck\(u0, 'adelantada-no-llego'\);/.test(o), 're-chequeo SIN los datos del comprobante rechazado');
   assert.ok(/_blockUserAccount\(u\.id, why, by/.test(k) && /_phoneBanUser\(u, by, why\)/.test(k), 'bloqueo con historial + celular');
-  assert.ok(/if \(await _phoneBanned\(phone\)\) return \{ success: false, banned: true/.test(S), 'no se le manda código');
+  assert.ok(/\['register', 'verify-phone'\]\.includes\(String\(purpose\)\) && await _phoneBanned\(phone\)\) return \{ success: false, banned: true/.test(S), 'no se le manda código para registrarse');
   assert.ok(/code: 'PHONE_BANNED', error: PHONE_BAN_MSG \}; \/\/ #1150/.test(S), 'ni confirma sin SMS');
   assert.strictEqual((S.match(/if \(await _phoneBanned\(req\.body && req\.body\.phone\)\) return res\.status\(403\)/g) || []).length, 2, 'alta y entrada rápida');
   assert.ok(/_phoneUnbanUser\(user\.id\)/.test(S), 'desbloquear la cuenta libera el celular');
@@ -90,6 +90,24 @@ caso('#1150 Cierre: la adelantada es carga automática, se separa (sin verificar
   const k = S.indexOf('function _closeCheck('), ck = S.slice(k, k + 6000);
   assert.ok(/it\('adelantadas', 'Cargas adelantadas \(banco caído\) verificadas', !_bad/.test(ck), 'el cierre no da OK con adelantadas sin verificar o perdidas');
   assert.ok(/_advanceCloseRecalc\(c, movement\)/.test(S) && /_closeEnsure\(k, true\)/.test(S), 'el cierre viejo se recalcula al verificar');
+});
+caso('#1151 Revisión: sin doble carga (prioridad de la adelantada, repetido del mismo pago, intento normal previo) y la adelantada fallida vuelve pendiente', () => {
+  const mm = fn('hgcashMatchFromMovement'), ac = fn('hgcashAutoCarga'), f = fn('_advanceFinish'), tk = fn('_advanceTakeMovement');
+  assert.ok(/if \(await _advanceTakeMovement\(movement, cfg\)\) return;/.test(mm) && mm.indexOf('_advanceTakeMovement') < mm.indexOf('const candidates'), 'la transferencia se ofrece primero a la adelantada');
+  assert.ok(/rows\.length !== 1\) return false/.test(tk) && /_advanceMovementFits\(c, movement, hg\)/.test(tk));
+  assert.ok(/'advance\.status': \{ \$in: \['claiming', 'unverified'\] \}, amount: \{ \$gte: amt - 1, \$lte: amt \+ 1 \}/.test(ac) && /reviewResolution: 'duplicate'/.test(ac) && ac.indexOf('_advanceVerify(adv') < ac.indexOf('matchStatus: \'claiming\''), 'otro comprobante del mismo pago no carga de nuevo');
+  assert.ok(/advance: null, matchedMovementId: null,/.test(S) && /bankMatchStatus: \{ \$in: \['none', 'pending'\] \}, matchedMovementId: null \}/.test(fn('_advanceCredit')), 'atado a una transferencia ⇒ no se adelanta');
+  assert.ok(/autoCharged: false, reviewStatus: 'pending', reviewResolution: null[^\n]*'advance\.status': 'failed'/.test(f), 'fallida ⇒ pendiente de nuevo');
+  assert.ok(/reviewStatus: 'pending', autoCharged: true, 'advance\.status': \{ \$ne: 'claiming' \}/.test(fn('_depositReviewTick')), 'el cron no confirma una reserva a medias');
+  assert.ok(/code: 'BANK_ALREADY_CHARGED' \}\);\n      \} catch \(e\) \{ logger\.warn\(`\[deposit-reviews\/confirm\] chequeo adelantada/.test(S), 'la confirmación a mano avisa');
+});
+caso('#1151 Revisión: banco caído sin falsos positivos, vínculos sin datos de adelantadas no verificadas, celular sólo propio', () => {
+  const b = fn('_bankInboundState'), t = fn('_advanceTick');
+  assert.ok(/now - lastInAt > 6 \* 60000/.test(b) && /lastInAt - 15 \* 60000/.test(b) && /'autoLoadOff\.at': null/.test(b), 'espera = clientes con historial y comprobantes de la caída');
+  assert.ok(/if \(!st\.manual && st\.lastInAt\) cq\.createdAt\.\$gte/.test(t), 'no se adelantan comprobantes viejos');
+  assert.ok(/const CQ = \{ 'advance\.status': \{ \$nin: \['claiming', 'unverified', 'rejected', 'failed'\] \}/.test(S));
+  assert.ok(/via: \{ \$in: \['sms', 'historico'\] \}/.test(S) && /!== key && await _phoneBanned\(phone\)/.test(S));
+  assert.ok(/movement \? \{\} : \{ 'advance\.status': 'unverified' \}/.test(fn('_advanceVerify')), 'Llegó a mano es condicional');
 });
 console.log(`\n${ok}/${total} casos OK`);
 process.exit(ok === total ? 0 : 1);

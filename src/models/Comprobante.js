@@ -105,4 +105,5 @@ comprobanteSchema.index({ dedupeKey: 1, isComprobante: 1 });
 
 comprobanteSchema.index({ reviewStatus: 1, createdAt: 1 }); // #957: cola de Cargas pendientes
 comprobanteSchema.index({ 'advance.status': 1, createdAt: -1 }, { sparse: true }); // #1149
+comprobanteSchema.index({ 'advance.movementId': 1 }, { sparse: true }); // #1151: el cierre busca las adelantadas por su transferencia
 module.exports = mongoose.models['Comprobante'] || mongoose.model('Comprobante', comprobanteSchema);

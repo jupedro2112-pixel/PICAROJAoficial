@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1150)
+> **Última actualización: 2026-11-19** (#1151)
 
 ## Sesión 2026-11-09
 
@@ -15159,3 +15159,30 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - ⚠️ Límites: el bloqueo es por CELULAR (no por dispositivo ni por CBU); en modo de registro sin celular (landing de publicista que no lo pide) el
   bloqueo recién actúa cuando carga un número (para retirar). Una adelantada verificada A MANO cuya transferencia el sistema todavía no enganchó
   deja ese día una "entrada sin acreditar" hasta que `_advanceReconcile` la engancha sola (4 días).
+
+### 1151. Revisión de punta a punta de #1149/#1150: huecos de doble carga, falsos "banco caído", bloqueo de celular a inocentes (2026-11-19)
+- **Owner:** "armame un PDF con todo explicado cómo funciona, y mientras tanto revisá todo de punta a punta". La revisión la hizo una lectura
+  independiente del código (sin el contexto de quien lo escribió); cada hallazgo se verificó contra el código antes de corregir.
+- **Plata (corregido):** (1) adelantada que falla 5 veces quedaba `failed` + `reviewStatus:'confirmed'` (el cron `_depositReviewTick` confirmaba
+  toda `autoCharged` pendiente) ⇒ la transferencia real no la tomaba nadie. Ahora el cron saltea `advance.status:'claiming'` y la fallida vuelve
+  `pending`. (2) Una transferencia, dos cargas: el match normal podía darle la transferencia a OTRO comprobante del mismo pago ⇒
+  `_advanceTakeMovement` al principio de `hgcashMatchFromMovement` (la adelantada tiene prioridad), guard en `hgcashAutoCarga` (mismo cliente +
+  mismo monto con adelantada sin verificar ⇒ se verifica ésa y el comprobante se cierra `duplicate`) y 409 `BANK_ALREADY_CHARGED` en la
+  confirmación a mano. (3) Comprobante con intento normal fallido (`matchedMovementId` puesto, reference `vip-hg-*`) ya no se adelanta.
+- **Banco caído (corregido):** el "silencio" cuenta sólo clientes con historial verificado, con carga automática activa y comprobantes
+  posteriores a la última transferencia (−15 min); la señal por consulta exige además 6 min sin entradas; detectado solo ⇒ sólo se adelantan
+  comprobantes de la caída (a mano: ventana completa de 90 min).
+- **Verificación (corregido):** `_advanceMovementFits` exige que la FECHA DEL BANCO de la transferencia sea del momento del comprobante (hasta
+  +4 h; sin fecha, +24 h): una transferencia real de días después ya no "verifica" una adelantada falsa. "Llegó" a mano es condicional
+  (dos agentes a la vez). Retiros frenados por la adelantada sólo se liberan si tienen menos de 20 h (el re-chequeo toma hasta 24 h).
+- **Celular / vínculos (corregido):** se bloquean el número actual y los verificados por SMS (no los tipeados sin código); el bloqueo frena
+  `register` / `verify-phone` y un número NUEVO en `_phoneConfirmNoSms`, no el ingreso ni el recupero de una cuenta existente.
+  `_dupAccountCheck` ignora comprobantes con `advance.status` claiming/unverified/rejected/failed (un trucho no vincula a un tercero).
+  Elegibilidad: un reenvío cerrado solo como repetido (`reviewResolution:'duplicate'`) ya no deja al cliente 30 días sin adelanto.
+- **Sabido y NO cambiado:** cierre automático por "No llegó" + otra cuenta aunque sea demora del banco (pedido del owner); arqueo con sobrante
+  si un "Llegó" a mano nunca engancha la transferencia; bono sin Transaction si el server se reinicia a mitad de una adelantada con bono;
+  "una sin verificar por cliente" no es atómico entre instancias (lo acota `maxOpenArs`); `HgcashCharge` duplicado reintenta 4 días.
+- **PDF para el owner** (fuera del repo, se pierde al reiniciar Tails): se regenera con el script del scratchpad; el contenido es este WORKLOG
+  (#1149-#1151) en lenguaje llano.
+- **Validación:** `test-advance-load` 13/13 (2 casos nuevos), soporte 18/18, payout 8/8, receipt-match 11/11, cierre 9/9, dup 11/11, 1053 9/9,
+  1090 13/13, `node --check`. **Sin probar en vivo. Necesita deploy en los dos AWS.**

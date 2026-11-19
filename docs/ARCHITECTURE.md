@@ -2212,3 +2212,12 @@ comprobante y se verifica después. Detalle de decisiones en WORKLOG #1149.
   datos del comprobante) → `_advanceCloseAccount` = `_blockUserAccount` + `_phoneBanUser`. Devuelve `{closed, other, phones}`.
 - **`phone_bans`** (colección cruda, llave `tail` = últimos 10 dígitos): `_phoneBanned` en `generateAndSendOTP`, `_phoneConfirmNoSms`,
   `POST /api/auth/register` y `/api/auth/quick-entry`. `_phoneUnbanUser` al desbloquear. Un camino NUEVO que acepte un celular tiene que consultarla.
+
+### #1151 — revisión (reglas que no hay que perder)
+- La transferencia que entra se ofrece PRIMERO a la adelantada (`_advanceTakeMovement` en `hgcashMatchFromMovement`); `hgcashAutoCarga` no
+  carga otro comprobante del mismo cliente y monto mientras haya una adelantada sin verificar (lo cierra `duplicate`).
+- `_advWaitingQ` y `_advanceCredit` exigen `matchedMovementId: null`; `_depositReviewTick` no confirma `advance.status:'claiming'`; la
+  adelantada `failed` vuelve `reviewStatus:'pending'`.
+- `_advanceMovementFits`: match normal + fecha del banco cercana al comprobante. `_bankInboundState` devuelve `lastInAt` y el tick acota los
+  candidatos a la caída.
+- `phone_bans`: sólo números propios (actual + SMS); corta `register` / `verify-phone` / número nuevo.

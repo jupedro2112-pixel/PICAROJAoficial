@@ -466,6 +466,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   **#1150:** el cierre separa las adelantadas (`adv_pend` / `adv_perdida` / `adv_otro_dia` / `adv_entro_hoy`; `DailyClose.adelantadas*`) y no da OK
   con una sin verificar o perdida: un cambio en `Comprobante.advance` tiene que seguir cuadrando con `_closeReconcile`. "No llegó" de un cliente con
   OTRA cuenta (o botón ⛔ Trucho) ⇒ cuenta cerrada + celular en `phone_bans`; un camino NUEVO que acepte un celular consulta `_phoneBanned`.
+  **#1151:** un camino NUEVO que acredite una transferencia entrante pasa antes por `_advanceTakeMovement` (la adelantada tiene prioridad) y uno
+  que tome comprobantes pendientes respeta `advance` / `matchedMovementId` (si no: una transferencia, dos cargas).
 - **BANCO AUTOMÁTICO BLINDADO (#1012):** `getConfig` devuelve el default si la base falla ⇒ NUNCA leer→mezclar→guardar `Config['hgcash']` entero
   (lo apagaba solo). Cambios puntuales con `_hgcashSetFields`; sólo el panel guarda el objeto (con `confirmOff` para apagar). `_hgcashGuardTick`
   restaura `Config['hgcashLastGood']` si aparece apagado sin `manualOff`. Misma trampa para cualquier Config crítica: usar $set de campo.

@@ -93,10 +93,10 @@ async function _phoneConfirmNoSms(userId, phoneRaw, source) {
   const phone = String(phoneRaw || '').trim();
   if (!validateInternationalPhone(phone)) return { ok: false, status: 400, error: 'Número de celular inválido.' };
   const key = normalizePhoneKey(phone);
-  if (await _phoneBanned(phone)) return { ok: false, status: 403, code: 'PHONE_BANNED', error: PHONE_BAN_MSG }; // #1150
   const taken = await User.findOne({ phoneKey: key, phoneVerified: true, id: { $ne: userId } }).select('_id').lean();
   if (taken) return { ok: false, status: 400, code: 'PHONE_TAKEN', error: 'Este número ya está vinculado a otra cuenta. Ingresá con esa cuenta o usá otro número.' };
   const u = await User.findOne({ id: userId }).select('id username phone phoneKey phoneVerified').lean(); if (!u) return { ok: false, status: 404, error: 'Usuario no encontrado' };
+  if ((u.phoneKey || normalizePhoneKey(u.phone || '')) !== key && await _phoneBanned(phone)) return { ok: false, status: 403, code: 'PHONE_BANNED', error: PHONE_BAN_MSG }; // #1150 (#1151: sólo un número NUEVO)
   // Revisión #1029: un número cargado SIN código nunca queda "verificado". Si el cliente cambia el número, pierde la verificación anterior
   // (si no, uno verificado podía apropiarse del número de otro y dejarlo sin retiros ni recupero de clave).
   const changed = (u.phoneKey || normalizePhoneKey(u.phone || '')) !== key;
@@ -136,7 +136,7 @@ async function _phoneBanned(phone) {
 async function _phoneBanUser(u, by, reason) {
   const tails = new Set(); const add = (x) => { const t = _phoneTail(x); if (t) tails.add(t); };
   add(u.phone); add(u.phoneKey);
-  try { (await PhoneLog.distinct('phone', { userId: String(u.id) })).forEach(add); } catch (_) {}
+  try { (await PhoneLog.distinct('phone', { userId: String(u.id), via: { $in: ['sms', 'historico'] } })).forEach(add); } catch (_) {} // #1151: los tipeados sin código pueden ser de otra persona
   const col = mongoose.connection.collection('phone_bans');
   for (const t of tails) {
     try { await col.updateOne({ tail: t }, { $setOnInsert: { tail: t, userId: String(u.id), username: u.username || null, by: by || '?', reason: String(reason || '').slice(0, 300), at: new Date() } }, { upsert: true }); } catch (e) { logger.warn('[phone-ban] ' + e.message); }
@@ -145,7 +145,8 @@ async function _phoneBanUser(u, by, reason) {
 }
 async function _phoneUnbanUser(userId) { try { const r = await mongoose.connection.collection('phone_bans').deleteMany({ userId: String(userId) }); return (r && r.deletedCount) || 0; } catch (_) { return 0; } }
 async function generateAndSendOTP(phone, purpose) {
-  if (await _phoneBanned(phone)) return { success: false, banned: true, error: PHONE_BAN_MSG }; // #1150
+  // #1151: el bloqueo frena ALTAS y números NUEVOS en una cuenta; no el ingreso / recupero de clave / retiro de una cuenta que ya existe.
+  if (['register', 'verify-phone'].includes(String(purpose)) && await _phoneBanned(phone)) return { success: false, banned: true, error: PHONE_BAN_MSG }; // #1150
   if (!(await getSmsEnabled())) return { success: false, smsOff: true, error: await _smsOffText() };
   return _otpSendRaw(phone, purpose);
 }
@@ -2147,7 +2148,7 @@ async function _dupAccountCheck(userIn, origin, opts = {}) {
       addPayer(opts.cuit, opts.name);
       (await BankMovement.find({ matchedUserId: u.id, direction: { $ne: 'Outbound' } }).select('fromCBU fromCUIT fromName').sort({ createdAt: -1 }).limit(30).lean()).forEach((m) => { if (dig(m.fromCBU).length >= 10) cbus.add(dig(m.fromCBU)); addPayer(m.fromCUIT, m.fromName); });
       // #1033 (revisión): la carga MANUAL (Cargas pendientes / a mano) no deja BankMovement.matchedUserId ⇒ también cuentan los COMPROBANTES acreditados.
-      const CQ = { $or: [{ bankMatchStatus: { $in: ['auto_charged', 'manual_charged'] } }, { reviewStatus: 'confirmed' }] };
+      const CQ = { 'advance.status': { $nin: ['claiming', 'unverified', 'rejected', 'failed'] }, $or: [{ bankMatchStatus: { $in: ['auto_charged', 'manual_charged'] } }, { reviewStatus: 'confirmed' }] }; // #1151: una adelantada no verificada no prueba quién pagó
       try { (await Comprobante.find({ userId: u.id, ...CQ }).select('originCbu originCuit originHolder').sort({ createdAt: -1 }).limit(30).lean()).forEach((c) => { if (dig(c.originCbu).length >= 10) cbus.add(dig(c.originCbu)); addPayer(c.originCuit, c.originHolder); }); } catch (_) {}
       const otherIds = async (q) => (await BankMovement.distinct('matchedUserId', { direction: { $ne: 'Outbound' }, matchedUserId: { $nin: [null, u.id] }, ...q })).filter(Boolean).slice(0, 20).map(String);
       if (cuits.size) (await otherIds({ fromCUIT: { $in: [...cuits].slice(0, 6).flatMap((c) => [c, c.slice(0, 2) + '-' + c.slice(2, 10) + '-' + c.slice(10)]) } })).forEach((id) => cuitIds.add(id));
@@ -2664,7 +2665,7 @@ async function _depositReviewTick() {
   try {
     if (!(await _cronClaim('depreview', 50 * 1000))) return; // revisión #1124: una instancia por pasada
     const cfg = await getDepositReviewConfig();
-    await Comprobante.updateMany({ reviewStatus: 'pending', autoCharged: true },
+    await Comprobante.updateMany({ reviewStatus: 'pending', autoCharged: true, 'advance.status': { $ne: 'claiming' } }, // #1151: la adelantada a medias no está acreditada todavía
       { $set: { reviewStatus: 'confirmed', reviewResolution: 'auto', reviewedBy: 'auto', reviewedAt: new Date() } });
     const since = new Date(Date.now() - 72 * 3600 * 1000);
     const limit = new Date(Date.now() - cfg.escalateMinutes * 60 * 1000);
@@ -2916,7 +2917,7 @@ async function getAdvanceConfig() {
     forceUntil: fu && !isNaN(fu) && fu > new Date() ? fu : null };
 }
 let _hgPollOkAt = 0, _hgPollFails = 0; // los mantiene _hgcashPollTick (por instancia; cada instancia consulta al banco cada minuto)
-const _advWaitingQ = (cfg) => ({ isComprobante: true, status: 'unique', reviewStatus: 'pending', autoCharged: { $ne: true }, bankMatchStatus: { $in: ['none', 'pending'] }, amount: { $gt: 0 }, advance: null,
+const _advWaitingQ = (cfg) => ({ isComprobante: true, status: 'unique', reviewStatus: 'pending', autoCharged: { $ne: true }, bankMatchStatus: { $in: ['none', 'pending'] }, amount: { $gt: 0 }, advance: null, matchedMovementId: null, // #1151: ya atado a una transferencia ⇒ su reference es vip-hg-*; adelantarlo sería otra reference (doble carga)
   trustedFallback: { $ne: true }, createdAt: { $gte: new Date(Date.now() - 90 * 60000), $lte: new Date(Date.now() - cfg.waitMinutes * 60000) } });
 // ¿El banco está dejando de avisar las transferencias que entran? { down, why, since, manual }
 async function _bankInboundState(cfg) {
@@ -2928,22 +2929,30 @@ async function _bankInboundState(cfg) {
   if (st && st.downSince) {
     const ds = new Date(st.downSince).getTime();
     const back = lastInAt > ds || (st.kind === 'poll' && _hgPollFails === 0 && _hgPollOkAt > ds + 2 * 60000) || now - ds > 6 * 3600000; // 6 h: se vuelve a evaluar de cero
-    if (!back) return { down: true, why: st.why, since: st.downSince };
+    if (!back) return { down: true, why: st.why, since: st.downSince, lastInAt };
     await Config.set('advanceLoadState', { downSince: null, upAt: new Date().toISOString(), lastWhy: st.why || null, lastDownSince: st.downSince }, 'system');
     logger.warn(`[adelantada] el banco VOLVIÓ (estaba caído desde ${st.downSince}: ${st.why}) ⇒ se dejan de adelantar cargas y se verifican las adelantadas`);
     return { down: false, recovered: true };
   }
   let why = null, kind = null;
-  if (_hgPollFails >= 3 && now - _hgPollOkAt > 4 * 60000) { why = `la consulta al banco falla hace ${_hgPollOkAt ? Math.round((now - _hgPollOkAt) / 60000) + ' min' : 'rato'}`; kind = 'poll'; }
+  if (_hgPollFails >= 3 && now - _hgPollOkAt > 4 * 60000 && now - lastInAt > 6 * 60000) { why = `la consulta al banco falla hace ${_hgPollOkAt ? Math.round((now - _hgPollOkAt) / 60000) + ' min' : 'rato'}`; kind = 'poll'; }
   else if (now - lastInAt > cfg.silentMinutes * 60000) {
-    const users = await Comprobante.distinct('userId', _advWaitingQ(cfg));
+    // #1151: "esperando" = comprobantes mandados DESPUÉS de la última transferencia que entró, de clientes a los que el banco YA les
+    // acreditó alguna vez y con la carga automática activa. Lo que queda colgado siempre (pagos de terceros, cuentas secundarias,
+    // comprobantes viejos o truchos) no cuenta: si no, de madrugada 5 de esos alcanzaban para declarar la caída.
+    const wq = _advWaitingQ(cfg); wq.createdAt.$gte = new Date(Math.max(wq.createdAt.$gte.getTime(), lastInAt - 15 * 60000));
+    let users = await Comprobante.distinct('userId', wq);
+    if (users.length >= cfg.minWaiting) {
+      const hist = (await BankMovement.distinct('matchedUserId', { matchedUserId: { $in: users }, direction: 'Inbound', matchStatus: { $in: ['auto_charged', 'manual_charged'] } })).map(String);
+      users = hist.length ? (await User.distinct('id', { id: { $in: hist }, isBlocked: { $ne: true }, 'autoLoadOff.at': null })) : [];
+    }
     if (users.length >= cfg.minWaiting) { why = `no entra ninguna transferencia hace ${lastInAt ? Math.round((now - lastInAt) / 60000) + ' min' : 'rato'} y hay ${users.length} clientes con el comprobante mandado esperando`; kind = 'silence'; }
   }
   if (!why) return { down: false };
   await Config.set('advanceLoadState', { downSince: new Date().toISOString(), why, kind }, 'system');
   logger.warn(`[adelantada] BANCO CAÍDO detectado: ${why} ⇒ se adelantan las cargas de los clientes con historial (Config['advanceLoad'])`);
   try { io.to('admins').emit('security_alert', { message: '🏦 El banco no está avisando transferencias: ' + why + '. Se adelantan las cargas de clientes con historial; quedan en 🔌 Cargas sin verificar.', at: new Date() }); } catch (_) {}
-  return { down: true, why, since: new Date().toISOString() };
+  return { down: true, why, since: new Date().toISOString(), lastInAt };
 }
 async function _advanceEligible(c, cfg, hg) {
   const u = await User.findOne({ id: String(c.userId) });
@@ -2952,7 +2961,7 @@ async function _advanceEligible(c, cfg, hg) {
   const uid = String(u.id), amount = Number(c.amount);
   if (await Comprobante.exists({ userId: uid, 'advance.status': { $in: ['claiming', 'unverified'] } })) return { ok: false, retry: true, why: 'ya tiene una carga adelantada sin verificar' };
   const since30 = new Date(Date.now() - 30 * 86400000);
-  if (await Comprobante.exists({ userId: uid, createdAt: { $gte: since30 }, $or: [{ reviewStatus: 'rejected' }, { 'advance.status': 'rejected' }, { status: 'duplicate', duplicateOfUserId: { $nin: [uid, null] } }] })) return { ok: false, why: 'comprobante rechazado o de otra cuenta en los últimos 30 días' };
+  if (await Comprobante.exists({ userId: uid, createdAt: { $gte: since30 }, $or: [{ reviewStatus: 'rejected', reviewResolution: { $ne: 'duplicate' } }, { 'advance.status': 'rejected' }, { status: 'duplicate', duplicateOfUserId: { $nin: [uid, null] } }] })) return { ok: false, why: 'comprobante rechazado o de otra cuenta en los últimos 30 días' };
   const ver = await BankMovement.aggregate([{ $match: { matchedUserId: uid, direction: 'Inbound', matchStatus: { $in: ['auto_charged', 'manual_charged'] } } }, { $group: { _id: null, n: { $sum: 1 }, max: { $max: '$amount' } } }]);
   const n = (ver[0] && ver[0].n) || 0, max = Number((ver[0] && ver[0].max) || 0);
   if (!n) return { ok: false, why: 'todavía no tiene ninguna carga verificada por el banco' };
@@ -2972,7 +2981,7 @@ async function _advanceEligible(c, cfg, hg) {
   return { ok: true, user: u, platform: pid, cap };
 }
 async function _advanceCredit(c, el, st) {
-  const claim = await Comprobante.findOneAndUpdate({ id: c.id, advance: null, autoCharged: { $ne: true }, reviewStatus: 'pending', bankMatchStatus: { $in: ['none', 'pending'] } },
+  const claim = await Comprobante.findOneAndUpdate({ id: c.id, advance: null, autoCharged: { $ne: true }, reviewStatus: 'pending', bankMatchStatus: { $in: ['none', 'pending'] }, matchedMovementId: null },
     { $set: { autoCharged: true, advance: { status: 'claiming', at: new Date(), amount: Number(c.amount), why: String(st.why || '').slice(0, 200), platform: el.platform } } }, { new: true }).lean();
   if (!claim) return false;
   return _advanceFinish(claim, el.user, true);
@@ -2990,7 +2999,7 @@ async function _advanceFinish(c, user, withBonus) {
     if (auto.claimed) { try { await auto.revert(); } catch (_) {} }
     const tries = Number(c.advanceTries || 0) + 1;
     if (tries >= 5) { // 5 intentos con la MISMA reference sin poder cargar ⇒ vuelve al camino normal (espera la transferencia / Cargas pendientes)
-      await Comprobante.updateOne({ id: c.id, 'advance.status': 'claiming' }, { $set: { autoCharged: false, 'advance.status': 'failed', 'advance.note': String((result && result.error) || 'no se pudo cargar').slice(0, 200) }, $inc: { advanceTries: 1 } });
+      await Comprobante.updateOne({ id: c.id, 'advance.status': 'claiming' }, { $set: { autoCharged: false, reviewStatus: 'pending', reviewResolution: null, reviewedBy: null, reviewedAt: null, 'advance.status': 'failed', 'advance.note': String((result && result.error) || 'no se pudo cargar').slice(0, 200) }, $inc: { advanceTries: 1 } }); // #1151: vuelve PENDIENTE (si no, la transferencia real no la tomaba nadie)
       await _emitAdminOnlyChatNote(c.userId, c.username, `⚠️ No se pudo ADELANTAR la carga de $${amount.toLocaleString('es-AR')} (${String((result && result.error) || 'error').slice(0, 100)}). Sigue el camino normal: se acredita cuando entre la transferencia o desde Cargas pendientes.`).catch(() => {});
     } else await Comprobante.updateOne({ id: c.id }, { $inc: { advanceTries: 1 }, $set: { 'advance.at': new Date() } });
     logger.warn(`[adelantada] no se pudo cargar a ${user.username} $${amount} (intento ${tries}): ${(result && result.error) || 'error'}`);
@@ -3064,8 +3073,9 @@ async function _advanceVerify(c, { by, movement, note }) {
   }
   const wasRejected = c.advance && c.advance.status === 'rejected';
   const already = c.advance && c.advance.status === 'verified'; // ya la había verificado una persona: sólo se le engancha la transferencia
-  await Comprobante.updateOne({ id: c.id }, { $set: Object.assign(already ? {} : { 'advance.status': 'verified', 'advance.verifiedAt': new Date(), 'advance.by': by, 'advance.note': note || null },
+  const _vr = await Comprobante.updateOne(Object.assign({ id: c.id }, movement ? {} : { 'advance.status': 'unverified' }), { $set: Object.assign(already ? {} : { 'advance.status': 'verified', 'advance.verifiedAt': new Date(), 'advance.by': by, 'advance.note': note || null },
     movement ? { bankMatchStatus: 'auto_charged', matchedMovementId: movement.movementId, 'advance.movementId': movement.movementId } : {}) });
+  if (!movement && !(_vr.modifiedCount || _vr.nModified)) return false; // #1151: otra persona la resolvió en el mismo momento
   try { _apiFailCache.clear(); } catch (_) {}
   _advanceCloseRecalc(c, movement); // #1150
   if (wasRejected) {
@@ -3076,7 +3086,7 @@ async function _advanceVerify(c, { by, movement, note }) {
     await User.updateOne({ id: c.userId }, { $set: { receiptTrusted: { at: new Date(), by } } }).catch(() => {});
     await _emitAdminOnlyChatNote(c.userId, c.username, `✅ Carga adelantada de $${Number(c.amount).toLocaleString('es-AR')} VERIFICADA (${movement ? 'la transferencia entró al banco' : 'la vio ' + by + ' en el banco'}). Cliente DE CONFIANZA.`).catch(() => {});
     // retiros frenados sólo por la adelantada ⇒ vuelven al re-chequeo automático (salen solos si no hay otra cosa)
-    try { await PendingPayout.updateMany({ userId: c.userId, status: 'pending_review', reviewRequired: true, paidBy: null, reviewReason: /ADELANTADA/ }, { $set: { reviewRequired: false, autoPay: false, fraudRecheck: { n: 0, at: new Date() } } }); } catch (_) {}
+    try { await PendingPayout.updateMany({ userId: c.userId, status: 'pending_review', reviewRequired: true, paidBy: null, reviewReason: /ADELANTADA/, createdAt: { $gte: new Date(Date.now() - 20 * 3600000) } }, { $set: { reviewRequired: false, autoPay: false, fraudRecheck: { n: 0, at: new Date() } } }); } catch (_) {}
   }
   return true;
 }
@@ -3128,13 +3138,32 @@ function _advanceCloseRecalc(c, movement) {
     for (const k of keys) { if (k >= today) continue; DailyClose.exists({ dateKey: k }).then((x) => x && _closeEnsure(k, true)).catch((e) => logger.warn('[adelantada] recalcular cierre ' + k + ': ' + e.message)); }
   } catch (_) {}
 }
+// #1151: ¿esta transferencia puede ser la de esta adelantada? Mismo criterio que el match normal + la FECHA DEL BANCO: el cliente transfiere
+// ANTES de mandar el comprobante, así que una transferencia hecha horas o días después no es la suya (4 h de margen por husos / demoras).
+function _advanceMovementFits(c, m, hg) {
+  if (!_statusAccredited(m.status, hg) || !_comprobanteMatchesMovement(c, m, hg)) return false;
+  const t = new Date(c.createdAt).getTime();
+  if (m.date) { const d = new Date(m.date).getTime(); return d <= t + 4 * 3600000 && d >= t - 12 * 3600000; }
+  return new Date(m.createdAt).getTime() <= t + 24 * 3600000; // sin fecha del banco: como mucho un día después
+}
+// Una transferencia que entra se le ofrece PRIMERO a la adelantada que la está esperando (si no, el match normal se la podía dar a otro
+// comprobante del mismo pago ⇒ una transferencia, dos cargas). true = la tomó una adelantada.
+async function _advanceTakeMovement(movement, hg) {
+  const amt = Number(movement.amount) || 0; if (!amt) return false;
+  const rows = (await Comprobante.find({ $or: [{ 'advance.status': 'unverified' }, { 'advance.status': { $in: ['verified', 'rejected'] }, 'advance.movementId': null }], amount: { $gte: amt - 1, $lte: amt + 1 }, createdAt: { $gte: new Date(Date.now() - 4 * 86400000) } }).sort({ createdAt: 1 }).limit(20).lean())
+    .filter((c) => _advanceMovementFits(c, movement, hg));
+  if (rows.length !== 1) return false;
+  const ok = await _advanceVerify(rows[0], { by: 'banco', movement });
+  if (ok) logger.info(`[adelantada] verificada al entrar la transferencia: ${rows[0].username} $${amt} ⇔ movimiento ${movement.movementId}`);
+  return !!ok;
+}
 async function _advanceReconcile(hg) {
   const rows = await Comprobante.find({ $or: [{ 'advance.status': 'unverified' }, { 'advance.status': { $in: ['verified', 'rejected'] }, 'advance.movementId': null }], createdAt: { $gte: new Date(Date.now() - 4 * 86400000) } }).sort({ createdAt: 1 }).limit(120).lean();
   for (const c of rows) {
     try {
       const amt = Number(c.amount) || 0; if (!amt) continue;
       const ms = (await BankMovement.find({ direction: 'Inbound', matchStatus: 'pending', amount: { $gte: amt - 1, $lte: amt + 1 }, createdAt: { $gte: new Date(new Date(c.createdAt).getTime() - 2 * 3600000) } }).sort({ createdAt: 1 }).limit(50).lean())
-        .filter((m) => _statusAccredited(m.status, hg) && _comprobanteMatchesMovement(c, m, hg));
+        .filter((m) => _advanceMovementFits(c, m, hg));
       if (ms.length === 1 && await _advanceVerify(c, { by: 'banco', movement: ms[0] })) logger.info(`[adelantada] verificada sola: ${c.username} $${amt} ⇔ movimiento ${ms[0].movementId}`);
     } catch (e) { logger.warn('[adelantada] verificación de ' + c.id + ': ' + e.message); }
   }
@@ -3151,7 +3180,10 @@ async function _advanceTick() {
     const st = await _bankInboundState(cfg); if (!st.down) return;
     const openAgg = await Comprobante.aggregate([{ $match: { 'advance.status': { $in: ['claiming', 'unverified'] } } }, { $group: { _id: null, t: { $sum: '$advance.amount' } } }]);
     let open = Number((openAgg[0] && openAgg[0].t) || 0);
-    const cands = await Comprobante.find(_advWaitingQ(cfg)).sort({ createdAt: 1 }).limit(40).lean();
+    // #1151: detectado solo ⇒ sólo comprobantes de la caída (mandados desde 15 min antes de la última transferencia que entró); un
+    // comprobante viejo que venía colgado por otra razón no se adelanta. Marcado a mano ⇒ la ventana completa (90 min).
+    const cq = _advWaitingQ(cfg); if (!st.manual && st.lastInAt) cq.createdAt.$gte = new Date(Math.max(cq.createdAt.$gte.getTime(), st.lastInAt - 15 * 60000));
+    const cands = await Comprobante.find(cq).sort({ createdAt: 1 }).limit(40).lean();
     for (const c of cands) {
       if (cfg.maxOpenArs > 0 && open + Number(c.amount) > cfg.maxOpenArs) { logger.warn(`[adelantada] tope general de adelantos sin verificar alcanzado ($${Math.round(open)} de $${cfg.maxOpenArs}): no se adelanta más hasta verificar`); break; }
       const el = await _advanceEligible(c, cfg, hg);
@@ -3844,6 +3876,24 @@ function _emitHgcashUpdate(kind) {
 // ATÓMICA el movimiento Y el comprobante para que nunca se cargue dos veces.
 async function hgcashAutoCarga({ movement, comprobante, mode }) {
   const shadow = mode !== 'auto';
+  // #1151 (revisión): el cliente tiene una ADELANTADA sin verificar por este mismo monto y manda otra captura del mismo pago (que la IA
+  // leyó distinto) ⇒ esta transferencia es la de la adelantada: se verifica aquélla y este comprobante se cierra como repetido. Si la
+  // adelantada todavía se está acreditando, se espera a la próxima pasada. (Una SEGUNDA transferencia real del mismo monto llega después,
+  // con la adelantada ya verificada, y se carga normal.)
+  try {
+    const amt = Number(movement.amount) || 0;
+    const adv = (!shadow && amt && comprobante && comprobante.userId) ? await Comprobante.findOne({ userId: comprobante.userId, id: { $ne: comprobante.id }, 'advance.status': { $in: ['claiming', 'unverified'] }, amount: { $gte: amt - 1, $lte: amt + 1 } }).lean() : null;
+    if (adv && adv.advance.status === 'claiming') return;
+    if (adv) {
+      const t = new Date(adv.createdAt).getTime(), d = new Date(movement.date || movement.createdAt).getTime();
+      if (d <= t + 4 * 3600000 && await _advanceVerify(adv, { by: 'banco', movement })) {
+        await Comprobante.updateOne({ id: comprobante.id, reviewStatus: 'pending', autoCharged: { $ne: true } }, { $set: { reviewStatus: 'rejected', reviewResolution: 'duplicate', reviewedBy: 'auto', reviewedAt: new Date(), reviewNote: ('Repetido: esa transferencia ya se había acreditado como carga adelantada (' + adv.id + ')').slice(0, 200) } });
+        await _emitAdminOnlyChatNote(comprobante.userId, comprobante.username, `🔁 Mandó otro comprobante de $${amt.toLocaleString('es-AR')} y la transferencia que entró es la de su carga ADELANTADA: se verificó ésa y NO se cargó de nuevo.`).catch(() => {});
+        logger.info(`[adelantada] ${comprobante.username}: comprobante ${comprobante.id} era repetido de la adelantada ${adv.id} (movimiento ${movement.movementId})`);
+        return;
+      }
+    }
+  } catch (e) { logger.warn('[adelantada] guard de repetido: ' + e.message); }
 
   // 1) Reclamar el movimiento (pending → claiming).
   const movClaim = await BankMovement.findOneAndUpdate(
@@ -4531,6 +4581,7 @@ async function hgcashMatchFromMovement(movement) {
     if (!movement || movement.direction !== 'Inbound' || movement.matchStatus !== 'pending') return;
     if (!_statusAccredited(movement.status, cfg)) return; // todavía no acreditado (status != done)
     if (cfg.currency && movement.currency && String(movement.currency).toUpperCase() !== String(cfg.currency).toUpperCase()) return;
+    try { if (await _advanceTakeMovement(movement, cfg)) return; } catch (e) { logger.warn('[adelantada] prioridad sobre el movimiento: ' + e.message); } // #1151
 
     // Ventana CORTA: solo comprobantes enviados en los últimos raceWindowMinutes.
     const raceMin = Math.min(cfg.windowMinutes || 60, cfg.raceWindowMinutes || 10);
@@ -17195,7 +17246,7 @@ async function _supportBotUserFacts(u) {
   try { out.pendingReceipts = await Comprobante.countDocuments({ userId: u.id, reviewStatus: 'pending' }); } catch (_) {}
   try { const dg = await _supportReceiptDiagnose(u.id, false); if (dg && dg.info) out.receiptInfo = dg.info; } catch (_) {} // #1148
   try { out.askedHuman = await _supportPreActive(u.id); } catch (_) {} // #1149
-  try { const ac = await getAdvanceConfig(); const st = (await getConfig('advanceLoadState', null)) || {}; out.bankDelay = !!(ac.forceUntil || st.downSince); } catch (_) {} // #1149
+  try { const ac = await getAdvanceConfig(); const st = (await getConfig('advanceLoadState', null)) || {}; out.bankDelay = !!(ac.forceUntil || (ac.enabled && st.downSince && Date.now() - new Date(st.downSince).getTime() < 6 * 3600000)); } catch (_) {} // #1149
   // #1043: el extra por instalar de ESTE cliente (para explicarle bien) y si el sistema puede corregírselo solo.
   try {
     const ig = u.installGift || {};
@@ -24417,6 +24468,11 @@ app.post('/api/admin/deposit-reviews/:id/confirm', authMiddleware, depositorMidd
     // #1033 (revisión): comprobante TARDÍO de una transferencia que el banco YA acreditó (sin comprobante legible: fallback de confianza, carga
     // desde el listado de movimientos) ⇒ sería la segunda carga de la misma plata. Se frena salvo force:true ("Es OTRA transferencia").
     if (!(req.body && req.body.force === true)) {
+      try { // #1151: carga ADELANTADA sin verificar del mismo monto ⇒ casi seguro es el mismo pago
+        const a0 = Number(c.amount) || 0;
+        const advOpen = a0 > 0 ? await Comprobante.findOne({ userId: c.userId, id: { $ne: c.id }, 'advance.status': { $in: ['claiming', 'unverified'] }, amount: { $gte: a0 - 1, $lte: a0 + 1 } }).select('id').lean() : null;
+        if (advOpen) return res.status(409).json({ error: `Este cliente YA tiene una carga ADELANTADA de $${Math.round(a0).toLocaleString('es-AR')} acreditada y sin verificar (banco caído). Si este comprobante es de ESA transferencia, no se carga de nuevo: marcá "Llegó" en 🔌 Cargas sin verificar.`, code: 'BANK_ALREADY_CHARGED' });
+      } catch (e) { logger.warn(`[deposit-reviews/confirm] chequeo adelantada: ${e.message}`); }
       try {
         const linked = (await Comprobante.distinct('matchedMovementId', { userId: c.userId, id: { $ne: c.id }, matchedMovementId: { $ne: null } })).filter(Boolean);
         if (c.matchedMovementId) linked.push(c.matchedMovementId);
