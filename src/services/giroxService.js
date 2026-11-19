@@ -191,7 +191,7 @@ function _adaptOnFull(lane) {
   d.limit = Math.min(HARD_MAX_RPM, Math.ceil(cur * 1.15) + 1);
   d.lastRaise = now;
   _dynLimit.set(lane, d);
-  logger.info(`[girox-uso] key …${String(lane).slice(-4)}: el techo sube solo ${cur} → ${d.limit} por min (1girox no rechazó nada)`);
+  logger.info(`[girox-uso] key ${_keyTag(lane)}: el techo sube solo ${cur} → ${d.limit} por min (1girox no rechazó nada)`);
   return true;
 }
 /** 1girox devolvió 429: esa key llegó a su tope real ⇒ se baja. */
@@ -205,7 +205,7 @@ function _adaptOn429(lane) {
   if (!recent) {
     // #1142: nunca por debajo del 80 % del techo configurado (con 2 instancias el configurado ya es la mitad del cupo real)
     const next = Math.max(ADAPT_FLOOR_RPM, Math.floor(_laneLimit(lane) * 0.8), Math.min(cur, Math.floor(_laneLoad(lane) * 0.9)));
-    if (next < cur) logger.warn(`[girox-uso] key …${String(lane).slice(-4)}: 1girox rechazó por límite ⇒ el techo baja ${cur} → ${next} por min`);
+    if (next < cur) logger.warn(`[girox-uso] key ${_keyTag(lane)}: 1girox rechazó por límite ⇒ el techo baja ${cur} → ${next} por min`);
     d.limit = next;
   }
   _dynLimit.set(lane, d);
@@ -314,6 +314,8 @@ async function _acquireSlot(laneKey, priority) {
 //   [girox-uso] key …ab12 (publicista) 30/30 por min · 429: 4 · sin lugar: 12 ·
 //   cortes 20s: 3 · espera máx 28s · session 11, getPlayer 9, refund-daily 6
 // Apagar: GIROX_USAGE_LOG=0.
+/** Cómo se nombra una key en los logs: el COMIENZO (igual que la muestran el panel y 1girox) + los últimos 4. */
+function _keyTag(lane) { const k = String(lane || ''); return k.length > 16 ? `${k.slice(0, 11)}…${k.slice(-4)}` : '(principal)'; }
 const _usage = new Map(); // lane → { n, r429, timeouts, noSlot, waitMax, ops: Map }
 function _usageOf(lane) {
   let m = _usage.get(lane);
@@ -333,7 +335,7 @@ function _usageFlush() {
       const limit = _effLimit(lane);
       if (m.n >= limit * 0.5 || m.r429 || m.noSlot || m.timeouts) {
         const ops = [...m.ops.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${v}`).join(', ');
-        logger.warn(`[girox-uso] key …${String(lane).slice(-4)} (${_laneKind(lane)}) ${m.n}/${limit} por min`
+        logger.warn(`[girox-uso] key ${_keyTag(lane)} (${_laneKind(lane)}) ${m.n}/${limit} por min`
           + ` · 429: ${m.r429} · sin lugar: ${m.noSlot} · cortes ${Math.round(TIMEOUT_MS / 1000)}s: ${m.timeouts}`
           + ` · espera máx ${Math.round(m.waitMax / 1000)}s · ${ops}`);
       }
