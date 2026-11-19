@@ -2468,6 +2468,42 @@ async function _askReceiptResend(userId, username, why, compId) {
 // CERRADO; si la gente abre Soporte, que sí se abra". El comprobante viaja como imagen del chat y reabre el chat; cuando el SISTEMA ya lo
 // resolvió (carga acreditada sola, comprobante repetido, ilegible, menor al mínimo, a la espera del banco) se vuelve a cerrar. NO se cierra si
 // el cliente escribió TEXTO que nadie respondió (eso es abrir Soporte), ni si el chat está en Pagos (sólo pasa de 'open' a 'closed').
+// #1147 (owner: "lo que se carga automático que cierre el chat de Soporte, así no quedan los viejos"): al ACREDITARSE una carga, la charla de
+// Soporte del cliente queda CERRADA en el panel (y el chat general también), aunque haya escrito "no me llegó" sin respuesta: ya se resolvió.
+// El corte (`supportSessionSince`) se pone justo DESPUÉS de lo último que escribió / del pase a un agente, así el cliente sigue viendo el
+// aviso de la carga. Si vuelve a escribir, se abre sola como siempre. `needDepositAfter` = sólo si hubo una carga posterior (barrido).
+async function _supportCloseAfterCharge(userId, why, needDepositAfter) {
+  try {
+    if (!userId) return false;
+    const uid = String(userId);
+    const last = await Message.findOne({ $or: [{ senderId: uid, senderRole: 'user' }, { receiverId: uid, 'metadata.kind': 'bot_handoff' }] }).sort({ timestamp: -1 }).select('timestamp').lean();
+    if (needDepositAfter) {
+      if (!last) return false;
+      if (!(await Transaction.exists({ userId: uid, type: 'deposit', timestamp: { $gt: last.timestamp } }))) return false;
+    }
+    const cut = last ? new Date(new Date(last.timestamp).getTime() + 1) : new Date();
+    const r = await User.updateOne({ id: uid, $or: [{ supportSessionSince: null }, { supportSessionSince: { $exists: false } }, { supportSessionSince: { $lt: cut } }] }, { $set: { supportSessionSince: cut } });
+    const c = await ChatStatus.updateOne({ userId: uid, status: 'open' }, { $set: { status: 'closed', closedAt: new Date(), closedBy: 'auto', assignedTo: null } });
+    const changed = !!((r && r.modifiedCount) || (c && c.modifiedCount));
+    if (changed) {
+      _spConvCache = null;
+      try { await delayClockResolve(uid, { responded: true, agentId: 'system', agentUsername: 'automático', via: 'auto' }); } catch (_) {}
+      try { notifyAdmins('chat_closed', { userId: uid, by: 'sistema', adminId: 'system' }); } catch (_) {}
+      logger.info(`[chat] Soporte cerrado solo (${why}) user=${uid}`);
+    }
+    return changed;
+  } catch (e) { logger.warn(`[chat] cierre de Soporte tras carga: ${e.message}`); return false; }
+}
+// Barrido (cada 5 min, con el cierre automático de Soporte): charlas PENDIENTES cuyo cliente ya recibió una carga después de lo último que escribió.
+async function _supportSweepCharged() {
+  try {
+    const data = await _supportConversationsShared();
+    const open = ((data && data.conversations) || []).filter((r) => !r.closed).slice(0, 150);
+    let n = 0;
+    for (const r of open) if (await _supportCloseAfterCharge(r.userId, 'ya tenía la carga acreditada', true)) n++;
+    if (n) logger.info(`[chat] Soporte: ${n} charla(s) pendientes cerradas porque la carga ya estaba acreditada`);
+  } catch (e) { logger.warn(`[chat] barrido de Soporte: ${e.message}`); }
+}
 async function _chatAutoCloseIfHandled(userId, why) {
   try {
     if (!userId) return;
@@ -4142,7 +4178,7 @@ async function _hgcashCreditToPlatform({ movement, comprobante, user, platformId
       fbAdsWebhook.notify('Purchase', user, { value: Number(amount), currency: 'ARS' });
     } catch (_) {}
     _emitHgcashUpdate('cargado');
-    _chatAutoCloseIfHandled(user.id, 'carga acreditada sola').catch(() => {}); // #895
+    _supportCloseAfterCharge(user.id, 'carga acreditada sola').catch(() => {}); // #895 → #1147: cierra también Soporte
     logger.info(`[hgcash] auto-carga OK user=${user.username} amount=$${amount} movement=${movement.movementId} platform=${pid} by=${by}`);
   } catch (e) {
     if (charged) {
@@ -12538,6 +12574,7 @@ async function _agentDepositHandler(req, res, body) {
         `transferId=${result.data?.transfer_id || result.data?.transferId || 'n/a'} ` +
         `balanceLookup=${balanceResult.success ? 'ok' : 'failed'}`
       );
+      _supportCloseAfterCharge(user.id, 'carga manual acreditada').catch(() => {}); // #1147
 
       res.json({
         success: true,
@@ -36249,6 +36286,7 @@ async function _supportAutoCloseMinutes() {
   return SUPPORT_AUTOCLOSE_MIN_DEFAULT;
 }
 async function _supportAutoCloseTick() {
+  await _supportSweepCharged(); // #1147
   const minutes = await _supportAutoCloseMinutes();
   if (!(minutes > 0)) return;
   const hours = Math.round(minutes / 6) / 10; // sólo para el log

@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1146)
+> **Última actualización: 2026-11-19** (#1147)
 
 ## Sesión 2026-11-09
 
@@ -15068,3 +15068,16 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   original ya estaba fuera de la ventana (`windowMinutes`, 60) o trabado por #1143/#1145, y reenviar no hacía nada.
 - Ahora un reenvío propio de algo sin acreditar llama `_hgcashRetryOriginal(original)`: busca YA la transferencia mirando movimientos desde que mandó el
   original (hasta 24 h). Con IA y sin IA. No se quitó la protección de comprobante repetido (acreditar cada reenvío sería pagar varias veces la misma transferencia).
+
+### 1147. Al acreditarse una carga se cierra sola la charla de Soporte + barrido de las viejas — sólo server
+- Logs 04:00-04:26 UTC tras desplegar #1143-#1146: las cargas volvieron (20 automáticas + manuales en 15 min, 2 candados huérfanos retomados, falsos
+  duplicados revividos, 0 fallas). El `TimeoutNaNWarning` del arranque SIGUE y no apareció ningún `⛔ la variable`: ese aviso no era la causa (queda sin
+  ubicar, no molesta). Qué destrabó exactamente la key principal no quedó confirmado; lo que se ve es que con #1143 las cargas salen.
+- Caso picayanette95 ($9.600): no es falla; al banco no llegó ninguna transferencia de ese monto/titular ⇒ queda para el agente (verificar en el banco).
+- Owner: "lo que se carga automático que cierre el chat de Soporte, hay chats viejos, dice +99". Antes la carga acreditada no cerraba la charla si el cliente
+  había escrito sin respuesta ("no me llegó") o había pedido un agente.
+- `_supportCloseAfterCharge(userId, why, needDepositAfter)`: pone `User.supportSessionSince` 1 ms después de lo último que escribió el cliente / del pase a
+  un agente (el cliente sigue viendo el aviso de la carga) y cierra `ChatStatus`. Lo llaman la carga automática y la manual del panel.
+- `_supportSweepCharged` (dentro de `_supportAutoCloseTick`, cada 5 min): charlas pendientes cuyo cliente recibió una carga DESPUÉS de lo último que escribió
+  ⇒ cerradas. Limpia el atraso solo. Si el cliente vuelve a escribir, la charla se abre como siempre.
+- Regla: un flujo NUEVO que acredite una carga llama `_supportCloseAfterCharge`.
