@@ -3766,3 +3766,27 @@ body:not(.sp-classic) .ig-remind-btn:active { transform: scale(.98); }
 #profileModal #pfUserBox { display: flex !important; }
 #profileModal #pfUserBox .pf-build { display: none !important; }
 #profileModal #pfUserBox .pf-userhint { font-size: 11px; color: var(--p-muted); }
+
+/* #1138-e (owner: "acomodá la info del servicio, está encimada y mal ordenada; dejá sólo los beneficios y las bases abajo"):
+   fila prolija = ícono + título a la izquierda y circulito "›" a la derecha, centrados (sin el margen negativo de #1137-w);
+   abierta = texto completo y "Minimizar ▴" abajo. Sin opiniones; Bases y condiciones centradas arriba de "Entendido". */
+#infoModal .info-reviews-wrap { display: none !important; }
+body.no-ref #infoMsg .ref-only { display: none !important; }
+#infoMsg.info-msg.im-compact .im-sec { padding-right: 12px !important; }
+#infoMsg .im-card:not(.open) { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 0; min-height: 54px; }
+#infoMsg .im-card[hidden] { display: none !important; }
+#infoMsg .im-card:not(.open) .im-sec { flex: 1 1 auto !important; min-width: 0; margin: 0 !important; padding: 10px 6px 10px 12px !important; max-height: none !important; }
+#infoMsg .im-card:not(.open) .im-sec::after { display: none !important; }
+#infoMsg .im-card:not(.open) .im-sec > b:first-child { white-space: nowrap !important; overflow: hidden; text-overflow: ellipsis; }
+#infoMsg .im-card:not(.open) .im-sec + .im-more { flex: 0 0 32px !important; width: 32px !important; height: 32px !important; margin: 0 12px 0 0 !important; padding: 0 !important;
+  border: 1px solid var(--p-border) !important; border-radius: 50% !important; background: var(--p-surface) !important; font-size: 0 !important; display: flex !important; align-items: center; justify-content: center; }
+#infoMsg .im-card:not(.open) .im-sec + .im-more::after { content: "›"; font: 900 20px/1 var(--p-font); color: var(--p-red); margin-top: -2px; }
+#infoMsg .im-card.open .im-more { margin: 0 !important; width: 100% !important; height: auto !important; font-size: 12px !important; }
+#infoMsg .im-card.open .im-more::after { content: none !important; }
+#infoModal .im-foot { display: flex !important; flex-direction: column !important; align-items: stretch !important; gap: 8px; }
+#infoModal .im-foot .im-terms { align-self: center; text-align: center; }
+#infoMsg .im-card:not(.open) .im-sec { display: block !important; overflow: visible !important; -webkit-line-clamp: unset !important; height: auto !important; }
+#infoMsg .im-card:not(.open) .im-sec > b:first-child { margin: 0 !important; display: flex !important; align-items: center; }
+/* #1138-e: UNA columna a lo ancho (en dos columnas los títulos se cortaban: "Ruleta diar…", "Misiones d…"). */
+#infoMsg.im-grid { display: grid !important; grid-template-columns: 1fr !important; gap: 8px !important; }
+#infoMsg .im-card .im-sec > b:first-child { font-size: 14px !important; }

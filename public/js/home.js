@@ -2115,19 +2115,13 @@
         const box = _el('infoMsg'); if (!box || box.dataset.cards === '1') return;
         Array.from(box.querySelectorAll(':scope > .im-sec')).forEach((p) => {
             const btn = p.nextElementSibling && p.nextElementSibling.classList.contains('im-more') ? p.nextElementSibling : null;
-            const card = document.createElement('div'); card.className = 'im-card' + (p.classList.contains('im-missions') ? ' im-card-missions' : '');
+            const card = document.createElement('div'); card.className = 'im-card' + (p.classList.contains('im-missions') ? ' im-card-missions' : '') + (p.classList.contains('ref-only') ? ' ref-only' : ''); // #1138-e: referidos apagados ⇒ fuera
             if (p.id) card.dataset.for = p.id;
             box.insertBefore(card, p); card.appendChild(p); if (btn) card.appendChild(btn);
             // #1081 (owner: "más prolijo, premium y sectorizado, todo en una pantalla y que se pueda expandir"): toda la tarjeta se toca para abrir/cerrar
             if (btn) card.addEventListener('click', (e) => { if (e.target.closest('.im-more, a, button, input')) return; btn.click(); });
         });
-        // #1081: dos sectores — el servicio (por qué elegirnos, rollover, plataformas) y tus beneficios (VIP, reembolsos, ruleta, referidos, fueguito, misiones)
-        try {
-            const cards = Array.from(box.querySelectorAll(':scope > .im-card')); const firstBen = cards[3] || null;
-            const sec = (t) => { const d = document.createElement('div'); d.className = 'im-sector'; d.textContent = t; return d; };
-            if (cards[0]) box.insertBefore(sec('El servicio'), cards[0]);
-            if (firstBen) box.insertBefore(sec('Tus beneficios'), firstBen);
-        } catch (_) {}
+        // #1138-e (owner: "dejá sólo los beneficios"): ya no hay sector "El servicio" ⇒ sin títulos de sector (#1081).
         box.dataset.cards = '1'; box.classList.add('im-grid');
     }
     function infoFoldInit() {
@@ -2758,7 +2752,7 @@
             // #1137-l (owner: "cuando aprietan Soporte, que tengan las opciones en el chat tipo WhatsApp, algo sencillo… y que adentro diga quiero hablar
             // con una persona"): burbuja con la pregunta y abajo los botones apilados, como un mensaje con botones de WhatsApp.
             _shEl.innerHTML = '<div class="shm-wa"><div class="message agente sp-helpmsg"><b class="shm-t">🎧 Soporte</b><span class="shm-q">¿Con qué te ayudamos? Tocá una opción 👇</span></div>' +
-                '<div class="shm-btns">' + b('carga', '💳 Mi carga no llegó') + b('retiro', '💸 Problema con un retiro') + b('reembolso', '🎁 Reembolsos') + b('bono', '🎰 Bonos') + b('otro', '❓ Otra consulta') +
+                '<div class="shm-btns">' + b('carga', '💳 Mi carga no llegó') + b('retiro', '💸 Problema con un retiro') + b('reembolso', '🎁 Reembolsos') + b('bono', '🎰 Bonos') + /* #1138-f (owner): sin "Otra consulta" */
                 '<button type="button" class="shm-person" onclick="VIP.home.spHelpPick(\'problema\')">👤 Quiero hablar con una persona</button></div></div>';
         }
         _shUntil = Date.now() + 3 * 60 * 1000;

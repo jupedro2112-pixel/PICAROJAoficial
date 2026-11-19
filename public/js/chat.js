@@ -119,7 +119,7 @@ VIP.chat = (function () {
                 : INFO_T.includes(t) ? "VIP.home.spInfo('" + t + "')"
                 : "VIP.home.spDeposit()"; /* #1042-e: con Girox abierto ⇒ Carga rápida del casino; si no, la carga automática de siempre */
             const label = escapeHtml(String(md.label || (t === 'withdraw' ? '💸 Ir a Retirar premio' : '⚡ Ir a Carga automática')));
-            if (t === 'terms') return `<button type="button" class="chat-terms-mini" onclick="${act}">📄 Bases y condiciones</button>`; // #878: chico, no molesta
+            if (t === 'terms') return ''; // #1138-f (owner): las Bases y condiciones NO van en cada respuesta de Soporte: viven abajo del Perfil (y en Info)
             return `<div class="plat-choice"><button type="button" class="plat-btn plat-play-now${t === 'terms' ? ' plat-terms' : ''}" onclick="${act}">${label}</button></div>`;
         }
         if (md.kind === 'deposit_rejected') return '<div class="dep-pill dep-rej">❌ Carga no acreditada</div>';

@@ -14562,7 +14562,7 @@ async function initializeData() {
   } } catch (e) { console.warn('[startup-mig #1138 bot] ' + e.message); }
   // #1138 (owner): textos nuevos de carga/retiro pendiente, rechazo y pago ⇒ sólo pisa los que siguen con el texto de fábrica anterior.
   for (const [n, o, v] of [['/sys_withdraw_delayed', WITHDRAW_DELAYED_OLD_1020, WITHDRAW_DELAYED_DEFAULT], ['/sys_deposit_pending_review', DEPOSIT_PENDING_REVIEW_OLD_1138, DEPOSIT_PENDING_REVIEW_DEFAULT],
-    ['/sys_deposit_rejected', DEPOSIT_REJECTED_OLD_1138, DEPOSIT_REJECTED_DEFAULT], ['/sys_payout_done_chat', PAYOUT_DONE_CHAT_OLD_1138, PAYOUT_DONE_CHAT_DEFAULT], ['/sys_payout_paid', PAYOUT_PAID_OLD_1138, PAYOUT_PAID_DEFAULT]]) {
+    ['/sys_deposit_rejected', DEPOSIT_REJECTED_OLD_1138, DEPOSIT_REJECTED_DEFAULT], ['/sys_payout_done_chat', PAYOUT_DONE_CHAT_OLD_1138, PAYOUT_DONE_CHAT_DEFAULT], ['/sys_payout_paid', PAYOUT_PAID_OLD_1138, PAYOUT_PAID_DEFAULT], ['/sys_support_problem', SUPPORT_PROBLEM_OLD_1138, SUPPORT_PROBLEM_DEFAULT]]) {
     try { await Command.updateOne({ name: n, response: o }, { $set: { response: v } }); } catch (e) { console.warn('[startup-mig #1138] ' + n + ': ' + e.message); }
   }
   try { await Command.updateOne({ name: '/sys_withdraw_delayed', response: WITHDRAW_DELAYED_OLD_890 }, { $set: { response: WITHDRAW_DELAYED_DEFAULT } }); } catch (e) { console.warn('[startup-migration] #1020:', e.message); } // #1020: sólo el texto viejo sin editar
@@ -15297,9 +15297,9 @@ async function initializeData() {
     },
     {
       name: '/sys_support_problem',
-      description: 'CHAT NUEVO (#1042-u): respuesta cuando el cliente toca "👤 Hablar con un agente" (🎧 Soporte, #1134; el chat pasa directo a un agente en Soporte). Sin variables. Vacío = no se manda nada (igual pasa al agente).',
+      description: 'CHAT NUEVO (#1042-u): respuesta cuando el cliente toca "👤 Quiero hablar con una persona" (🎧 Soporte, #1134; el chat pasa directo a un agente en Soporte). Variable: {nombre} (persona de turno). Vacío = no se manda nada (igual pasa al agente).',
       type: 'message',
-      response: 'Ya te paso con una persona del equipo, un segundo 🙌'
+      response: SUPPORT_PROBLEM_DEFAULT
     },
     {
       name: '/sys_deposit_luck',
@@ -16384,6 +16384,8 @@ const SUPPORT_AUTOREPLY_DEFAULT = '🙌 Contame qué necesitás, ya estamos con 
 // con un botón que lleva al sector. Texto editable ({min} = carga mínima, {retiro_min} = retiro mínimo).
 const SUPPORT_QUICK_CARGAR_DEFAULT = '⚡ Las cargas son 100% automáticas: transferís al CBU, mandás la foto del comprobante y se acredita sola en minutos (carga mínima {min}). Tocá el botón y te llevo a la carga automática. Si ya la hiciste y algo falló, contame acá y lo reviso.';
 const SUPPORT_QUICK_RETIRAR_DEFAULT = '💸 Los retiros también son automáticos: en "Retirar premio" completás tus datos, confirmás con el código SMS y se paga solo a tu CBU (retiro mínimo {retiro_min}). Tocá el botón para ir. Si ya lo pediste y tenés dudas, contame acá.';
+const SUPPORT_PROBLEM_OLD_1138 = 'Ya te paso con una persona del equipo, un segundo 🙌';
+const SUPPORT_PROBLEM_DEFAULT = '👋 Buenas, en breve {nombre} está con usted. Por favor, indíquenos su problema 🙌'; // #1138-f
 const SUPPORT_QUICK_KINDS = ['cargar', 'retirar', 'otro', 'carga', 'retiro', 'reembolso', 'bono', 'problema']; // #1042-u: + 'Tengo otro problema' (directo a un agente)
 // // #602: temas del soporte de problemas · #715: + bono
 // #702 (owner 2026-10-21): respuestas automáticas POR TEMA en Soporte. "Con una carga": avisar de antemano la carga mínima y pedir
@@ -16427,8 +16429,9 @@ async function _supportQuickReply(userId, username, quick, text) {
   try {
     // #1042-u (owner): botón "Tengo otro problema" ⇒ DIRECTO a un agente (chat abierto en Soporte) + aviso corto al cliente; la IA no se mete.
     if (quick === 'problema') {
-      const t = await renderSystemCommand('/sys_support_problem', 'Ya te paso con una persona del equipo, un segundo 🙌', {});
-      if (t) await _sendUserSystemMessage({ id: userId, username }, t, { metadata: { channel: 'support', topic: 'problema' } });
+      // #1138-f: "Buenas, en breve {nombre} está con usted…" firmado por el turno
+      const t = await renderSystemCommand('/sys_support_problem', SUPPORT_PROBLEM_DEFAULT, { nombre: await getSupportAgentName() });
+      if (t) await _sendUserTurnNotice({ id: userId, username }, t, { metadata: { channel: 'support', topic: 'problema' } });
       await _supportHandoffNow(userId, username, 'tocó "Hablar con un agente"');
       return;
     }

@@ -2633,7 +2633,7 @@
             <div class="modal-header info-head-sm">
                 <img src="/icons/icon-192x192.png" class="info-logo" alt="" width="34" height="34"><!-- #932: logo chiquito sobre el título -->
                 <h2>Información del servicio</h2>
-                <p class="info-sub">Todo lo que te da PICA ROJA · tocá cada uno para ver el detalle</p><!-- #1081 -->
+                <p class="info-sub">Tus beneficios · tocá cada uno para ver el detalle</p><!-- #1081 -->
             </div>
             <!-- #369: la línea de app + notificaciones (#254) se sacó de acá: vive en Perfil. -->
             <!-- #237: reseñas ARRIBA, plegadas (owner: "que no esté abierto así se ve todo lo otro"). reviews.js
@@ -2654,14 +2654,6 @@
                 <!-- #622 (owner 2026-10-20): textos MINIMIZADOS para que todo el Info entre en una pantalla. Mismos ids
                      (home.js llena infoMs*, infoDailyMax/Weekly/Monthly, infoCardWhyTitle, infoCardTwoPlatsDesc). -->
                 <!-- #640 (owner 2026-10-20): orden = Por qué elegirnos · (plataformas) · Niveles VIP · Reembolsos · Ruleta diaria · Referidos · Fueguito · Misiones -->
-                <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M9 3l3 18 3-18"/></svg></i><span id="infoCardWhyTitle">¿Por qué elegir Girox?</span></b>Cargás solo en minutos, retirás a tu CBU y soporte en vivo 24 hs. <b>Carga mínima <span class="md-amt">$2.000</span>:</b> con ese monto o más se acredita sola; <b>con una carga menor, tu carga NO va a ser acreditada</b> (escribinos por Soporte). <b>La plataforma mejor paga de internet.</b> Por <b>antifraude</b>, <b>cada carga</b> se juega <b><span class="rx-dep">×1</span></b> antes de retirarla, y los bonos de bienvenida y regalos <b><span class="rx-bon">×5</span></b> (rollover); las comisiones de referidos, <b>×1</b>.</p>
-                <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
-                <!-- #885 (owner): cargas y retiros con rollover ×3 por antifraude, bien explicado -->
-                <p class="im-sec" id="infoCardRollover"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></i>Cargas y retiros (antifraude)</b>Para cuidar el servicio y que nadie lo use para mover plata sin jugar, <b>cada carga tiene rollover <span class="rx-dep">×1</span></b>: hay que apostar su monto <span class="rx-dep">×1</span> antes de retirarla (ej.: cargás $10.000 ⇒ apostás $10.000 y ya podés retirar). Los bonos y regalos van <b><span class="rx-bon">×5</span></b>. <span class="im-upd" style="display:block;margin:6px 0;padding:6px 9px;border-radius:8px;background:var(--p-soft,rgba(230,0,35,.08));border-left:3px solid var(--p-red,#e60023)"><b style="color:var(--p-red,#e60023)">🆕 ACTUALIZADO:</b> los <b>bonos y regalos se juegan sólo en SLOTS</b> (tragamonedas). Tu carga la jugás en lo que quieras: casino, slots o deportes.</span><b>Cuenta lo que apostás</b>, ganes o pierdas, no lo que cargás, y lo que ganás jugando se puede retirar con la misma regla. En <b>Retirar premio</b> ves cuánto podés retirar hoy y cuánto te falta apostar para el resto: se libera solo, no hace falta escribir a Soporte.</p>
-                <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
-                <!-- #296: se muestra sólo si hay 2+ plataformas habilitadas (home.js _paintPlatformTexts) -->
-                <p class="im-sec" id="infoCardTwoPlats"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="M8 12h.01M11 12h.01M14 12h.01"/><path d="M7 18l-1 3M17 18l1 3"/></svg></i>La plataforma que quieras</b><span id="infoCardTwoPlatsDesc"><b>Girox</b>, <b>Ganamos</b>, <b>Jugaygana</b> y <b>PICA ROJA</b> (nuestra plataforma propia, pronto), todas originales, con el mismo usuario. <i>(Estamos trabajando en las automatizaciones para Jugaygana, Ganamos y PICA ROJA.)</i></span><!-- #710 (owner) --></p>
-                <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
                 <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z"/><path d="M5 20h14"/></svg></i>Niveles VIP</b>Todo lo que apostás suma: subís de nivel, cobrás bonos y rakeback semanal (rakeback = te devolvemos un % de lo que apostaste). Los bonos se juegan <b>×5</b> antes de retirarlos.</p>
                 <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
                 <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg></i>Reembolsos <span class="info-badge">Novedad</span></b>
@@ -2669,11 +2661,11 @@
                     <span class="im-line">Sobre lo perdido <b>con tu plata</b> (bonos no cuentan). <b>Se cobra solo</b> desde "Cobrá tu reembolso acá" y se juega <b>×5</b> antes de retirarlo.</span>
                     <span class="refund-promo" hidden></span></p>
                 <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
-                <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg></i>Ruleta diaria</b>Con <b><span class="rl-min">$10.000</span></b> cargados en el día (se suman las cargas del día) y la app instalada tenés <b>un giro gratis por día</b>: % extra o plata al instante. Los premios en plata se juegan <b>×5</b> antes de poder retirarlos. <button type="button" class="im-link" onclick="hideModal('infoModal'); if(window.VIP&&VIP.roulette&&VIP.roulette.open)VIP.roulette.open();">Girar ›</button></p>
+                <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg></i>Ruleta diaria</b>Con la app instalada tenés <b>un giro gratis por día</b>: te da un % extra para tu carga de hoy. Si cargás <b><span class="rl-min">$10.000</span></b> en el día, el giro es <b>DORADO</b> y podés ganar plata (se juega <b>×5</b>). <button type="button" class="im-link" onclick="hideModal('infoModal'); if(window.VIP&&VIP.roulette&&VIP.roulette.open)VIP.roulette.open();">Girar ›</button></p>
                 <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
-                <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M15.5 14.2c2.6.3 4.5 2.4 4.5 4.8"/></svg></i>Referidos</b>Invitá con tu link y cobrá cada mes el <b><span class="ref-pct">5</span>%</b> de su actividad, de por vida. Entra como bono con <b>rollover ×1</b>: se apuesta una vez y se retira.</p>
+                <p class="im-sec ref-only"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M15.5 14.2c2.6.3 4.5 2.4 4.5 4.8"/></svg></i>Referidos</b>Invitá con tu link y cobrá cada mes el <b><span class="ref-pct">5</span>%</b> de su actividad, de por vida. Entra como bono con <b>rollover ×1</b>: se apuesta una vez y se retira.</p>
                 <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
-                <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 4 4.5 4 8.5a4 4 0 0 1-8 0c0-1.5.5-2.5 1.2-3.3C9.5 9.5 10 11 11 11.5 11 8 12 6 12 3z"/><path d="M8 13.5c-.6 1-1 2-1 3a5 5 0 0 0 10 0c0-1-.4-2-1-3"/></svg></i>Fueguito</b>Reclamá tu fueguito cada día y sumás <b>días de racha</b>; en cada hito hay un <b>premio</b>. Para cobrarlo tenés que cumplir un <b>rollover</b> que va subiendo por hito. <b>Rollover = lo que apostás en la plataforma, no lo que cargás</b>: cargar no suma, jugar sí. Cada racha tiene un <b>plazo</b> (ej.: <b>10 fueguitos en 20 días</b>): en esos días tenés que llegar a los fueguitos y completar las apuestas del premio. <b>No es plata perdida</b>: es lo que apostás jugando, ganes o pierdas. Al cobrar vuelve a 0. El premio se juega <b><span class="rx-bon">×5</span></b> antes de retirarlo. <button type="button" class="im-link" onclick="hideModal('infoModal'); var b=document.getElementById('fireBtn'); if(b) b.click();">Ver mi racha ›</button></p>
+                <p class="im-sec"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c1 3 4 4.5 4 8.5a4 4 0 0 1-8 0c0-1.5.5-2.5 1.2-3.3C9.5 9.5 10 11 11 11.5 11 8 12 6 12 3z"/><path d="M8 13.5c-.6 1-1 2-1 3a5 5 0 0 0 10 0c0-1-.4-2-1-3"/></svg></i>Fueguito</b>Reclamá tu fueguito todos los días y sumá <b>días de racha</b>. En cada hito hay un <b>premio</b>: se cobra cuando apostás lo que pide (jugar suma, cargar no) dentro del plazo de la racha. Se juega <b><span class="rx-bon">×5</span></b> antes de retirarlo. <button type="button" class="im-link" onclick="hideModal('infoModal'); var b=document.getElementById('fireBtn'); if(b) b.click();">Ver mi racha ›</button></p>
                 <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
                 <p class="im-sec im-missions"><b><i class="im-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg></i>Misiones de la semana</b>
                     <span class="im-line">Metas de carga de <b>lunes a domingo</b>. Cumplís una y el premio <b>se acredita solo</b>.</span>
@@ -2683,7 +2675,7 @@
                 </p>
                 <button type="button" class="im-more" onclick="VIP.home.infoMore(this)">Ver más ›</button>
             </div>
-            <div class="modal-actions" style="margin-top: 10px;">
+            <div class="modal-actions im-foot" style="margin-top: 10px;">
                 <!-- #683 (owner): bases y condiciones públicas (public/terminos.html) -->
                 <a class="im-terms" href="/terminos.html" onclick="VIP.home.openTerms(event)">📄 Bases y condiciones del servicio ›</a>
                 <button id="closeInfoModal" class="btn btn-primary" style="width: 100%;">Entendido</button>
@@ -2798,7 +2790,7 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el ícono para cambiarlo</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v746</div>
+                    <div class="pf-build" id="appBuildTag">app v747</div>
                 </div>
             </div>
             <div class="pf-main pf-main-big">
@@ -2831,7 +2823,7 @@
                     <div class="pf-main pf-config-link">
                         <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                     </div>
-                    <div class="pf-build pf-build-min" id="pfBuildMini">app v746</div> <!-- #790: espejo de #appBuildTag -->
+                    <div class="pf-build pf-build-min" id="pfBuildMini">app v747</div> <!-- #790: espejo de #appBuildTag -->
                 </div>
             </details>
             <div class="pf-actions">
