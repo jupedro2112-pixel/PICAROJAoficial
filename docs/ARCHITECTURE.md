@@ -2232,3 +2232,5 @@ comprobante y se verifica después. Detalle de decisiones en WORKLOG #1149.
 - **Permisos:** ajustes y forzado = dueño (`OWNER_ONLY_MUTATIONS`); Llegó / No llegó = admin, depositor, cajero, con nota; Trucho = admin.
 - **#1153:** la IA de soporte recibe `advancePending` (cliente con una adelantada sin verificar) como DATO INTERNO: al cliente nunca se le dice ni se le
   insinúa que su carga se acreditó sin revisar (ni la IA, ni 1girox, ni avisos). `_supportPayoutDiagnose` volvió a funcionar (en #1152 un comentario en medio de la línea anulaba el `return`).
+- **#1154:** `_bonusVigenteOf(userId)` = qué bono lleva la próxima carga (sólo lectura, mismo orden que `resolveAutoBonus`); la usan
+  `/api/bonus/vigente` (app) y la IA de soporte (`bonusNow`). Si cambia el orden de `resolveAutoBonus`, cambiar esa función.

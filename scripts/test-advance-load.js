@@ -66,6 +66,7 @@ caso('Panel: rutas con permisos (veredicto: admin/depositor/cajero · ajustes: s
 caso('Soporte adelantado: la 1ª vez que pide una persona atiende la IA (retiro en proceso / "contame"); si no puede, pasa DIRECTO a un agente', () => {
   assert.ok(/mins <= 180\) return \{ kind: 'wd_progress'/.test(S), '#1153: el diagnóstico del retiro en proceso no puede quedar anulado por un comentario');
   assert.ok(!/Carga automática \(adelantada\)/.test(S) && /DATO INTERNO \(el cliente NUNCA tiene que enterarse/.test(B), '#1153: la carga adelantada es interna: ni 1girox ni la IA se lo muestran al cliente');
+  assert.ok(/async function _bonusVigenteOf\(userId\)/.test(S) && /res\.json\(await _bonusVigenteOf\(req\.user\.userId\)\)/.test(S) && /out\.bonusNow = /.test(S) && /BONO QUE TIENE DISPONIBLE HOY/.test(B), '#1154: la app y la IA leen el mismo bono vigente');
   assert.ok(/out\.advancePending = /.test(S), '#1153: la IA sabe si el cliente tiene una adelantada sin verificar');
   assert.ok(/kind: 'support_pre'/.test(S) && /_supportPayoutDiagnose\(userId\)/.test(S) && /!preRecent && !sentByBot/.test(S), 'pre-soporte una vez y nunca si lo mandó el bot al botón');
   assert.ok(/if \(r\.handoff && await _supportPreActive\(userId\)\) r = /.test(S), 'handoff directo tras el pre-soporte');

@@ -17326,6 +17326,7 @@ async function _supportBotUserFacts(u) {
   try { out.pendingReceipts = await Comprobante.countDocuments({ userId: u.id, reviewStatus: 'pending' }); } catch (_) {}
   try { const dg = await _supportReceiptDiagnose(u.id, false); if (dg && dg.info) out.receiptInfo = dg.info; } catch (_) {} // #1148
   try { out.askedHuman = await _supportPreActive(u.id); } catch (_) {} // #1149
+  try { const bv = await _bonusVigenteOf(u.id); if (bv && Number(bv.pct) > 0) out.bonusNow = `+${Number(bv.pct)}% ${bv.label || 'en su próxima carga'}` + (bv.until ? ` (vale hasta las ${bv.until})` : '') + (bv.capArs ? ` (tope $${Number(bv.capArs).toLocaleString('es-AR')})` : ''); } catch (_) {} // #1154
   try { const ac = await getAdvanceConfig(); const st = (await getConfig('advanceLoadState', null)) || {}; out.bankDelay = !!(ac.forceUntil || (ac.enabled && st.downSince && Date.now() - new Date(st.downSince).getTime() < 6 * 3600000)); } catch (_) {} // #1149
   try { const av = await Comprobante.findOne({ userId: String(u.id), 'advance.status': 'unverified' }).select('advance.amount').lean(); if (av) out.advancePending = Math.round(Number(av.advance && av.advance.amount) || 0); } catch (_) {} // #1153
   // #1043: el extra por instalar de ESTE cliente (para explicarle bien) y si el sistema puede corregírselo solo.
@@ -18242,28 +18243,32 @@ app.get('/api/first-deposit-promo', authMiddleware, async (req, res) => {
 });
 // #1077 (owner: "que apenas entren al chat se vea el bono vigente"): qué bono lleva la PRÓXIMA carga del cliente, en el mismo orden que
 // resolveAutoBonus pero SÓLO LEYENDO (no reserva ni consume nada). Si cambia el orden de resolveAutoBonus, cambiar acá también.
-app.get('/api/bonus/vigente', authMiddleware, async (req, res) => {
-  res.set('Cache-Control', 'no-store');
+// #1154: la MISMA lectura la usan la app (/api/bonus/vigente) y la IA de soporte (para contarle al cliente qué bono tiene hoy).
+async function _bonusVigenteOf(userId) {
   try {
-    const u = await User.findOne({ id: req.user.userId }).select('id username noWelcomeGifts fraudFlags duplicateOf storyBonus secondDepositOffer dailyRoulettePendingPct dailyRoulettePendingExpiresAt').lean();
-    if (!u || (u.duplicateOf && u.duplicateOf.username)) return res.json({ pct: 0 });
+    const u = await User.findOne({ id: String(userId) }).select('id username noWelcomeGifts fraudFlags duplicateOf storyBonus secondDepositOffer dailyRoulettePendingPct dailyRoulettePendingExpiresAt').lean();
+    if (!u || (u.duplicateOf && u.duplicateOf.username)) return ({ pct: 0 });
     const now = Date.now(); const hhmm = (d) => new Date(d).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' });
     const blockWelcome = _isFlagged(u) || (await _noWelcomeActive(u));
     if (!blockWelcome) {
       const fp = await getFirstDepositBonusPct(u);
-      if (fp > 0 && await _isFirstRealDeposit(u)) { const cap = await getFirstDepositCapArs(u); return res.json({ pct: fp, kind: 'first', label: 'en tu primera carga', capArs: cap > 0 ? cap : 0 }); }
+      if (fp > 0 && await _isFirstRealDeposit(u)) { const cap = await getFirstDepositCapArs(u); return ({ pct: fp, kind: 'first', label: 'en tu primera carga', capArs: cap > 0 ? cap : 0 }); }
     }
     const sb = u.storyBonus || {};
-    if (Number(sb.pct) > 0 && sb.expiresAt && new Date(sb.expiresAt).getTime() > now) return res.json({ pct: Number(sb.pct), kind: 'story', label: 'en tu próxima carga', until: hhmm(sb.expiresAt) });
+    if (Number(sb.pct) > 0 && sb.expiresAt && new Date(sb.expiresAt).getTime() > now) return ({ pct: Number(sb.pct), kind: 'story', label: 'en tu próxima carga', until: hhmm(sb.expiresAt) });
     const so = u.secondDepositOffer || {};
-    if (!blockWelcome && so.status === 'offered' && Number(so.pct) > 0 && so.expiresAt && new Date(so.expiresAt).getTime() > now) return res.json({ pct: Number(so.pct), kind: 'second', label: 'en tu segunda carga', until: hhmm(so.expiresAt) });
-    if (Number(u.dailyRoulettePendingPct) > 0 && (!u.dailyRoulettePendingExpiresAt || new Date(u.dailyRoulettePendingExpiresAt).getTime() > now)) return res.json({ pct: Number(u.dailyRoulettePendingPct), kind: 'roulette', label: 'de la ruleta en tu carga de hoy', until: u.dailyRoulettePendingExpiresAt ? hhmm(u.dailyRoulettePendingExpiresAt) : null });
+    if (!blockWelcome && so.status === 'offered' && Number(so.pct) > 0 && so.expiresAt && new Date(so.expiresAt).getTime() > now) return ({ pct: Number(so.pct), kind: 'second', label: 'en tu segunda carga', until: hhmm(so.expiresAt) });
+    if (Number(u.dailyRoulettePendingPct) > 0 && (!u.dailyRoulettePendingExpiresAt || new Date(u.dailyRoulettePendingExpiresAt).getTime() > now)) return ({ pct: Number(u.dailyRoulettePendingPct), kind: 'roulette', label: 'de la ruleta en tu carga de hoy', until: u.dailyRoulettePendingExpiresAt ? hhmm(u.dailyRoulettePendingExpiresAt) : null });
     const pb = await _getActivePromoBonus(u.username).catch(() => null);
-    if (pb && Number(pb.percent) > 0 && pb.applyMode !== 'agent') return res.json({ pct: Number(pb.percent), kind: 'promo', label: 'en tu próxima carga', until: pb.expiresAt ? hhmm(pb.expiresAt) : null });
+    if (pb && Number(pb.percent) > 0 && pb.applyMode !== 'agent') return ({ pct: Number(pb.percent), kind: 'promo', label: 'en tu próxima carga', until: pb.expiresAt ? hhmm(pb.expiresAt) : null });
     const ap = await getAutoLoadBonusPct();
-    if (ap > 0) return res.json({ pct: ap, kind: 'auto', label: 'en cada carga con comprobante' });
-    res.json({ pct: 0 });
-  } catch (e) { res.json({ pct: 0 }); }
+    if (ap > 0) return ({ pct: ap, kind: 'auto', label: 'en cada carga con comprobante' });
+    return { pct: 0 };
+  } catch (e) { return { pct: 0 }; }
+}
+app.get('/api/bonus/vigente', authMiddleware, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(await _bonusVigenteOf(req.user.userId));
 });
 app.get('/api/install-gift/status', authMiddleware, async (req, res) => {
   try {

@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1153)
+> **Última actualización: 2026-11-19** (#1154)
 
 ## Sesión 2026-11-09
 
@@ -15231,3 +15231,15 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - **Aprendizaje con confirmación (ya existía, NO se tocó):** lo que contesta la IA y lo que contestan los agentes va a `support_bot_learned` como
   pendiente; sólo lo APROBADO en panel → 🧠 Responder para IA lo contesta el bot solo. Los reclamos de plata nunca se contestan con lo aprendido.
 - Tests: `test-advance-load` 16/16 (con 2 chequeos nuevos), `test-support-bot` 18/18. Sin cambio de panel ni de la PWA. No probado en vivo.
+
+### 1154. La IA de soporte sabe qué bono tiene disponible HOY cada cliente (2026-11-19)
+- **Owner:** "lo de instalar la app después de la carga, si no la tienen, mandáselo escrito con el botón" / "es prioridad que sepan cosas del servicio
+  como reembolsos, siempre sin alertar; si vuelven al otro día y tienen un bono disponible, avisarles" / "es todo automático, no quiero errores".
+- **Ya existía (verificado en el código, NO se tocó):** recordatorio escrito con botón "Instalar la app" después de TODA carga a quien no la tiene
+  (#1138, `maybeOfferInstallGift`: manual, hgcash y adelantada; máx. 1 cada 2 h); bono vigente a la vista al entrar al chat (#1077,
+  `/api/bonus/vigente`); beneficios tras las primeras cargas (`/sys_bot_after_deposit`, con el % de reembolso); avisos de reembolso (`_refundRemindRun`).
+- **Nuevo:** la lógica de `/api/bonus/vigente` pasó tal cual a `_bonusVigenteOf(userId)` (la ruta sólo la llama) y `_supportBotUserFacts` suma
+  `bonusNow`: la IA le cuenta al cliente su bono real de hoy (mismo dato que ve en la app) cuando pregunta por bonos / cargar o saluda, sin presionar.
+- **Decisión (mía):** NO agregué un aviso automático nuevo "al volver al otro día": sería otro mensaje masivo sin probar en vivo y el bono ya se ve al
+  entrar al chat. Si el owner lo quiere igual, va por el Centro de avisos (topes) y sin push.
+- Tests: 30/33 del repo (los 3 de siempre), `test-advance-load` 16/16 con chequeo nuevo. Sin cambio de panel ni PWA. No probado en vivo.
