@@ -2578,6 +2578,7 @@ async function _hgcashRecoveryPass() {
     const cfg = await getHgcashConfig();
     if (!cfg.enabled) return;
     try { await _hgcashReviveFalseDuplicates(); } catch (e) { logger.warn(`[hgcash] revivir falsos duplicados: ${e.message}`); } // #1145
+    try { await _hgcashReviveErrors(); } catch (e) { logger.warn(`[hgcash] revivir errores: ${e.message}`); } // #1148
     const since = new Date(Date.now() - (cfg.windowMinutes || 60) * 60 * 1000);
     const pend = await Comprobante.find({ isComprobante: true, autoCharged: { $ne: true }, status: { $ne: 'duplicate' }, reviewStatus: 'pending',
       bankMatchStatus: { $in: ['none', 'pending'] }, amount: { $gt: 0 }, createdAt: { $gte: since, $lte: new Date(Date.now() - 60 * 1000) } }).sort({ createdAt: 1 }).limit(120) /* #1144: ponerse al día tras una caída (antes 30 por pasada) */.lean();
@@ -3937,6 +3938,34 @@ async function _hgChargeLockOrphan(chargeKey, lock) {
   if (lock.userId && await Transaction.exists({ userId: lock.userId, type: 'deposit', amount: Number(lock.amount), timestamp: { $gte: since } })) return false;
   return true;
 }
+// #1148: reintenta un comprobante pendiente contra los movimientos de las últimas 24 h (no depende de `windowMinutes`).
+async function _hgcashRetryComp(compId) {
+  try {
+    if (!compId) return;
+    const c = await Comprobante.findOne({ id: compId, autoCharged: { $ne: true }, reviewStatus: 'pending', status: { $ne: 'duplicate' } }).lean();
+    if (c && Number(c.amount) > 0) await hgcashMatchFromComprobante(c, { since: new Date(Date.now() - 24 * 3600 * 1000) });
+  } catch (e) { logger.warn(`[hgcash] reintento de comprobante: ${e.message}`); }
+}
+// #1148 (owner: "hay 40 comprobantes a verificar, ¿no debería hacer todo solo?"): una transferencia que quedó en 'error' porque la plataforma
+// rechazó la carga varias veces (agente sin fichas, límite, caída) no se reintentaba NUNCA más y esperaba a un agente. Ahora, pasados 15 min,
+// tiene UNA ronda más de intentos automáticos (marca `[reintento]` en chargeError: no entra en bucle). No se toca si el comprobante ya se
+// resolvió o si al cliente le cargaron ese monto después (un agente la hizo a mano). Misma reference `vip-hg-*`: no puede duplicar.
+async function _hgcashReviveErrors() {
+  const rows = await BankMovement.find({ direction: 'Inbound', matchStatus: 'error', chargeError: { $not: /^\[reintento\]/ },
+    updatedAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000), $lte: new Date(Date.now() - 15 * 60 * 1000) } }).sort({ updatedAt: 1 }).limit(60).lean();
+  let n = 0;
+  for (const m of rows) {
+    const comp = m.matchedComprobanteId ? await Comprobante.findOne({ id: m.matchedComprobanteId }).lean() : null;
+    if (!comp || comp.autoCharged || comp.reviewStatus !== 'pending' || comp.status === 'duplicate') continue;
+    if (await Transaction.exists({ userId: comp.userId, type: 'deposit', amount: Number(m.amount), timestamp: { $gte: new Date(new Date(m.createdAt).getTime() - 60 * 1000) } })) continue;
+    const r = await BankMovement.updateOne({ movementId: m.movementId, matchStatus: 'error' }, { $set: { matchStatus: 'pending', chargeAttempts: 0, chargeError: '[reintento] ' + String(m.chargeError || '').slice(0, 280) } });
+    if (!(r.modifiedCount || r.nModified)) continue;
+    await Comprobante.updateOne({ id: comp.id, autoCharged: { $ne: true } }, { $set: { bankMatchStatus: 'pending' } });
+    n++;
+    await _hgcashRetryComp(comp.id);
+  }
+  if (n) logger.warn(`[hgcash] recuperación: ${n} transferencia(s) que habían quedado en ERROR se reintentan solas`);
+}
 // Movimientos que quedaron marcados 'duplicate' por un candado huérfano vuelven a pendiente (los toma la recuperación de cada 3 min).
 async function _hgcashReviveFalseDuplicates() {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -3950,6 +3979,7 @@ async function _hgcashReviveFalseDuplicates() {
     if (!(r.modifiedCount || r.nModified)) continue;
     if (m.matchedComprobanteId) await Comprobante.updateOne({ id: m.matchedComprobanteId, autoCharged: { $ne: true }, bankMatchStatus: 'duplicate' }, { $set: { bankMatchStatus: 'pending' } });
     n++;
+    await _hgcashRetryComp(m.matchedComprobanteId); // #1148: se reintenta YA aunque el comprobante esté fuera de la ventana
   }
   if (n) logger.warn(`[hgcash] recuperación: ${n} transferencia(s) marcadas "duplicado" SIN haberse acreditado vuelven a pendiente`);
 }
@@ -16547,10 +16577,62 @@ function _supportTopicFromText(text) {
   if (/carg|transfer|deposit|comprobante|acredit|cbu|alias/.test(t)) return 'carga';
   return null;
 }
+// #1148 (owner: "cuando ponen hablar con un agente y se quejan que no le cargaron, que actúe automático: que cargue si falló, que detecte si ya
+// fue cargado, y si ese comprobante lo mandó otro que le responda sobre eso"). Revisa los comprobantes de las últimas 24 h del cliente y dice en
+// qué quedó. Con `act` vuelve a buscar YA la transferencia en el banco (hasta 24 h atrás) y, si está, la carga (misma vía y candados de siempre:
+// nunca carga sin transferencia que coincida ni dos veces la misma). Sin `act` sólo lee (para los datos de la IA).
+async function _supportReceiptDiagnose(userId, act) {
+  const money = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+  try {
+    const uid = String(userId);
+    const comps = await Comprobante.find({ userId: uid, isComprobante: true, createdAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000) } }).sort({ createdAt: -1 }).limit(12).lean();
+    if (!comps.length) return { kind: 'none' };
+    let p = comps.find((c) => c.status !== 'duplicate' && !c.autoCharged && c.reviewStatus === 'pending');
+    if (p) {
+      if (act && Number(p.amount) > 0 && ['none', 'pending'].includes(p.bankMatchStatus || 'none')) {
+        const from = Math.max(Date.now() - 24 * 3600 * 1000, new Date(p.createdAt).getTime() - 30 * 60 * 1000);
+        await hgcashMatchFromComprobante(p, { since: new Date(from) });
+        p = (await Comprobante.findOne({ id: p.id }).lean()) || p;
+      }
+      if (p.autoCharged || p.reviewStatus === 'confirmed') return { kind: 'charged', amount: p.amount, info: `su comprobante de ${money(p.amount)} se acreditó recién` };
+      if (!(Number(p.amount) > 0)) return { kind: 'unreadable', info: 'mandó un comprobante que no se pudo leer (sin monto): tiene que reenviarlo bien o lo revisa una persona' };
+      if (p.bankMatchStatus === 'needs_review') return { kind: 'review', amount: p.amount, info: `su comprobante de ${money(p.amount)} está en revisión manual (posible carga repetida)` };
+      return { kind: 'no_transfer', amount: p.amount, info: `su comprobante de ${money(p.amount)} está recibido pero en el banco todavía NO figura una transferencia que coincida (monto y titular)` };
+    }
+    const last = comps[0];
+    if (last.status === 'duplicate' && last.duplicateOfUserId && String(last.duplicateOfUserId) !== uid) return { kind: 'used_by_other', amount: last.amount, info: 'el comprobante que mandó YA fue usado en otra cuenta: no se carga; tiene que mandar el comprobante de SU transferencia' };
+    const ok = comps.find((c) => c.autoCharged || c.reviewStatus === 'confirmed');
+    if (ok) return { kind: 'already_credited', amount: ok.amount, info: `su comprobante de ${money(ok.amount)} YA se acreditó; lo que reenvió es el mismo (no es otro pago)` };
+    if (last.reviewStatus === 'rejected') return { kind: 'rejected', amount: last.amount, info: 'su último comprobante fue rechazado por el equipo' };
+    return { kind: 'none' };
+  } catch (e) { logger.warn(`[support] diagnóstico de comprobante: ${e.message}`); return { kind: 'none' }; }
+}
+const SUPPORT_RECEIPT_TEXTS = {
+  no_transfer: ['/sys_support_rc_no_transfer', '🔎 Revisamos tu comprobante de {monto}: lo tenemos, pero en el banco todavía no figura esa transferencia. Fijate en tu banco que haya salido y que el CBU sea el que te pasamos; apenas entra se acredita sola. Igual ya lo está mirando una persona del equipo 🙌'],
+  unreadable: ['/sys_support_rc_unreadable', '🔎 Tu comprobante no se pudo leer bien. Mandá el comprobante completo (con monto, titular, fecha y N° de operación) y se acredita solo. Igual ya lo está mirando una persona del equipo 🙌'],
+  used_by_other: ['/sys_support_rc_used', '⚠️ Ese comprobante ya fue usado en otra cuenta, por eso no se cargó. Mandanos el comprobante de TU transferencia y lo revisamos.'],
+  already_credited: ['/sys_support_rc_credited', '✅ Ese comprobante de {monto} ya se acreditó en tu cuenta. Si hiciste OTRA transferencia, mandanos el comprobante de esa.'],
+  review: ['/sys_support_rc_review', '🔎 Tu carga de {monto} está en revisión: una persona del equipo la confirma enseguida 🙌']
+};
 async function _supportQuickReply(userId, username, quick, text) {
   try {
     // #1042-u (owner): botón "Tengo otro problema" ⇒ DIRECTO a un agente (chat abierto en Soporte) + aviso corto al cliente; la IA no se mete.
     if (quick === 'problema') {
+      // #1148: antes de pasar a una persona se revisa SOLO la carga del cliente (y se carga si la transferencia está en el banco).
+      let dg = { kind: 'none' };
+      try { dg = await _supportReceiptDiagnose(userId, true); } catch (_) {}
+      if (dg.kind === 'charged') { logger.info(`[support] ${username}: pidió un agente y su carga se acreditó sola ⇒ no pasa a una persona`); return; } // el aviso de la carga ya le llegó
+      const _rt = SUPPORT_RECEIPT_TEXTS[dg.kind];
+      if (_rt) {
+        const tx = await renderSystemCommand(_rt[0], _rt[1], { monto: '$' + Math.round(Number(dg.amount) || 0).toLocaleString('es-AR') });
+        if (tx) await _sendUserTurnNotice({ id: userId, username }, tx, { metadata: { channel: 'support', kind: 'receipt_status', status: dg.kind } });
+        if (dg.kind === 'already_credited' || dg.kind === 'used_by_other') { // respondido: no hace falta una persona (si insiste, vuelve a tocar el botón)
+          await _emitAdminOnlyChatNote(userId, username, `🤖 Pidió un agente por su carga; se le contestó solo: ${dg.info}.`).catch(() => {});
+          return;
+        }
+        await _supportHandoffNow(userId, username, `tocó "Hablar con un agente" — ${dg.info}`);
+        return;
+      }
       // #1138-f: "Buenas, en breve {nombre} está con usted…" firmado por el turno
       const t = await renderSystemCommand('/sys_support_problem', SUPPORT_PROBLEM_DEFAULT, { nombre: await getSupportAgentName() });
       if (t) await _sendUserTurnNotice({ id: userId, username }, t, { metadata: { channel: 'support', topic: 'problema' } });
@@ -16769,6 +16851,7 @@ async function _supportBotUserFacts(u) {
   }
   try { out.appInstalled = u.fcmTokenContext === 'standalone' || (Array.isArray(u.fcmTokens) && u.fcmTokens.some((t) => t && t.context === 'standalone')); } catch (_) {}
   try { out.pendingReceipts = await Comprobante.countDocuments({ userId: u.id, reviewStatus: 'pending' }); } catch (_) {}
+  try { const dg = await _supportReceiptDiagnose(u.id, false); if (dg && dg.info) out.receiptInfo = dg.info; } catch (_) {} // #1148
   // #1043: el extra por instalar de ESTE cliente (para explicarle bien) y si el sistema puede corregírselo solo.
   try {
     const ig = u.installGift || {};

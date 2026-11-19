@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1147)
+> **Última actualización: 2026-11-19** (#1148)
 
 ## Sesión 2026-11-09
 
@@ -15081,3 +15081,18 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - `_supportSweepCharged` (dentro de `_supportAutoCloseTick`, cada 5 min): charlas pendientes cuyo cliente recibió una carga DESPUÉS de lo último que escribió
   ⇒ cerradas. Limpia el atraso solo. Si el cliente vuelve a escribir, la charla se abre como siempre.
 - Regla: un flujo NUEVO que acredite una carga llama `_supportCloseAfterCharge`.
+
+### 1148. Soporte revisa y carga solo al pedir un agente + transferencias en ERROR se reintentan — server + supportBot
+- Owner: "cuando ponen hablar con un agente y se quejan que no le cargaron, que actúe automático: si falló la API que cargue, que detecte que no haya sido
+  cargado; si el comprobante lo mandó otro, que le responda sobre eso"; "hay 40 comprobantes a verificar, ¿no debería hacer todo solo?".
+- `_supportReceiptDiagnose(userId, act)`: mira los comprobantes de 24 h del cliente. Con `act` (botón "Hablar con un agente") vuelve a buscar la transferencia
+  en el banco (24 h) y la carga si está. Resultado: `charged` (no pasa a una persona), `already_credited` / `used_by_other` (se le contesta solo, nota interna,
+  sin pase), `no_transfer` / `unreadable` / `review` (se le explica y pasa a un agente con el diagnóstico en la nota). Textos `/sys_support_rc_*`
+  (fallback en `SUPPORT_RECEIPT_TEXTS`). La IA recibe el mismo dato (`receiptInfo` en `userFactsText`). Nunca carga sin transferencia que coincida.
+- `_hgcashReviveErrors` (recuperación de cada 3 min): movimiento en `error` (carga rechazada 3 veces: sin fichas, límite, caída) con +15 min ⇒ UNA ronda más
+  (marca `[reintento]`), salvo comprobante ya resuelto o carga del mismo monto hecha después. `_hgcashRetryComp` reintenta contra 24 h de movimientos (no depende
+  de la ventana) y lo usan también los falsos duplicados (#1145).
+- "Si falla la API que a los activos les cargue igual": ya existe para la IA de comprobantes (#1010, cliente de confianza). Si lo caído es 1girox no hay dónde
+  cargar: queda en reintento.
+- Queda para una persona: comprobante cuyo titular/monto no coincide con ninguna transferencia (ej. picaelias97), ilegibles, ambiguos.
+- Test `scripts/test-support-bot.js` 18/18 (se amplió la distancia del chequeo del pase). Sin probar en vivo.

@@ -186,6 +186,7 @@ function userFactsText(u, agentName) {
   if (u.installGift) L.push(`- Extra por instalar la app: ${u.installGift}.`);
   if (u.fixInstall) L.push(`- CORRECCIÓN DISPONIBLE "install_gift_topup": ${u.fixInstall}. Si reclama el extra por instalar, marcá fix = "install_gift_topup".`);
   if (u.pendingReceipts > 0) L.push(`- Tiene ${u.pendingReceipts} comprobante(s) de carga esperando acreditación.`);
+  if (u.receiptInfo) L.push(`- ESTADO DE SU CARGA (dato real del sistema, usalo si reclama una carga; no inventes otro): ${u.receiptInfo}.`); // #1148
   if (u.payout) L.push(`- Último retiro: ${u.payout}.`);
   if (u.blocked) L.push('- La cuenta está BLOQUEADA: no des detalles, decí que el equipo lo revisa y marcá handoff.');
   if (u.aiReplies > 0) L.push(`- Ya le respondiste ${u.aiReplies} vez/veces en esta charla${u.aiReplies >= 2 ? ': si sigue sin entender lo mismo, explicalo distinto y más simple, o marcá handoff' : ''}.`);
