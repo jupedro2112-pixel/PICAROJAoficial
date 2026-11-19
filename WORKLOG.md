@@ -14936,3 +14936,7 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Owner: "cuando aprietan Soporte sacá Otra consulta; si aprietan Quiero hablar con una persona, el primer mensaje es: Buenas, en breve (la persona de turno) está con usted, por favor indíquenos su problema" + "sacá de cada respuesta de soporte las Bases y condiciones; quedan abajo del Perfil".
 - `spHelpMenu` sin el botón 'otro'. `/sys_support_problem` = "👋 Buenas, en breve {nombre} está con usted. Por favor, indíquenos su problema 🙌" (`SUPPORT_PROBLEM_DEFAULT`, {nombre} = turno), enviado con `_sendUserTurnNotice`; migración al boot si tenía el texto anterior.
 - chat.js: el botón `target:'terms'` ya no se dibuja en el chat (el server lo sigue mandando en la metadata; se ve también en mensajes viejos).
+
+### 1138-g. "Mi carga no llegó" ⇒ cómo mandar el comprobante + ejemplo (2026-11-19) — sólo server
+- Owner: "si tocan Mi carga no llegó y responde automático, que explique cómo enviar el comprobante y deje un ejemplo para que vean la captura que tienen que mandar con sus datos completos".
+- `/sys_support_topic_carga` nuevo de fábrica (captura ENTERA sin recortar: titular y CUIT, fecha y hora, monto, N° de operación + carga mínima); migración si tenía el texto anterior. Sale firmado por el turno (`_sendUserTurnNotice`) con el botón "🧾 Ver ejemplo y enviar comprobante" (`receipt_example` ⇒ guía con ejemplo y de ahí adjuntar) y ya sin el 2º mensaje genérico (/sys_support_detail) para ese tema.

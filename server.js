@@ -14562,7 +14562,7 @@ async function initializeData() {
   } } catch (e) { console.warn('[startup-mig #1138 bot] ' + e.message); }
   // #1138 (owner): textos nuevos de carga/retiro pendiente, rechazo y pago ⇒ sólo pisa los que siguen con el texto de fábrica anterior.
   for (const [n, o, v] of [['/sys_withdraw_delayed', WITHDRAW_DELAYED_OLD_1020, WITHDRAW_DELAYED_DEFAULT], ['/sys_deposit_pending_review', DEPOSIT_PENDING_REVIEW_OLD_1138, DEPOSIT_PENDING_REVIEW_DEFAULT],
-    ['/sys_deposit_rejected', DEPOSIT_REJECTED_OLD_1138, DEPOSIT_REJECTED_DEFAULT], ['/sys_payout_done_chat', PAYOUT_DONE_CHAT_OLD_1138, PAYOUT_DONE_CHAT_DEFAULT], ['/sys_payout_paid', PAYOUT_PAID_OLD_1138, PAYOUT_PAID_DEFAULT], ['/sys_support_problem', SUPPORT_PROBLEM_OLD_1138, SUPPORT_PROBLEM_DEFAULT]]) {
+    ['/sys_deposit_rejected', DEPOSIT_REJECTED_OLD_1138, DEPOSIT_REJECTED_DEFAULT], ['/sys_payout_done_chat', PAYOUT_DONE_CHAT_OLD_1138, PAYOUT_DONE_CHAT_DEFAULT], ['/sys_payout_paid', PAYOUT_PAID_OLD_1138, PAYOUT_PAID_DEFAULT], ['/sys_support_problem', SUPPORT_PROBLEM_OLD_1138, SUPPORT_PROBLEM_DEFAULT], ['/sys_support_topic_carga', SUPPORT_TOPIC_CARGA_OLD_1138, SUPPORT_TOPIC_CARGA_DEFAULT]]) {
     try { await Command.updateOne({ name: n, response: o }, { $set: { response: v } }); } catch (e) { console.warn('[startup-mig #1138] ' + n + ': ' + e.message); }
   }
   try { await Command.updateOne({ name: '/sys_withdraw_delayed', response: WITHDRAW_DELAYED_OLD_890 }, { $set: { response: WITHDRAW_DELAYED_DEFAULT } }); } catch (e) { console.warn('[startup-migration] #1020:', e.message); } // #1020: sólo el texto viejo sin editar
@@ -15056,7 +15056,7 @@ async function initializeData() {
     {
       // #702: respuestas automáticas POR TEMA de Soporte (chips "Con una carga / retiro / reembolso / Otra cosa" y palabras clave).
       name: '/sys_support_topic_carga',
-      description: 'Soporte: respuesta automática cuando el tema es UNA CARGA (avisa la carga mínima y pide captura si cargó menos). Variables: {min}, {retiro_min}. Vacío = no se manda.',
+      description: 'Soporte: respuesta automática a "💳 Mi carga no llegó" (cómo mandar el comprobante; la app le agrega el botón con el EJEMPLO, #1138-g). Variables: {min}, {retiro_min}. Vacío = no se manda.',
       type: 'message',
       response: SUPPORT_TOPIC_CARGA_DEFAULT
     },
@@ -16395,7 +16395,9 @@ const SUPPORT_QUICK_KINDS = ['cargar', 'retirar', 'otro', 'carga', 'retiro', 're
 // botón de Bases y condiciones. También se detecta el tema por palabras clave cuando escriben libre (sin tocar un chip).
 // Textos editables en COMANDOS (/sys_support_topic_* y /sys_support_detail). Una vez por tema cada 2 h por cliente; nunca si un
 // agente respondió hace < 10 min.
-const SUPPORT_TOPIC_CARGA_DEFAULT = '💳 Carga mínima {min}: con eso o más se acredita sola. Si cargaste menos, mandanos la captura.';
+const SUPPORT_TOPIC_CARGA_OLD_1138 = '💳 Carga mínima {min}: con eso o más se acredita sola. Si cargaste menos, mandanos la captura.';
+// #1138-g (owner): "Mi carga no llegó" ⇒ explicar cómo mandar el comprobante + botón con un EJEMPLO de la captura con los datos completos.
+const SUPPORT_TOPIC_CARGA_DEFAULT = '📸 Para revisar tu carga, mandanos acá la captura ENTERA del comprobante, sin recortar, donde se vean bien tus datos:\n\n✅ Titular y CUIT\n✅ Fecha y hora\n✅ Monto\n✅ N° de operación\n\nTocá el botón de abajo para ver un ejemplo de cómo tiene que verse 👇 (Carga mínima {min}.)';
 const SUPPORT_TOPIC_RETIRO_DEFAULT = '💸 Retiro mínimo {retiro_min}, desde "Retirar premio". Ahí ves cuánto podés retirar hoy y, si una parte sigue en juego, cuánto te falta apostar (se libera solo). ¿Ya lo pediste y no llegó? Pasanos fecha y monto.';
 const SUPPORT_TOPIC_REEMBOLSO_DEFAULT = '🎁 La info del reembolso está en el botón de abajo. ¿Algo no cierra? Contanos.';
 const SUPPORT_TOPIC_OTRO_DEFAULT = '❓ Contanos qué pasó, cuándo y con qué monto, y te respondemos.';
@@ -16502,6 +16504,10 @@ async function _supportCannedReply(userId, username, quick, text, explicit) {
       : topic === 'retiro' ? await renderSystemCommand('/sys_support_topic_retiro', SUPPORT_TOPIC_RETIRO_DEFAULT, vars)
       : topic === 'bono' ? await renderSystemCommand('/sys_support_topic_bono', SUPPORT_TOPIC_BONO_DEFAULT, vars) // #715
       : await renderSystemCommand('/sys_support_topic_reembolso', SUPPORT_TOPIC_REEMBOLSO_DEFAULT, vars);
+    if (first && topic === 'carga') { // #1138-g: firmado por el turno + botón con el ejemplo del comprobante; sin el 2º mensaje genérico
+      await _sendUserTurnNotice(u, first, { metadata: { kind: 'go_section', target: 'receipt_example', label: '🧾 Ver ejemplo y enviar comprobante', channel: 'support', topic } });
+      return;
+    }
     if (first) {
       const meta = topic === 'reembolso' ? { kind: 'go_section', target: 'refund', label: '🎁 Ver info de reembolso', channel: 'support', topic } : { channel: 'support', topic };
       await _sendUserSystemMessage(u, first, { metadata: meta });
