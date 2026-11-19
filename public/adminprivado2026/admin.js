@@ -13229,6 +13229,21 @@ async function retryRouletteCredit(spinId) {
 // =========================================================================
 // authFetch: fetch autenticado para esta seccion (la base vieja no lo tiene
 // global). Agrega el Bearer y, si hay body, el Content-Type JSON.
+// #1138-p (owner, captura "Unexpected token '<'"): mientras AWS cambia de servidores (subida / variable nueva) o Cloudflare corta un pedido, la
+// respuesta es una PÁGINA de error (HTML) en vez de datos y el panel mostraba "Unexpected token '<'". Ahora, en TODO el panel, eso se ve como un
+// aviso claro. Ojo: la operación pudo haberse hecho igual ⇒ el aviso pide revisar antes de repetir (cargas, pagos).
+(function () {
+    try {
+        const _origJson = Response.prototype.json;
+        Response.prototype.json = function () {
+            const st = this.status;
+            return _origJson.call(this).catch(function (e) {
+                if (e && e.name === 'SyntaxError') throw new Error('⚠️ El servidor no respondió bien' + (st ? ' (' + st + ')' : '') + ': se está actualizando o está ocupado. Esperá un minuto y, ANTES de repetir, fijate si la operación ya se hizo (chat del cliente / movimientos).');
+                throw e;
+            });
+        };
+    } catch (_) {}
+})();
 function authFetch(url, opts) {
     const o = opts || {};
     o.headers = Object.assign({}, o.headers || {}, { 'Authorization': 'Bearer ' + currentToken });

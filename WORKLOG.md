@@ -14972,3 +14972,7 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Causa probable: Safari lee el manifest al CARGAR la página; la llave de instalación (cookie `vip_inst`) recién se crea después del login ⇒ si instala en esa misma carga, el inicio de la app no lleva `?acceso=`.
 - Dos caminos nuevos: (1) antes de mostrar la guía "Agregar a inicio" en iPhone, si la página cargó sin la llave, se recarga UNA vez (con la llave ya puesta) y la guía se abre sola (`installNeedsReload` / `installReloadThenGuide`, flag `localStorage vip_inst_ck`); (2) la llave también va en la cookie `vip_inst2` (Path=/api/auth/access-link): la app instalada sin sesión ni `?acceso=` hace `POST /api/auth/access-link` sin token y, si el iPhone copió las cookies de Safari, entra sola. Sin cookie ⇒ login normal con el usuario ya escrito, sin cartel. Logout borra las dos cookies.
 - No se pudo probar en un iPhone desde acá: verificar con el owner.
+
+### 1138-p. Panel: "Unexpected token '<'" ⇒ aviso claro (2026-11-19)
+- Owner (captura en el Chat completo, durante una subida a AWS): toast "Unexpected token '<'". Es una página de error HTML (nginx/ELB/Cloudflare mientras cambian los servidores) leída como JSON.
+- admin.js envuelve `Response.prototype.json`: si el cuerpo no es JSON ⇒ "⚠️ El servidor no respondió bien (código): se está actualizando o está ocupado… ANTES de repetir, fijate si la operación ya se hizo". Vale para todo el panel sin tocar cada llamada.
