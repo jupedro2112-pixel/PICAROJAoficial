@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1145)
+> **Última actualización: 2026-11-19** (#1146)
 
 ## Sesión 2026-11-09
 
@@ -15061,3 +15061,10 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
     junto con su comprobante ⇒ se acreditan solos.
 - Regla: un paso NUEVO entre el candado `HgcashCharge` y la carga no puede dejar el candado puesto si no se acreditó.
 - Sólo `node --check`; sin probar en vivo.
+
+### 1146. Reenviar el comprobante vuelve a buscar la transferencia del original — sólo server
+- Owner: "quiero que todos los comprobantes que envíen se carguen; están spameando los que ya enviaron y no les carga por eso".
+- El reenvío NUNCA bloqueó al original (queda `pending` y se acredita cuando cruza con el banco; la copia se cierra como `duplicate`). Lo que pasaba: el
+  original ya estaba fuera de la ventana (`windowMinutes`, 60) o trabado por #1143/#1145, y reenviar no hacía nada.
+- Ahora un reenvío propio de algo sin acreditar llama `_hgcashRetryOriginal(original)`: busca YA la transferencia mirando movimientos desde que mandó el
+  original (hasta 24 h). Con IA y sin IA. No se quitó la protección de comprobante repetido (acreditar cada reenvío sería pagar varias veces la misma transferencia).

@@ -2712,6 +2712,7 @@ async function _fallbackDuplicate({ userId, username, messageId, imageHash, orig
         if (pTxt) await _sendUserSystemMessage({ id: userId, username }, pTxt, { metadata: { kind: 'receipt_already_pending', amount: original.amount || 0, channel: 'support' } });
       } catch (_) {}
     }
+    _hgcashRetryOriginal(original); // #1146
   } else {
     await _emitAdminOnlyChatNote(userId, username, sameUser
       ? '🧾 Comprobante REPETIDO (misma imagen que uno suyo ya acreditado; la IA está caída). NO se cargó automático. Revisá antes de cargar.'
@@ -2978,6 +2979,7 @@ async function analyzeComprobanteFromMessage({ userId, username, content, messag
           } catch (_) {}
         }
         _chatAutoCloseIfHandled(userId, 'comprobante reenviado (pendiente)').catch(() => {});
+        _hgcashRetryOriginal(original); // #1146
         return;
       }
       if (sameUser) {
@@ -4202,7 +4204,17 @@ async function hgcashMatchFromMovement(movement) {
 
 // Desde un COMPROBANTE recién recibido: si fue a NUESTRA cuenta hgcash, buscar un
 // movimiento entrante que coincida por MONTO + NOMBRE de origen + ventana de tiempo.
-async function hgcashMatchFromComprobante(comprobante) {
+// #1146: el cliente REENVIÓ un comprobante suyo que sigue sin acreditarse ⇒ se vuelve a buscar YA la transferencia del ORIGINAL, mirando
+// los movimientos del banco desde que lo mandó (hasta 24 h), aunque ya esté fuera de la ventana normal. No carga nada nuevo: es el mismo pago.
+function _hgcashRetryOriginal(original) {
+  try {
+    if (!original || original.autoCharged || original.status === 'duplicate' || original.reviewStatus !== 'pending' || !(Number(original.amount) > 0)) return;
+    if (!['none', 'pending'].includes(original.bankMatchStatus || 'none')) return;
+    const from = Math.max(Date.now() - 24 * 60 * 60 * 1000, new Date(original.createdAt || Date.now()).getTime() - 30 * 60 * 1000);
+    hgcashMatchFromComprobante(original, { since: new Date(from) }).catch(() => {});
+  } catch (_) {}
+}
+async function hgcashMatchFromComprobante(comprobante, opts) {
   try {
     const cfg = await getHgcashConfig();
     if (!cfg.enabled) return;
@@ -4211,7 +4223,8 @@ async function hgcashMatchFromComprobante(comprobante) {
     // Buscamos un movimiento entrante que corresponda (por N° de transacción/coelsa,
     // o por nombre de origen + destino). NO dependemos de la config de cuenta: el
     // match se valida contra el movimiento real (sirve para cualquier banco/cuenta).
-    const since = new Date(Date.now() - (cfg.windowMinutes || 60) * 60 * 1000);
+    let since = new Date(Date.now() - (cfg.windowMinutes || 60) * 60 * 1000);
+    if (opts && opts.since instanceof Date && opts.since < since) since = opts.since; // #1146
     const candidates = await BankMovement.find({
       direction: 'Inbound', matchStatus: 'pending', createdAt: { $gte: since }
     }).sort({ createdAt: -1 }).limit(600) /* #1144: con la ventana ampliada tras una caída hay cientos de movimientos pendientes (antes 80) */.lean();
