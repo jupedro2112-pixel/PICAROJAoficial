@@ -104,6 +104,18 @@ function getApiKey() {
  *  que ya no alcanza un techo parejo. Ej. con 2 instancias, una key de 180 y
  *  una de 60: `pk_aaa:90,pk_bbb:30`. Sin sufijo → GIROX_MAX_RPM.
  *  @returns {Array<{key:string, rpm:number}>} */
+/** #1143: número de una variable de entorno, SIEMPRE válido. Un valor mal escrito en AWS ("85/min", "85 por min"…) daba NaN:
+ *  la fila del límite no terminaba nunca y todo pedido por esa key quedaba colgado sin error (cargas en "Procesando…"). */
+function _numEnv(name, def) {
+  const raw = process.env[name];
+  if (raw == null || String(raw).trim() === '') return def;
+  const n = Number(String(raw).trim());
+  if (Number.isFinite(n) && n > 0) return n;
+  if (!_numEnv._warned[name]) { _numEnv._warned[name] = 1; try { console.error(`[girox] ⛔ la variable ${name} tiene un valor que no es un número ("${String(raw).slice(0, 20)}") ⇒ se usa ${def}`); } catch (_) {} }
+  return def;
+}
+_numEnv._warned = {};
+
 function _readsKeyConfigs() {
   const raw = process.env.GIROX_API_KEY_CONSULTAS || '';
   return raw.split(',')
@@ -115,7 +127,7 @@ function _readsKeyConfigs() {
         const rpm = Number(e.slice(i + 1));
         if (Number.isFinite(rpm) && rpm > 0) return { key: e.slice(0, i).trim(), rpm };
       }
-      return { key: e, rpm: MAX_RPM };
+      return { key: e, rpm: _maxRpm() };
     })
     .filter((c) => c.key);
 }
@@ -127,7 +139,7 @@ function getReadsKeys() {
 // Techo de las keys de PUBLICISTA (en la plataforma siguen en 60/min): 60 ÷ 2
 // instancias. Env propia por si girox se las sube — NO heredan GIROX_MAX_RPM,
 // que acompaña a la master (180/min desde el 2026-08-15).
-const PUBLISHER_MAX_RPM = Number(process.env.GIROX_PUBLISHER_MAX_RPM || 30);
+const PUBLISHER_MAX_RPM = _numEnv('GIROX_PUBLISHER_MAX_RPM', 30);
 
 // Overrides POR key de publicista (`GIROX_PUBLISHER_KEY_RPM` = `pk_x:90,pk_y:90`).
 // Para cuando 1girox sube el límite de UN publicista puntual (ej. onekey, con
@@ -151,7 +163,7 @@ function _publisherKeyConfigs() {
 function _laneLimit(laneKey) {
   const cfg = _readsKeyConfigs().find((c) => c.key === laneKey);
   if (cfg) return cfg.rpm;
-  if (!laneKey || laneKey === 'master' || laneKey === getApiKey()) return MAX_RPM;
+  if (!laneKey || laneKey === 'master' || laneKey === getApiKey()) return _maxRpm();
   const pub = _publisherKeyConfigs().find((c) => c.key === laneKey);
   if (pub) return pub.rpm;
   return PUBLISHER_MAX_RPM;
@@ -166,7 +178,7 @@ function _laneLimit(laneKey) {
 //   · 1girox devolvió 429 ⇒ baja al 80 % de lo que venía mandando (nunca más que a 40 % de un saque; piso 15) y espera 90 s antes de volver a subir.
 // Así una key que 1girox subió a 180 o a 999 se aprovecha sola, y una de 60 se queda cerca de 60 entre todas las instancias.
 // Apagar (volver al techo fijo): GIROX_ADAPTIVE_RPM=0.
-const HARD_MAX_RPM = Number(process.env.GIROX_HARD_MAX_RPM || 480);
+const HARD_MAX_RPM = _numEnv('GIROX_HARD_MAX_RPM', 480);
 const ADAPT_FLOOR_RPM = 15;
 const _dynLimit = new Map(); // lane → { limit, last429, lastRaise }
 function _adaptiveOn() { return !/^(0|false|off)$/i.test(String(process.env.GIROX_ADAPTIVE_RPM || '')); }
@@ -255,7 +267,7 @@ function isEnabled() {
   return !!(getBaseUrl() && getApiKey()) || isSimulated(); // #616
 }
 
-const TIMEOUT_MS = Number(process.env.GIROX_TIMEOUT_MS || 20000);
+const TIMEOUT_MS = _numEnv('GIROX_TIMEOUT_MS', 20000);
 
 // Reintentos ante fallas transitorias (5xx / timeout / red / 429).
 // La doc recomienda backoff 2s, 5s, 15s reusando SIEMPRE la misma reference.
@@ -271,7 +283,8 @@ const RETRY_DELAYS_MS = [2000, 5000, 15000];
 // techo real es N×GIROX_MAX_RPM por key, así que el 429 sigue siendo posible →
 // por eso además se reintenta respetando Retry-After. Con 2 instancias, poner
 // GIROX_MAX_RPM = (límite por key)/2 (ej. 30 con límite 60; 90 si lo suben a 180).
-const MAX_RPM = Number(process.env.GIROX_MAX_RPM || 55); // margen de seguridad bajo el límite
+// #1143: se lee en el momento (SSM carga después del require) y siempre es un número válido.
+function _maxRpm() { return _numEnv('GIROX_MAX_RPM', 55); }
 const WINDOW_MS = 60000;
 const MAX_QUEUE_WAIT_MS = 30000; // si hay que esperar más que esto, falla rápido
 
@@ -288,6 +301,7 @@ async function _acquireSlot(laneKey, priority) {
     const now = Date.now();
     const arr = (_laneTimestamps.get(lane) || []).filter((t) => now - t < WINDOW_MS);
     let limit = _effLimit(lane); // #1141: techo vigente (se ajusta solo)
+    if (!(Number.isFinite(limit) && limit >= 1)) limit = 30; // #1143: nunca un techo inválido
     if (arr.length >= limit && _adaptOnFull(lane)) limit = _effLimit(lane);
     // #1142: la PLATA (carga, retiro, bono) no hace la fila detrás de las consultas de saldo: pasa siempre. Si 1girox la rechaza
     // por límite, se reintenta sola con la misma reference.
@@ -298,8 +312,9 @@ async function _acquireSlot(laneKey, priority) {
     }
     _laneTimestamps.set(lane, arr);
     const oldest = arr[0];
-    const waitMs = Math.max(50, WINDOW_MS - (now - oldest) + 25);
-    if (now + waitMs > deadline) return false;
+    let waitMs = Math.max(50, WINDOW_MS - (now - oldest) + 25);
+    if (!Number.isFinite(waitMs)) waitMs = 1000; // #1143: una espera inválida NUNCA deja el pedido dando vueltas para siempre
+    if (!(now + waitMs <= deadline)) return false;
     await _sleep(waitMs);
   }
 }
@@ -688,8 +703,8 @@ async function createPlatformUser({ username, password }) {
 //   • Solo se cachean lecturas EXITOSAS — nunca null/errores transitorios.
 //   • La plataforma sigue siendo la verdad para el DÉBITO real (el retiro/carga
 //     los valida girox server-side); el cache es solo para LECTURA/display.
-const PLAYER_CACHE_TTL_MS = Number(process.env.GIROX_PLAYER_CACHE_MS || 8000);
-const PLAYER_STALE_MS = Number(process.env.GIROX_PLAYER_STALE_MS || 180000);
+const PLAYER_CACHE_TTL_MS = _numEnv('GIROX_PLAYER_CACHE_MS', 8000);
+const PLAYER_STALE_MS = _numEnv('GIROX_PLAYER_STALE_MS', 180000);
 /** true si la key por la que sale ese jugador está al 70 % o más de su techo en el último minuto. */
 async function _laneBusyFor(username) {
   try {
@@ -703,10 +718,10 @@ const _playerInflight = new Map();     // usernameLower → Promise<data|null>
 const _playerInvalidatedAt = new Map(); // usernameLower → ts de la última invalidación
 
 // Cache de stats/netwin (getPlayerStats) — status de reembolso. Ver getPlayerStats.
-const STATS_CACHE_TTL_MS = Number(process.env.GIROX_STATS_CACHE_MS || 90000);
+const STATS_CACHE_TTL_MS = _numEnv('GIROX_STATS_CACHE_MS', 90000);
 const _statsCache = new Map();         // "user|from|to" → { data, ts }
 // #1003 (velocidad): un rango YA CERRADO (termina antes de hoy, hora ART) no cambia ⇒ 30 min; y dos pedidos iguales a la vez salen UNA vez.
-const STATS_CLOSED_TTL_MS = Number(process.env.GIROX_STATS_CLOSED_CACHE_MS || 30 * 60000);
+const STATS_CLOSED_TTL_MS = _numEnv('GIROX_STATS_CLOSED_CACHE_MS', 30 * 60000);
 const _statsInflight = new Map();
 
 /** Borra el saldo cacheado de un usuario (se llama tras cada operación de plata)

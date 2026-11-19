@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1142)
+> **Última actualización: 2026-11-19** (#1143)
 
 ## Sesión 2026-11-09
 
@@ -15022,3 +15022,19 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   (2) con la key al 70 % o más, las lecturas de saldo de PANTALLA usan el saldo guardado de hasta 3 min (`GIROX_PLAYER_STALE_MS`, `_laneBusyFor`); `{fresh:true}`
   y la invalidación tras cada operación de plata siguen igual; (3) el techo adaptable ya no baja de 80 % del configurado (bajaba 30 → 17 y empeoraba una instancia).
 - Una etiqueta NUEVA de un pedido que mueva plata tiene que empezar con una de las palabras de `_MONEY_LABEL_RX` (o sumarse ahí) para tener prioridad.
+
+### 1143. Cargas colgadas en "Procesando…" desde las 02:50 UTC: la key PRINCIPAL quedó muda tras un cambio de variables en AWS — sólo server
+- Logs (2 instancias): última `auto-carga OK` 02:50:53 y último `[deposit] OK` 02:50:45; después CERO cargas (ni OK ni error) aunque el banco siguió avisando
+  movimientos (20-40 cada 10 min) y entraron comprobantes. A las 02:50:31 hubo un `config-deploy` (cambio de variables de entorno, no de código). Desde ese
+  arranque, en cada boot: `TimeoutNaNWarning: NaN is not a number. Timeout duration was set to 1.` y en 1girox la key "app principal" figura con último uso
+  02:49:52. Las keys de publicista y de consultas siguieron andando (por eso se veía saldo y se entraba al casino).
+- Mecanismo: toda carga (manual y automática) llama primero `girox.getPlatformConfig()` (`_depositRolloverXFor`), que sale por la key PRINCIPAL. Con un techo
+  inválido (NaN) en ese carril, `_acquireSlot` nunca daba lugar ni cortaba (`ventana < NaN` es falso, `ahora + NaN > límite` es falso, espera de 1 ms): el pedido
+  quedaba dando vueltas para siempre, sin error ni log. Causa más probable: `GIROX_MAX_RPM` (u otra numérica) cargada en AWS con algo que no es un número.
+  No se pudo ver el valor desde los logs: queda como causa PROBABLE, no confirmada.
+- Arreglo: `_numEnv(name, def)` para TODOS los números del entorno de `giroxService` (valor inválido ⇒ default + `[girox] ⛔ la variable X tiene un valor que no
+  es un número`), `GIROX_MAX_RPM` se lee en el momento (`_maxRpm()`, toma también el de SSM, que antes se ignoraba porque carga después del require) y la fila
+  nunca puede quedar sin salida (techo inválido ⇒ 30; espera inválida ⇒ 1 s; corta a los 30 s con el aviso de siempre).
+- Regla: un número que venga del entorno se lee con `_numEnv`, nunca `Number(process.env.X || def)`.
+- El límite de 1girox de la pauta quedó resuelto antes: con el pool de 9 keys, desde 03:51 UTC no hay 429 ni esperas en `[girox-uso]`.
+- Pendiente del owner: las cargas de 02:50 → deploy quedaron sin acreditar (movimientos del banco "SIN match" / comprobantes en Cargas pendientes): revisarlas.
