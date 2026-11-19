@@ -14952,3 +14952,11 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 
 ### 1138-j. Firma de Soporte "Nombre - Soporte PICA ROJA" (2026-11-19) — app v749
 - Owner: "cuando una persona de soporte contesta que figure el nombre y diga, ej., Sofía - Soporte PICA ROJA, no Carga aquí". chat.js `msg-who`.
+
+### 1138-k. Soporte del panel: el chat se abre SÓLO con "hablar con una persona" (2026-11-19)
+- Owner: "a Soporte que solamente se le abra el chat si aprieta el botón de hablar con una persona; si no, que nunca se abra, para no generar fricción".
+- `_supportConversationsBuild` → `needsAgent`: abierto sólo con nota `bot_handoff` (botón / pase) o si una persona del equipo ya contestó. Se quitó la apertura por "reclamo que el bot no contestó en 3 min". Test `test-support-bot.js` actualizado (18/18).
+
+### 1138-l/m. Girox: chat cerrado deja el Sorteo mensual + barra nítida y fondo negro (2026-11-19) — app v750
+- Owner: "cuando se cierra el chat que quede el circulito pero que no tape más el sorteo mensual". Con el chat cerrado ya no va el botón CARGA AQUÍ en el medio de la barra (#1134 lo ponía encima del Sorteo mensual); queda el círculo verde CARGAS abajo.
+- Owner: "la parte inferior del menú superior se ve borrosa… y los espacios en blanco arriba/abajo en negro": el ‹ Volver tenía un brillo rojo (box-shadow de chat.css) que se veía borroso debajo de la barra ⇒ barra del casino sin sombras/desenfoques; `html`/`body.casino-open` en negro.

@@ -25538,11 +25538,11 @@ async function _supportConversationsBuild() {
         const H = mp(ho), A = mp(human), B = mp(answered), L = mp(lastU), M = new Set(mutes.map((x) => x._id));
         const grace = Date.now() - 3 * 60000;
         const needsAgent = (r) => {
-          if (H.has(r.userId) || A.has(r.userId)) return true; // pasado a un agente / ya lo atiende una persona
-          if (!r._needs || M.has(r.userId)) return false;
-          const lu = L.get(r.userId); if (!lu) return false;
-          const ans = B.get(r.userId);
-          return new Date(lu).getTime() < grace && !(ans && new Date(ans) >= new Date(lu));
+          // #1138-k (owner: "que a Soporte sólo se le abra el chat si el cliente aprieta 'hablar con una persona'; si no, nunca, para no generar
+          // fricción"): ABIERTO sólo con el pase por el botón (nota bot_handoff) o si una persona del equipo ya lo está atendiendo. Ya no se abre
+          // por un reclamo que el bot no contestó (antes: 3 min sin respuesta del bot).
+          void M; void L; void B; void grace;
+          return H.has(r.userId) || A.has(r.userId);
         };
         _rows = rows.map((r) => {
           if (!needsAgent(r)) { r.closed = true; r.botHandled = true; return r; }

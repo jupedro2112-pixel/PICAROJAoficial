@@ -3821,3 +3821,16 @@ body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino > #spTicker b 
 .srt-soon { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; background: var(--p-surface); border: 2px dashed var(--p-border); border-radius: 16px; padding: 14px; margin: 10px 0; }
 .srt-soon > b { font: 900 18px var(--p-font); color: var(--p-red); letter-spacing: .04em; }
 .srt-soon > span { font-size: 13px; color: var(--p-text-2, var(--p-muted)); }
+
+/* #1138-l (owner: "cuando se cierra el chat que quede el circulito pero que no tape más el sorteo mensual"): con el chat cerrado ya NO va el
+   botón grande CARGA AQUÍ en el medio de la barra (pisaba al Sorteo mensual, #1134); para cargar queda el círculo verde CARGAS abajo. */
+body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-loadchat { display: none !important; }
+body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-brand:not([hidden]),
+body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-srt:not([hidden]) { display: inline-flex !important; }
+/* #1138-m (owner: "la parte inferior del menú superior se ve borrosa: que se vea sin borrado; y los espacios en blanco de arriba o abajo, en
+   negro"): sin sombras / brillos / desenfoques en la barra del casino (el ‹ Volver tenía un brillo rojo que se veía borroso abajo) y fondo negro
+   detrás de todo mientras Girox está abierto (zonas del teléfono arriba / abajo y el rebote al deslizar). */
+.casino-topbar, .casino-topbar *:not(.st-badge) { box-shadow: none !important; text-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.casino-topbar .casino-back { box-shadow: none !important; }
+html:has(body.casino-open), body.casino-open { background: #000 !important; }
+#casinoOverlay { padding-bottom: 0; }

@@ -206,7 +206,7 @@ caso('server.js: frenos del bot (pausa por agente, handoff, una respuesta por me
   assert.ok(/const sentAny = await Message\.findOne[\s\S]{0,200}if \(sentAny\) return;\s*r = \{ ok: true, reply: [^}]*handoff: true/.test(S), 'IA falla y no salió respuesta fija ⇒ aviso + agente (nunca un visto)');
   assert.ok(/if \(!r\.reply\) r\.reply = /.test(S), 'silencio sólo después de una frase de cierre');
   assert.ok(/VIP\.ui\.showModal = function \(id\) \{ try \{ _modalIntoCasino\(id\); \}/.test(H) && /_modalsBackAll\(\); \} catch/.test(H), 'ventanas adentro de Girox');
-  assert.ok(/#1042-n[\s\S]{0,2500}if \(H\.has\(r\.userId\) \|\| A\.has\(r\.userId\)\) return true;[\s\S]{0,600}if \(!needsAgent\(r\)\) \{ r\.closed = true; r\.botHandled = true; return r; \}/.test(S), 'Soporte: todo se ve, abierto sólo si necesita un agente');
+  assert.ok(/#1042-n[\s\S]{0,4000}return H\.has\(r\.userId\) \|\| A\.has\(r\.userId\);[\s\S]{0,600}if \(!needsAgent\(r\)\) \{ r\.closed = true; r\.botHandled = true; return r; \}/.test(S), 'Soporte: todo se ve, abierto SÓLO con el botón "hablar con una persona" o si ya lo atiende una persona (#1138-k)');
   assert.ok(/if \(mode !== 'play'\) \{ try \{ if \(document\.body\.classList\.contains\('ev-expanded'\)\)/.test(H), 'al cambiar de menú se suelta el bloqueo de scroll');
   assert.ok(/return c\.enabled && !c\.classic && \(supportBot\.isAvailable\(\) \|\| c\.learnedOnly\);/.test(S) && /cfg\.classic \|\| \(!supportBot\.isAvailable\(\) && !cfg\.learnedOnly\)/.test(S), 'chat clásico = sin bot');
   const CSS = fs.readFileSync(path.join(ROOT, 'public/css/pin.css'), 'utf8'); const blk = CSS.slice(CSS.indexOf('/* #1042 (owner, captura de referencia)'));
