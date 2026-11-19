@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1141)
+> **Última actualización: 2026-11-19** (#1142)
 
 ## Sesión 2026-11-09
 
@@ -15012,3 +15012,13 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   para consultas (`GIROX_API_KEY_CONSULTAS`). No se agregó nada nuevo ahí.
 - Dato de la captura de 1girox (03:36 UTC): "app principal" con último uso 02:49:52 mientras las de consultas seguían en uso ⇒ los jugadores que se saturaban
   NO salen por esa key. Falta identificar cuál es (el log `[girox-uso]` muestra los últimos 4 caracteres).
+
+### 1142. Causa de raíz confirmada con `[girox-uso]`: la key del publicista (…BYyO) está en ~60/min y se va en saldos y entradas al casino — sólo server
+- Logs tras el deploy de #1139-#1141 (03:43–03:47 UTC, 2 instancias): `key …BYyO (publicista)` 22-34 pedidos por minuto POR INSTANCIA y 1girox ya rechaza
+  (429) ⇒ esa key sigue en ~60/min en 1girox. Reparto: `getPlayer` (leer saldo) ~50 %, `session` (entrar al casino) ~35 %, reembolsos / fueguito el resto.
+  Las cargas hacían la misma fila (esperas de 20-30 s, "sin lugar" 12 en un minuto) ⇒ Depositar en "Procesando…". No es la key "app principal" (la de 999).
+- Arreglos de código (alivian, NO reemplazan subir el cupo de esa key en 1girox o sumarle keys a la campaña):
+  (1) la PLATA no hace fila (`_MONEY_LABEL_RX`: deposit / withdraw / bonus / bonusClaim / regalo pasan siempre; un 429 se reintenta con la misma reference);
+  (2) con la key al 70 % o más, las lecturas de saldo de PANTALLA usan el saldo guardado de hasta 3 min (`GIROX_PLAYER_STALE_MS`, `_laneBusyFor`); `{fresh:true}`
+  y la invalidación tras cada operación de plata siguen igual; (3) el techo adaptable ya no baja de 80 % del configurado (bajaba 30 → 17 y empeoraba una instancia).
+- Una etiqueta NUEVA de un pedido que mueva plata tiene que empezar con una de las palabras de `_MONEY_LABEL_RX` (o sumarse ahí) para tener prioridad.

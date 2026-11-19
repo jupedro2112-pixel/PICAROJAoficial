@@ -203,7 +203,8 @@ function _adaptOn429(lane) {
   const recent = now - d.last429 < 5000; // una tanda de 429 juntos cuenta una sola vez
   d.last429 = now;
   if (!recent) {
-    const next = Math.max(ADAPT_FLOOR_RPM, Math.min(cur, Math.floor(Math.max(_laneLoad(lane), cur * 0.5) * 0.8)));
+    // #1142: nunca por debajo del 80 % del techo configurado (con 2 instancias el configurado ya es la mitad del cupo real)
+    const next = Math.max(ADAPT_FLOOR_RPM, Math.floor(_laneLimit(lane) * 0.8), Math.min(cur, Math.floor(_laneLoad(lane) * 0.9)));
     if (next < cur) logger.warn(`[girox-uso] key …${String(lane).slice(-4)}: 1girox rechazó por límite ⇒ el techo baja ${cur} → ${next} por min`);
     d.limit = next;
   }
@@ -280,7 +281,7 @@ function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 /** Espera a que haya lugar en la ventana de rate limit DE ESA KEY.
  *  Devuelve false si esperar sería excesivo. */
-async function _acquireSlot(laneKey) {
+async function _acquireSlot(laneKey, priority) {
   const lane = laneKey || 'master';
   const deadline = Date.now() + MAX_QUEUE_WAIT_MS;
   for (;;) {
@@ -288,7 +289,9 @@ async function _acquireSlot(laneKey) {
     const arr = (_laneTimestamps.get(lane) || []).filter((t) => now - t < WINDOW_MS);
     let limit = _effLimit(lane); // #1141: techo vigente (se ajusta solo)
     if (arr.length >= limit && _adaptOnFull(lane)) limit = _effLimit(lane);
-    if (arr.length < limit) {
+    // #1142: la PLATA (carga, retiro, bono) no hace la fila detrás de las consultas de saldo: pasa siempre. Si 1girox la rechaza
+    // por límite, se reintenta sola con la misma reference.
+    if (arr.length < limit || priority) {
       arr.push(now);
       _laneTimestamps.set(lane, arr);
       return true;
@@ -340,6 +343,9 @@ function _usageFlush() {
 }
 const _usageTimer = setInterval(_usageFlush, WINDOW_MS);
 if (_usageTimer && _usageTimer.unref) _usageTimer.unref();
+
+// #1142: pedidos que mueven plata (por la etiqueta del log): no esperan lugar en la fila.
+const _MONEY_LABEL_RX = /^(deposit|withdraw|bonus|bonusClaim|regalo)\b/i;
 
 // ============================================================
 // TRANSPORTE
@@ -518,7 +524,7 @@ async function _request({ method, path, body, label, retryable = true, username 
     const _lane = keyOverride || getApiKey();
     const _um = _usageOf(_lane);
     const _t0 = Date.now();
-    const _gotSlot = await _acquireSlot(_lane);
+    const _gotSlot = await _acquireSlot(_lane, _MONEY_LABEL_RX.test(String(label || '')));
     const _waited = Date.now() - _t0;
     if (_waited > _um.waitMax) _um.waitMax = _waited;
     if (_gotSlot) { _um.n++; const _op = _usageOp(label); _um.ops.set(_op, (_um.ops.get(_op) || 0) + 1); } else _um.noSlot++;
@@ -681,6 +687,15 @@ async function createPlatformUser({ username, password }) {
 //   • La plataforma sigue siendo la verdad para el DÉBITO real (el retiro/carga
 //     los valida girox server-side); el cache es solo para LECTURA/display.
 const PLAYER_CACHE_TTL_MS = Number(process.env.GIROX_PLAYER_CACHE_MS || 8000);
+const PLAYER_STALE_MS = Number(process.env.GIROX_PLAYER_STALE_MS || 180000);
+/** true si la key por la que sale ese jugador está al 70 % o más de su techo en el último minuto. */
+async function _laneBusyFor(username) {
+  try {
+    let k = await _resolveKeyFor(username);
+    const lanes = (Array.isArray(k) ? k : [k]).map((x) => (typeof x === 'string' && x.trim()) || getApiKey()).filter(Boolean);
+    return lanes.length > 0 && lanes.every((l) => _laneLoad(l) >= _effLimit(l) * 0.7);
+  } catch (_) { return false; }
+}
 const _playerCache = new Map();        // usernameLower → { data, ts }
 const _playerInflight = new Map();     // usernameLower → Promise<data|null>
 const _playerInvalidatedAt = new Map(); // usernameLower → ts de la última invalidación
@@ -715,7 +730,7 @@ function _maybeCachePlayer(key, data, startTs) {
 // mantener vivo el proceso solo por este timer.
 const _playerCachePrune = setInterval(() => {
   const now = Date.now();
-  for (const [k, v] of _playerCache) if (now - v.ts >= PLAYER_CACHE_TTL_MS) _playerCache.delete(k);
+  for (const [k, v] of _playerCache) if (now - v.ts >= Math.max(PLAYER_CACHE_TTL_MS, PLAYER_STALE_MS)) _playerCache.delete(k);
   for (const [k, v] of _statsCache) if (now - v.ts >= Math.max(STATS_CACHE_TTL_MS, STATS_CLOSED_TTL_MS)) _statsCache.delete(k); // #1003: los cerrados viven 30 min
   // Los timestamps de invalidación se guardan más tiempo que la peor lectura en
   // vuelo posible (timeout + reintentos ~80s) para no reactivar la race.
@@ -777,6 +792,10 @@ async function getUserInfoByName(username, opts = {}) {
 
   const cached = _playerCache.get(key);
   if (cached && (Date.now() - cached.ts) < PLAYER_CACHE_TTL_MS) return cached.data;
+  // #1142 (logs 2026-11-19: la key del publicista se iba en leer saldos, getPlayer = la mitad de los pedidos): con la key EXIGIDA
+  // (70 % del techo o más) una lectura de PANTALLA usa el saldo guardado de hasta 3 min en vez de hacer fila. Las decisiones de plata
+  // piden {fresh:true} y cada carga / retiro / bono borra lo guardado, así que el saldo que cambió se lee de nuevo.
+  if (cached && (Date.now() - cached.ts) < PLAYER_STALE_MS && await _laneBusyFor(username)) return cached.data;
 
   // Coalescing: si ya hay una lectura EN VUELO para este usuario, se comparte
   // (no se dispara otra request a girox).
