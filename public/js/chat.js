@@ -74,6 +74,11 @@ VIP.chat = (function () {
         if (md.kind === 'install_gift_offer') {
             return `<div class="plat-choice"><button type="button" class="plat-btn plat-play-now" onclick="VIP.home.installGiftOpen()">🎁 Ver mi extra por instalar la app</button></div>`;
         }
+        // #1138: recordatorio después de una carga (sin la app) ⇒ botón verde "Instalar la app" (reclama el extra al abrirla instalada).
+        if (md.kind === 'install_gift_remind') {
+            const amt = Number(md.amount) || 0;
+            return `<div class="plat-choice"><button type="button" class="plat-btn plat-play-now ig-remind-btn" onclick="VIP.home.installGiftMain()">📲 Instalar la app${amt ? ' y reclamar $' + amt.toLocaleString('es-AR') : ''}</button></div>`;
+        }
         // #364 (owner): tarjeta del CBU como en la gemela — CBU / Alias / Titular, Copiar CBU, Copiar ALIAS y el botón
         // verde "Por favor enviar comprobante aquí" que abre el adjuntar. El texto del mensaje (/sys_cbu) va arriba.
         if (md.kind === 'cbu_card') {

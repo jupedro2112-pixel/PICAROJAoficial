@@ -1684,6 +1684,18 @@
                 else if (fresh && !_playNowShown.has(message.id)) { _playNowShown.add(message.id); _lastDeposit = { platform: md.platform, amount: md.amount, bonus: md.bonus }; showPlayNow(Object.assign({}, _lastDeposit, (_ig && _ig.status === 'offered' && Number(_ig.amount) > 0) ? { gift: _ig } : { plain: true })); } // #735: sin regalo → sin botones, 3 s
             } catch (_) {}
         }
+        // #1138: recordatorio después de una carga (sin la app) ⇒ queda escrito en el chat con su botón; con Girox abierto se abre el chat.
+        if (md && md.kind === 'install_gift_remind') {
+            try {
+                const ts = new Date(message.timestamp || 0).getTime();
+                if ((!ts || (Date.now() - ts) < 3 * 60000) && !_igSeen.has(message.id)) {
+                    _igSeen.add(message.id);
+                    if (!_igPending()) _ig = Object.assign({}, _ig || {}, { status: 'offered', amount: md.amount, expiresAt: md.expiresAt || null });
+                    _igPaintBar();
+                    if (spNewCasino()) spShowChat();
+                }
+            } catch (_) {}
+        }
         // #283: oferta de carga GRATIS por instalar la app (primera carga) → hoja al instante si es reciente.
         if (md && md.kind === 'install_gift_offer') {
             try {

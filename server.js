@@ -2171,6 +2171,16 @@ girox.setGiftGuard(async (username) => {
   _dupGuardCache.set(username, { why, ts: Date.now() }); return why;
 });
 function _installGiftExpired(ig) { return !!(ig && ig.expiresAt && new Date(ig.expiresAt).getTime() < Date.now()); }
+// #1138: recordatorio después de una carga (cliente sin la app, extra pendiente): escrito por la persona de turno + botón "Instalar la app".
+const INSTALL_GIFT_REMIND_DEFAULT = '📲 *¿Todavía no tenés la app?*\n\n🎁 Instalá la app y reclamá *${monto} SIN CARGO* en fichas.\n\nTocá el botón de abajo 👇 y en un minuto la tenés.';
+async function _installGiftRemind(user, amount, expiresAt) {
+  const monto = Number(amount || 0).toLocaleString('es-AR');
+  const text = await renderSystemCommand('/sys_install_gift_remind', INSTALL_GIFT_REMIND_DEFAULT, { username: user.username, monto });
+  if (!text) return false;
+  await _sendUserTurnNotice(user, text, { metadata: { kind: 'install_gift_remind', amount: Number(amount) || 0, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null },
+    push: { title: `🎁 $${monto} sin cargo por instalar la app`, body: 'Instalá la app y reclamalo al toque.' } });
+  return true;
+}
 // Devuelve true si se OFRECIÓ (el que llama puede omitir el cartel genérico "instalá la app").
 async function maybeOfferInstallGift(userIn, { amount, platform = null, source = '' } = {}) {
   try {
@@ -2180,16 +2190,25 @@ async function maybeOfferInstallGift(userIn, { amount, platform = null, source =
     const user = await User.findOne({ id: userIn.id }).lean();
     if (!user) return false;
     const st = user.installGift && user.installGift.status;
-    if (st && st !== 'none') return false;            // ya ofrecida / reclamada / vencida
+    if (st && !['none', 'offered', 'deferred'].includes(st)) return false; // reclamada / vencida
+    if ((st === 'offered' || st === 'deferred') && _installGiftExpired(user.installGift)) return false;
     const _abuse = await _welcomeAbuseOf(user); if (_abuse) { logger.warn(`[install-gift] ${user.username}: sin extra por instalar — ${_abuse}`); _emitAdminOnlyChatNote(user.id, user.username, `⚠️ SIN EXTRA POR INSTALAR LA APP: ${_abuse}. Si es un cliente legítimo, cargáselo a mano desde Bonificación.`).catch(() => {}); return false; } // #974
     if (_rouletteHasAppInstalled(user)) return false; // ya tiene la app: no hay nada que incentivar
-    // Sólo la PRIMERA carga real (la recién acreditada ya está en Transaction).
+    // #1138 (owner): "después de la carga, si no tiene la app, remarcale: instalá la app y reclamá $5.000 sin cargo, con el botón".
+    // Antes sólo en la PRIMERA carga; ahora en TODAS (oferta pendiente ⇒ recordatorio; nunca ofrecida ⇒ se ofrece). Máx. 1 cada 2 h.
+    if (st === 'offered' || st === 'deferred') {
+      const gAmt = Number(user.installGift.amount) || 0; if (!(gAmt > 0)) return false;
+      const lim = new Date(Date.now() - 2 * 3600000);
+      const ok = await User.updateOne({ id: user.id, 'installGift.status': st, $or: [{ 'installGift.remindedAt': null }, { 'installGift.remindedAt': { $lt: lim } }] }, { $set: { 'installGift.remindedAt': new Date() } });
+      if (!(ok.modifiedCount || ok.nModified)) return true; // recordado hace poco: igual no mandar el cartel genérico
+      await _installGiftRemind(user, gAmt, user.installGift.expiresAt);
+      return true;
+    }
     const n = await Transaction.countDocuments({
       $or: [{ userId: user.id }, { username: user.username }],
       type: 'deposit',
       'metadata.source': { $nin: ['install_bonus', 'welcome_gift', 'payout_refund'] }
     });
-    if (n > 1) return false;
     const gift = installGiftAmount(amount, cfg);
     if (!(gift > 0)) return false;
     const now = new Date();
@@ -2202,8 +2221,9 @@ async function maybeOfferInstallGift(userIn, { amount, platform = null, source =
     if (!reserved) return false;
     const vars = { username: user.username, monto: gift.toLocaleString('es-AR'), pct: cfg.fixedArs > 0 ? '' : cfg.pct, dias: cfg.days, carga: base.toLocaleString('es-AR') };
     const text = (await renderSystemCommand('/sys_install_gift_offer', INSTALL_GIFT_OFFER_DEFAULT, vars)) || _renderVars('🎁 Instalando la app te regalamos ${monto} extra en fichas.', vars);
+    if (n > 1) { await _installGiftRemind(user, gift, expiresAt); } else { // #1138: no es la primera carga ⇒ el texto corto (el de oferta habla de la "primera carga")
     const md = { kind: 'install_gift_offer', amount: gift, baseAmount: base, pct: cfg.fixedArs > 0 ? null : cfg.pct, expiresAt: expiresAt.toISOString() };
-    await _sendUserSystemMessage(user, text, { metadata: md, push: { title: `🎁 $${vars.monto} extra por instalar la app`, body: `Instalá la app y cargá $${vars.monto} extra en fichas.` } });
+    await _sendUserTurnNotice(user, text, { metadata: md, push: { title: `🎁 $${vars.monto} extra por instalar la app`, body: `Instalá la app y cargá $${vars.monto} extra en fichas.` } }); }
     await _emitAdminOnlyChatNote(user.id, user.username,
       (cfg.fixedArs > 0 // #1029: con monto fijo la nota decía "50%" y confundía (parecía un bono del 50% de corrido)
         ? `🎁 EXTRA por instalar la app OFRECIDO: $${vars.monto} (monto fijo; su primera carga fue de $${vars.carga}). Vence en ${cfg.days} días.`
@@ -14754,6 +14774,12 @@ async function initializeData() {
     {
       // #283 (2026-10-17): oferta de CARGA GRATIS por instalar la app al acreditarse la PRIMERA carga de un
       // cliente sin la app. Los botones ("Instalar ahora" / "Ahora quiero jugar") los pone la PWA (metadata).
+      name: '/sys_install_gift_remind',
+      description: '#1138: recordatorio DESPUÉS DE CADA CARGA a un cliente sin la app con el extra por instalar pendiente (máx. 1 cada 2 h; el botón "Instalar la app" lo pone la app). Variables: {username}, {monto} (sin $). Vacío = no se manda.',
+      type: 'message',
+      response: INSTALL_GIFT_REMIND_DEFAULT
+    },
+    {
       name: '/sys_install_gift_offer',
       description: '% EXTRA por instalar la app: mensaje al acreditarse la PRIMERA carga de un cliente que no tiene la app (los botones "Instalar ahora y cargar el extra" / "Seguir jugando, lo cargo después" los pone la app). Variables: {username}, {monto} (sin $, el extra), {pct}, {dias}, {carga} (la carga). Vacío = texto corto por defecto (el cartel igual sale). El % / tope / días se editan en Bonos automáticos.',
       type: 'message',

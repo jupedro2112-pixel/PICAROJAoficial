@@ -3733,3 +3733,16 @@ html:has(body.casino-open), body.casino-open { background: #000 !important; }
 .info-msg.im-compact .im-sec { padding-right: 52px !important; }
 .info-msg.im-compact .im-sec:not(.open) + .im-more { font-size: 0 !important; width: 32px; height: 32px; padding: 0 !important; margin-top: -46px !important; margin-bottom: 14px !important; display: flex !important; align-items: center; justify-content: center; }
 .info-msg.im-compact .im-sec:not(.open) + .im-more::after { content: "›"; font: 900 20px/1 var(--p-font); color: var(--p-red); margin-top: -2px; }
+
+/* #1138 (owner): Telegram de la burbuja a la MITAD de alto (una línea en negrita + subtítulo chico). */
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow { gap: 7px; margin-top: 4px; padding: 3px 9px 3px 4px; border-radius: 10px; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-ico { flex: 0 0 20px; width: 20px; height: 20px; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-ico svg { width: 12px; height: 12px; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt { line-height: 1.1; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt b { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow .stg-txt small { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow i { font-size: 15px; }
+/* #1138: botón "Instalar la app" del recordatorio después de la carga (verde tipo WhatsApp, a lo ancho). */
+body:not(.sp-classic) .ig-remind-btn { width: 100%; background: #25d366 !important; color: #fff !important; border: 0 !important; border-radius: 22px !important;
+  font-weight: 800 !important; padding: 10px 14px !important; box-shadow: 0 2px 6px rgba(0, 0, 0, .18); }
+body:not(.sp-classic) .ig-remind-btn:active { transform: scale(.98); }
