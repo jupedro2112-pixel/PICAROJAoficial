@@ -3017,7 +3017,7 @@ async function _advanceFinish(c, user, withBonus) {
       auto = await resolveAutoBonus(user, amount, 'auto-adelantada', {});
       if (auto.bonus > 0) await Comprobante.updateOne({ id: c.id }, { $set: { 'advance.bonusPlan': { bonus: Number(auto.bonus), pct: auto.pct || 0, label: auto.label || '', source: auto.source || null, rule: auto.rule || null } } });
     } else if (c.advance.bonusPlan && Number(c.advance.bonusPlan.bonus) > 0) auto = Object.assign({ claimed: false }, c.advance.bonusPlan); // #1152: reintento con el mismo bono
-    result = await _depositWithBonus(adapter, user.username, amount, 'Carga automática (adelantada)', ref, auto.bonus);
+    result = await _depositWithBonus(adapter, user.username, amount, 'Carga automática (hgcash)', ref, auto.bonus); // #1153: en 1girox figura igual que cualquier carga (el cliente no tiene que notar que fue adelantada)
   } catch (e) { result = { success: false, error: e.message }; }
   if (!result || !result.success) {
     // #1152: el bono reclamado NO se devuelve en un fallo intermedio (el reintento lo vuelve a mandar con la misma reference); si no, un

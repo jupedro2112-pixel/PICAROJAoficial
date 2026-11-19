@@ -2230,5 +2230,5 @@ comprobante y se verifica después. Detalle de decisiones en WORKLOG #1149.
   `BankMovement`; `_advanceRepair` termina lo cortado (`advance.hookAt`). 96 h sin transferencia ⇒ `_advanceReject(..., {noClose:true})`.
 - **Cierre:** grupos mismo día / otro día / pend / perdida / **mano** (verified sin movementId: no sale de la caja, `adv_mano`, no da OK).
 - **Permisos:** ajustes y forzado = dueño (`OWNER_ONLY_MUTATIONS`); Llegó / No llegó = admin, depositor, cajero, con nota; Trucho = admin.
-- **#1153:** la IA de soporte recibe `advancePending` (cliente con una adelantada sin verificar) para explicar la carga y el retiro en espera sin
-  insinuar desconfianza. `_supportPayoutDiagnose` volvió a funcionar (en #1152 un comentario en medio de la línea anulaba el `return`).
+- **#1153:** la IA de soporte recibe `advancePending` (cliente con una adelantada sin verificar) como DATO INTERNO: al cliente nunca se le dice ni se le
+  insinúa que su carga se acreditó sin revisar (ni la IA, ni 1girox, ni avisos). `_supportPayoutDiagnose` volvió a funcionar (en #1152 un comentario en medio de la línea anulaba el `return`).

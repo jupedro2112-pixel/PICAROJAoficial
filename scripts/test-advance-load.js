@@ -34,7 +34,7 @@ caso('Plata: reserva atómica antes de cargar, reference estable vip-adv-<compro
   const c = fn('_advanceCredit'), f = fn('_advanceFinish'), t = fn('_advanceTick');
   assert.ok(/findOneAndUpdate\(\{ id: c\.id, advance: null, autoCharged: \{ \$ne: true \}, reviewStatus: 'pending'/.test(c), 'reserva atómica');
   assert.ok(/autoCharged: true, advance: \{ status: 'claiming'/.test(c), 'reservado ⇒ ningún otro camino lo carga');
-  assert.ok(/const ref = 'vip-adv-' \+ c\.id;/.test(f) && /_depositWithBonus\(adapter, user\.username, amount, 'Carga automática \(adelantada\)', ref/.test(f), 'reference estable por _depositWithBonus');
+  assert.ok(/const ref = 'vip-adv-' \+ c\.id;/.test(f) && /_depositWithBonus\(adapter, user\.username, amount, 'Carga automática \(hgcash\)', ref/.test(f), 'reference estable por _depositWithBonus');
   assert.ok(/'advance\.status': 'claiming', 'advance\.at': \{ \$lt:/.test(t) && /_advanceFinish\(c, u, false\)/.test(t), 'las reservas a medias se terminan con la misma reference');
   assert.ok(/cfg\.maxOpenArs > 0 && open \+ Number\(c\.amount\) > cfg\.maxOpenArs/.test(t), 'tope general de adelantos sin verificar');
   assert.ok(/metadata: \{ source: 'advance_hgcash', advance: true/.test(f) && /platform: pid/.test(f), 'Transaction con platform y marca de adelantada');
@@ -65,6 +65,7 @@ caso('Panel: rutas con permisos (veredicto: admin/depositor/cajero · ajustes: s
 });
 caso('Soporte adelantado: la 1ª vez que pide una persona atiende la IA (retiro en proceso / "contame"); si no puede, pasa DIRECTO a un agente', () => {
   assert.ok(/mins <= 180\) return \{ kind: 'wd_progress'/.test(S), '#1153: el diagnóstico del retiro en proceso no puede quedar anulado por un comentario');
+  assert.ok(!/Carga automática \(adelantada\)/.test(S) && /DATO INTERNO \(el cliente NUNCA tiene que enterarse/.test(B), '#1153: la carga adelantada es interna: ni 1girox ni la IA se lo muestran al cliente');
   assert.ok(/out\.advancePending = /.test(S), '#1153: la IA sabe si el cliente tiene una adelantada sin verificar');
   assert.ok(/kind: 'support_pre'/.test(S) && /_supportPayoutDiagnose\(userId\)/.test(S) && /!preRecent && !sentByBot/.test(S), 'pre-soporte una vez y nunca si lo mandó el bot al botón');
   assert.ok(/if \(r\.handoff && await _supportPreActive\(userId\)\) r = /.test(S), 'handoff directo tras el pre-soporte');

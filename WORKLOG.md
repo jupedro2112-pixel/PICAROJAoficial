@@ -15225,7 +15225,9 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   sintaxis era válida): la función devolvía siempre null, así que el soporte adelantado nunca le decía al cliente "tu pago está en proceso / ya se pagó" y
   siempre le preguntaba qué le pasó. Corregido; test nuevo que lo vigila. Lección: un comentario nunca va en el medio de una línea de código.
 - **IA:** `_supportBotUserFacts` suma `advancePending` (monto de la adelantada sin verificar del cliente) y el prompt explica qué decir: la carga ya está
-  en fichas, el retiro sale cuando termine la validación con el banco, no reenviar el comprobante, nunca insinuar desconfianza; si insiste, handoff.
+  acreditada y para el cliente es una carga NORMAL. **Owner: "es algo interno que nadie tiene que saber"** ⇒ la IA nunca nombra ni insinúa que se
+  acreditó sin revisar; un retiro en espera se contesta como cualquier retiro en proceso. En 1girox la carga figura "Carga automática (hgcash)" como
+  las demás (antes decía "adelantada"). Regla: ningún texto NUEVO que vea el cliente (chat, push, app, 1girox) menciona la carga adelantada.
 - **Aprendizaje con confirmación (ya existía, NO se tocó):** lo que contesta la IA y lo que contestan los agentes va a `support_bot_learned` como
   pendiente; sólo lo APROBADO en panel → 🧠 Responder para IA lo contesta el bot solo. Los reclamos de plata nunca se contestan con lo aprendido.
 - Tests: `test-advance-load` 16/16 (con 2 chequeos nuevos), `test-support-bot` 18/18. Sin cambio de panel ni de la PWA. No probado en vivo.
