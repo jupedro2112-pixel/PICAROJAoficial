@@ -14944,3 +14944,11 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 ### 1138-h. Cinta "CARGÁ Y GANÁ" arriba de todo del chat de Girox (2026-11-19) — app v748
 - Owner (captura de la cinta debajo de la cabecera): "ponelo arriba de todo de ese chat, sin que moleste abajo y que se diferencie arriba".
 - `_supportIntoCasino` muda `#spTicker` como PRIMER hijo de `#supportPanel` (arriba de la cabecera verde) sólo con el chat nuevo; `_supportOutOfCasino` lo devuelve a su lugar (`_tkHome`). CSS: franja roja degradada, letras blancas, "VER" en píldora. Los ids no cambian (spPromoPaint sigue igual).
+
+### 1138-i. Sorteos: el del auto PRÓXIMAMENTE + inscripción paso a paso (2026-11-19) — app v749
+- Owner: "el del auto ponelo próximamente/pendiente y que la gente se pueda inscribir al del iPhone; hay poca gente inscripta y cuando entran se pierden: que la inscripción sea fácil, detallada y que entiendan los pasos".
+- `comingSoon` por sorteo (`src/services/sorteos.js`, default `gran: true`; panel → Sorteos → "🔜 Próximamente (sin inscripción)"). Server: `/api/sorteos` lo devuelve, `join` lo rechaza, la historia/aviso del sorteo en vivo lo saltea. App: tarjetas y mini dicen "🔜 Próximamente"; adentro sólo aviso + premios + Bases con botón "Mientras tanto, anotate al Sorteo mensual"; la píldora del casino abre el que está abierto.
+- `joinBlock` nuevo: "📝 Cómo anotarte (es gratis)" con barra de progreso ("Llevás 3 de 6"), pasos NUMERADOS con qué hacer y su botón (Instalar la app, Activar notificaciones, Cargar mi celular → verificación, Cargar ahora, cuenta con 7 días = se cumple solo, Telegram + casilla "Ya me uní"); los cumplidos quedan en una línea "✅ Listo"; botón verde grande "Anotarme al …" + "↻ Ya hice un paso, revisar de nuevo".
+
+### 1138-j. Firma de Soporte "Nombre - Soporte PICA ROJA" (2026-11-19) — app v749
+- Owner: "cuando una persona de soporte contesta que figure el nombre y diga, ej., Sofía - Soporte PICA ROJA, no Carga aquí". chat.js `msg-who`.

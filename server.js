@@ -31096,7 +31096,7 @@ app.get('/api/sorteos', authMiddleware, async (req, res) => {
       if (key === 'mensual' && p.prevKey && now - p.start < 7 * sorteosRules.DAY) { const pm = draws[_drawKey(key, p.prevKey, 'main')]; const pw = await _sorteoWinners(key, p.prevKey, pm && pm.winner ? pm.winner.userId : null); if (pw.length) winners = pw.map((w, i) => ({ pos: i + 2, name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), points: w.points, me: w.userId === user.id, period: p.prevKey })); drawKey = key + ':' + p.prevKey; }
       if (draws[drawKey]) draw = { at: draws[drawKey].at, seed: draws[drawKey].seed, amount: draws[drawKey].amount, winners: (draws[drawKey].winners || []).map((w) => ({ name: w.userId === user.id ? w.username : sorteosRules.mask(w.username), me: w.userId === user.id })) };
       out.push({
-        key, title: s.title, emoji: s.emoji, status: p.status, periodKey: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt,
+        key, title: s.title, emoji: s.emoji, status: p.status, comingSoon: !!s.comingSoon /* #1138-i */, periodKey: p.periodKey, start: p.start, end: p.end, publishAt: p.publishAt,
         startsInMs: Math.max(0, p.start - now), endsInMs: Math.max(0, p.end - now), prizes: s.prizes, extra: s.extra && s.extra.enabled ? s.extra : null, // #969: en los dos
         rules: { pts: s.pts, ptsPer: s.ptsPer, dayCapArs: s.dayCapArs || 0, dayDepositMin: s.dayDepositMin || 0, dayDepositPts: s.dayDepositPts || 0, weekActiveDays: s.weekActiveDays || 0, weekPts: s.weekPts || 0, missionWeekPct: s.missionWeekPct || 0, tickets: s.tickets, milestones: s.milestones, text: sorteosRules.rulesText(s) }, // #981
         tickets: { total: tTotal, mine: tMine, list: tList.map((t) => ({ n: t.n, reason: t.reason, at: t.at })), chance: tTotal ? tMine / tTotal : 0 }, // #981
@@ -31114,6 +31114,7 @@ app.post('/api/sorteos/:key/join', authMiddleware, async (req, res) => {
   try {
     const key = String(req.params.key || ''); if (!SORTEO_KEYS.includes(key)) return res.status(404).json({ error: 'Sorteo inexistente' });
     const cfg = await _sorteosCfg(); if (!cfg.enabled || !cfg[key].enabled) return res.status(400).json({ error: 'Este sorteo no está activo.' });
+    if (cfg[key].comingSoon) return res.status(400).json({ error: 'Este sorteo está PRÓXIMAMENTE: te avisamos apenas abra la inscripción.' }); // #1138-i
     const user = await User.findOne({ id: req.user.userId }).select('id username phone fcmToken fcmTokenContext fcmTokens isBlocked createdAt').lean(); // #1039: createdAt
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (user.isBlocked) return res.status(403).json({ error: 'Tu cuenta no puede participar.' });
@@ -31694,7 +31695,7 @@ async function _tgPanelCompute() {
   try {
     const so = await _sorteosCfg();
     if (so.enabled) {
-      const pkey = ['gran', 'mensual'].find((k) => so[k] && so[k].enabled && sorteosRules.periodOf(so[k], now).status === 'live'); const pick = pkey ? so[pkey] : null;
+      const pkey = ['gran', 'mensual'].find((k) => so[k] && so[k].enabled && !so[k].comingSoon /* #1138-i */ && sorteosRules.periodOf(so[k], now).status === 'live'); const pick = pkey ? so[pkey] : null;
       if (pick) {
         const per = sorteosRules.periodOf(pick, now); const rq = so.requirements || {};
         const req = [rq.app && 'app instalada', rq.notif && 'notificaciones', rq.telegram && 'unirte a Telegram', rq.phone && 'celular cargado', rq.deposit && 'una carga', rq.week && 'cuenta con 7 días'].filter(Boolean);

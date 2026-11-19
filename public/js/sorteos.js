@@ -33,6 +33,7 @@
     // ---- Tarjetas (básico / intermedio) y banner (Girox directo)
     function cardSub(s) {
         const tk = s.tickets && s.tickets.mine > 0 ? ' · 🎟️ ' + num(s.tickets.mine) : '';
+        if (s.comingSoon) return '🔜 Próximamente'; // #1138-i
         if (s.status === 'soon') return (s.me && s.me.joined ? 'Registrado ✅ · empieza en ' : 'Empieza en ') + cdShort(s.startsInMs);
         if (s.status === 'closed') return s.winners && s.winners.length ? 'Cerrado · ver ganadores' : 'Cerrado · ganadores el ' + fday(s.publishAt);
         if (s.me && s.me.joined) return s.me.points > 0 ? 'Registrado · puesto #' + s.me.rank + tk : 'Registrado ✅';
@@ -180,23 +181,42 @@
         return h;
     }
     function winnersList(w) { return '<div class="srt-table">' + w.map((x) => '<div class="srt-row' + (x.me ? ' me' : '') + '"><span class="srt-r">' + ['🥇', '🥈', '🥉'][x.pos - 1] + '</span><span class="srt-n">' + esc(x.name) + (x.me ? ' <i>vos</i>' : '') + '</span><b class="srt-pts">' + num(x.points) + ' pts</b></div>').join('') + '</div>'; }
+    // #1138-i (owner: "hay poca gente inscripta y cuando entran se pierden: que la inscripción sea fácil, detallada y que entiendan los pasos"):
+    // PASOS NUMERADOS, cada uno con qué hacer y su botón; lo que ya cumple queda tildado en una línea; barra de progreso y botón final grande.
     function joinBlock(s, compact) {
         const me = s.me || {}, ck = me.checks || {}, req = (_data && _data.requirements) || {};
-        const cls = compact ? ' compact' : '';
-        if (me.joined) return '<div class="srt-reg">✅ Registrado en el ' + esc(s.title) + '<small> · desde el ' + esc(fday(me.joinedAt)) + '</small></div>';
-        const row = (k, ok, txt, extra) => (req[k] === false ? '' : '<li class="' + (ok ? 'ok' : 'no') + '"><i>' + (ok ? '✅' : '⬜') + '</i><span>' + txt + (extra || '') + '</span></li>');
-        const tg = _data && _data.telegramUrl ? ' <button type="button" class="srt-link" onclick="VIP.sorteos.tgOpen()">Unirme ›</button>' : '';
-        // #1137-s (owner: "básico, sin fricción"): se muestran SÓLO los requisitos que faltan; los cumplidos quedan en una línea ("✅ 5 listos")
-        const _rq = ['app', 'notif', 'phone', 'deposit'].filter((k) => req[k] !== false).map((k) => !!ck[k]).concat([ck.week !== false]).concat(req.telegram === false ? [] : [!!ck.telegram]);
-        const _ok = _rq.filter(Boolean).length, _miss = _rq.length - _ok;
-        return '<div class="srt-join srt-simple' + cls + '"><b>📝 Anotate gratis</b><small>' + (_miss ? 'Te ' + (_miss === 1 ? 'falta 1 cosa' : 'faltan ' + _miss + ' cosas') + ' para poder anotarte' + (_ok ? ' · ✅ ' + _ok + ' ya ' + (_ok === 1 ? 'lista' : 'listas') : '') + ':' : '✅ Ya cumplís todo. Tocá el botón y listo.') + '</small><ul class="srt-req">' +
-            row('app', ck.app, 'Tener la app de PICA ROJA instalada', ck.app ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.home.installGiftOpen&&VIP.home.installGiftOpen()}catch(_){}">¿Cómo? ›</button>') +
-            row('notif', ck.notif, 'Notificaciones activadas', ck.notif ? '' : ' <button type="button" class="srt-link" onclick="try{VIP.notifications&&VIP.notifications.requestNotificationPermission&&VIP.notifications.requestNotificationPermission()}catch(_){}">Activar ›</button>') +
-            row('phone', ck.phone, 'Tu número de celular cargado en el Perfil', ck.phone ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.openProfile()}catch(_){}">Cargarlo ›</button>') +
-            row('deposit', ck.deposit, 'Al menos una carga real', ck.deposit ? '' : ' <button type="button" class="srt-link" onclick="VIP.sorteos.close();try{VIP.home.easyLoad()}catch(_){}">Cargar ›</button>') +
-            row('week', ck.week !== false, 'Cuenta con al menos 7 días de antigüedad <small>(seguridad: así nadie se anota con una cuenta recién creada)</small>', '') + // #1039
-            (req.telegram === false ? '' : '<li class="' + (ck.telegram ? 'ok' : 'no') + '"><i>' + (ck.telegram ? '✅' : '⬜') + '</i><label><input type="checkbox" id="srtTg_' + s.key + '"' + (ck.telegram ? ' checked' : '') + '> Ya me uní al Telegram de PICA ROJA (ahí anunciamos los ganadores)</label>' + tg + '</li>') +
-            '</ul><button type="button" class="srt-btn' + (compact ? ' sm' : '') + '" onclick="VIP.sorteos.join(\'' + s.key + '\')">Anotarme al ' + esc(s.title) + '</button></div>';
+        if (me.joined) return '<div class="srt-reg">✅ Ya estás anotado en el ' + esc(s.title) + '<small> · desde el ' + esc(fday(me.joinedAt)) + '. Ahora cargá y jugá: tus apuestas suman tickets y puntos solas.</small></div>';
+        if (s.comingSoon) return comingSoonBlock(s);
+        const steps = [];
+        const add = (k, ok, ico, title, how, btn) => { if (req[k] === false) return; steps.push({ ok: !!ok, ico, title, how, btn: btn || '' }); };
+        const B = (txt, js) => '<button type="button" class="srt-st-btn" onclick="' + js + '">' + txt + '</button>';
+        add('app', ck.app, '📲', 'Instalá la app de PICA ROJA', 'Tocá el botón y elegí <b>"Instalar"</b> o <b>"Agregar a pantalla de inicio"</b>. Después abrí PICA ROJA desde el ícono nuevo de tu teléfono.', B('📲 Instalar la app', "try{VIP.home.pfInstall()}catch(_){}"));
+        add('notif', ck.notif, '🔔', 'Activá las notificaciones', 'Así te avisamos al toque si ganás. Tocá el botón y elegí <b>"Permitir"</b>.', B('🔔 Activar', "try{VIP.notifications.requestNotificationPermission()}catch(_){}"));
+        add('phone', ck.phone, '📱', 'Cargá tu número de celular', 'En tu <b>Perfil</b>, arriba de todo: <b>Verificación de teléfono</b>. Es para poder contactarte si ganás.', B('📱 Cargar mi celular', "VIP.sorteos.close();try{VIP.home.openVerifyPhone()}catch(_){}"));
+        add('deposit', ck.deposit, '💳', 'Hacé al menos una carga', 'Con <b>una sola carga</b> ya cumplís este paso.', B('💳 Cargar ahora', "VIP.sorteos.close();try{VIP.home.spDeposit()}catch(_){try{VIP.home.easyLoad()}catch(__){}}"));
+        add('week', ck.week !== false, '⏳', 'Cuenta con 7 días', 'Se cumple <b>solo</b>, no tenés que hacer nada: es por seguridad, para que nadie se anote con una cuenta recién creada.', '');
+        if (req.telegram !== false) {
+            const tgBtn = _data && _data.telegramUrl ? B('✈️ Unirme al Telegram', 'VIP.sorteos.tgOpen()') : '';
+            steps.push({ ok: !!ck.telegram, ico: '✈️', title: 'Unite al Telegram de PICA ROJA', how: 'Ahí anunciamos los ganadores. Unite y después <b>marcá la casilla</b> "Ya me uní".', btn: tgBtn + '<label class="srt-st-ck"><input type="checkbox" id="srtTg_' + s.key + '"' + (ck.telegram ? ' checked' : '') + '> Ya me uní</label>', tg: true });
+        }
+        const done = steps.filter((x) => x.ok).length, total = steps.length, miss = total - done;
+        let n = 0;
+        const li = steps.map((x) => { n++; return x.ok && !x.tg
+            ? '<li class="srt-st ok"><span class="srt-st-n">✅</span><div class="srt-st-b"><b>' + x.ico + ' ' + x.title + '</b><small>Listo</small></div></li>'
+            : '<li class="srt-st' + (x.ok ? ' ok' : '') + '"><span class="srt-st-n">' + (x.ok ? '✅' : n) + '</span><div class="srt-st-b"><b>' + x.ico + ' ' + x.title + '</b><small>' + x.how + '</small>' + (x.btn ? '<div class="srt-st-acts">' + x.btn + '</div>' : '') + '</div></li>'; }).join('');
+        return '<div class="srt-join srt-steps-join' + (compact ? ' compact' : '') + '"><b class="srt-sj-t">📝 Cómo anotarte (es gratis)</b>' +
+            '<div class="srt-sj-prog"><i style="width:' + Math.round(done / Math.max(1, total) * 100) + '%"></i></div>' +
+            '<small class="srt-sj-sub">' + (miss ? 'Llevás <b>' + done + ' de ' + total + '</b>. Seguí los pasos en orden 👇 y al final tocá el botón verde.' : '¡Ya cumplís todo! Tocá el botón verde y quedás anotado.') + '</small>' +
+            '<ol class="srt-st-list">' + li + '</ol>' +
+            '<button type="button" class="srt-btn srt-sj-go" onclick="VIP.sorteos.join(\'' + s.key + '\')">✅ Anotarme al ' + esc(s.title) + '</button>' +
+            '<button type="button" class="srt-sj-re" onclick="VIP.sorteos.load()">↻ Ya hice un paso, revisar de nuevo</button>' +
+            '<small class="srt-sj-foot">Te anotás <b>una sola vez</b> y quedás adentro. Después, cada carga y cada apuesta te suman tickets y puntos solas.</small></div>';
+    }
+    // #1138-i: sorteo PRÓXIMAMENTE (el del auto): se ven los premios, sin inscripción; lleva al que sí está abierto.
+    function comingSoonBlock(s) {
+        const o = (_data && _data.sorteos || []).find((x) => x.key !== s.key && !x.comingSoon);
+        return '<div class="srt-soon"><b>🔜 PRÓXIMAMENTE</b><span>La inscripción a este sorteo abre pronto. Te avisamos por notificación apenas se pueda anotar.</span>' +
+            (o ? '<button type="button" class="srt-btn" onclick="VIP.sorteos.open(\'' + o.key + '\')">Mientras tanto, anotate al ' + esc(o.title) + ' ›</button>' : '') + '</div>';
     }
     function crossCard(s) {
         const o = (_data.sorteos || []).find((x) => x.key !== s.key); if (!o) return '';
@@ -215,6 +235,11 @@
         if (!s) { b.innerHTML = '<div class="srt-note">' + (_data && _data.enabled === false ? 'Por ahora no hay sorteos activos.' : 'Este sorteo no está disponible.') + '</div>'; return; }
         if (t) t.textContent = s.emoji + ' ' + s.title;
         const rt = (s.rules && s.rules.text) || {};
+        if (s.comingSoon) { // #1138-i: sólo premios + aviso + Bases
+            b.innerHTML = '<div class="srt-strip"><span>🔜 <b>PRÓXIMAMENTE</b></span></div>' + comingSoonBlock(s) + hero(s) +
+                '<div class="srt-sec srt-tc-sec"><button type="button" class="srt-tc-toggle" onclick="VIP.sorteos.tcToggle(this)" aria-expanded="false"><span>📜 Bases y condiciones · ' + esc(s.title) + '</span><i>Maximizar ▾</i></button><ol class="srt-tc" hidden>' + (s.terms || []).map((x) => '<li><b>' + esc(x.t) + ':</b> ' + esc(x.d) + '</li>').join('') + '</ol></div>';
+            try { b.scrollTop = 0; } catch (_) {} return;
+        }
         let h = strip(s);                 // 1) inicio, chico
         // #1137-s: cómo funciona en 3 pasos, antes que nada
         h += '<div class="srt-steps"><div><i>1</i><span><b>Anotate</b> gratis acá abajo</span></div><div><i>2</i><span><b>Cargá y jugá</b>: sumás tickets y puntos solo</span></div><div><i>3</i><span>El <b>' + esc(fday(s.publishAt)) + '</b> sorteamos y te avisamos</span></div></div>';
@@ -249,11 +274,11 @@
     // Empieza en… · Ver más ▾" y un – para cerrarlo) y en el medio de la barra queda PICA ROJA; CERRADO, queda la píldora "Sorteo mensual" en el
     // medio y tocarla vuelve a abrir el banner. El estado se recuerda en el teléfono (vip_srt_casino_bar).
     function _casinoBarOpen() { try { return localStorage.getItem('vip_srt_casino_bar') === 'open'; } catch (_) { return false; } } // #937: al iniciar, resumido (píldora) sin abrir
-    function casinoPill() { const list = (_data && _data.enabled && _data.sorteos) || []; const s0 = list.find((x) => x.status === 'live') || list[0]; openMini(s0 ? s0.key : 'mensual'); } // #1042-z
+    function casinoPill() { const list = (_data && _data.enabled && _data.sorteos) || []; const s0 = list.find((x) => x.status === 'live' && !x.comingSoon) || list.find((x) => !x.comingSoon) || list[0]; /* #1138-i */ openMini(s0 ? s0.key : 'mensual'); } // #1042-z
     function casinoBar(open) { try { localStorage.setItem('vip_srt_casino_bar', open ? 'open' : 'closed'); } catch (_) {} paintCasino(); }
     function paintCasino() {
         const list = (_data && _data.enabled && _data.sorteos) || [];
-        const s0 = list.find((x) => x.status === 'live') || list[0];
+        const s0 = list.find((x) => x.status === 'live' && !x.comingSoon) || list.find((x) => !x.comingSoon) || list[0]; /* #1138-i */
         const btn = _el('casinoSrtBtn'), brand = _el('casinoBrand'), bar = _el('casinoSrtBar');
         if (!btn && !bar) return;
         // #1042-z (owner: "el sorteo sacalo de ahí para no perder lugar y ponelo arriba donde está el logo de PICA ROJA"): ya no hay banner
@@ -287,14 +312,14 @@
             if (!ordered.length) return '<div class="srt-mini-box"><div class="srt-note">' + (_data ? 'Por ahora no hay sorteos activos.' : 'Cargando…') + '</div></div>';
             const one = (s2) => {
                 const until = untilOf(s2);
-                const when = s2.status === 'closed' ? '🔒 Cerrado' : (s2.status === 'soon' ? '⏳ Empieza en <b data-cd-short="' + until + '">' + esc(cdShort(s2.startsInMs)) + '</b>' : '<em class="srt-live">● EN VIVO</em> · termina en <b data-cd-short="' + until + '">' + esc(cdShort(s2.endsInMs)) + '</b>');
+                const when = s2.comingSoon ? '🔜 <b>PRÓXIMAMENTE</b>' : s2.status === 'closed' ? '🔒 Cerrado' : (s2.status === 'soon' ? '⏳ Empieza en <b data-cd-short="' + until + '">' + esc(cdShort(s2.startsInMs)) + '</b>' : '<em class="srt-live">● EN VIVO</em> · termina en <b data-cd-short="' + until + '">' + esc(cdShort(s2.endsInMs)) + '</b>');
                 const me = s2.me || {}; const mine = me.joined ? (me.points > 0 ? ' · ✅ puesto #' + num(me.rank) : ' · ✅ anotado') : '';
                 return '<div class="srt-mini-s"><div class="srt-mini-sh"><b>' + esc(s2.emoji + ' ' + s2.title) + '</b><small>' + when + mine + '</small></div>' +
                     '<div class="srt-mini-prizes">' + (s2.prizes || []).map((p) => '<div class="srt-mini-p">' + pic(p.img, 'srt-mini-img', p.name) + '<b>' + esc(p.name) + '</b>' + (p.value ? '<small>' + esc(p.value) + '</small>' : '') + '</div>').join('') + '</div>' +
                     '<p class="srt-mini-txt">🎟️ 1° premio por sorteo de tickets entre los anotados · 2° y 3° por ranking. ' + (s2.key === 'gran' ? 'Del ' + esc(fday(s2.start)) + ' al ' + esc(fday(s2.end)) + ' · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.rules.dayDepositPts ? ' · +' + num(s2.rules.dayDepositPts) + ' por día que cargás' : '') + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO EXTRA') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' al azar' : '') : 'Todos los meses · ' + num(s2.rules.pts) + ' pts cada ' + money(s2.rules.ptsPer) + ' apostados' + (s2.extra && s2.extra.enabled ? ' · ' + esc(s2.extra.title || 'SORTEO') + ': ' + num(s2.extra.winners) + ' × ' + money(s2.extra.amount) + ' para los que cargan ' + num(s2.extra.minDeposits) + ' veces en el mes' : '')) + '. Ganan los 3 anotados con más puntos.</p></div>';
             };
             return '<div class="srt-mini-box"><div class="srt-mini-head"><b>🏆 ¡Increíbles premios!</b><button type="button" class="srt-x" onclick="VIP.sorteos.closeMini()" aria-label="Cerrar">✕</button></div>' + ordered.map(one).join('') +
-                '<button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + (ordered.find((x) => x.status === 'live') || ordered[0]).key + '\')">Anotate, es gratis ›</button><p class="srt-mini-foot">Adentro tenés el detalle completo y las Bases.</p></div>';
+                '<button type="button" class="srt-btn sm" onclick="VIP.sorteos.goMenu(\'' + (ordered.find((x) => x.status === 'live' && !x.comingSoon) || ordered.find((x) => !x.comingSoon) || ordered[0]).key + '\')">Anotate, es gratis ›</button><p class="srt-mini-foot">Adentro tenés el detalle completo y las Bases.</p></div>';
         };
         m.innerHTML = inner(); document.body.appendChild(m); m._paint = () => { m.innerHTML = inner(); };
         clearInterval(_tick); _tick = setInterval(tickCd, 1000);

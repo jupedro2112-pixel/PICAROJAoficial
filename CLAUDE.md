@@ -424,7 +424,7 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   2° y 3° por ranking (puntos con techo diario $300.000 + constancia). Tickets NUNCA se quitan ni se reasignan (índice único).
   **#1037:** `Config['sorteoDraws']` se escribe POR CAMPO (`_sorteoDrawSave`, commit atómico, reveal con lock): nunca leer→mezclar→guardar. Huella 6 h
   después del cierre ⇒ período CONGELADO (no más tickets/puntos); semilla 48 h después del mediodía del día 1. Ganadores (tickets, ranking, extra) sin
-  bloqueados / secundarias / marcas / staff. Requisitos para anotarse:
+  bloqueados / secundarias / marcas / staff. **#1138-i:** `comingSoon` por sorteo (default el `gran` = PRÓXIMAMENTE: se ve, sin inscripción; panel → Sorteos → 🔜) y la inscripción va PASO A PASO (`joinBlock`). Requisitos para anotarse:
   app, notificaciones, Telegram, **celular cargado** y una carga. Premios se entregan a mano (push + nota al ganador). Panel → App → Sorteos (🎟️ / 🎲)
   y Principal → "Sorteos: ¿sirven?". Un cambio en las reglas de puntos/tickets pasa por `computePoints` y sus tests, nunca por el motor.
 - **TABLERO DEL NEGOCIO (#1009):** Principal → 📈 Negocio (`/api/admin/inicio/negocio`, lógica en `src/services/businessBoard.js`, test

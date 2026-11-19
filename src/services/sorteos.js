@@ -40,6 +40,7 @@ function defaults() {
     }),
     gran: Object.assign({}, base, {
       enabled: true, key: 'gran', title: 'Gran Sorteo', emoji: '🚗', start: '2026-12-01', end: '2027-01-31',
+      comingSoon: true, // #1138-i (owner): el del auto queda PRÓXIMAMENTE (se ve, pero sin inscripción) hasta destildarlo en el panel
       missionWeekPct: 10,
       milestones: { firstDeposit: 1, fourWeeks: 5, tenDeposits: 5 }, // 1ª carga del período +1 · 4 semanas seguidas activas +5 · 10 cargas +5
       prizes: [
@@ -62,6 +63,7 @@ function normalize(saved) {
     out[k] = Object.assign({}, d[k], s[k] || {}); out[k].key = k;
     if (!Array.isArray(out[k].prizes) || !out[k].prizes.length) out[k].prizes = d[k].prizes;
     out[k].prizes = [0, 1, 2].map((i) => Object.assign({}, d[k].prizes[i] || { pos: i + 1, img: '🎁', name: '', value: '' }, out[k].prizes[i] || {}, { pos: i + 1, mode: i === 0 ? 'tickets' : 'ranking' }));
+    out[k].comingSoon = (s[k] && typeof s[k].comingSoon === 'boolean') ? s[k].comingSoon : !!d[k].comingSoon; // #1138-i
     out[k].extra = Object.assign({}, d[k].extra, (s[k] && s[k].extra) || {});
     out[k].tickets = Object.assign({}, d[k].tickets, (s[k] && s[k].tickets) || {});
     out[k].milestones = Object.assign({}, d[k].milestones, (s[k] && s[k].milestones) || {});
