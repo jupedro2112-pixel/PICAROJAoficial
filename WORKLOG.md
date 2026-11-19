@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1152)
+> **Última actualización: 2026-11-19** (#1153)
 
 ## Sesión 2026-11-09
 
@@ -15217,3 +15217,15 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   registro propio del recupero de fichas; `PHONE_BANNED` permite enumerar; `_payoutAutoRetryTick` no vuelve a pasar el gate.
 - **Validación:** `test-advance-load` 16/16, soporte 18/18, payout 8/8, receipt-match 11/11, cierre 9/9, caja OK, dup 11/11, 1053 9/9, 1117
   15/15, 1090 13/13, `node --check`. **Sin probar en vivo. Necesita deploy en los dos AWS.**
+
+### 1153. Soporte: error de #1152 corregido (retiro en proceso) + la IA sabe de la carga adelantada sin verificar (2026-11-19)
+- **Owner:** "¿la IA quedó perfeccionada para que entienda todo el servicio y dé buenas respuestas?" / "que se vaya perfeccionando pero después haya
+  confirmación siempre, donde está; así queda como bot a futuro entendiendo todo".
+- **Error de #1152 (mío):** en `_supportPayoutDiagnose` un comentario quedó pegado ANTES del `return` del caso "retiro en proceso" y lo anulaba (la
+  sintaxis era válida): la función devolvía siempre null, así que el soporte adelantado nunca le decía al cliente "tu pago está en proceso / ya se pagó" y
+  siempre le preguntaba qué le pasó. Corregido; test nuevo que lo vigila. Lección: un comentario nunca va en el medio de una línea de código.
+- **IA:** `_supportBotUserFacts` suma `advancePending` (monto de la adelantada sin verificar del cliente) y el prompt explica qué decir: la carga ya está
+  en fichas, el retiro sale cuando termine la validación con el banco, no reenviar el comprobante, nunca insinuar desconfianza; si insiste, handoff.
+- **Aprendizaje con confirmación (ya existía, NO se tocó):** lo que contesta la IA y lo que contestan los agentes va a `support_bot_learned` como
+  pendiente; sólo lo APROBADO en panel → 🧠 Responder para IA lo contesta el bot solo. Los reclamos de plata nunca se contestan con lo aprendido.
+- Tests: `test-advance-load` 16/16 (con 2 chequeos nuevos), `test-support-bot` 18/18. Sin cambio de panel ni de la PWA. No probado en vivo.

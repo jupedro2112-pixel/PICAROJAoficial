@@ -17042,12 +17042,13 @@ const SUPPORT_PRE_TEXTS = {
 };
 async function _supportPreActive(userId) { try { return !!(await Message.exists({ receiverId: userId, 'metadata.kind': 'support_pre', timestamp: { $gte: new Date(Date.now() - 30 * 60000) } })); } catch (_) { return false; } }
 async function _supportPayoutDiagnose(userId) {
+  // #1152: un retiro FALLADO no está "validándose": lo ve una persona (por eso 'failed' no entra en wd_progress).
   try {
     const now = Date.now();
     const p = await PendingPayout.findOne({ userId: String(userId), createdAt: { $gte: new Date(now - 48 * 3600000) } }).sort({ createdAt: -1 }).select('status amount createdAt paidAt').lean();
     if (!p) return null;
     const mins = Math.round((now - new Date(p.createdAt).getTime()) / 60000);
-    if (['pending_review', 'paying'].includes(p.status) && mins <= 180) // #1152: un retiro FALLADO no está "validándose": lo ve una persona return { kind: 'wd_progress', amount: p.amount, info: `retiro de $${Math.round(p.amount || 0).toLocaleString('es-AR')} en proceso hace ${mins} min: se le avisó que está validándose` };
+    if (['pending_review', 'paying'].includes(p.status) && mins <= 180) return { kind: 'wd_progress', amount: p.amount, info: `retiro de $${Math.round(p.amount || 0).toLocaleString('es-AR')} en proceso hace ${mins} min: se le avisó que está validándose` };
     if (p.status === 'paid' && p.paidAt && now - new Date(p.paidAt).getTime() < 6 * 3600000) return { kind: 'wd_paid', amount: p.amount, info: `retiro de $${Math.round(p.amount || 0).toLocaleString('es-AR')} ya pagado: se le avisó` };
     return null; // más de 3 h en proceso, rechazado, etc.: lo ve una persona
   } catch (_) { return null; }
@@ -17326,6 +17327,7 @@ async function _supportBotUserFacts(u) {
   try { const dg = await _supportReceiptDiagnose(u.id, false); if (dg && dg.info) out.receiptInfo = dg.info; } catch (_) {} // #1148
   try { out.askedHuman = await _supportPreActive(u.id); } catch (_) {} // #1149
   try { const ac = await getAdvanceConfig(); const st = (await getConfig('advanceLoadState', null)) || {}; out.bankDelay = !!(ac.forceUntil || (ac.enabled && st.downSince && Date.now() - new Date(st.downSince).getTime() < 6 * 3600000)); } catch (_) {} // #1149
+  try { const av = await Comprobante.findOne({ userId: String(u.id), 'advance.status': 'unverified' }).select('advance.amount').lean(); if (av) out.advancePending = Math.round(Number(av.advance && av.advance.amount) || 0); } catch (_) {} // #1153
   // #1043: el extra por instalar de ESTE cliente (para explicarle bien) y si el sistema puede corregírselo solo.
   try {
     const ig = u.installGift || {};

@@ -64,6 +64,8 @@ caso('Panel: rutas con permisos (veredicto: admin/depositor/cajero · ajustes: s
   assert.ok(/window\.advVerdict = advVerdict/.test(A) && /_advItemHtml\(c, fm, fd, chip\)/.test(A) && /_advPanelHtml\(j\.adv, fm, fd\)/.test(A));
 });
 caso('Soporte adelantado: la 1ª vez que pide una persona atiende la IA (retiro en proceso / "contame"); si no puede, pasa DIRECTO a un agente', () => {
+  assert.ok(/mins <= 180\) return \{ kind: 'wd_progress'/.test(S), '#1153: el diagnóstico del retiro en proceso no puede quedar anulado por un comentario');
+  assert.ok(/out\.advancePending = /.test(S), '#1153: la IA sabe si el cliente tiene una adelantada sin verificar');
   assert.ok(/kind: 'support_pre'/.test(S) && /_supportPayoutDiagnose\(userId\)/.test(S) && /!preRecent && !sentByBot/.test(S), 'pre-soporte una vez y nunca si lo mandó el bot al botón');
   assert.ok(/if \(r\.handoff && await _supportPreActive\(userId\)\) r = /.test(S), 'handoff directo tras el pre-soporte');
   assert.ok(/estamos validando|lo estamos validando/.test(S), 'retiro en proceso: "lo estamos validando y en breve sale"');
