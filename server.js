@@ -188,9 +188,39 @@ function makeRateStore(prefix) {
   return new RedisBackedRateStore(prefix);
 }
 
+// #1140 (2026-11-19): con 6-8× de tráfico el panel de cada agente pasaba los 300 pedidos por minuto y TODO le respondía "Demasiadas solicitudes"
+// (también el botón Depositar), sin dejar ni una línea en los logs. Ahora: el staff con sesión válida tiene un techo propio más alto
+// (`STAFF_RATE_MAX`, 1500/min por cuenta), los clientes siguen en 300/min por IP, y cada corte queda anotado (una vez por minuto por clave).
+function _rateKeyOf(req) {
+  if (req._rateKey) return req._rateKey;
+  let k = null;
+  const sess = getAdminApiSessionCookie(req);
+  if (sess) {
+    try {
+      const d = jwt.verify(sess, JWT_SECRET, { algorithms: ['HS256'] });
+      if (d && d.userId) k = 'sess:' + d.userId;
+    } catch (_) { /* cookie inválida → se limita por IP */ }
+  }
+  req._rateKey = k || req.ip;
+  return req._rateKey;
+}
+const _rateHitLogged = new Map(); // clave → último minuto anotado
+function _rateLimitHit(name, req, res, options) {
+  try {
+    const key = String(_rateKeyOf(req));
+    const min = Math.floor(Date.now() / 60000);
+    if (_rateHitLogged.get(name + '|' + key) !== min) {
+      if (_rateHitLogged.size > 5000) _rateHitLogged.clear();
+      _rateHitLogged.set(name + '|' + key, min);
+      logger.warn(`[limite-propio] ${name}: se cortó a ${key.startsWith('sess:') ? 'la cuenta de staff ' + key.slice(5) : 'la IP ' + key} (pasó el tope por minuto) en ${req.method} ${String(req.originalUrl || '').split('?')[0]}`);
+    }
+  } catch (_) { /* el aviso nunca rompe la respuesta */ }
+  res.status(options.statusCode).json(options.message);
+}
 const generalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: (req) => (String(_rateKeyOf(req)).startsWith('sess:') ? (Number(process.env.STAFF_RATE_MAX) || 1500) : 300),
+  handler: (req, res, _next, options) => _rateLimitHit('general', req, res, options),
   standardHeaders: true,
   legacyHeaders: false,
   store: makeRateStore('general'), // #956: compartido entre instancias (antes N×300/min)
@@ -198,19 +228,8 @@ const generalLimiter = rateLimit({
   // (admin_api_session). Así varios agentes detrás de la misma IP (oficina/NAT)
   // NO comparten el límite y no se 429-ean entre ellos. Los clientes de la PWA
   // (que se autentican por header Bearer, sin esa cookie) siguen limitados por IP.
-  keyGenerator: (req) => {
-    // 🔒 La cookie se VERIFICA antes de usarla como clave (fix 2026-08-06):
-    // antes se aceptaba tal cual, así que mandando un valor random distinto en
-    // cada request se conseguía un balde nuevo y el límite global no existía.
-    const sess = getAdminApiSessionCookie(req);
-    if (sess) {
-      try {
-        const d = jwt.verify(sess, JWT_SECRET, { algorithms: ['HS256'] });
-        if (d && d.userId) return 'sess:' + d.userId;
-      } catch (_) { /* cookie inválida → se limita por IP */ }
-    }
-    return req.ip;
-  },
+  // 🔒 La cookie se VERIFICA antes de usarla como clave (fix 2026-08-06): con un valor inventado se limita por IP.
+  keyGenerator: (req) => _rateKeyOf(req),
   // Desactiva la validación de IPv6-fallback de la lib: usamos cookie para admins
   // e IP para clientes a propósito (no necesitamos el helper de IPv6 acá).
   validate: { keyGeneratorIpFallback: false },

@@ -376,6 +376,16 @@ además se reintenta respetando el header `Retry-After`. Con 2 instancias,
 `GIROX_MAX_RPM` = (límite por key)/2: **30** con el límite actual de 60, **90**
 si lo suben a 180.
 
+**Medidor `[girox-uso]` (#1139):** una línea de log por minuto y por key (últimos 4 caracteres, tipo de carril) cuando pasó la mitad del techo o hubo
+429 / "sin lugar" / cortes de 20 s, con el detalle por tipo de pedido. Es la forma de ver QUÉ gasta el cupo (antes sólo se anotaban los fallos).
+`GIROX_USAGE_LOG=0` lo apaga. Una key de publicista igual a la principal (o con espacios) usa el carril principal.
+
+**Techo que se ajusta solo (#1141):** los techos configurados son el punto de partida; cada key sube 15 % cuando llena su ventana sin 429 (hasta
+`GIROX_HARD_MAX_RPM`, 480 por instancia) y baja al 80 % cuando 1girox devuelve 429 (`_effLimit`, `_adaptOnFull`, `_adaptOn429`). Usar SIEMPRE `_effLimit`
+para saber el techo vigente; `_laneLimit` es sólo el configurado. `GIROX_ADAPTIVE_RPM=0` vuelve al techo fijo.
+**Límite propio del servidor (#1140):** `generalLimiter` = 300/min por IP para clientes y `STAFF_RATE_MAX` (1500/min) por cuenta de staff; cada corte se
+anota como `[limite-propio]`.
+
 La misma cuota la comparte el script de migración: mientras corre, producción
 sigue pidiendo saldos, cargas y retiros contra el mismo cupo de la master.
 

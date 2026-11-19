@@ -117,6 +117,9 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **Rate limit: 60 req/min** en la Partner API. Hay un limitador local (`GIROX_MAX_RPM`,
   default 55) pero es **por proceso** → con N instancias en EB el techo real es N×55 y
   el 429 sigue siendo posible (se reintenta respetando `Retry-After`).
+  **#1139-#1141:** el techo de cada key se ajusta SOLO (sube sin 429, baja con 429; `_effLimit`, nunca `_laneLimit` para el techo vigente) y los logs
+  `[girox-uso]` (uso por key y por minuto) y `[limite-propio]` (corte del límite del servidor: clientes 300/min por IP, staff `STAFF_RATE_MAX` 1500) son
+  lo PRIMERO que hay que mirar ante "todo saturado".
 - **Rollover ACTIVO en la plataforma:** el jugador puede tener saldo que NO puede
   retirar. Validar retiros contra `wagering.available`, **nunca** contra `balance`.
 - **El netwin sale de la Partner API** (`GET /players/{username}/stats`, v1.8), por

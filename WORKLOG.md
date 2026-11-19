@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-12** (#1136)
+> **Última actualización: 2026-11-19** (#1141)
 
 ## Sesión 2026-11-09
 
@@ -14976,3 +14976,39 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 ### 1138-p. Panel: "Unexpected token '<'" ⇒ aviso claro (2026-11-19)
 - Owner (captura en el Chat completo, durante una subida a AWS): toast "Unexpected token '<'". Es una página de error HTML (nginx/ELB/Cloudflare mientras cambian los servidores) leída como JSON.
 - admin.js envuelve `Response.prototype.json`: si el cuerpo no es JSON ⇒ "⚠️ El servidor no respondió bien (código): se está actualizando o está ocupado… ANTES de repetir, fijate si la operación ya se hizo". Vale para todo el panel sin tocar cada llamada.
+
+### 1139. Medidor de uso de 1girox por key + diagnóstico de la saturación del 2026-11-18/19 — sólo server
+- Owner (con logs de las dos instancias y capturas de Atlas): "quiero entender por qué está todo saturado… ¿no aparece en logs? ¿cómo hago para que aparezca?".
+- **Diagnóstico (logs 2026-11-18 00:00 → 2026-11-19 03:22 UTC):** NO es MongoDB (cero errores de base durante la falla; sólo el timeout de 10 s de cada arranque).
+  Son tres cosas de 1girox: (1) `insufficient_funds` 01:15–02:35 UTC = el agente se quedó SIN FICHAS en 1girox: 35 auto-cargas, 8 manuales y 3 extras por
+  instalar rebotadas; (2) carril de 30/min saturado (`rate limit local saturado (30/min)` 1.288 veces) + 429 de 1girox, con 6-8× el tráfico normal
+  (1.500-1.800 conexiones por hora por instancia contra ~250) — siguió DESPUÉS del cambio de #1138-n: el arranque informa `GIROX_MAX_RPM=90` (no 85) y el
+  carril saturado sigue siendo de 30 ⇒ la excepción de `GIROX_PUBLISHER_KEY_RPM` no coincide con la key que usan esos jugadores; (3) `sorteo(N jugadores, key
+  publicista)` se corta a los 20 s ~1.400 veces por día y gasta cupo de esa misma key.
+- **Por qué no se veía:** `giroxService` sólo anotaba los pedidos que fallaban. Nuevo `[girox-uso]`: una línea por minuto y por key (últimos 4 caracteres) si
+  pasó la mitad del techo o hubo 429 / sin lugar / cortes, con el detalle por tipo de pedido. Apagar: `GIROX_USAGE_LOG=0`.
+- `_request`: la key del publicista se limpia de espacios y, si es la MISMA que la principal, va por el carril principal (antes caía en "publicista", 30/min).
+- Pendiente: decidir con el owner el motor del sorteo (lotes más chicos / sin reintentos) y revisar las 35 auto-cargas rebotadas por falta de fichas.
+
+### 1140. Panel: "Demasiadas solicitudes" = el límite PROPIO del servidor (no 1girox) — sólo server
+- Owner (capturas del panel, 2026-11-19 ~03:00 UTC): seis carteles "Demasiadas solicitudes. Intenta más tarde." / "Error cargando open", el botón Depositar en
+  "Procesando…" y agentes avisando "no funcionan las cargas".
+- Ese texto es de `generalLimiter` (server.js): 300 pedidos por minuto POR CUENTA de staff, sumados entre las dos instancias (#956). Con 6-8× de chats el panel
+  de un agente pasa ese tope y durante el resto del minuto TODO le responde 429, también `POST /api/admin/deposit`. No dejaba nada en los logs.
+- Cambio: staff con sesión válida ⇒ tope propio `STAFF_RATE_MAX` (1500/min por cuenta; clientes siguen en 300/min por IP) y cada corte se anota:
+  `[limite-propio] general: se cortó a la cuenta de staff <id> … en POST /api/admin/deposit` (una vez por minuto por clave). `_rateKeyOf(req)` = la clave de siempre.
+- El "Unexpected token '<'" de las 03:08 UTC coincide con el reinicio de las 03:08:56: un cambio de variables en AWS reinicia las DOS instancias a la vez.
+- Pendiente: con el log nuevo, ver qué pedidos del panel se repiten tanto (candidato: recargas de la lista de chats por cada evento del socket).
+
+### 1141. El techo de pedidos a 1girox se ajusta SOLO por key (sin tocar variables en AWS) — sólo server
+- Owner (subió "app principal" a 999/min en 1girox): "subí el tope con el código, sin necesidad de poner GIROX_MAX_RPM en AWS; subí a todas, o poné una opción
+  de cargar muchas keys del mismo acceso".
+- `giroxService`: el techo configurado (`GIROX_MAX_RPM`, `:rpm` de consultas, 30 de publicistas) es sólo el PUNTO DE PARTIDA. Cada key busca su tope real:
+  ventana llena y sin 429 en 90 s ⇒ +15 % cada 20 s hasta `GIROX_HARD_MAX_RPM` (480 por instancia); 429 de 1girox ⇒ baja al 80 % de lo que venía mandando
+  (nunca más que a 40 % de un saque, piso 15) y espera 90 s. `_effLimit(lane)` = techo vigente (lo usan la fila, los repartos entre keys y los logs).
+  Cada subida / bajada queda en el log `[girox-uso]`. Apagar: `GIROX_ADAPTIVE_RPM=0`.
+- Simulación aislada: key de 60/min con pedido de 100/min ⇒ el techo queda en ~60-67 con 4 rechazos en 10 min; key de 999 con pedido de 400/min ⇒ sube a 456, 0 rechazos.
+- Varias keys del mismo acceso: YA existe para campañas (panel → campaña → pegar varias keys separadas por coma, se SUMAN al pool y se reparte la carga) y
+  para consultas (`GIROX_API_KEY_CONSULTAS`). No se agregó nada nuevo ahí.
+- Dato de la captura de 1girox (03:36 UTC): "app principal" con último uso 02:49:52 mientras las de consultas seguían en uso ⇒ los jugadores que se saturaban
+  NO salen por esa key. Falta identificar cuál es (el log `[girox-uso]` muestra los últimos 4 caracteres).

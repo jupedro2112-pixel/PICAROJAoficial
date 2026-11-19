@@ -157,6 +157,59 @@ function _laneLimit(laneKey) {
   return PUBLISHER_MAX_RPM;
 }
 
+// ============================================================
+// TECHO QUE SE AJUSTA SOLO (#1141, 2026-11-19)
+// ============================================================
+// Owner: "subí el tope con el código, sin tener que tocar variables en AWS". El techo configurado (GIROX_MAX_RPM, :rpm de consultas,
+// publicistas) pasa a ser sólo el PUNTO DE PARTIDA de cada key. Después cada key busca su tope real:
+//   · se llenó la ventana y 1girox NO devolvió 429 en los últimos 90 s ⇒ sube 15 % (como mucho cada 20 s) hasta GIROX_HARD_MAX_RPM (480);
+//   · 1girox devolvió 429 ⇒ baja al 80 % de lo que venía mandando (nunca más que a 40 % de un saque; piso 15) y espera 90 s antes de volver a subir.
+// Así una key que 1girox subió a 180 o a 999 se aprovecha sola, y una de 60 se queda cerca de 60 entre todas las instancias.
+// Apagar (volver al techo fijo): GIROX_ADAPTIVE_RPM=0.
+const HARD_MAX_RPM = Number(process.env.GIROX_HARD_MAX_RPM || 480);
+const ADAPT_FLOOR_RPM = 15;
+const _dynLimit = new Map(); // lane → { limit, last429, lastRaise }
+function _adaptiveOn() { return !/^(0|false|off)$/i.test(String(process.env.GIROX_ADAPTIVE_RPM || '')); }
+/** Techo VIGENTE de una key (el ajustado, o el configurado si nunca se movió). */
+function _effLimit(lane) {
+  const base = _laneLimit(lane);
+  if (!_adaptiveOn()) return base;
+  const d = _dynLimit.get(lane || 'master');
+  return d ? d.limit : base;
+}
+function _laneLoad(lane) {
+  const now = Date.now();
+  return (_laneTimestamps.get(lane) || []).filter((t) => now - t < WINDOW_MS).length;
+}
+/** La ventana se llenó: si 1girox no se quejó hace rato, se sube el techo. */
+function _adaptOnFull(lane) {
+  if (!_adaptiveOn()) return false;
+  const now = Date.now();
+  const cur = _effLimit(lane);
+  const d = _dynLimit.get(lane) || { limit: cur, last429: 0, lastRaise: 0 };
+  if (cur >= HARD_MAX_RPM || now - d.last429 < 90000 || now - d.lastRaise < 20000) return false;
+  d.limit = Math.min(HARD_MAX_RPM, Math.ceil(cur * 1.15) + 1);
+  d.lastRaise = now;
+  _dynLimit.set(lane, d);
+  logger.info(`[girox-uso] key …${String(lane).slice(-4)}: el techo sube solo ${cur} → ${d.limit} por min (1girox no rechazó nada)`);
+  return true;
+}
+/** 1girox devolvió 429: esa key llegó a su tope real ⇒ se baja. */
+function _adaptOn429(lane) {
+  if (!_adaptiveOn()) return;
+  const now = Date.now();
+  const cur = _effLimit(lane);
+  const d = _dynLimit.get(lane) || { limit: cur, last429: 0, lastRaise: 0 };
+  const recent = now - d.last429 < 5000; // una tanda de 429 juntos cuenta una sola vez
+  d.last429 = now;
+  if (!recent) {
+    const next = Math.max(ADAPT_FLOOR_RPM, Math.min(cur, Math.floor(Math.max(_laneLoad(lane), cur * 0.5) * 0.8)));
+    if (next < cur) logger.warn(`[girox-uso] key …${String(lane).slice(-4)}: 1girox rechazó por límite ⇒ el techo baja ${cur} → ${next} por min`);
+    d.limit = next;
+  }
+  _dynLimit.set(lane, d);
+}
+
 /** Elige la key de consultas con MÁS LUGAR LIBRE (techo − usado) en su
  *  ventana: una key de 180 absorbe proporcionalmente más que una de 60. */
 function _pickReadsKey() {
@@ -169,7 +222,7 @@ function _pickReadsKey() {
   for (const c of configs) {
     const arr = _laneTimestamps.get(c.key) || [];
     const load = arr.filter((t) => now - t < WINDOW_MS).length;
-    const free = c.rpm - load;
+    const free = _effLimit(c.key) - load;
     if (free > bestFree) { bestFree = free; best = c.key; }
   }
   return best;
@@ -187,7 +240,7 @@ function _pickPublisherKey(pool) {
   for (const k of keys) {
     const arr = _laneTimestamps.get(k) || [];
     const load = arr.filter((t) => now - t < WINDOW_MS).length;
-    const free = _laneLimit(k) - load;
+    const free = _effLimit(k) - load;
     if (free > bestFree) { bestFree = free; best = k; }
   }
   return best;
@@ -229,11 +282,12 @@ function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
  *  Devuelve false si esperar sería excesivo. */
 async function _acquireSlot(laneKey) {
   const lane = laneKey || 'master';
-  const limit = _laneLimit(lane); // las keys de consultas pueden tener techo propio (:rpm)
   const deadline = Date.now() + MAX_QUEUE_WAIT_MS;
   for (;;) {
     const now = Date.now();
     const arr = (_laneTimestamps.get(lane) || []).filter((t) => now - t < WINDOW_MS);
+    let limit = _effLimit(lane); // #1141: techo vigente (se ajusta solo)
+    if (arr.length >= limit && _adaptOnFull(lane)) limit = _effLimit(lane);
     if (arr.length < limit) {
       arr.push(now);
       _laneTimestamps.set(lane, arr);
@@ -246,6 +300,46 @@ async function _acquireSlot(laneKey) {
     await _sleep(waitMs);
   }
 }
+
+// ============================================================
+// MEDIDOR DE USO POR KEY (#1139, 2026-11-19)
+// ============================================================
+// Hasta acá sólo se anotaban los pedidos que FALLABAN: con la página saturada no
+// había forma de saber cuántos pedidos por minuto salían por cada key ni qué los
+// gastaba. Una línea por minuto y por key (sólo si pasó la mitad del techo o hubo
+// 429 / sin lugar / cortes), con la key tapada (últimos 4) y el detalle por tipo:
+//   [girox-uso] key …ab12 (publicista) 30/30 por min · 429: 4 · sin lugar: 12 ·
+//   cortes 20s: 3 · espera máx 28s · session 11, getPlayer 9, refund-daily 6
+// Apagar: GIROX_USAGE_LOG=0.
+const _usage = new Map(); // lane → { n, r429, timeouts, noSlot, waitMax, ops: Map }
+function _usageOf(lane) {
+  let m = _usage.get(lane);
+  if (!m) { m = { n: 0, r429: 0, timeouts: 0, noSlot: 0, waitMax: 0, ops: new Map() }; _usage.set(lane, m); }
+  return m;
+}
+function _usageOp(label) { return String(label || '?').split('(')[0].trim().slice(0, 28) || '?'; }
+function _laneKind(lane) {
+  if (!lane || lane === 'master' || lane === getApiKey()) return 'principal';
+  if (getReadsKeys().includes(lane)) return 'consultas';
+  return _publisherKeyConfigs().some((c) => c.key === lane) ? 'publicista con techo propio' : 'publicista';
+}
+function _usageFlush() {
+  try {
+    if (/^(0|false|off)$/i.test(String(process.env.GIROX_USAGE_LOG || ''))) { _usage.clear(); return; }
+    for (const [lane, m] of _usage) {
+      const limit = _effLimit(lane);
+      if (m.n >= limit * 0.5 || m.r429 || m.noSlot || m.timeouts) {
+        const ops = [...m.ops.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${v}`).join(', ');
+        logger.warn(`[girox-uso] key …${String(lane).slice(-4)} (${_laneKind(lane)}) ${m.n}/${limit} por min`
+          + ` · 429: ${m.r429} · sin lugar: ${m.noSlot} · cortes ${Math.round(TIMEOUT_MS / 1000)}s: ${m.timeouts}`
+          + ` · espera máx ${Math.round(m.waitMax / 1000)}s · ${ops}`);
+      }
+    }
+  } catch (_) { /* el medidor nunca rompe nada */ }
+  _usage.clear();
+}
+const _usageTimer = setInterval(_usageFlush, WINDOW_MS);
+if (_usageTimer && _usageTimer.unref) _usageTimer.unref();
 
 // ============================================================
 // TRANSPORTE
@@ -401,6 +495,12 @@ async function _request({ method, path, body, label, retryable = true, username 
   // tiene más lugar libre → reparte la carga. Se elige UNA vez (antes de los
   // reintentos) para no romper la idempotencia por reference.
   if (Array.isArray(keyOverride)) keyOverride = _pickPublisherKey(keyOverride);
+  // #1139: una key de publicista guardada con un espacio de más, o que es la MISMA que la principal, caía en el carril
+  // "publicista" (30/min) aunque 1girox la tuviera en 180 ⇒ se limpia y, si es la principal, usa el carril principal.
+  if (typeof keyOverride === 'string') {
+    keyOverride = keyOverride.trim() || null;
+    if (keyOverride && keyOverride === String(getApiKey() || '').trim()) keyOverride = null;
+  }
   // Lecturas por el pool de consultas SOLO cuando iría por la master: la key de
   // un publicista es la única que ve a SUS jugadores, no se puede reemplazar.
   if (!keyOverride && readOnly) keyOverride = _pickReadsKey();
@@ -415,8 +515,15 @@ async function _request({ method, path, body, label, retryable = true, username 
       await _sleep(wait);
     }
 
-    if (!(await _acquireSlot(keyOverride || getApiKey()))) {
-      logger.warn(`[girox] ${label} — rate limit local saturado (${_laneLimit(keyOverride || getApiKey())}/min${keyOverride && getReadsKeys().includes(keyOverride) ? ', key consultas' : ''}), abortando`);
+    const _lane = keyOverride || getApiKey();
+    const _um = _usageOf(_lane);
+    const _t0 = Date.now();
+    const _gotSlot = await _acquireSlot(_lane);
+    const _waited = Date.now() - _t0;
+    if (_waited > _um.waitMax) _um.waitMax = _waited;
+    if (_gotSlot) { _um.n++; const _op = _usageOp(label); _um.ops.set(_op, (_um.ops.get(_op) || 0) + 1); } else _um.noSlot++;
+    if (!_gotSlot) {
+      logger.warn(`[girox] ${label} — rate limit local saturado (${_effLimit(keyOverride || getApiKey())}/min${keyOverride && getReadsKeys().includes(keyOverride) ? ', key consultas' : ''}), abortando`);
       return { ok: false, error: 'La plataforma está saturada. Reintentá en un minuto.', code: 'rate_limited_local', httpStatus: null };
     }
 
@@ -432,6 +539,8 @@ async function _request({ method, path, body, label, retryable = true, username 
       return { ok: true, data: resp.data || {}, httpStatus: resp.status };
     } catch (e) {
       lastErr = _normalizeError(e, label);
+      if (lastErr.httpStatus === 429 || lastErr.code === 'RATE_LIMITED') { _um.r429++; _adaptOn429(_lane); }
+      else if (lastErr.code === 'ECONNABORTED') _um.timeouts++;
       // Log sin exponer la key ni la password del body.
       logger.warn(`[girox] ${lastErr.detail}`);
       if (!retryable || !lastErr.retryable || attempt === RETRY_DELAYS_MS.length) {
