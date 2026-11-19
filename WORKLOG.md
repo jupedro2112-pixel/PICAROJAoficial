@@ -14960,3 +14960,8 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 ### 1138-l/m. Girox: chat cerrado deja el Sorteo mensual + barra nítida y fondo negro (2026-11-19) — app v750
 - Owner: "cuando se cierra el chat que quede el circulito pero que no tape más el sorteo mensual". Con el chat cerrado ya no va el botón CARGA AQUÍ en el medio de la barra (#1134 lo ponía encima del Sorteo mensual); queda el círculo verde CARGAS abajo.
 - Owner: "la parte inferior del menú superior se ve borrosa… y los espacios en blanco arriba/abajo en negro": el ‹ Volver tenía un brillo rojo (box-shadow de chat.css) que se veía borroso debajo de la barra ⇒ barra del casino sin sombras/desenfoques; `html`/`body.casino-open` en negro.
+
+### 1138-n. "La plataforma está saturada": menos consultas a 1girox por cada alta nueva (2026-11-19)
+- Logs del owner (02:25 ART): altas seguidas de la pauta `PICAROJA2026` (key del publicista) + `HTTP 429 RATE_LIMITED` de 1girox + carteles "La plataforma está saturada" en cargas manuales y auto-cargas fallidas.
+- Cada cliente nuevo, al abrir la app, pedía a 1girox el netwin de ayer / semana pasada / mes pasado (3 consultas de la key del publicista) para mostrar $0. `/api/refunds/status` ahora devuelve 0 sin consultar cuando la cuenta se creó DESPUÉS del fin del período (el reclamo sigue pidiendo el netwin real con `fresh`).
+- Pendiente del owner: pedirle a 1girox que suba a 180/min la key del publicista de PICAROJA2026 y, recién ahí, `GIROX_PUBLISHER_KEY_RPM=<key>:85` (2 instancias) en AWS.

@@ -10341,10 +10341,16 @@ app.get('/api/refunds/status', authMiddleware, async (req, res) => {
     // Desde la Partner API v1.8 esto sale de `GET /players/{username}/stats`, con la
     // misma API key que el resto. Antes había que ir al PANEL de administración con un
     // Bearer de sesión y el ID numérico del jugador — se fue todo eso.
+    // #1138-n (logs 2026-11-19: 429 de 1girox con altas seguidas de la pauta PICAROJA2026, todas por la key del publicista): una cuenta
+    // creada DESPUÉS de que terminó un período no jugó en él ⇒ ese netwin es 0 sin preguntarle a 1girox (cada alta nueva gastaba 3 consultas
+    // de la key del publicista sólo para mostrar $0). Es sólo el ESTADO: el reclamo pide el netwin real con {fresh:true}.
+    let _createdAt = null; try { const _u = await User.findOne({ id: userId }).select('createdAt').lean(); _createdAt = _u && _u.createdAt ? new Date(_u.createdAt) : null; } catch (_) {}
+    const _zero = { success: true, casinoNetwin: 0, bonusGranted: 0, skipped: 'cuenta posterior al período' };
+    const _st = (from, to, label) => (_createdAt && _createdAt > to ? Promise.resolve(_zero) : girox.getPlayerStats(username, from, to, label));
     const [dN, wN, mN] = await Promise.all([
-      girox.getPlayerStats(username, dailyFrom, dailyTo, 'refund-daily'),
-      girox.getPlayerStats(username, weeklyFrom, weeklyTo, 'refund-weekly'),
-      girox.getPlayerStats(username, monthlyFrom, monthlyTo, 'refund-monthly')
+      _st(dailyFrom, dailyTo, 'refund-daily'),
+      _st(weeklyFrom, weeklyTo, 'refund-weekly'),
+      _st(monthlyFrom, monthlyTo, 'refund-monthly')
     ]);
     // ⚠️ `netwin` POSITIVO = el jugador perdió (lo que se reembolsa). Negativo = ganó
     // en el período → no hay nada que devolver, se corta en 0.
