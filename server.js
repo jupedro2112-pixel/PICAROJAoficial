@@ -2543,7 +2543,7 @@ async function _hgcashRecoveryPass() {
     if (!cfg.enabled) return;
     const since = new Date(Date.now() - (cfg.windowMinutes || 60) * 60 * 1000);
     const pend = await Comprobante.find({ isComprobante: true, autoCharged: { $ne: true }, status: { $ne: 'duplicate' }, reviewStatus: 'pending',
-      bankMatchStatus: { $in: ['none', 'pending'] }, amount: { $gt: 0 }, createdAt: { $gte: since, $lte: new Date(Date.now() - 60 * 1000) } }).sort({ createdAt: 1 }).limit(30).lean();
+      bankMatchStatus: { $in: ['none', 'pending'] }, amount: { $gt: 0 }, createdAt: { $gte: since, $lte: new Date(Date.now() - 60 * 1000) } }).sort({ createdAt: 1 }).limit(120) /* #1144: ponerse al día tras una caída (antes 30 por pasada) */.lean();
     for (const comp of pend) await hgcashMatchFromComprobante(comp);
   } catch (e) { logger.warn(`[hgcash] recuperación: ${e.message}`); }
 }
@@ -4169,7 +4169,7 @@ async function hgcashMatchFromComprobante(comprobante) {
     const since = new Date(Date.now() - (cfg.windowMinutes || 60) * 60 * 1000);
     const candidates = await BankMovement.find({
       direction: 'Inbound', matchStatus: 'pending', createdAt: { $gte: since }
-    }).sort({ createdAt: -1 }).limit(80).lean();
+    }).sort({ createdAt: -1 }).limit(600) /* #1144: con la ventana ampliada tras una caída hay cientos de movimientos pendientes (antes 80) */.lean();
 
     const matches = candidates.filter(m =>
       _statusAccredited(m.status, cfg) &&

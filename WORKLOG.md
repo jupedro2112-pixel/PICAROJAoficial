@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1143)
+> **Última actualización: 2026-11-19** (#1144)
 
 ## Sesión 2026-11-09
 
@@ -15038,3 +15038,12 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Regla: un número que venga del entorno se lee con `_numEnv`, nunca `Number(process.env.X || def)`.
 - El límite de 1girox de la pauta quedó resuelto antes: con el pool de 9 keys, desde 03:51 UTC no hay 429 ni esperas en `[girox-uso]`.
 - Pendiente del owner: las cargas de 02:50 → deploy quedaron sin acreditar (movimientos del banco "SIN match" / comprobantes en Cargas pendientes): revisarlas.
+
+### 1144. Ponerse al día con las cargas automáticas atrasadas — sólo server
+- Owner: "el único problema es que no carga fichas; ¿no podés cargar todo vos y dejar todo en 0? dar un 20 % y que diga perdón por la demora".
+- Desde acá NO hay acceso a producción (ni base ni 1girox): las cargas las hace el servidor. Ya existe la recuperación automática (`_hgcashRecoveryPass`, cada
+  3 min): vuelve a cruzar los comprobantes pendientes de la ventana (`Config['hgcash'].windowMinutes`, 60) con los movimientos del banco y acredita con la
+  reference de siempre (no puede duplicar). Se subieron los topes para una caída larga: 120 comprobantes por pasada (antes 30) y 600 movimientos candidatos (antes 80).
+- Para lo atrasado de más de 1 h: ampliar un rato la ventana en Comandos → Banco automático (hasta 1440 min) y volverla a 60 cuando la cola quede en 0.
+- El 20 % de disculpa: con lo que ya hay (panel → Notificaciones → Lote con regalo, audiencia "cargadores" del día, % en la próxima carga, texto de disculpa);
+  no se agregó un regalo automático nuevo en medio del incidente.
