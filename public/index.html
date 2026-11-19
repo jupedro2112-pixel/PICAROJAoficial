@@ -2774,20 +2774,21 @@
     <div id="profileModal" class="modal hidden refund-simple profile-modal pf-compact" onclick="if(event.target===this)hideModal('profileModal')">
         <div class="modal-content" style="max-width: 420px; position: relative;" onclick="event.stopPropagation()">
             <button onclick="hideModal('profileModal')" class="rs-close" aria-label="Cerrar">✕</button>
-            <div class="play-bal" id="playBalProfile"><span class="pb-k">🎰 Tu saldo para jugar</span><b class="js-play-bal">$0</b><button type="button" class="pb-r" onclick="VIP.ui.syncBalance && VIP.ui.syncBalance()" title="Actualizar saldo" aria-label="Actualizar saldo">↻</button></div><!-- #847 --><button type="button" class="fit-link" onclick="VIP.home.openFitPhone()">📱 Ajustar la pantalla a mi teléfono ›</button><!-- #865 -->
+            <div class="pf-hide">            <div class="play-bal" id="playBalProfile"><span class="pb-k">🎰 Tu saldo para jugar</span><b class="js-play-bal">$0</b><button type="button" class="pb-r" onclick="VIP.ui.syncBalance && VIP.ui.syncBalance()" title="Actualizar saldo" aria-label="Actualizar saldo">↻</button></div><!-- #847 --></div><!-- #1138-d: el saldo ya está en el recuadro del usuario -->
             <div class="modal-header">
                 <h2>👤 Tu perfil</h2>
-                <p>Tus datos de acceso a la app y a las plataformas</p>
             </div>
-            <!-- #404 (owner): orden del Perfil — Canjear código arriba de todo · Menú intermedio/completo · Modo nocturno + Notificaciones
-                 · usuario + datos + Capturar · Fueguito · el resto. Todo más compacto (.pf-compact). -->
-            <!-- #645/#646 (owner): VERIFICACIÓN DE TELÉFONO ARRIBA DE TODO del Perfil, como IMPORTANTE hasta que verifique: estado (Verificado ✓ / Sin verificar) + botón que abre el modal con la explicación paso a paso -->
+            <!-- #1138-d (owner: "simplificá el perfil, lo veo muy cargado"): arriba SÓLO lo pendiente (verificar teléfono / instalar la app; si ya
+                 está hecho no aparece) · Canjear código · tu usuario (ícono que se cambia) con usuario y contraseña · ⚙️ Configuración plegada abajo
+                 con todo lo demás (modo nocturno, notificaciones, clave, pantalla, foto de tus datos…). Telegram salió del Perfil. -->
             <div class="pf-theme-row pf-phone" id="pfPhoneRow">
                 <span class="pf-theme-k"><b><i class="pi pi-sm">📱</i>Verificación de teléfono <em class="pf-imp" id="pfPhoneImp">Importante</em></b><small id="pfPhoneHint">Necesaria para retirar</small></span>
                 <button type="button" class="pf-theme-btn" id="pfPhoneBtn" onclick="VIP.home.openVerifyPhone()">Verificar</button>
             </div>
-            <!-- #783/#789 (owner): recuadro de usuario (avatar · nombre · SALDO · nivel) debajo de la verificación de teléfono -->
-            <!-- #304 (owner): recuadro de USUARIO con avatar (tocar = elegir ícono; los de nivel se desbloquean al subir). -->
+            <button type="button" class="pf-act pf-install-top" id="pfInstallRow" onclick="VIP.home.pfInstall()"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/></svg></i><span>Instalar la app<small id="pfInstallHint">Acceso directo en tu teléfono</small></span></button>
+            <div class="pf-actions pf-actions-top">
+                <button type="button" class="pf-act" onclick="hideModal('profileModal');if(window.openWelcomeCodeModal)openWelcomeCodeModal()"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8"/><path d="M12 8v12"/><path d="M12 8c-2.5 0-4.5-1.3-4.5-3S9 2.5 10 3.5 12 8 12 8zm0 0c2.5 0 4.5-1.3 4.5-3S15 2.5 14 3.5 12 8 12 8z"/></svg></i><span>Canjear un código<small>Códigos de bienvenida y promos</small></span></button>
+            </div>
             <div class="pf-userbox" id="pfUserBox">
                 <button type="button" class="pf-avatar" id="pfAvatarBtn" onclick="VIP.home.openAvatarPicker()" title="Cambiar avatar"><span id="pfAvatar">👤</span><span class="pf-avatar-edit" aria-hidden="true">✎</span></button>
                 <div class="pf-userinfo">
@@ -2795,53 +2796,52 @@
                     <!-- #393 (owner): código de referido debajo del nombre -->
                     <div class="pf-usercode" id="pfUserCode" style="display:none;">Tu código <b id="pfUserCodeV">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('code')">Copiar</button></div>
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
-                    <div class="pf-userhint">Tocá el avatar para elegir tu ícono · los de nivel se desbloquean al subir</div>
+                    <div class="pf-userhint">Tocá el ícono para cambiarlo</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v745</div>
+                    <div class="pf-build" id="appBuildTag">app v746</div>
                 </div>
             </div>
-            <div class="pf-actions pf-actions-top">
-                <button type="button" class="pf-act" onclick="hideModal('profileModal');if(window.openWelcomeCodeModal)openWelcomeCodeModal()"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8"/><path d="M12 8v12"/><path d="M12 8c-2.5 0-4.5-1.3-4.5-3S9 2.5 10 3.5 12 8 12 8zm0 0c2.5 0 4.5-1.3 4.5-3S15 2.5 14 3.5 12 8 12 8z"/></svg></i><span>Canjear un código<small>Códigos de bienvenida y promos</small></span></button>
-            </div>
-            <!-- #399 (owner): modo nocturno ARRIBA de todo de Perfil, con botón Activar / Desactivar (default: desactivado) -->
-            <div class="pf-theme-row">
-                <span class="pf-theme-k"><b><i class="pi pi-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></i>Modo nocturno</b><small id="pfThemeHint">Desactivado</small></span>
-                <button type="button" class="pf-theme-btn" id="pfThemeBtn" onclick="vipToggleTheme()">Activar</button>
-            </div>
-            <div class="pf-actions pf-actions-top">
-                <!-- #645 (owner): Notificaciones = estado + botón ACTIVAR siempre apretable (aunque figure activado, por las dudas). #notificationBtn conserva toda la lógica FCM. -->
-                <div class="pf-theme-row" id="pfNotifRow">
-                    <span class="pf-theme-k"><b><i class="pi pi-sm">🔔</i>Notificaciones</b><small id="pfNotifHint">Avisos de cargas, reembolsos y premios</small></span>
-                    <span style="display:inline-flex;align-items:center;"><button class="pf-ico-btn notif-topbar-btn" id="notificationBtn" title="Estado de las notificaciones" aria-label="Notificaciones">🔔</button><button type="button" class="pf-theme-btn" id="pfNotifActivate" onclick="var b=document.getElementById('notificationBtn'); if(b){ b.disabled=false; b.click(); }">Activar</button></span>
-                </div>
-                <!-- #971 (owner): qué avisos quiere recibir, sin apagar las notificaciones del teléfono (así no perdemos el canal). -->
-                <div class="pf-theme-row" id="pfAvisosRow">
-                    <span class="pf-theme-k"><b><i class="pi pi-sm">🎚️</i>Qué avisos querés recibir</b><small id="pfAvisosHint">Bonos del día, novedades y todo lo tuyo</small></span>
-                    <select class="pf-theme-btn pf-select" id="pfAvisosSel" onchange="VIP.home.setNotifLevel(this.value)" aria-label="Qué avisos querés recibir"><option value="all">Todos</option><option value="mine">Sólo lo mío</option><option value="none">Ninguno</option></select>
-                </div>
-            </div>
-            <!-- #270 (owner): predominancia a usuario, contraseña y página de la app + botón de captura. -->
             <div class="pf-main pf-main-big">
                 <div class="pf-row"><span class="pf-k">Usuario</span><b class="pf-v" id="pfUser">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('user')">Copiar</button></div>
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
-                <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                 <div class="pf-hint" id="pfHint"></div>
-                <div class="pf-build pf-build-min" id="pfBuildMini">app v745</div> <!-- #790: espejo de #appBuildTag -->
-                <button type="button" class="pf-capture" id="pfCaptureBtn" onclick="VIP.autoload.saveCapture()">📸 Capturar mis datos</button>
-                <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
             </div>
+            <details class="pf-config" id="pfConfig">
+                <summary><i class="pi pi-sm">⚙️</i><span>Configuración<small>Modo nocturno, notificaciones, clave y más</small></span><em aria-hidden="true">›</em></summary>
+                <div class="pf-config-body">
+                    <div class="pf-theme-row">
+                <span class="pf-theme-k"><b><i class="pi pi-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></i>Modo nocturno</b><small id="pfThemeHint">Desactivado</small></span>
+                <button type="button" class="pf-theme-btn" id="pfThemeBtn" onclick="vipToggleTheme()">Activar</button>
+            </div>
+                    <div class="pf-theme-row" id="pfNotifRow">
+                    <span class="pf-theme-k"><b><i class="pi pi-sm">🔔</i>Notificaciones</b><small id="pfNotifHint">Avisos de cargas, reembolsos y premios</small></span>
+                    <span style="display:inline-flex;align-items:center;"><button class="pf-ico-btn notif-topbar-btn" id="notificationBtn" title="Estado de las notificaciones" aria-label="Notificaciones">🔔</button><button type="button" class="pf-theme-btn" id="pfNotifActivate" onclick="var b=document.getElementById('notificationBtn'); if(b){ b.disabled=false; b.click(); }">Activar</button></span>
+                </div>
+                    <div class="pf-theme-row" id="pfAvisosRow">
+                    <span class="pf-theme-k"><b><i class="pi pi-sm">🎚️</i>Qué avisos querés recibir</b><small id="pfAvisosHint">Bonos del día, novedades y todo lo tuyo</small></span>
+                    <select class="pf-theme-btn pf-select" id="pfAvisosSel" onchange="VIP.home.setNotifLevel(this.value)" aria-label="Qué avisos querés recibir"><option value="all">Todos</option><option value="mine">Sólo lo mío</option><option value="none">Ninguno</option></select>
+                </div>
+                    <div class="pf-actions">
+                        <button type="button" class="pf-act" onclick="hideModal('profileModal');VIP.home.openChangePassword()"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="4.5"/><path d="M11.5 10.5L20 2M16 6l2.5 2.5M13.5 8.5L16 11"/></svg></i><span>Cambiar clave<small>Se cambia en la app y en todas las plataformas</small></span></button>
+                        <button type="button" class="pf-act" onclick="VIP.autoload.saveCapture()" id="pfCaptureBtn"><i class="pi pi-sm">📸</i><span>Foto de mis datos<small>Guardá tu usuario y clave en la galería</small></span></button>
+                        <div id="pfCapturePreview" style="display:none;margin-top:8px;"></div>
+                        <button type="button" class="pf-act" onclick="hideModal('profileModal');VIP.home.openFitPhone()"><i class="pi pi-sm">📱</i><span>Ajustar la pantalla<small>Si algo se ve cortado en tu teléfono</small></span></button>
+                        <button type="button" class="pf-act" onclick="hideModal('profileModal');var b=document.getElementById('settingsBtn'); if(b){b.click();}else{VIP.ui.showModal('settingsModal');}"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></i><span>Más ajustes<small>Modo oscuro del chat · plan de notificaciones</small></span></button>
+                    </div>
+                    <div class="pf-main pf-config-link">
+                        <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
+                    </div>
+                    <div class="pf-build pf-build-min" id="pfBuildMini">app v746</div> <!-- #790: espejo de #appBuildTag -->
+                </div>
+            </details>
             <div class="pf-actions">
                 <!-- #645 (owner): el fueguito salió del Perfil (fila oculta; #fireBtn sigue acá porque toda la app lo abre con .click()) -->
                 <div class="pf-act pf-wrap" id="pfFireRow">
                     <button class="pf-ico-btn fire-topbar-btn" id="fireBtn" title="Fueguito — racha diaria, reclamá tu premio cada día">🔥<span id="fireStreak" class="fire-streak-badge">0</span></button>
                     <span onclick="var b=document.getElementById('fireBtn'); if(b) b.click();">Fueguito<small>Racha diaria · premios que se cobran con rollover (apostar, no cargar)</small></span>
                 </div>
-                <button type="button" class="pf-act" onclick="hideModal('profileModal');VIP.home.openChangePassword()"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="4.5"/><path d="M11.5 10.5L20 2M16 6l2.5 2.5M13.5 8.5L16 11"/></svg></i><span>Cambiar clave<small>Se cambia en la app y en todas las plataformas</small></span></button>
-                <button type="button" class="pf-act" onclick="hideModal('profileModal');VIP.ui.installApp()"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/></svg></i><span>Instalar la app<small>Acceso directo en tu teléfono</small></span></button>
-                <a class="pf-act" id="canalTelegramHeaderBtn" href="/go/comunidad" target="_blank" rel="noopener noreferrer"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9.5a3.5 3.5 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10"/></svg></i><span>Canal de Telegram<small>Novedades y promos</small></span></a>
-                <!-- #294 (owner): "Soporte en vivo" se sacó del Perfil (el chat se abre desde Carga manual). El id del globito queda oculto para home.js. -->
+                <a class="pf-act pf-hide" id="canalTelegramHeaderBtn" href="/go/comunidad" target="_blank" rel="noopener noreferrer"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 9.5a3.5 3.5 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10"/></svg></i><span>Canal de Telegram<small>Novedades y promos</small></span></a>
                 <span id="headerSupportUnread" class="support-unread" style="display:none;">0</span>
-                <button type="button" class="pf-act" onclick="hideModal('profileModal');var b=document.getElementById('settingsBtn'); if(b){b.click();}else{VIP.ui.showModal('settingsModal');}"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></i><span>Más ajustes<small>Modo oscuro del chat · plan de notificaciones</small></span></button>
                 <!-- #412 (owner): "Cerrar sesión" SOLO para el usuario de prueba (body.is-tester, lo pone home.js #296) -->
                 <button type="button" class="pf-act pf-logout" id="pfLogoutBtn" onclick="hideModal('profileModal');VIP.auth.handleLogout()"><i class="pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5v16h-5"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg></i><span>Cerrar sesión<small>Salís de la app en este teléfono</small></span></button>
             </div>

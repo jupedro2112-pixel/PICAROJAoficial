@@ -3746,3 +3746,23 @@ body:not(.sp-classic) #casinoOverlay > #supportPanel.sp-in-casino .sp-tgrow i { 
 body:not(.sp-classic) .ig-remind-btn { width: 100%; background: #25d366 !important; color: #fff !important; border: 0 !important; border-radius: 22px !important;
   font-weight: 800 !important; padding: 10px 14px !important; box-shadow: 0 2px 6px rgba(0, 0, 0, .18); }
 body:not(.sp-classic) .ig-remind-btn:active { transform: scale(.98); }
+
+/* #1138-d (owner): PERFIL simplificado — lo pendiente arriba, tus datos, y "⚙️ Configuración" plegada abajo con todo lo demás. */
+.profile-modal .pf-hide, .profile-modal [hidden] { display: none !important; }
+.profile-modal .pf-install-top { width: 100%; margin: 0 0 10px; outline: 2px solid var(--p-green, #16a34a); outline-offset: -2px; }
+.profile-modal details.pf-config { margin: 10px 0 8px; background: var(--p-surface); border-radius: 16px; overflow: hidden; }
+.profile-modal details.pf-config > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; color: var(--p-text); font-weight: 800; }
+.profile-modal details.pf-config > summary::-webkit-details-marker { display: none; }
+.profile-modal details.pf-config > summary span { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.profile-modal details.pf-config > summary small { font-weight: 600; font-size: 11.5px; color: var(--p-muted); }
+.profile-modal details.pf-config > summary em { font-style: normal; font-size: 22px; color: var(--p-muted); transition: transform .2s; }
+.profile-modal details.pf-config[open] > summary em { transform: rotate(90deg); }
+.profile-modal .pf-config-body { padding: 0 10px 10px; }
+.profile-modal .pf-config-body .pf-theme-row, .profile-modal .pf-config-body .pf-act { background: var(--p-card) !important; }
+.profile-modal .pf-config-body .pf-actions { margin: 0; }
+.profile-modal .pf-config-link { margin-top: 8px; }
+.profile-modal .pf-userbal { display: none !important; } /* #1138-d (owner): el saldo ya lo ven en Girox */
+/* #1138-d (owner: "al perfil dejale un ícono predeterminado y que se pueda modificar"): vuelve el recuadro del usuario (lo había ocultado #790), compacto y sin saldo. */
+#profileModal #pfUserBox { display: flex !important; }
+#profileModal #pfUserBox .pf-build { display: none !important; }
+#profileModal #pfUserBox .pf-userhint { font-size: 11px; color: var(--p-muted); }

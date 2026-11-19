@@ -797,7 +797,7 @@
             try { const bal = _el('pfUserBal'), ub = _el('userBalance'); if (bal && ub) bal.textContent = ub.textContent || '$0'; } catch (_) {}
             try { const bm = _el('pfBuildMini'), bt = _el('appBuildTag'); if (bm && bt) bm.textContent = bt.textContent; } catch (_) {} // #790
             b.textContent = ok ? '✓ Verificado' : 'Verificar'; b.classList.toggle('ok', ok);
-            const row = _el('pfPhoneRow'), imp = _el('pfPhoneImp'); if (row) row.classList.toggle('pf-important', !ok); if (imp) imp.hidden = ok; // #646 b.title = ok ? 'Tu número ya está verificado. Tocá para cambiarlo.' : 'Verificar mi número';
+            const row = _el('pfPhoneRow'), imp = _el('pfPhoneImp'); if (row) { row.classList.toggle('pf-important', !ok); row.hidden = ok; } if (imp) imp.hidden = ok; // #1138-d: verificado ⇒ no aparece // #646 b.title = ok ? 'Tu número ya está verificado. Tocá para cambiarlo.' : 'Verificar mi número';
         } catch (_) {}
     }
     function paintPfNotif() {
@@ -846,8 +846,18 @@
             VIP.state.notifLevel = j.level; _pfAvisosHint(j.level); try { VIP.ui.showToast('Listo, guardado ✓'); } catch (_) {}
         } catch (_) { try { VIP.ui.showToast('No se pudo guardar, probá de nuevo', 'error'); } catch (__) {} paintPfAvisos(); }
     }
+    // #1138-d (owner): "instalar la app" arriba del Perfil SÓLO si todavía no la tiene (con el extra pendiente, lo dice); instalada ⇒ no aparece.
+    function _paintPfInstall() {
+        try {
+            const row = _el('pfInstallRow'); if (!row) return;
+            row.hidden = _isStandalone();
+            const h = _el('pfInstallHint'); if (h) h.textContent = _igPending() ? ('Instalala y reclamá ' + _igFmt(_ig.amount) + ' sin cargo') : 'Acceso directo en tu teléfono';
+        } catch (_) {}
+    }
+    function pfInstall() { try { VIP.ui.hideModal('profileModal'); } catch (_) {} if (_igPending()) installGiftMain(); else { try { VIP.ui.installApp(); } catch (_) {} } }
     function openProfile() {
-        paintPfPhone(); paintPfNotif(); paintPfAvisos(); // #645 · #971
+        paintPfPhone(); paintPfNotif(); paintPfAvisos(); _paintPfInstall(); // #645 · #971 · #1138-d
+        try { const c = _el('pfConfig'); if (c) c.open = false; } catch (_) {}
         _pfShown = true; // #393
         try { if (VIP.autoload && VIP.autoload.hidePreview) VIP.autoload.hidePreview(); } catch (_) {}
         _pfPaint();
@@ -3356,7 +3366,7 @@
         playToggle, pvFold, pvPick, // #1032
         casinoChatToggle, spGreetMsg, // #1042-x
         menuNow, chatNow, // #1042-y
-        supportFaqOpen, supportFaqClose, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, casinoHelp, casinoLoadChat, spCargar, spHelpMenu, spHelpPick, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
+        supportFaqOpen, supportFaqClose, pfInstall, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, casinoHelp, casinoLoadChat, spCargar, spHelpMenu, spHelpPick, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782
         pwRecoGo, pwRecoLater, // #806
         renderCasinoTabs, switchPlatform, openChangePassword, setPreferred, toggleBubble, dismissBubble, restoreBubble, choosePlatform, paintInstallButtons, openPlatformTab, openPlatform, toggleCasinoLoad, dismissCasinoQuick, restoreCasinoQuick, toggleAccess, openInApp, renderSupportTests, toggleInfoReviews, toggleInfoVip, toggleInfoRoulette, renderVipDetail, toggleRefHow, toggleVipCard, renderVipCard, renderVipClaim, pickVipClaimPlat, claimLevelBonus, loadReferralClaimable, claimReferral,
