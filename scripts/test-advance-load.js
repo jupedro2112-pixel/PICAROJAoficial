@@ -69,5 +69,27 @@ caso('Soporte adelantado: la 1ª vez que pide una persona atiende la IA (retiro 
   assert.ok(/estamos validando|lo estamos validando/.test(S), 'retiro en proceso: "lo estamos validando y en breve sale"');
   assert.ok(/u\.askedHuman/.test(B) && /u\.bankDelay/.test(B), 'la IA sabe que pidió una persona y que el banco está con demoras');
 });
+caso('#1150 No llegó + OTRA cuenta (o "Trucho") ⇒ cuenta cerrada y celular bloqueado; el celular bloqueado no pasa por ningún alta', () => {
+  const j = fn('_advanceReject'), o = fn('_advanceOtherAccount'), k = fn('_advanceCloseAccount');
+  assert.ok(/const link = await _advanceOtherAccount\(c\.userId\);/.test(j) && /if \(link \|\| \(opts && opts\.close\)\) closed = await _advanceCloseAccount/.test(j));
+  assert.ok(/_dupAccountCheck\(u0, 'adelantada-no-llego'\);/.test(o), 're-chequeo SIN los datos del comprobante rechazado');
+  assert.ok(/_blockUserAccount\(u\.id, why, by/.test(k) && /_phoneBanUser\(u, by, why\)/.test(k), 'bloqueo con historial + celular');
+  assert.ok(/if \(await _phoneBanned\(phone\)\) return \{ success: false, banned: true/.test(S), 'no se le manda código');
+  assert.ok(/code: 'PHONE_BANNED', error: PHONE_BAN_MSG \}; \/\/ #1150/.test(S), 'ni confirma sin SMS');
+  assert.strictEqual((S.match(/if \(await _phoneBanned\(req\.body && req\.body\.phone\)\) return res\.status\(403\)/g) || []).length, 2, 'alta y entrada rápida');
+  assert.ok(/_phoneUnbanUser\(user\.id\)/.test(S), 'desbloquear la cuenta libera el celular');
+  assert.ok(/advVerdict\(\\'' \+ c\.id \+ '\\',\\'fake\\'\)/.test(A) && /close: fake/.test(A));
+});
+caso('#1150 Cierre: la adelantada es carga automática, se separa (sin verificar / no llegó / otro día / entró hoy) y corrige diferencia, arqueo e ingresos', () => {
+  const r = fn('_closeReconcile');
+  assert.ok(/src === 'advance_hgcash'\) return 'auto'/.test(r), 'no cae en "a mano sin cuenta"');
+  assert.ok(/add\('adv_pend'[^\n]*adelantadasPend, -1/.test(r) && /add\('adv_perdida'[^\n]*adelantadasPerdida, -1/.test(r) && /add\('adv_otro_dia'[^\n]*adelantadasOtroDia, -1/.test(r) && /add\('adv_entro_hoy'[^\n]*adelantadasEntraron, \+1/.test(r), 'causas con su signo');
+  const i = S.indexOf('function _closeApply('), ap = S.slice(i, i + 6000);
+  assert.ok(/doc\.ingresosTotal = Math\.round\(\(doc\.depositos \|\| 0\) - _advLost/.test(ap), 'la que no llegó no es ingreso');
+  assert.ok(/- \(_advNet - _advLost\)\)/.test(ap) && /doc\.depositos - _depSec - _advNet - doc\.retiros/.test(ap), 'arqueo sin la plata que no entró ese día');
+  const k = S.indexOf('function _closeCheck('), ck = S.slice(k, k + 6000);
+  assert.ok(/it\('adelantadas', 'Cargas adelantadas \(banco caído\) verificadas', !_bad/.test(ck), 'el cierre no da OK con adelantadas sin verificar o perdidas');
+  assert.ok(/_advanceCloseRecalc\(c, movement\)/.test(S) && /_closeEnsure\(k, true\)/.test(S), 'el cierre viejo se recalcula al verificar');
+});
 console.log(`\n${ok}/${total} casos OK`);
 process.exit(ok === total ? 0 : 1);

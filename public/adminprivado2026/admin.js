@@ -6150,6 +6150,7 @@ async function cierresDetalle(dk) {
         const lst = function (titulo, arr, cols) { if (!arr || !arr.length) return ''; return '<details class="cl-list"><summary>' + titulo + ' (' + arr.length + ')</summary><table class="data-table"><thead><tr>' + cols.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>' + arr.map(function (x) { return '<tr>' + cols.map(function (c) { const v = x[c[0]]; return '<td>' + (c[0] === 'hora' && v ? new Date(v).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : (c[0] === 'monto' ? money(v) : escapeHtml(String(v == null ? '—' : v)))) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></details>'; };
         html += lst('Cargas acreditadas a mano', it.depositosManual, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['cuenta', 'Entró en'], ['nota', 'Nota']]);
         html += lst('Retiros pagados a mano desde nuestras cuentas', it.pagosMarcados, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['via', 'Desde']]); // #1001
+        html += lst('⚡ Cargas adelantadas (banco caído)', it.adelantadas, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['estado', 'Estado']]); // #1150
         html += lst('Entradas del banco sin acreditar', it.entradasSinAcreditar, [['hora', 'Hora'], ['de', 'De'], ['monto', 'Monto'], ['estado', 'Estado']]);
         html += lst('Retiros pagados a mano', it.pagosManual, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['via', 'Vía']]);
         html += lst('Retiros pagados por banco externo (ingreso)', it.pagosExternos, [['hora', 'Hora'], ['usuario', 'Usuario'], ['monto', 'Monto'], ['agente', 'Agente'], ['via', 'Vía']]); // #913
@@ -7464,7 +7465,7 @@ function _advPanelHtml(a, fm, fd) {
 }
 function _advItemHtml(c, fm, fd, chip) {
     const st = c.advStatus === 'unverified' ? chip('⏳ acreditada SIN verificar') : c.advStatus === 'verified' ? chip('✅ verificada · ' + escapeHtml(c.advBy || '') + ' ' + fd(c.advAt)) : c.advStatus === 'rejected' ? chip('❌ NO LLEGÓ · ' + escapeHtml(c.advBy || '') + ' ' + fd(c.advAt) + (c.advNote ? ' · ' + escapeHtml(c.advNote) : ''), true) : chip('⚠️ no se pudo adelantar: ' + escapeHtml(c.advNote || ''), true);
-    const btn = c.advStatus === 'unverified' ? '<button class="btn-primary btn-small" onclick="advVerdict(\'' + c.id + '\',\'ok\')">✅ Llegó</button> <button class="btn-secondary btn-small" onclick="advVerdict(\'' + c.id + '\',\'reject\')">❌ No llegó</button>' : '';
+    const btn = c.advStatus === 'unverified' ? '<button class="btn-primary btn-small" onclick="advVerdict(\'' + c.id + '\',\'ok\')">✅ Llegó</button> <button class="btn-secondary btn-small" onclick="advVerdict(\'' + c.id + '\',\'reject\')">❌ No llegó</button> <button class="btn-secondary btn-small" style="color:var(--p-red,#d23a4e)" onclick="advVerdict(\'' + c.id + '\',\'fake\')">⛔ Trucho: cerrar cuenta</button>' : '';
     return '<div style="border-top:1px solid var(--p-border,#e2e2e2);padding:8px 0;font-size:12.5px' + (c.advStatus === 'verified' ? ';opacity:.6' : '') + (c.problem ? ';border-left:3px solid var(--p-red,#d23a4e);padding-left:8px' : '') + '">' +
         '⚡ <b>' + escapeHtml(c.username || '') + '</b> · ' + fm(c.amount) + (c.bonus ? ' + bono ' + fm(c.bonus) : '') + ' · ADELANTADA · comprobante ' + fd(c.at) +
         '<div style="color:var(--p-muted,#767676)">Para buscar en el banco: ' + (c.fromName ? escapeHtml(c.fromName) : 'titular —') + (c.fromCbuTail ? ' · CBU ' + escapeHtml(c.fromCbuTail) : '') + (c.operation ? ' · op. ' + escapeHtml(String(c.operation)) : '') + (c.movementAt ? ' · entró ' + fd(c.movementAt) : '') + '</div>' +
@@ -7472,12 +7473,13 @@ function _advItemHtml(c, fm, fd, chip) {
 }
 async function advVerdict(id, verdict) {
     let note = '';
-    if (verdict === 'reject') { note = prompt('¿Qué viste en el banco? (el cliente queda EN ALERTA y sin carga automática)'); if (note === null) return; if (String(note).trim().length < 4) { showToast('Escribí el motivo', 'error'); return; } }
+    const fake = verdict === 'fake'; if (fake) verdict = 'reject'; // #1150
+    if (verdict === 'reject') { note = prompt(fake ? 'COMPROBANTE TRUCHO: se CIERRA la cuenta y se BLOQUEA su celular para nuevos registros. ¿Qué viste en el banco?' : '¿Qué viste en el banco? (el cliente queda EN ALERTA y sin carga automática; si tiene OTRA cuenta se le cierra la cuenta y se bloquea el celular)'); if (note === null) return; if (String(note).trim().length < 4) { showToast('Escribí el motivo', 'error'); return; } }
     else if (!confirm('¿Confirmás que la transferencia ENTRÓ al banco? El cliente queda de confianza.')) return;
     try {
-        const r = await authFetch('/api/admin/api-failures/' + encodeURIComponent(id) + '/advance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict: verdict, note: note }) });
+        const r = await authFetch('/api/admin/api-failures/' + encodeURIComponent(id) + '/advance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict: verdict, note: note, close: fake }) });
         const j = await r.json();
-        if (j && j.success) { showToast(verdict === 'ok' ? '✅ Verificada: cliente de confianza' : '❌ Marcada: cliente en alerta', verdict === 'ok' ? 'success' : 'info'); loadApiFailures(); } else showToast((j && j.error) || 'No se pudo marcar', 'error');
+        if (j && j.success) { showToast(verdict === 'ok' ? '✅ Verificada: cliente de confianza' : (j.closed ? '⛔ Cuenta CERRADA y celular bloqueado' + (j.other ? ' (otra cuenta: ' + j.other + ')' : '') : '❌ Marcada: cliente en alerta'), verdict === 'ok' ? 'success' : 'info'); loadApiFailures(); } else showToast((j && j.error) || 'No se pudo marcar', 'error');
     } catch (e) { showToast('Error de conexión', 'error'); }
 }
 async function _advPost(body, okMsg) {

@@ -93,6 +93,7 @@ async function _phoneConfirmNoSms(userId, phoneRaw, source) {
   const phone = String(phoneRaw || '').trim();
   if (!validateInternationalPhone(phone)) return { ok: false, status: 400, error: 'Número de celular inválido.' };
   const key = normalizePhoneKey(phone);
+  if (await _phoneBanned(phone)) return { ok: false, status: 403, code: 'PHONE_BANNED', error: PHONE_BAN_MSG }; // #1150
   const taken = await User.findOne({ phoneKey: key, phoneVerified: true, id: { $ne: userId } }).select('_id').lean();
   if (taken) return { ok: false, status: 400, code: 'PHONE_TAKEN', error: 'Este número ya está vinculado a otra cuenta. Ingresá con esa cuenta o usá otro número.' };
   const u = await User.findOne({ id: userId }).select('id username phone phoneKey phoneVerified').lean(); if (!u) return { ok: false, status: 404, error: 'Usuario no encontrado' };
@@ -122,7 +123,29 @@ const { generateAndSendOTP: _otpSendRaw, verifyOTP } = require('./src/services/o
 async function getSmsEnabled() { try { const v = await getConfig('smsEnabled', true); return !(v === false || v === 'false' || v === 0); } catch (_) { return true; } }
 const SMS_OFF_DEFAULT = '📵 Por el momento no estamos enviando SMS. Si necesitás recuperar tu clave o tu cuenta, escribinos por Soporte y te ayudamos.';
 async function _smsOffText() { return (await renderSystemCommand('/sys_sms_off', SMS_OFF_DEFAULT, {})) || SMS_OFF_DEFAULT; }
+// #1150 CELULARES BLOQUEADOS (owner: "le cerramos la cuenta por mandar comprobante trucho y le bloqueamos el celular para que no se pueda
+// registrar"). Colección cruda `phone_bans` ({ tail: últimos 10 dígitos, userId, username, by, reason, at }). Se consulta en TODO camino que
+// acepta un celular: envío de código (acá), confirmación sin SMS, alta y entrada rápida. Si la base falla NO se bloquea a nadie (fail-open:
+// es un filtro de altas, no de plata). Se levanta al desbloquear la cuenta (`_phoneUnbanUser`).
+const PHONE_BAN_MSG = 'No podemos registrar ese número. Si creés que es un error, escribinos por Soporte.';
+function _phoneTail(p) { const d = String(p || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : null; }
+async function _phoneBanned(phone) {
+  const t = _phoneTail(phone); if (!t) return false;
+  try { return !!(await mongoose.connection.collection('phone_bans').findOne({ tail: t }, { projection: { _id: 1 } })); } catch (_) { return false; }
+}
+async function _phoneBanUser(u, by, reason) {
+  const tails = new Set(); const add = (x) => { const t = _phoneTail(x); if (t) tails.add(t); };
+  add(u.phone); add(u.phoneKey);
+  try { (await PhoneLog.distinct('phone', { userId: String(u.id) })).forEach(add); } catch (_) {}
+  const col = mongoose.connection.collection('phone_bans');
+  for (const t of tails) {
+    try { await col.updateOne({ tail: t }, { $setOnInsert: { tail: t, userId: String(u.id), username: u.username || null, by: by || '?', reason: String(reason || '').slice(0, 300), at: new Date() } }, { upsert: true }); } catch (e) { logger.warn('[phone-ban] ' + e.message); }
+  }
+  return [...tails];
+}
+async function _phoneUnbanUser(userId) { try { const r = await mongoose.connection.collection('phone_bans').deleteMany({ userId: String(userId) }); return (r && r.deletedCount) || 0; } catch (_) { return 0; } }
 async function generateAndSendOTP(phone, purpose) {
+  if (await _phoneBanned(phone)) return { success: false, banned: true, error: PHONE_BAN_MSG }; // #1150
   if (!(await getSmsEnabled())) return { success: false, smsOff: true, error: await _smsOffText() };
   return _otpSendRaw(phone, purpose);
 }
@@ -3044,8 +3067,9 @@ async function _advanceVerify(c, { by, movement, note }) {
   await Comprobante.updateOne({ id: c.id }, { $set: Object.assign(already ? {} : { 'advance.status': 'verified', 'advance.verifiedAt': new Date(), 'advance.by': by, 'advance.note': note || null },
     movement ? { bankMatchStatus: 'auto_charged', matchedMovementId: movement.movementId, 'advance.movementId': movement.movementId } : {}) });
   try { _apiFailCache.clear(); } catch (_) {}
+  _advanceCloseRecalc(c, movement); // #1150
   if (wasRejected) {
-    await _emitAdminOnlyChatNote(c.userId, c.username, `🚨 La transferencia de la carga adelantada que se había marcado "NO LLEGÓ" APARECIÓ en el banco ($${Number(movement && movement.amount || c.amount).toLocaleString('es-AR')}). La carga era real: revisá al cliente en 🛡️ Antifraude y marcalo Legítimo para devolverle la carga automática.`).catch(() => {});
+    await _emitAdminOnlyChatNote(c.userId, c.username, `🚨 La transferencia de la carga adelantada que se había marcado "NO LLEGÓ" APARECIÓ en el banco ($${Number(movement && movement.amount || c.amount).toLocaleString('es-AR')}). La carga era real: revisá al cliente en 🛡️ Antifraude y marcalo Legítimo para devolverle la carga automática. Si se le cerró la cuenta por comprobante trucho, desbloqueala (eso también libera el celular).`).catch(() => {});
     return true;
   }
   if (c.advance && c.advance.status === 'unverified') {
@@ -3056,7 +3080,7 @@ async function _advanceVerify(c, { by, movement, note }) {
   }
   return true;
 }
-async function _advanceReject(c, by, note) {
+async function _advanceReject(c, by, note, opts) {
   const r = await Comprobante.updateOne({ id: c.id, 'advance.status': 'unverified' }, { $set: { 'advance.status': 'rejected', 'advance.verifiedAt': new Date(), 'advance.by': by, 'advance.note': note || null } });
   if (!(r.modifiedCount || r.nModified)) return false;
   const now = new Date(); const amt = '$' + Number(c.amount).toLocaleString('es-AR');
@@ -3064,7 +3088,45 @@ async function _advanceReject(c, by, note) {
     fraudReview: { status: 'watch', by, at: now, note: 'Carga adelantada de ' + amt + ' (banco caído) marcada NO LLEGÓ' + (note ? ': ' + note : ''), priority: 'high' } } });
   await _emitAdminOnlyChatNote(c.userId, c.username, `🚨 PRIORIDAD ALTA — ${by} marcó que la carga ADELANTADA de ${amt} NO LLEGÓ al banco${note ? ' (' + note + ')' : ''}. Las fichas YA están en su cuenta: si corresponde, descontalas a mano. El cliente quedó EN OBSERVACIÓN (retiros a revisión) y SIN CARGA AUTOMÁTICA. Para devolvérsela: 🛡️ Antifraude → Legítimo.`).catch(() => {});
   try { _apiFailCache.clear(); } catch (_) {}
-  return true;
+  // #1150 (owner): "si pasa una carga sin que sea un comprobante real y es un usuario de otra cuenta, le cerramos la cuenta directo por mandar
+  // comprobante trucho y le bloqueamos el celular para que no se pueda registrar". Con OTRA cuenta vinculada (o si el agente eligió
+  // "Trucho: cerrar cuenta") ⇒ bloqueo + celular bloqueado. Sin otra cuenta queda en observación, como antes (puede ser demora del banco).
+  let closed = null;
+  try {
+    const link = await _advanceOtherAccount(c.userId);
+    if (link || (opts && opts.close)) closed = await _advanceCloseAccount(c, by, link, note);
+  } catch (e) { logger.warn('[adelantada] cierre de cuenta: ' + e.message); }
+  _advanceCloseRecalc(c, null);
+  return closed ? { closed: true, other: closed.other || null, phones: closed.phones } : true;
+}
+// ¿Tiene OTRA cuenta? (es secundaria de alguien, o alguien es secundaria suya). Se re-chequea con el historial VERIFICADO del cliente; nunca
+// con los datos del comprobante rechazado (un comprobante trucho puede llevar los datos de un cliente inocente).
+async function _advanceOtherAccount(userId) {
+  const u0 = await User.findOne({ id: String(userId) }).select('id role').lean(); if (!u0 || u0.role !== 'user') return null;
+  await _dupAccountCheck(u0, 'adelantada-no-llego');
+  const u = await User.findOne({ id: u0.id }).select('id duplicateOf').lean();
+  if (u && u.duplicateOf && u.duplicateOf.username) return { username: u.duplicateOf.username, reason: u.duplicateOf.reason || 'cuenta vinculada', main: true };
+  const sec = await User.findOne({ 'duplicateOf.userId': u0.id }).select('username duplicateOf').lean();
+  return sec ? { username: sec.username, reason: (sec.duplicateOf && sec.duplicateOf.reason) || 'cuenta vinculada', main: false } : null;
+}
+async function _advanceCloseAccount(c, by, link, note) {
+  const amt = '$' + Number(c.amount).toLocaleString('es-AR');
+  const u = await User.findOne({ id: c.userId }).select('id username phone phoneKey role').lean(); if (!u || u.role !== 'user') return null;
+  const why = `Comprobante TRUCHO: carga adelantada de ${amt} que NO llegó al banco` + (link ? ` y tiene otra cuenta (${link.username}: ${link.reason})` : '') + (note ? ` — ${note}` : '');
+  await _blockUserAccount(u.id, why, by, { action: 'block', evidence: { kind: 'advance_fake_receipt', comprobanteId: c.id, amount: Number(c.amount), other: link ? link.username : null } });
+  const phones = await _phoneBanUser(u, by, why);
+  await _emitAdminOnlyChatNote(u.id, u.username, `⛔ CUENTA CERRADA por comprobante trucho (${by}): carga adelantada de ${amt} que no llegó${link ? ' y otra cuenta vinculada: ' + link.username + ' (' + link.reason + ')' : ''}. ${phones.length ? 'Celular BLOQUEADO para nuevos registros (' + phones.length + ').' : 'No tenía celular cargado para bloquear.'} Si fue un error: desbloqueá la cuenta (eso también libera el celular).`).catch(() => {});
+  logger.warn(`[adelantada] CUENTA CERRADA ${u.username} (${why}) celulares bloqueados: ${phones.length}`);
+  return { other: link ? link.username : null, phones: phones.length };
+}
+// El cierre de un día ya finalizado se recalcula cuando cambia el estado de una adelantada de ese día (o entra su transferencia).
+function _advanceCloseRecalc(c, movement) {
+  try {
+    const today = datosIa.dateKeyART(new Date()); const keys = new Set();
+    const a = c && c.advance && (c.advance.creditedAt || c.advance.at); if (a) keys.add(datosIa.dateKeyART(new Date(a)));
+    const m = movement && (movement.date || movement.createdAt); if (m) keys.add(datosIa.dateKeyART(new Date(m)));
+    for (const k of keys) { if (k >= today) continue; DailyClose.exists({ dateKey: k }).then((x) => x && _closeEnsure(k, true)).catch((e) => logger.warn('[adelantada] recalcular cierre ' + k + ': ' + e.message)); }
+  } catch (_) {}
 }
 async function _advanceReconcile(hg) {
   const rows = await Comprobante.find({ $or: [{ 'advance.status': 'unverified' }, { 'advance.status': { $in: ['verified', 'rejected'] }, 'advance.movementId': null }], createdAt: { $gte: new Date(Date.now() - 4 * 86400000) } }).sort({ createdAt: 1 }).limit(120).lean();
@@ -5689,6 +5751,7 @@ app.post('/api/auth/register', authLimiter, registerIpLimiter, async (req, res) 
       return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
     }
     { const _inv = await _inviteOnlyBlocks(referralCode, campaignCode); if (_inv) return res.status(403).json({ error: _inv, code: 'INVITE_ONLY' }); } // #748
+    if (await _phoneBanned(req.body && req.body.phone)) return res.status(403).json({ error: PHONE_BAN_MSG, code: 'PHONE_BANNED' }); // #1150
 
     // Validar el formato del username: evita XSS almacenado (un username con
     // HTML/JS se ejecutaría en el panel admin al listar usuarios o abrir el chat).
@@ -6647,6 +6710,7 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
     const name = String((req.body && req.body.name) || '').trim();
     if (name.length < 2) return res.status(400).json({ error: 'Decinos tu nombre.' });
     { const _inv = await _inviteOnlyBlocks(req.body && req.body.referralCode, code); if (_inv) return res.status(403).json({ error: _inv, code: 'INVITE_ONLY' }); } // #748
+    if (await _phoneBanned(req.body && req.body.phone)) return res.status(403).json({ error: PHONE_BAN_MSG, code: 'PHONE_BANNED' }); // #1150
     // #541 (owner): el registro desde el INICIO de la app (sin link de publicidad) exige verificar el celular por SMS antes de
     // crear la cuenta (Config['quickEntrySms'], default ON; tilde en Configuración → Registro). Los links de publicidad no.
     // Con el celular verificado la entrada con el nombre vale en CUALQUIER modo de registro (también con "Registro con SMS").
@@ -22847,6 +22911,7 @@ app.post('/api/admin/users/:id/unblock', authMiddleware, adminMiddleware, async 
     user.blockedAt = null;
     user.blockedBy = null;
     user.fraudAutoSkip = true; // #993: lo desbloqueó una persona ⇒ el antifraude automático no lo vuelve a bloquear solo
+    try { const _nb = await _phoneUnbanUser(user.id); if (_nb) user.fraudNotes = (user.fraudNotes || []).concat([{ at: new Date(), note: `Se levantó el bloqueo de ${_nb} celular(es) al desbloquear la cuenta` }]); } catch (_) {} // #1150
     user.fraudNotes = (user.fraudNotes || []).concat([{ at: new Date(), note: `${req.user.username} lo desbloqueó${wasAuto ? ' (lo había bloqueado el antifraude automático)' : ''}: ${ureason.slice(0, 200)}` }]);
     await user.save();
     _blockLog({ userId: user.id, username: user.username, action: 'unblock', by: req.user.username, role: req.user.role, reason: ureason, evidence: prevReason ? { previousBlockReason: prevReason, wasAuto } : null, ip: req.ip });
@@ -25072,12 +25137,15 @@ function _closeApply(doc, cfg) {
   //   NETO (fichas) = venta − regalos sigue aparte (es la cuenta de la plataforma, no de la caja).
   doc.feePerDeposit = cfg.perDepositFee == null ? 50 : cfg.perDepositFee;
   doc.feeDepositsArs = Math.round((doc.cargas || 0) * (doc.feePerDeposit || 0));
-  doc.ingresosTotal = Math.round((doc.depositos || 0) + (doc.pagosExternos || 0) + (doc.fondeos || 0));
+  // #1150 CARGAS ADELANTADAS: `_advLost` = marcadas NO LLEGÓ (no es ingreso: se resta) · `_advNet` = depósitos del día cuya plata NO entró al
+  // banco ese día (sin verificar + no llegó + entró otro día) menos las transferencias que entraron hoy de adelantadas de otro día.
+  const _advLost = Number(doc.adelantadasPerdida) || 0, _advNet = (Number(doc.adelantadasFuera) || 0) - (Number(doc.adelantadasEntraron) || 0);
+  doc.ingresosTotal = Math.round((doc.depositos || 0) - _advLost + (doc.pagosExternos || 0) + (doc.fondeos || 0));
   doc.egresosTotal = Math.round((doc.retiros || 0) + (doc.bankCommissionArs || 0) + (doc.feeDepositsArs || 0) + (doc.gastos || 0));
   doc.resultado = Math.round(doc.ingresosTotal - doc.egresosTotal);
   // #1001: lo que entró / salió por una cuenta SECUNDARIA es plata real (va al resultado) pero no pasa por la caja de la principal.
   const _depSec = Number(doc.depositosSecundaria) || 0, _paySec = Number(doc.pagosSecundaria) || 0;
-  doc.resultadoCaja = Math.round(doc.resultado + ((doc.gastos || 0) - (doc.gastosBanco || 0)) - _depSec + _paySec);
+  doc.resultadoCaja = Math.round(doc.resultado + ((doc.gastos || 0) - (doc.gastosBanco || 0)) - _depSec + _paySec - (_advNet - _advLost)); // #1150: la perdida ya se restó del resultado
   // #501 ARQUEO: banco (manual > automático) vs sistema
   doc.bankIn = doc.bankInManual != null ? doc.bankInManual : (doc.bankInAuto || 0);
   doc.bankOut = doc.bankOutManual != null ? doc.bankOutManual : (doc.bankOutAuto || 0);
@@ -25090,8 +25158,8 @@ function _closeApply(doc, cfg) {
   // #1038: contra el BANCO sólo cuenta lo que pasó por él: fondeos de la principal (fondeosBanco; los externos van al resultado pero no al
   // extracto) y los gastos que salieron de esta cuenta (gastosBanco: el banco los tiene como salida y el sistema no los tiene como retiro).
   const _fB = doc.fondeosBanco != null ? Number(doc.fondeosBanco) || 0 : (doc.fondeos || 0), _gB = Number(doc.gastosBanco) || 0;
-  doc.difIn = Math.round(doc.bankIn - _fB - (doc.depositos - _depSec)); doc.difOut = Math.round(doc.bankOut - (doc.retiros - (doc.pagosExternos || 0) - _paySec) - _gB);
-  doc.diferencia = Math.round((doc.bankIn - doc.bankOut) - (doc.depositos - _depSec - doc.retiros + _paySec) - ((doc.pagosExternos || 0) + _fB) + _gB);
+  doc.difIn = Math.round(doc.bankIn - _fB - (doc.depositos - _depSec - _advNet)); doc.difOut = Math.round(doc.bankOut - (doc.retiros - (doc.pagosExternos || 0) - _paySec) - _gB);
+  doc.diferencia = Math.round((doc.bankIn - doc.bankOut) - (doc.depositos - _depSec - _advNet - doc.retiros + _paySec) - ((doc.pagosExternos || 0) + _fB) + _gB);
   const tol = Math.max(1000, Math.round(doc.depositos * 0.001));
   // #502: si hay saldo del banco al inicio y al fin del día, el arqueo REAL es (saldo fin − saldo inicio) − (depósitos − retiros)
   const bs = doc.bankBalanceStartManual != null ? doc.bankBalanceStartManual : doc.bankBalanceStart, be = doc.bankBalanceEndManual != null ? doc.bankBalanceEndManual : doc.bankBalanceEnd;
@@ -25122,7 +25190,7 @@ async function _closeReconcile(dayKey) {
   const r0 = (n) => Math.round(Number(n) || 0);
   // ---- SISTEMA: depósitos
   const deps = await Transaction.find({ type: 'deposit', status: okSt, 'metadata.source': { $nin: GIFT }, timestamp: { $gte: d0, $lte: d1 } }).select('amount username adminUsername description metadata timestamp').lean();
-  const cls = (t) => { const src = (t.metadata && t.metadata.source) || ''; if (/PRUEBA|test/i.test(String(t.description || ''))) return 'prueba'; if (src === 'auto_hgcash' || src === 'self_service') return 'auto'; return 'manual'; };
+  const cls = (t) => { const src = (t.metadata && t.metadata.source) || ''; if (/PRUEBA|test/i.test(String(t.description || ''))) return 'prueba'; if (src === 'auto_hgcash' || src === 'self_service' || src === 'advance_hgcash') return 'auto'; return 'manual'; }; // #1150: la adelantada es automática
   const g = { auto: [], manual: [], prueba: [] }; deps.forEach((t) => g[cls(t)].push(t));
   const sum = (arr) => r0(arr.reduce((s, t) => s + (Number(t.amount) || 0), 0));
   out.sistema.depositosAuto = sum(g.auto); out.sistema.depositosAutoN = g.auto.length;
@@ -25157,7 +25225,7 @@ async function _closeReconcile(dayKey) {
   out.items.pagosManual = payMan.slice(0, 50).map((p) => ({ hora: p.paidAt, usuario: p.username, monto: r0(p.amount), agente: p.paidBy || null, via: p.paidVia || null }));
   out.items.pagosExternos = payExt.slice(0, 50).map((p) => ({ hora: p.paidAt, usuario: p.username, monto: r0(p.amount), agente: p.paidBy || null, via: 'banco externo' }));
   // ---- BANCO: movimientos del día (fecha del banco o de alta)
-  const movs = await BankMovement.find({ createdAt: { $gte: new Date(d0.getTime() - 86400000), $lte: new Date(d1.getTime() + 86400000) } }).select('amount direction status matchStatus date createdAt fromName toName username').lean();
+  const movs = await BankMovement.find({ createdAt: { $gte: new Date(d0.getTime() - 86400000), $lte: new Date(d1.getTime() + 86400000) } }).select('movementId amount direction status matchStatus date createdAt fromName toName username').lean();
   const inDay = movs.filter((m) => { const dd = m.date || m.createdAt; return dd >= d0 && dd <= d1 && !/reject|fail|cancel|error/i.test(String(m.status || '')); });
   const isIn = (m) => String(m.direction || '').toLowerCase() === 'inbound', isOut = (m) => String(m.direction || '').toLowerCase() === 'outbound';
   const ins = inDay.filter(isIn), outs = inDay.filter(isOut);
@@ -25168,6 +25236,37 @@ async function _closeReconcile(dayKey) {
   out.banco.entradasDevueltas = sum(bIn.devueltas); out.banco.entradasDupIgn = sum(bIn.dupIgn); out.banco.entradasCaja = sum(bIn.caja); out.banco.entradasCajaN = bIn.caja.length; // #1038
   out.banco.salidas = sum(outs); out.banco.salidasN = outs.length;
   out.items.entradasSinAcreditar = bIn.sinAcreditar.slice(0, 50).map((m) => ({ hora: m.date || m.createdAt, de: m.fromName || null, monto: r0(m.amount), estado: ms(m) || 'pendiente' }));
+  // ---- #1150 CARGAS ADELANTADAS (#1149, banco caído): el sistema tiene el depósito ANTES de que el banco muestre la transferencia.
+  // Owner: "en el cierre confirmá si dio bien; no quiero desfasaje de plata en estas situaciones". Cada adelantada del día cae en UNO de:
+  //   mismo día (la transferencia entró ese día: nada que explicar) · otro día (verificada, la plata entró otro día o la vio una persona) ·
+  //   pendiente (sin verificar) · perdida (marcada NO LLEGÓ: fichas entregadas sin plata). Y al revés: transferencias que entraron HOY y
+  //   pertenecen a una adelantada de OTRO día. Con eso se corrigen la diferencia, el arqueo de caja y el resultado (ver `_closeApply`).
+  {
+    const advTx = deps.filter((t) => ((t.metadata && t.metadata.source) || '') === 'advance_hgcash');
+    const advIds = advTx.map((t) => t.metadata && t.metadata.comprobanteId).filter(Boolean);
+    const insIds = new Set(ins.map((m) => m.movementId).filter(Boolean));
+    const advC = advIds.length ? await Comprobante.find({ id: { $in: advIds } }).select('id advance').lean() : [];
+    const byC = new Map(advC.map((c) => [c.id, c.advance || {}]));
+    const A = { mismo: [], otro: [], pend: [], perdida: [] };
+    for (const t of advTx) {
+      const a = byC.get(t.metadata.comprobanteId) || {};
+      if (a.movementId && insIds.has(a.movementId)) A.mismo.push(t);
+      else if (a.status === 'verified') A.otro.push(t);
+      else if (a.status === 'rejected') A.perdida.push(t);
+      else A.pend.push(t);
+    }
+    const hoyC = insIds.size ? await Comprobante.find({ 'advance.movementId': { $in: [...insIds] }, id: { $nin: advIds } }).select('id username advance').lean() : [];
+    const hoyIds = new Set(hoyC.map((c) => c.advance.movementId));
+    const entraron = ins.filter((m) => hoyIds.has(m.movementId));
+    out.sistema.adelantadas = sum(advTx); out.sistema.adelantadasN = advTx.length;
+    out.sistema.adelantadasPend = sum(A.pend); out.sistema.adelantadasPendN = A.pend.length;
+    out.sistema.adelantadasPerdida = sum(A.perdida); out.sistema.adelantadasPerdidaN = A.perdida.length;
+    out.sistema.adelantadasOtroDia = sum(A.otro); out.sistema.adelantadasOtroDiaN = A.otro.length;
+    out.sistema.adelantadasFuera = out.sistema.adelantadasPend + out.sistema.adelantadasPerdida + out.sistema.adelantadasOtroDia; // depósito del día sin entrada del banco ese día
+    out.banco.adelantadasEntraron = sum(entraron); out.banco.adelantadasEntraronN = entraron.length;
+    const lbl = (t) => A.pend.includes(t) ? '⏳ SIN verificar' : A.perdida.includes(t) ? '❌ NO LLEGÓ' : A.otro.includes(t) ? '✅ verificada (entró otro día / vista a mano)' : '✅ entró ese día';
+    out.items.adelantadas = advTx.slice(0, 50).map((t) => ({ hora: t.timestamp, usuario: t.username, monto: r0(t.amount), estado: lbl(t) }));
+  }
   // ---- GASTOS del día (#770): pagados por la API (salen del banco) o registrados a mano
   const _gAll = await Expense.find({ dateKey: dayKey, status: { $ne: 'failed' } }).select('id amount concept toName paidVia createdBy createdAt hgId kind account source bankMatch').lean();
   const gastos = _gAll.filter((g) => g.kind !== 'fondeo'), fondeos = _gAll.filter((g) => g.kind === 'fondeo'); // #904
@@ -25195,6 +25294,11 @@ async function _closeReconcile(dayKey) {
   add('dep_manual', 'Cargas a mano que entraron a la cuenta PRINCIPAL', out.sistema.depositosManualPrincipal, -1, 'La transferencia tiene que verse en el banco como "entrada sin acreditar" (se compensan). Si no aparece, revisar el comprobante.', 'media');
   add('dep_secundaria', 'Cargas a mano que entraron a una cuenta SECUNDARIA', out.sistema.depositosSecundaria, -1, 'La plata entró a otra cuenta nuestra (ver "Cuentas"): no pasa por el banco principal. Es normal.', 'baja');
   add('dep_sin_cuenta', 'Cargas a mano SIN marcar en qué cuenta entró la plata', out.sistema.depositosSinCuenta, -1, 'El agente no dijo dónde entró la plata. Revisar con quién y por qué se acreditó (lista de abajo).', 'alta');
+  // #1150: adelantadas (signo −: el sistema tiene el depósito y el banco de ese día no tiene la entrada; +: entró hoy lo de otro día)
+  add('adv_pend', 'Cargas ADELANTADAS (banco caído) todavía SIN verificar', out.sistema.adelantadasPend, -1, 'Se acreditaron con el comprobante y la transferencia todavía no se vio. Se verifican solas cuando entra; si no, resolverlas en 🔌 Cargas sin verificar (Llegó / No llegó). El cierre no da OK hasta entonces.', 'alta');
+  add('adv_perdida', 'Cargas adelantadas marcadas NO LLEGÓ (fichas entregadas SIN plata)', out.sistema.adelantadasPerdida, -1, 'PÉRDIDA: el comprobante no era real. Se descuenta de los ingresos del día. Descontar las fichas al cliente si todavía las tiene (lista de abajo).', 'alta');
+  add('adv_otro_dia', 'Cargas adelantadas cuya transferencia entró OTRO día (o se verificó a mano)', out.sistema.adelantadasOtroDia, -1, 'La plata es real pero el banco la muestra en otro día (o como "entrada sin acreditar" si la vio una persona): se compensa sola. Es normal después de una caída del banco.', 'baja');
+  add('adv_entro_hoy', 'Transferencias que entraron HOY de cargas adelantadas de OTRO día', out.banco.adelantadasEntraron, +1, 'El depósito figura el día en que se adelantó la carga y la plata entró hoy: se compensa con ese día. Es normal.', 'baja');
   add('dep_prueba', 'Cargas de PRUEBA (usuario tester)', out.sistema.depositosPrueba, -1, 'Sólo en el entorno de prueba. En producción tiene que ser $0.', 'media');
   // #904: lo que el dueño registró como FONDEO explica (hasta su monto) las entradas del banco que no son cargas de clientes.
   // #1038: sólo los fondeos del banco PRINCIPAL explican entradas del banco: primero las ya cruzadas ('caja'), después hasta ese monto las "sin acreditar".
@@ -25302,7 +25406,7 @@ async function _closeEnsure(dayKey, recalc) {
     try { doc = await DailyClose.create({ id: uuidv4(), ...t }); } catch (e) { if (e && e.code === 11000) doc = await DailyClose.findOne({ dateKey: dayKey }); else throw e; }
   } else if (doc.status !== 'finalizado' || recalc) { Object.assign(doc, t, { recalculatedAt: new Date() }); }
   await _closeAttachBalances(doc); _closeApply(doc, cfg);
-  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); const _ds = (doc.detalle && doc.detalle.sistema) || {}; doc.gastos = Number(_ds.gastos) || 0; doc.pagosExternos = Number(_ds.pagosExternos) || 0; doc.fondeos = Number(_ds.fondeos) || 0; doc.gastosBanco = Number(_ds.gastosMainVistos != null ? _ds.gastosMainVistos : _ds.gastosBanco) || 0; doc.fondeosBanco = Number(_ds.fondeosMain) || 0; /* #1038: lo que pasó por ESTE banco */ doc.depositosSecundaria = Number(_ds.depositosSecundaria) || 0; doc.pagosSecundaria = Number(_ds.pagosSecundaria) || 0; _closeApply(doc, cfg); } /* #913: pagos externos + fondeos → arqueo */ catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
+  try { doc.detalle = await _closeReconcile(dayKey); doc.markModified('detalle'); const _ds = (doc.detalle && doc.detalle.sistema) || {}; doc.gastos = Number(_ds.gastos) || 0; doc.pagosExternos = Number(_ds.pagosExternos) || 0; doc.fondeos = Number(_ds.fondeos) || 0; doc.gastosBanco = Number(_ds.gastosMainVistos != null ? _ds.gastosMainVistos : _ds.gastosBanco) || 0; doc.fondeosBanco = Number(_ds.fondeosMain) || 0; /* #1038: lo que pasó por ESTE banco */ doc.depositosSecundaria = Number(_ds.depositosSecundaria) || 0; doc.pagosSecundaria = Number(_ds.pagosSecundaria) || 0; doc.adelantadasFuera = Number(_ds.adelantadasFuera) || 0; doc.adelantadasPerdida = Number(_ds.adelantadasPerdida) || 0; doc.adelantadasEntraron = Number(((doc.detalle || {}).banco || {}).adelantadasEntraron) || 0; /* #1150 */ _closeApply(doc, cfg); } /* #913: pagos externos + fondeos → arqueo */ catch (e) { logger.warn('[cierres] conciliación ' + dayKey + ': ' + e.message); } // #770: gastos → resultado
   _closeCheckSet(doc);
   await doc.save(); return doc;
 }
@@ -25319,6 +25423,10 @@ function _closeCheck(doc) {
   it('dep_cuenta', 'Cargas a mano con la cuenta marcada', legacy || !s.depositosSinCuentaN, s.depositosSinCuentaN ? s.depositosSinCuentaN + ' carga(s) por ' + $(s.depositosSinCuenta) + ' sin decir en qué cuenta entró la plata.' : 'todas', legacy && !!s.depositosSinCuentaN);
   it('pago_marca', 'Retiros a mano con "desde dónde se pagó"', !s.pagosManualN, s.pagosManualN ? s.pagosManualN + ' retiro(s) por ' + $(s.pagosManual) + ' sin marcar (principal / secundaria / otro banco).' : 'todos');
   if (s.cajaNoVistoN) it('caja_banco', 'Movimientos anotados vistos en el banco', false, s.cajaNoVistoN + ' anotado(s) por ' + $(s.cajaNoVisto) + ' como del banco principal que no aparecen en el extracto (📒 Anotar movimientos: revisar comprobante / cuenta).'); else if (s.fondeosMain || s.gastosMain) it('caja_banco', 'Movimientos anotados vistos en el banco', true, 'todos'); // #1038
+  if (s.adelantadasN || b.adelantadasEntraronN) { // #1150
+    const _bad = (s.adelantadasPendN || 0) + (s.adelantadasPerdidaN || 0);
+    it('adelantadas', 'Cargas adelantadas (banco caído) verificadas', !_bad, _bad ? [s.adelantadasPendN ? s.adelantadasPendN + ' sin verificar por ' + $(s.adelantadasPend) + ' (🔌 Cargas sin verificar)' : '', s.adelantadasPerdidaN ? s.adelantadasPerdidaN + ' que NO llegaron por ' + $(s.adelantadasPerdida) + ': pérdida, ya descontada de los ingresos' : ''].filter(Boolean).join(' · ') : (s.adelantadasN || 0) + ' por ' + $(s.adelantadas) + ', todas con su transferencia' + (s.adelantadasOtroDiaN ? ' (' + s.adelantadasOtroDiaN + ' entraron otro día)' : ''));
+  }
   it('trabados', 'Ningún retiro trabado "pagando"', !s.pagosTrabadosN, s.pagosTrabadosN ? s.pagosTrabadosN + ' retiro(s) quedaron pagando más de 30 min: revisar en Pagos a confirmar.' : 'ninguno');
   if (hasBank) it('diferencia', 'Diferencia banco − sistema explicada', Math.abs(r0(d.sinExplicar)) <= tol, d.sinExplicar ? 'queda ' + $(d.sinExplicar) + ' sin explicar (ver Posibles causas).' : 'todo explicado');
   if (doc.arqueo && doc.arqueo !== 'sin_datos') it('caja', 'Caja de la principal (saldo 00 hs)', doc.arqueo === 'cuadra', doc.arqueo === 'cuadra' ? 'cuadra' : (doc.arqueo === 'faltante' ? 'faltante ' : 'sobrante ') + $(Math.abs(doc.diferencia || 0)));
@@ -26690,10 +26798,10 @@ app.post('/api/admin/api-failures/:id/advance', authMiddleware, adminMiddleware,
     const c = await Comprobante.findOne({ id: String(req.params.id), 'advance.status': 'unverified' }).lean();
     if (!c) return res.status(409).json({ error: 'Esa carga ya no está pendiente de verificar (la verificó el banco u otra persona).' });
     if (verdict === 'reject' && note.length < 4) return res.status(400).json({ error: 'Escribí el motivo (qué viste en el banco).' });
-    const ok = verdict === 'ok' ? await _advanceVerify(c, { by: req.user.username, note }) : await _advanceReject(c, req.user.username, note);
+    const ok = verdict === 'ok' ? await _advanceVerify(c, { by: req.user.username, note }) : await _advanceReject(c, req.user.username, note, { close: !!(req.body && req.body.close) });
     if (!ok) return res.status(409).json({ error: 'Ya la resolvió otra persona.' });
-    logger.info(`[adelantada] ${req.user.username} marcó ${verdict === 'ok' ? 'LLEGÓ' : 'NO LLEGÓ'} ${c.id} (${c.username} $${c.amount})`);
-    res.json({ success: true });
+    logger.info(`[adelantada] ${req.user.username} marcó ${verdict === 'ok' ? 'LLEGÓ' : 'NO LLEGÓ'} ${c.id} (${c.username} $${c.amount})${ok && ok.closed ? ' — CUENTA CERRADA' : ''}`);
+    res.json({ success: true, closed: !!(ok && ok.closed), other: (ok && ok.other) || null, phones: (ok && ok.phones) || 0 });
   } catch (e) { logger.warn('[adelantada] veredicto: ' + e.message); res.status(500).json({ error: 'Error' }); }
 });
 // #1149: ajustes de la carga adelantada (sólo el admin general). Se guarda POR CAMPO (nunca leer→mezclar→guardar el objeto: regla #1012).

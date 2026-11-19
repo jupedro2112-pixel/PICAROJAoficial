@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1149)
+> **Última actualización: 2026-11-19** (#1150)
 
 ## Sesión 2026-11-09
 
@@ -15134,3 +15134,28 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - ⚠️ A mirar tras el deploy: el cierre diario va a mostrar las adelantadas como cargas sin transferencia hasta que se verifiquen (no se tocó la
   conciliación); el motivo `duplicado` ahora castiga (avisar a los agentes); la detección por "silencio" depende del volumen: de madrugada con poco
   movimiento necesita 5 clientes esperando (ajustable en el panel) y, si hace falta, está el botón "🏦 El banco está caído: adelantar por 2 h".
+
+### 1150. Cierre que cuadra con las cargas adelantadas + comprobante trucho con otra cuenta = cuenta cerrada y celular bloqueado (2026-11-19) — panel v316
+- **Owner:** "en el cierre confirmá si dio bien el cierre, no quiero que haya desfasaje de plata en estas situaciones; si pasa una carga sin que sea
+  un comprobante real y es un usuario de otra cuenta, le cerramos la cuenta directo por mandar comprobante trucho y le bloqueamos el celular para
+  que no se pueda registrar". (A la pregunta de #1149 "¿el No llegó descuenta las fichas solo?" contestó "ok perfecto": queda a mano.)
+- **Cierre (`_closeReconcile` / `_closeApply` / `_closeCheck`):** la adelantada (`metadata.source:'advance_hgcash'`) cuenta como carga AUTOMÁTICA
+  (antes caía en "a mano sin cuenta"). Cada una se clasifica por su `Comprobante.advance`: entró ese día · **otro día** (verificada, la plata entró
+  otro día o la vio una persona) · **sin verificar** · **no llegó**. Causas nuevas `adv_pend`, `adv_perdida`, `adv_otro_dia` (−) y `adv_entro_hoy`
+  (+, transferencias de hoy que son de adelantadas de otro día). `DailyClose.adelantadasFuera / adelantadasPerdida / adelantadasEntraron`: la que
+  NO llegó se resta de los INGRESOS y del resultado; el arqueo de caja y `difIn`/`diferencia` no esperan la plata que no entró ese día y sí
+  cuentan la que entró de otro día. Control nuevo del ✅ OK: "Cargas adelantadas verificadas" (no da OK con una sin verificar o perdida). Al
+  verificar / rechazar / enganchar la transferencia se recalcula el cierre de ese día aunque esté finalizado (`_advanceCloseRecalc`). Lista
+  "⚡ Cargas adelantadas" en el detalle del cierre.
+- **No llegó + otra cuenta:** `_advanceReject` re-chequea vínculos (`_advanceOtherAccount` → `_dupAccountCheck` con el historial VERIFICADO, nunca
+  con los datos del comprobante rechazado: un trucho puede llevar los datos de un inocente). Si es secundaria de alguien o tiene una secundaria ⇒
+  `_advanceCloseAccount`: `_blockUserAccount` (queda en `BlockEvent`) + `_phoneBanUser`. Sin otra cuenta sigue como #1149 (observación + sin carga
+  automática), y el agente tiene el botón **⛔ Trucho: cerrar cuenta** para cerrarla igual (`close:true`).
+- **Celulares bloqueados:** colección `phone_bans` (por los últimos 10 dígitos; el número actual + todos los de `PhoneLog` del cliente).
+  `_phoneBanned` corta: envío de códigos (`generateAndSendOTP`), confirmación sin SMS (`_phoneConfirmNoSms`), alta y entrada rápida
+  (`PHONE_BANNED`). Desbloquear la cuenta libera el celular (`_phoneUnbanUser`). Si la base falla no bloquea a nadie.
+- **Validación:** `test-advance-load` 11/11 (2 casos nuevos), `test-close-accounts` 9/9, `test-caja-movimientos`, `test-dup-account` 11/11,
+  `test-support-bot` 18/18, `test-payout-auto` 8/8, seguridad 1053 / 1117 OK, `node --check`. **Sin probar en vivo. Necesita deploy en los dos AWS.**
+- ⚠️ Límites: el bloqueo es por CELULAR (no por dispositivo ni por CBU); en modo de registro sin celular (landing de publicista que no lo pide) el
+  bloqueo recién actúa cuando carga un número (para retirar). Una adelantada verificada A MANO cuya transferencia el sistema todavía no enganchó
+  deja ese día una "entrada sin acreditar" hasta que `_advanceReconcile` la engancha sola (4 días).

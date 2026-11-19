@@ -2201,3 +2201,14 @@ comprobante y se verifica después. Detalle de decisiones en WORKLOG #1149.
 - **Trampas:** (1) un flujo nuevo que acredite sin ver la transferencia tiene que dejar `Comprobante.advance`; (2) no sacar `autoCharged:true` de la
   reserva (es lo que evita la doble carga); (3) el cierre diario todavía no distingue las adelantadas sin verificar (figuran como carga sin entrada
   del banco hasta que se verifican); (4) test `scripts/test-advance-load.js`.
+
+### #1150 — cierre y comprobante trucho
+- **Cierre:** `_closeReconcile` clasifica cada Transaction `advance_hgcash` del día por `Comprobante.advance` (entró ese día / otro día / sin
+  verificar / no llegó) y busca las transferencias de HOY que pertenecen a adelantadas de otro día. Causas `adv_pend`, `adv_perdida`,
+  `adv_otro_dia`, `adv_entro_hoy`. `_closeApply`: `ingresosTotal` resta `adelantadasPerdida`; `resultadoCaja`, `difIn` y `diferencia` usan
+  `_advNet = adelantadasFuera − adelantadasEntraron`. `_closeCheck` agrega el control `adelantadas`. `_advanceCloseRecalc` recalcula cierres
+  finalizados cuando cambia una adelantada.
+- **No llegó:** `_advanceReject(c, by, note, {close})` → `_advanceOtherAccount` (vínculo por `duplicateOf`, tras re-correr `_dupAccountCheck` sin
+  datos del comprobante) → `_advanceCloseAccount` = `_blockUserAccount` + `_phoneBanUser`. Devuelve `{closed, other, phones}`.
+- **`phone_bans`** (colección cruda, llave `tail` = últimos 10 dígitos): `_phoneBanned` en `generateAndSendOTP`, `_phoneConfirmNoSms`,
+  `POST /api/auth/register` y `/api/auth/quick-entry`. `_phoneUnbanUser` al desbloquear. Un camino NUEVO que acepte un celular tiene que consultarla.

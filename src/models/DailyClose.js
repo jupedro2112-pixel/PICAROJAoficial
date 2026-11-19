@@ -49,6 +49,8 @@ const schema = new mongoose.Schema({
   ingresosTotal: { type: Number, default: 0 }, egresosTotal: { type: Number, default: 0 }, resultadoCaja: { type: Number, default: 0 }, bankBalanceExpectedEnd: { type: Number, default: null },
   // #1001: cuentas SECUNDARIAS (Config['bankAccounts']): lo cargado / pagado por ahí, saldos { <id>: { start, end } } y el CONTROL del cierre.
   depositosSecundaria: { type: Number, default: 0 }, pagosSecundaria: { type: Number, default: 0 },
+  // #1150: cargas adelantadas (#1149). Fuera = depósitos del día sin entrada del banco ese día; Perdida = marcadas NO LLEGÓ; Entraron = transferencias de adelantadas de otro día.
+  adelantadasFuera: { type: Number, default: 0 }, adelantadasPerdida: { type: Number, default: 0 }, adelantadasEntraron: { type: Number, default: 0 },
   accountBalances: { type: mongoose.Schema.Types.Mixed, default: null },
   check: { type: mongoose.Schema.Types.Mixed, default: null },
   autoFinalizedAt: { type: Date, default: null },
