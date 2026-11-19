@@ -2221,3 +2221,12 @@ comprobante y se verifica después. Detalle de decisiones en WORKLOG #1149.
 - `_advanceMovementFits`: match normal + fecha del banco cercana al comprobante. `_bankInboundState` devuelve `lastInAt` y el tick acota los
   candidatos a la caída.
 - `phone_bans`: sólo números propios (actual + SMS); corta `register` / `verify-phone` / número nuevo.
+
+### #1152 — segunda revisión (reglas vigentes; pisan lo anterior donde difieran)
+- **Cuándo se adelanta:** consulta al banco fallando (`kind:'poll'`) o `forceUntil` (dueño). El silencio (`kind:'silence'`) sólo deja
+  `advanceLoadState.suspectAt/suspectWhy` + alerta, salvo `silenceAuto`.
+- **Verificación sola:** `_advanceMovementFits(c, m, hg, ks)` = match normal + `_advFromKnown` + `m.date` ≤ `advance.creditedAt` + 2 min.
+  Tardía ⇒ `_advanceFlagLate` (`advance.lateMovementId`, cliente en `watch`). `_advanceVerify` reserva `advance.movementId` ANTES de tomar el
+  `BankMovement`; `_advanceRepair` termina lo cortado (`advance.hookAt`). 96 h sin transferencia ⇒ `_advanceReject(..., {noClose:true})`.
+- **Cierre:** grupos mismo día / otro día / pend / perdida / **mano** (verified sin movementId: no sale de la caja, `adv_mano`, no da OK).
+- **Permisos:** ajustes y forzado = dueño (`OWNER_ONLY_MUTATIONS`); Llegó / No llegó = admin, depositor, cajero, con nota; Trucho = admin.

@@ -42,7 +42,7 @@ caso('Plata: reserva atómica antes de cargar, reference estable vip-adv-<compro
 });
 caso('Verificación: sola cuando entra la transferencia (candado HgcashCharge), o a mano; el cliente queda de confianza y sus retiros se re-chequean', () => {
   const v = fn('_advanceVerify'), r = fn('_advanceReconcile');
-  assert.ok(/ms\.length === 1 && await _advanceVerify/.test(r) && /_advanceMovementFits\(c, m, hg\)/.test(r), 'sólo con UNA transferencia que coincide y de la época del comprobante');
+  assert.ok(/ms\.length === 1 && await _advanceVerify/.test(r) && /_advanceMovementFits\(c, m, hg, ks\)/.test(r), 'sólo con UNA transferencia que coincide y de la época del comprobante');
   assert.ok(/matchStatus: 'pending' \}, \{ \$set: \{ matchStatus: 'claiming'/.test(v) && /HgcashCharge\.create/.test(v) && /matchStatus: 'auto_charged'/.test(v), 'consume el movimiento con el candado');
   assert.ok(/receiptTrusted: \{ at: new Date\(\), by \}/.test(v), 'queda de confianza');
   assert.ok(/reviewReason: \/ADELANTADA\//.test(v) && /fraudRecheck: \{ n: 0/.test(v), 'retiros frenados vuelven al re-chequeo');
@@ -60,7 +60,7 @@ caso('Retiros: con una adelantada sin verificar el retiro va a revisión (fail-c
 caso('Panel: rutas con permisos (veredicto: admin/depositor/cajero · ajustes: sólo admin, por campo) y botones Llegó / No llegó', () => {
   assert.ok(/app\.post\('\/api\/admin\/api-failures\/:id\/advance'[\s\S]{0,300}\['admin', 'depositor', 'cajero'\]/.test(S));
   assert.ok(/app\.post\('\/api\/admin\/advance-load\/config'[\s\S]{0,200}req\.user\.role !== 'admin'/.test(S) && /Config\.updateOne\(\{ key: 'advanceload' \}, \{ \$set: set \}/.test(S), 'ajustes por campo y con la key en minúsculas');
-  assert.ok(/verdict === 'reject' && note\.length < 4/.test(S), 'No llegó pide motivo');
+  assert.ok(/if \(note\.trim\(\)\.length < 4\) return res\.status\(400\)/.test(S), 'Llegó y No llegó piden motivo');
   assert.ok(/window\.advVerdict = advVerdict/.test(A) && /_advItemHtml\(c, fm, fd, chip\)/.test(A) && /_advPanelHtml\(j\.adv, fm, fd\)/.test(A));
 });
 caso('Soporte adelantado: la 1ª vez que pide una persona atiende la IA (retiro en proceso / "contame"); si no puede, pasa DIRECTO a un agente', () => {
@@ -71,10 +71,10 @@ caso('Soporte adelantado: la 1ª vez que pide una persona atiende la IA (retiro 
 });
 caso('#1150 No llegó + OTRA cuenta (o "Trucho") ⇒ cuenta cerrada y celular bloqueado; el celular bloqueado no pasa por ningún alta', () => {
   const j = fn('_advanceReject'), o = fn('_advanceOtherAccount'), k = fn('_advanceCloseAccount');
-  assert.ok(/const link = await _advanceOtherAccount\(c\.userId\);/.test(j) && /if \(link \|\| \(opts && opts\.close\)\) closed = await _advanceCloseAccount/.test(j));
+  assert.ok(/const link = \(opts && opts\.noClose\) \? null : await _advanceOtherAccount\(c\.userId\);/.test(j) && /if \(link \|\| \(opts && opts\.close\)\) closed = await _advanceCloseAccount/.test(j));
   assert.ok(/_dupAccountCheck\(u0, 'adelantada-no-llego'\);/.test(o), 're-chequeo SIN los datos del comprobante rechazado');
   assert.ok(/_blockUserAccount\(u\.id, why, by/.test(k) && /_phoneBanUser\(u, by, why\)/.test(k), 'bloqueo con historial + celular');
-  assert.ok(/\['register', 'verify-phone'\]\.includes\(String\(purpose\)\) && await _phoneBanned\(phone\)\) return \{ success: false, banned: true/.test(S), 'no se le manda código para registrarse');
+  assert.ok(/\['register', 'verify-phone', 'change-password'\]\.includes\(String\(purpose\)\) && await _phoneBanned\(phone\)\) return \{ success: false, banned: true/.test(S), 'no se le manda código para registrarse');
   assert.ok(/code: 'PHONE_BANNED', error: PHONE_BAN_MSG \}; \/\/ #1150/.test(S), 'ni confirma sin SMS');
   assert.strictEqual((S.match(/if \(await _phoneBanned\(req\.body && req\.body\.phone\)\) return res\.status\(403\)/g) || []).length, 2, 'alta y entrada rápida');
   assert.ok(/_phoneUnbanUser\(user\.id\)/.test(S), 'desbloquear la cuenta libera el celular');
@@ -94,9 +94,9 @@ caso('#1150 Cierre: la adelantada es carga automática, se separa (sin verificar
 caso('#1151 Revisión: sin doble carga (prioridad de la adelantada, repetido del mismo pago, intento normal previo) y la adelantada fallida vuelve pendiente', () => {
   const mm = fn('hgcashMatchFromMovement'), ac = fn('hgcashAutoCarga'), f = fn('_advanceFinish'), tk = fn('_advanceTakeMovement');
   assert.ok(/if \(await _advanceTakeMovement\(movement, cfg\)\) return;/.test(mm) && mm.indexOf('_advanceTakeMovement') < mm.indexOf('const candidates'), 'la transferencia se ofrece primero a la adelantada');
-  assert.ok(/rows\.length !== 1\) return false/.test(tk) && /_advanceMovementFits\(c, movement, hg\)/.test(tk));
-  assert.ok(/'advance\.status': \{ \$in: \['claiming', 'unverified'\] \}, amount: \{ \$gte: amt - 1, \$lte: amt \+ 1 \}/.test(ac) && /reviewResolution: 'duplicate'/.test(ac) && ac.indexOf('_advanceVerify(adv') < ac.indexOf('matchStatus: \'claiming\''), 'otro comprobante del mismo pago no carga de nuevo');
-  assert.ok(/advance: null, matchedMovementId: null,/.test(S) && /bankMatchStatus: \{ \$in: \['none', 'pending'\] \}, matchedMovementId: null \}/.test(fn('_advanceCredit')), 'atado a una transferencia ⇒ no se adelanta');
+  assert.ok(/rows\.length !== 1\) return false/.test(tk) && /_advanceMovementFits\(c, movement, hg, ks\)/.test(tk));
+  assert.ok(/_advanceMovementFits\(adv, movement, await getHgcashConfig\(\), await _knownSendersOf\(adv\.userId\)\) && await _advanceVerify\(adv/.test(ac) && !/reviewResolution: 'duplicate'/.test(ac) && ac.indexOf('_advanceVerify(adv') < ac.indexOf('matchStatus: \'claiming\''), 'otro comprobante del mismo pago no carga de nuevo y NO se rechaza solo');
+  assert.ok(/advance: null, matchedMovementId: null, toApiBank: \{ \$ne: true \},/.test(S) && /matchedMovementId: null, toApiBank: \{ \$ne: true \} \}/.test(fn('_advanceCredit')), 'atado a una transferencia ⇒ no se adelanta');
   assert.ok(/autoCharged: false, reviewStatus: 'pending', reviewResolution: null[^\n]*'advance\.status': 'failed'/.test(f), 'fallida ⇒ pendiente de nuevo');
   assert.ok(/reviewStatus: 'pending', autoCharged: true, 'advance\.status': \{ \$ne: 'claiming' \}/.test(fn('_depositReviewTick')), 'el cron no confirma una reserva a medias');
   assert.ok(/code: 'BANK_ALREADY_CHARGED' \}\);\n      \} catch \(e\) \{ logger\.warn\(`\[deposit-reviews\/confirm\] chequeo adelantada/.test(S), 'la confirmación a mano avisa');
@@ -108,6 +108,35 @@ caso('#1151 Revisión: banco caído sin falsos positivos, vínculos sin datos de
   assert.ok(/const CQ = \{ 'advance\.status': \{ \$nin: \['claiming', 'unverified', 'rejected', 'failed'\] \}/.test(S));
   assert.ok(/via: \{ \$in: \['sms', 'historico'\] \}/.test(S) && /!== key && await _phoneBanned\(phone\)/.test(S));
   assert.ok(/movement \? \{\} : \{ 'advance\.status': 'unverified' \}/.test(fn('_advanceVerify')), 'Llegó a mano es condicional');
+});
+caso('#1152 Antifraude: el silencio sólo AVISA, la transferencia tiene que ser ANTERIOR a la acreditación y de cuenta conocida, la tardía deja al cliente en observación', () => {
+  const b = fn('_bankInboundState');
+  assert.ok(/if \(kind === 'silence' && !cfg\.silenceAuto\) \{/.test(b) && /return \{ down: false, suspect: why \}/.test(b), 'silencio = aviso, no adelanto');
+  assert.ok(/silenceAuto: false \}/.test(S) && /duplicateOf: null, 'fraudFlags\.0': \{ \$exists: false \}/.test(b), 'apagado por defecto y sin secundarias en el conteo');
+  const i = S.indexOf('function _advanceMovementFits('), f = S.slice(i, i + 700);
+  assert.ok(/!_advFromKnown\(m, ks\)\) return false/.test(f) && /if \(!m\.date\) return false/.test(f) && /d <= _advCreditedAt\(c\) \+ 2 \* 60000/.test(f), 'pagar DESPUÉS de recibir las fichas no verifica sola');
+  assert.ok(/status: 'watch', by: 'sistema'/.test(fn('_advanceFlagLate')) && /_advanceFlagLate\(c, movement\)/.test(fn('_advanceTakeMovement')));
+  assert.ok(/Number\(c\.aiConfidence\) < 0\.75/.test(fn('_advanceEligible')));
+});
+caso('#1152 Plata: una transferencia verifica UNA sola adelantada, reparación de cortes, vencidas a los 4 días, bono con la misma reference', () => {
+  const v = fn('_advanceVerify'), rc = fn('_advanceReconcile'), f = fn('_advanceFinish'), c = fn('_advanceCredit');
+  assert.ok(/\{ id: c\.id, 'advance\.movementId': null, 'advance\.status': \{ \$in: \['unverified', 'verified', 'rejected'\] \} \}, \{ \$set: \{ 'advance\.movementId': movement\.movementId/.test(v) && v.indexOf("'advance.movementId': null") < v.indexOf("matchStatus: 'claiming'"), 'reserva de la adelantada ANTES de tomar el movimiento');
+  assert.ok(/if \(!mv\) \{ await undo\(\); return false; \}/.test(v) && /await undo\(\); return false; \} \}/.test(v));
+  assert.ok(/await _advanceRepair\(\)/.test(rc) && /_advanceReject\(c, 'sistema', 'no apareció ninguna transferencia en 4 días', \{ noClose: true \}\)/.test(rc));
+  assert.ok(/'advance\.bonusPlan'/.test(f) && /Object\.assign\(\{ claimed: false \}, c\.advance\.bonusPlan\)/.test(f));
+  assert.ok(/autoCharged: false, advance: null \} \}\);\n    return false;/.test(c), 'una sola abierta por cliente, atómico');
+});
+caso('#1152 Permisos, cierre y soporte: ajustes sólo del dueño, Trucho sólo admin, "Llegó a mano" no da OK, soporte adelantado sólo con IA', () => {
+  assert.ok(/\/\^\\\/api\\\/admin\\\/advance-load\\\/config\$\/i,/.test(S), 'OWNER_ONLY_MUTATIONS');
+  assert.ok(/req\.body\.close && req\.user\.role !== 'admin'\) return res\.status\(403\)/.test(S));
+  assert.ok(/\['capArs', 0, 500000\]/.test(S) && /Math\.min\(6, Math\.max\(0, Number\(b\.forceHours\)/.test(S), 'topes acotados');
+  assert.ok(/\['register', 'verify-phone', 'change-password'\]/.test(S) && /if \(u\.phoneVerified === true\) \{ add\(u\.phone\)/.test(S));
+  const r = fn('_closeReconcile');
+  assert.ok(/a\.status === 'verified' && !a\.movementId\) A\.mano\.push/.test(r) && /add\('adv_mano'[^\n]*adelantadasMano, -1/.test(r));
+  const k = S.indexOf('function _closeCheck('), ck = S.slice(k, k + 6000);
+  assert.ok(/\+ \(s\.adelantadasManoN \|\| 0\)/.test(ck));
+  assert.ok(/const _comBase = Math\.max\(0,/.test(S) && /_advRecalcPending\.has\(k\)/.test(S));
+  assert.ok(/const pre = \(!aiOn \|\| muted\) \? null :/.test(S) && /\['pending_review', 'paying'\]\.includes\(p\.status\) && mins <= 180/.test(S));
 });
 console.log(`\n${ok}/${total} casos OK`);
 process.exit(ok === total ? 0 : 1);

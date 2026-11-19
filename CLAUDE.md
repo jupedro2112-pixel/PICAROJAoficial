@@ -468,6 +468,10 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   OTRA cuenta (o botón ⛔ Trucho) ⇒ cuenta cerrada + celular en `phone_bans`; un camino NUEVO que acepte un celular consulta `_phoneBanned`.
   **#1151:** un camino NUEVO que acredite una transferencia entrante pasa antes por `_advanceTakeMovement` (la adelantada tiene prioridad) y uno
   que tome comprobantes pendientes respeta `advance` / `matchedMovementId` (si no: una transferencia, dos cargas).
+  **#1152 (5 revisores):** el SILENCIO sólo avisa (`silenceAuto` false): adelanta sola únicamente la consulta al banco fallando o el botón del DUEÑO
+  (ruta en `OWNER_ONLY_MUTATIONS`). Una transferencia verifica sola sólo si su fecha del banco es ANTERIOR a la acreditación y viene de una cuenta
+  conocida (`_advanceMovementFits`); nunca aflojar eso (es la "apuesta gratis": juego y pago sólo si gano). "Llegó" pide nota y, sin movimiento
+  enganchado, el cierre no da OK (`adv_mano`). Trucho (`close`) sólo admin.
 - **BANCO AUTOMÁTICO BLINDADO (#1012):** `getConfig` devuelve el default si la base falla ⇒ NUNCA leer→mezclar→guardar `Config['hgcash']` entero
   (lo apagaba solo). Cambios puntuales con `_hgcashSetFields`; sólo el panel guarda el objeto (con `confirmOff` para apagar). `_hgcashGuardTick`
   restaura `Config['hgcashLastGood']` si aparece apagado sin `manualOff`. Misma trampa para cualquier Config crítica: usar $set de campo.

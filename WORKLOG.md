@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1151)
+> **Última actualización: 2026-11-19** (#1152)
 
 ## Sesión 2026-11-09
 
@@ -15186,3 +15186,34 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   (#1149-#1151) en lenguaje llano.
 - **Validación:** `test-advance-load` 13/13 (2 casos nuevos), soporte 18/18, payout 8/8, receipt-match 11/11, cierre 9/9, dup 11/11, 1053 9/9,
   1090 13/13, `node --check`. **Sin probar en vivo. Necesita deploy en los dos AWS.**
+
+### 1152. Segunda revisión con 5 revisores (plata · seguridad · antifraude · cierre · regresiones) de la carga adelantada (2026-11-19) — panel v317
+- **Owner:** "revisá seguridad, que no haya nada roto de punta a punta antes de subir; poné 5 agentes de todo tipo y alterná con seguridad,
+  antifraude, etc." Cinco lecturas independientes y sólo-lectura; cada hallazgo se verificó contra el código. Regresiones: nada roto en lo
+  que ya funcionaba (30/33 tests; `test-server-boot`, `test-sorteos-front` y `test-sorteos-server` fallan IGUAL en 4179a2a, antes de #1149).
+- **Antifraude (lo más grave):** (a) "apuesta gratis": comprobante trucho con el banco caído, jugar, y transferir sólo si se gana ⇒ la
+  transferencia tardía verificaba y liberaba el retiro. Ahora `_advanceMovementFits` exige fecha del banco ≤ acreditación + 2 min y cuenta de
+  origen conocida (`_advFromKnown`); sin `date` no verifica sola; la tardía ⇒ `_advanceFlagLate` (observación + nota PRIORIDAD ALTA).
+  (b) caída PROVOCADA con 5 cuentas de madrugada ⇒ el "silencio" ya NO adelanta solo: avisa (`suspect`, alerta cada 30 min) y el dueño decide
+  con el botón; `Config['advanceLoad'].silenceAuto` (false) lo vuelve automático. La consulta al banco fallando sigue adelantando sola.
+  (c) `aiConfidence` ≥ 0,75 para adelantar. (d) "Llegó" pide nota; verificada a mano sin movimiento enganchado ⇒ grupo `mano` en el cierre
+  (`adv_mano`), NO sale de la caja y el cierre no da OK. (e) sin verificar a los 4 días ⇒ rechazo automático `by:'sistema'` con `noClose`.
+- **Plata:** `_advanceVerify` reserva primero la adelantada para ESA transferencia (`advance.movementId` null → id; `undo` si falla) — dos
+  transferencias juntas verificaban la misma y la segunda carga quedaba sin movimiento. El guard de `hgcashAutoCarga` sólo actúa si la
+  transferencia ES la de la adelantada (`_advanceMovementFits`) y ya NO rechaza el otro comprobante (queda pendiente). `_advanceRepair` termina
+  verificaciones cortadas a mitad. `toApiBank:true` (lo tomó el camino normal alguna vez) ⇒ no se adelanta. Bono: `advance.bonusPlan` se
+  guarda antes de cargar y el reintento manda el MISMO bono. "Una sola por cliente" atómico (las dos reservas se sueltan). Confirmación a mano:
+  409 también con una adelantada ya verificada del mismo monto (±36 h).
+- **Permisos:** `/api/admin/advance-load/config` en `OWNER_ONLY_MUTATIONS` (topes: techo ≤ $500.000, general ≤ $20M, forzado ≤ 6 h);
+  `close:true` (Trucho) sólo admin; caché de `api-failures` por dueño/no dueño. Celulares: sólo el número VERIFICADO; `change-password` y el
+  cambio de clave pendiente también consultan `_phoneBanned`; se compara la cola cruda y la normalizada.
+- **Cierre:** comisión del banco sobre lo que ENTRÓ ese día (`_comBase`); recálculo de cierres agrupado (uno por día, 90 s); renglón de
+  "adelantadas que no llegaron" en INGRESOS; la sin verificar se lista SIEMPRE en 🔌.
+- **Soporte (regresión):** el soporte adelantado sólo con la IA disponible y el cliente sin silenciar; en modo clásico / bot apagado / IA caída
+  "Hablar con una persona" va directo a un agente como antes. Un retiro `failed` ya no recibe "lo estamos validando".
+- **Sabido y NO cambiado:** depende de que `BankMovement.date` sea la hora real (verificar en la primera caída); la IA no detecta comprobantes
+  editados (riesgo acotado por techo y tope general; las fichas se pueden jugar, no retirar); 5.º intento en timeout puede soltar una carga que
+  1girox sí tomó; la adelantada perdida sigue siendo `deposit` para INICIO / Negocio / publicistas / sorteos / cliente fiel / Meta; no hay
+  registro propio del recupero de fichas; `PHONE_BANNED` permite enumerar; `_payoutAutoRetryTick` no vuelve a pasar el gate.
+- **Validación:** `test-advance-load` 16/16, soporte 18/18, payout 8/8, receipt-match 11/11, cierre 9/9, caja OK, dup 11/11, 1053 9/9, 1117
+  15/15, 1090 13/13, `node --check`. **Sin probar en vivo. Necesita deploy en los dos AWS.**
