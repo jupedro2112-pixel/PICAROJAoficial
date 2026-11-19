@@ -472,6 +472,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   (ruta en `OWNER_ONLY_MUTATIONS`). Una transferencia verifica sola sólo si su fecha del banco es ANTERIOR a la acreditación y viene de una cuenta
   conocida (`_advanceMovementFits`); nunca aflojar eso (es la "apuesta gratis": juego y pago sólo si gano). "Llegó" pide nota y, sin movimiento
   enganchado, el cierre no da OK (`adv_mano`). Trucho (`close`) sólo admin.
+  **#1153 (owner: "es algo interno que nadie tiene que saber"):** NINGÚN texto que vea el cliente (chat, IA, push, app, descripción en 1girox) nombra
+  ni insinúa que una carga se acreditó sin revisar; para el cliente es una carga normal. La IA lo recibe como dato interno (`advancePending`).
 - **BANCO AUTOMÁTICO BLINDADO (#1012):** `getConfig` devuelve el default si la base falla ⇒ NUNCA leer→mezclar→guardar `Config['hgcash']` entero
   (lo apagaba solo). Cambios puntuales con `_hgcashSetFields`; sólo el panel guarda el objeto (con `confirmOff` para apagar). `_hgcashGuardTick`
   restaura `Config['hgcashLastGood']` si aparece apagado sin `manualOff`. Misma trampa para cualquier Config crítica: usar $set de campo.
