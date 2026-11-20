@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-20** (#1157)
+> **Última actualización: 2026-11-20** (#1158)
 
 ## Sesión 2026-11-09
 
@@ -15297,3 +15297,25 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - **Historias:** el botón "cargar" tocado adentro de Girox abre el CHAT con los datos para transferir (`spCargar`); con el chat clásico, la carga rápida.
 - Tests: `test-story-segments` 23/23, `test-vip-exports` OK, repo 30/33 (los 3 de siempre). Nada de esto se vio en un teléfono: revisar en vivo que la
   barra de arriba no quede apretada en pantallas chicas (se sumó un botón) y que la línea deslizante no tape nada.
+
+### 1158. Cartel al entrar: "unite a Telegram, a los 1.000 sorteamos un 208 0 km" para clientes activos, cada 10 días (2026-11-20) — app v755
+- **Owner:** "armá también un botón de ingreso a clientes activos a los 5 días de unite a Telegram cuando entran: a los 1000 sorteamos un 208 0km a
+  los clientes activos; eso que se pueda cerrar o dejar; siempre cada 10 días lo ponemos, así impulsamos".
+- **Servidor:** `GET /api/config/community` suma `tgPromo` (true sólo si la cuenta es `role:'user'`, sin bloqueo / secundaria / marcas, con 5+ días
+  (`TG_PROMO_MIN_DAYS`) y al menos una carga real) y `tgPromoEveryDays` (10). Cualquier error ⇒ false.
+- **App:** `_tgCarSchedule()` al iniciar: si le toca y pasaron 10 días desde la última vez (`localStorage vip_tgcar_<usuario>`), a los ~12 s y sin otra
+  ventana abierta muestra la tarjeta (✕ / "Ahora no" / "Unirme al canal de Telegram" → `openTelegramInvite`). Se ve también con Girox abierto.
+  Al mostrarse queda marcado: vuelve a los 10 días, se haya unido o no (la app no sabe si se unió).
+- La franja de Telegram del chat (#1155) ahora dice "208 0 km" en vez de "auto 0 km".
+- **Sabido:** el sorteo del 208 NO existe en el sistema (ni conteo de suscriptores, ni inscripción, ni sorteo): es una promesa pública que el owner
+  resuelve por fuera. "Cliente activo" acá = tiene alguna carga real; no mira si cargó hace poco. Si se borra el almacenamiento del teléfono, el
+  cartel vuelve a salir antes de los 10 días.
+- Tests: `test-story-segments` 24/24, `test-vip-exports` OK. No probado en vivo.
+- **Menú sólo Girox, bloqueado (mismo #1158):** owner: "el menú viejo no quiero que esté este mes; el que quiero que figure solo es el principal de
+  Girox". `MENU_GIROX_ONLY_UNTIL = '2026-12-20'` (server.js): hasta esa fecha `_menusEnabledEffective` devuelve SIEMPRE sólo Girox (aunque el panel
+  diga otra cosa, aunque esté el Chat clásico y aunque falle la base) y el panel responde 409 al querer cambiar los menús. Para extenderlo o
+  cortarlo antes: cambiar esa fecha. La fecha la elegí yo (un mes desde el pedido).
+- **Revisión de seguridad** (agente aparte, sólo lectura, sobre todo lo de #1149 a #1157): sin hallazgos explotables. Observaciones que NO se
+  cambiaron: un depositor puede marcar "Llegó" con sólo una nota (el cierre igual no da OK, `adv_mano`); la adelantada confía en lo que la IA lee
+  del comprobante (riesgo aceptado, con topes); una adelantada que falla 5 veces vuelve al camino normal con otra reference (si 1girox hubiera
+  procesado un intento que dio timeout, la transferencia real cargaría de nuevo: caso raro, no lo provoca el cliente).

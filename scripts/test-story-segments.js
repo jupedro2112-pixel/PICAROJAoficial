@@ -42,4 +42,10 @@ caso('#1157 app: botón Código y línea deslizante en la barra del casino, Camb
   assert.ok(/class="cq-mov"/.test(U) && /span\.cq-mov:not\(#casinoChatBadge\)/.test(C), 'etiqueta MOVIBLE');
   assert.ok(/function cqAttention\(\)/.test(H) && /visibilitychange/.test(H) && /@keyframes cqAttn/.test(C), 'se prende al volver');
   assert.ok(/cargar: \(\) => \(H\.spNewCasino && H\.spNewCasino\(\) && H\.spCargar \? H\.spCargar\(\) : H\.spDeposit\(\)\)/.test(J), 'historia → cargar abre el chat'); });
+// #1158: cartel de Telegram + sorteo del 208 (clientes activos con 5+ días, cada 10 días, se puede cerrar)
+caso('#1158 cartel de Telegram: el servidor decide a quién (activo, 5+ días, sin marcas) y la app lo repite cada 10 días', () => { const rdp = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8'); const H = rdp('public/js/home.js');
+  assert.ok(/const TG_PROMO_MIN_DAYS = 5, TG_PROMO_EVERY_DAYS = 10;/.test(S) && /tgPromo, tgPromoEveryDays: TG_PROMO_EVERY_DAYS/.test(S));
+  const i = S.indexOf('let tgPromo = false;'), blk = S.slice(i, i + 900); assert.ok(i > 0 && /u\.role === 'user' && !u\.isBlocked && !u\.duplicateOf/.test(blk) && /Transaction\.exists\(\{ userId: u\.id, type: 'deposit'/.test(blk) && /catch \(_\) \{ tgPromo = false; \}/.test(blk));
+  assert.ok(/j\.tgPromo !== true/.test(H) && /Date\.now\(\) - last < every/.test(H) && /function tgCarClose\(\)/.test(H) && /tgCarClose, tgCarGo,/.test(H) && /_tgCarSchedule\(\); \} catch/.test(H)); });
+caso('#1158 menú: hasta la fecha fijada la app recibe sólo Girox (ni panel, ni chat clásico, ni error de base)', () => { assert.ok(/const MENU_GIROX_ONLY_UNTIL = '\d{4}-\d{2}-\d{2}';/.test(S)); assert.ok(/async function _menusEnabledEffective\(\) \{\n  if \(_menuGiroxLock\(\)\) return Object\.assign\(\{\}, MENUS_GIROX_ONLY\);/.test(S)); assert.ok(/menus: _menuGiroxLock\(\) \? MENUS_GIROX_ONLY :/.test(S) && /if \(_menuGiroxLock\(\)\) return res\.status\(409\)/.test(S)); });
 console.log(`\n${ok}/${ok + fails.length} casos OK`); process.exit(fails.length ? 1 : 0);

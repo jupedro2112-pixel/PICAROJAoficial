@@ -401,6 +401,8 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   `account_blocked`). Desbloquear o revisar a mano ⇒ `fraudAutoSkip` (el motor no lo vuelve a tocar). Test `scripts/test-fraud-auto.js`.
   **Registro cerrado (#994):** `registrationMode:'closed'` corta la página principal (app, entrada rápida) y los referidos; la LANDING de un publicista
   (campaña activa ≠ INGRESO, `_closedAllowsCampaign`) y el panel siguen creando cuentas.
+- **MENÚ SÓLO GIROX BLOQUEADO (#1158):** `MENU_GIROX_ONLY_UNTIL` (server.js) fuerza sólo Girox hasta esa fecha (pisa panel, Chat clásico y errores de base;
+  el panel da 409). Si "no se puede cambiar el menú", es eso. Cartel de Telegram + sorteo del 208: `tgPromo` en `/api/config/community` + `_tgCarSchedule` (app).
 - **HISTORIAS #1156:** partidos sólo importantes (`IMPORTANT_SCORE`, hasta 4), Top 10 que rota y lugar fijo "por qué elegirnos / pagos sin límites"
   (`WHY_KEYS`). El botón `app:<sección>` de una historia tocada con Girox abierto se abre ADENTRO del casino (mapa `IN` en `stories.js`): un destino
   nuevo va a `APP_LINKS` y a `IN`; nunca cerrar el casino ni `setHomeMode('full')` desde ahí (owner: "siempre dentro del menú Girox").

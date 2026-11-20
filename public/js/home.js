@@ -1532,6 +1532,47 @@
         const has = !!(_tg && (_tg.channelUrl || _tg.inviteUrl)); const inv = !!(_tg && _tg.inviteUrl);
         document.querySelectorAll('.tg-card').forEach((card) => { card.hidden = !has; card.querySelectorAll('.tg-inv').forEach((b) => { b.hidden = !inv; }); }); // #751: completo y básico
     }
+    // #1158 (owner): "un cartel al entrar para los clientes activos a los 5 días: unite a Telegram, a los 1.000 sorteamos un 208 0 km entre los
+    // clientes activos; que se pueda cerrar o dejar; siempre cada 10 días lo ponemos". El servidor dice si le toca (`tgPromo`); acá se lleva la
+    // cuenta de los 10 días por usuario (localStorage) y se espera a que no haya otra ventana abierta. Se ve también con Girox abierto.
+    function _tgCarKey() { const u = (VIP.state && VIP.state.currentUser && VIP.state.currentUser.username) || 'x'; return 'vip_tgcar_' + u; }
+    async function _tgCarSchedule() {
+        try {
+            if (!(VIP.state && VIP.state.currentToken)) return;
+            let last = 0; try { last = Number(localStorage.getItem(_tgCarKey())) || 0; } catch (_) {}
+            const r = await fetch(VIP.config.API_URL + '/api/config/community', { headers: { 'Authorization': 'Bearer ' + VIP.state.currentToken } }); if (!r.ok) return;
+            const j = await r.json(); _tg = j;
+            if (!j || j.tgPromo !== true || !(j.inviteUrl || j.channelUrl)) return;
+            const every = (Number(j.tgPromoEveryDays) > 0 ? Number(j.tgPromoEveryDays) : 10) * 86400000;
+            if (Date.now() - last < every) return;
+            _tgCarTry(0);
+        } catch (_) {}
+    }
+    function _tgCarTry(tries) {
+        if (tries > 12) return;
+        setTimeout(() => {
+            try {
+                const busy = document.body.classList.contains('mc-open') || document.querySelector('.modal:not(.hidden)') || document.querySelector('.play-now-card') || _el('pwRecoCard') || _el('tgCarCard') || (_el('storyViewer') && _el('storyViewer').classList.contains('open'));
+                if (busy) return _tgCarTry(tries + 1);
+                _tgCarShow();
+            } catch (_) {}
+        }, tries ? 10000 : 12000);
+    }
+    function _tgCarShow() {
+        const d = document.createElement('div'); d.id = 'tgCarCard'; d.className = 'pwreco-ov tgcar-ov';
+        d.innerHTML = '<div class="pwreco tgcar" role="dialog" aria-labelledby="tgCarT">' +
+            '<button type="button" class="tgcar-x" onclick="VIP.home.tgCarClose()" aria-label="Cerrar">✕</button>' +
+            '<div class="pwreco-ico tgcar-ico">🚗</div>' +
+            '<b id="tgCarT">Sorteamos un 208 0 km</b>' +
+            '<p>Cuando nuestro canal de Telegram llegue a <b>1.000 suscriptores</b>, sorteamos un <b>208 0 km</b> entre los clientes activos. Unite ahora y no te lo pierdas.</p>' +
+            '<button type="button" class="pwreco-go tgcar-go" onclick="VIP.home.tgCarGo()">Unirme al canal de Telegram</button>' +
+            '<button type="button" class="pwreco-later" onclick="VIP.home.tgCarClose()">Ahora no</button></div>';
+        d.addEventListener('click', (e) => { if (e.target === d) tgCarClose(); });
+        document.body.appendChild(d);
+        try { localStorage.setItem(_tgCarKey(), String(Date.now())); } catch (_) {} // visto ⇒ vuelve recién en 10 días (lo cierre o se una)
+    }
+    function tgCarClose() { const c = _el('tgCarCard'); if (c) c.remove(); }
+    function tgCarGo() { tgCarClose(); try { openTelegramInvite(); } catch (_) {} }
     // #1092 (owner): "Verificar SMS" arriba en la barra de Girox (donde estaba Telegram). Verificado ⇒ queda con el tilde y sólo avisa.
     function _smsVerified() { try { const u = (VIP.state && VIP.state.currentUser) || {}; return u.phoneVerified === true; } catch (_) { return false; } }
     function _paintCtSms() { const b = _el('ctSms'), l = _el('ctSmsLbl'); if (!b || !l) return; const ok = _smsVerified(); l.textContent = ok ? 'SMS ✓' : 'Verificar SMS'; b.classList.toggle('ct-sms-ok', ok); }
@@ -3367,6 +3408,7 @@
         try { _applyTesterClass(); } catch (_) {} // #296: botones de test sólo para el usuario de prueba
         try { _avatarInit(); } catch (_) {} // #304
         try { _pwRecoSchedule(); } catch (_) {} // #806: recomendación de cambiar la clave inicial
+        try { _tgCarSchedule(); } catch (_) {} // #1158: cartel de Telegram + sorteo del 208 (clientes activos, cada 10 días)
         try { _menuReaskInit(); } catch (_) {} // #367: volver a preguntar fácil / completo tras 10 min afuera
         try { _paintPlatformTexts(); } catch (_) {} // #296: textos según cuántas plataformas hay
         try { renderVipDetail(); renderVipCard(); setTimeout(() => { renderVipDetail(); renderVipCard(); }, 4000); } catch (_) {}
@@ -3410,7 +3452,7 @@
 
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
-        casinoChatToggle, spGreetMsg, casinoCode, // #1042-x · #1157
+        casinoChatToggle, spGreetMsg, casinoCode, tgCarClose, tgCarGo, // #1042-x · #1157 · #1158
         menuNow, chatNow, // #1042-y
         supportFaqOpen, supportFaqClose, pfInstall, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, casinoHelp, casinoLoadChat, spCargar, spHelpMenu, spHelpPick, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782

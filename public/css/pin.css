@@ -3858,3 +3858,11 @@ body:not(.sp-classic) #casinoOverlay #casinoSupportBubble > span.cq-mov:not(#cas
   body:not(.sp-classic) #casinoOverlay #casinoSupportBubble.cq-attn { animation: cqAttn 1.2s ease-out 7 !important; }
   @keyframes cqAttn { 0%, 100% { transform: scale(1); box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 4px rgba(37,211,102,.35); } 40% { transform: scale(1.16); box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 20px rgba(37,211,102,0); } }
 }
+/* #1158 (owner): cartel "unite a Telegram: a los 1.000 sorteamos un 208 0 km" (clientes activos, cada 10 días). Reusa la tarjeta .pwreco; va por
+   encima del casino y de las ventanas que se mudan adentro. */
+.tgcar-ov { z-index: 100010 !important; }
+.tgcar { position: relative; }
+.tgcar .tgcar-x { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border-radius: 50%; border: 0; background: var(--p-surface); color: var(--p-text); font: 800 14px/32px var(--p-font); cursor: pointer; padding: 0; }
+.tgcar .tgcar-ico { font-size: 28px; }
+.tgcar p b { color: var(--p-text); }
+.tgcar .tgcar-go { background: #229ed9; }

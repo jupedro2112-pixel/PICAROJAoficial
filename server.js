@@ -6879,16 +6879,23 @@ app.post('/api/auth/quick-entry', authLimiter, landingIpLimiter, async (req, res
 function _menusEnabledNorm(v) { const m = { basic: !(v && v.basic === false), easy: !(v && v.easy === false), full: !(v && v.full === false), girox: !(v && v.girox === false) }; return (m.basic || m.easy || m.full || m.girox) ? m : { basic: true, easy: true, full: true, girox: true }; }
 // #1042-s (owner): "si pongo el normal (Chat clásico), que siga todo igual de punta a punta, hasta con el menú" ⇒ con Chat clásico la app recibe
 // el menú de ANTES del cambio a sólo Girox (Config['menusEnabledBefore1042r'], o todos si no quedó guardado); el elegido queda guardado para cuando se vuelva.
+// #1158 (owner 2026-11-20): "el menú viejo no quiero que esté este mes; el que quiero que figure solo es el principal de Girox" ⇒ hasta esa
+// fecha (hora AR) la app recibe SIEMPRE sólo Girox: ni el panel, ni el Chat clásico, ni un error de la base devuelven los otros menús.
+const MENU_GIROX_ONLY_UNTIL = '2026-12-20';
+const MENUS_GIROX_ONLY = { basic: false, easy: false, full: false, girox: true };
+function _menuGiroxLock() { try { return new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10) <= MENU_GIROX_ONLY_UNTIL; } catch (_) { return true; } }
 async function _menusEnabledEffective() {
+  if (_menuGiroxLock()) return Object.assign({}, MENUS_GIROX_ONLY);
   let classic = false; try { classic = !!(await getSupportBotConfig()).classic; } catch (_) {}
   if (classic) return _menusEnabledNorm(await getConfig('menusEnabledBefore1042r', null));
   return _menusEnabledNorm(await getConfig('menusEnabled', null));
 }
-app.get('/api/public/menu-layout', async (req, res) => { try { const v = await getConfig('menuLayout', 1); const menus = await _menusEnabledEffective(); res.set('Cache-Control', 'no-store'); res.json({ layout: Number(v) === 2 ? 2 : 1, menus }); } catch (_) { res.json({ layout: 1, menus: { basic: true, easy: true, full: true } }); } });
+app.get('/api/public/menu-layout', async (req, res) => { try { const v = await getConfig('menuLayout', 1); const menus = await _menusEnabledEffective(); res.set('Cache-Control', 'no-store'); res.json({ layout: Number(v) === 2 ? 2 : 1, menus }); } catch (_) { res.json({ layout: 1, menus: _menuGiroxLock() ? MENUS_GIROX_ONLY : { basic: true, easy: true, full: true } }); } });
 app.get('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => { try { res.json({ success: true, menus: _menusEnabledNorm(await getConfig('menusEnabled', null)) }); } catch (_) { res.status(500).json({ error: 'Error' }); } });
 app.post('/api/admin/menus-enabled', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
+    if (_menuGiroxLock()) return res.status(409).json({ error: 'Hasta el ' + MENU_GIROX_ONLY_UNTIL.split('-').reverse().join('/') + ' la app usa sólo el menú de Girox (pedido del dueño). Después de esa fecha se puede cambiar acá.' }); // #1158
     const b = (req.body && req.body.menus) || {};
     const on = (x) => !(x === false || x === 'false' || x === 0 || x === '0');
     const m = { basic: on(b.basic), easy: on(b.easy), full: on(b.full), girox: on(b.girox) }; // #670
@@ -38069,6 +38076,7 @@ app.post('/api/admin/bonus-strategy/activate', authMiddleware, adminMiddleware, 
 // ============================================================
 // COMUNIDAD — config del link de la comunidad / canal de Telegram.
 // ============================================================
+const TG_PROMO_MIN_DAYS = 5, TG_PROMO_EVERY_DAYS = 10; // #1158
 app.get('/api/config/community', authMiddleware, async (req, res) => {
   try {
     const c = (await getConfig('communityConfig')) || {};
@@ -38076,7 +38084,17 @@ app.get('/api/config/community', authMiddleware, async (req, res) => {
     // la sección "Canal Informativo" del panel (eliminada 2026-08-03 al unificar
     // el canal en la Comunidad) — así una URL cargada ahí no se pierde.
     const legacyCanal = await getConfig('canalInformativoUrl', '');
+    // #1158 (owner): cartel "unite a Telegram: a los 1.000 sorteamos un 208 0 km" sólo para CLIENTES ACTIVOS con 5+ días de cuenta.
+    // Acá sólo se decide si le toca; cada cuánto se muestra (10 días) lo lleva la app. Cualquier error ⇒ no se muestra.
+    let tgPromo = false;
+    try {
+      const u = await User.findOne({ id: req.user.userId }).select('id role createdAt isBlocked duplicateOf fraudFlags').lean();
+      if (u && u.role === 'user' && !u.isBlocked && !u.duplicateOf && !(u.fraudFlags || []).length && u.createdAt && Date.now() - new Date(u.createdAt).getTime() >= TG_PROMO_MIN_DAYS * 86400000) {
+        tgPromo = !!(await Transaction.exists({ userId: u.id, type: 'deposit', status: { $nin: ['failed', 'cancelled'] }, 'metadata.source': { $nin: ['payout_refund', 'install_bonus', 'welcome_gift', 'welcome_code'] }, description: { $not: /PRUEBA/i } }));
+      }
+    } catch (_) { tgPromo = false; }
     res.json({
+      tgPromo, tgPromoEveryDays: TG_PROMO_EVERY_DAYS, // #1158
       channelUrl: c.channelUrl || c.url || legacyCanal || '',
       inviteUrl: c.inviteUrl || '', // #749
       supportUrl: c.supportUrl || '',
