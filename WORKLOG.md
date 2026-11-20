@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-20** (#1159)
+> **Última actualización: 2026-11-20** (#1161)
 
 ## Sesión 2026-11-09
 
@@ -15371,3 +15371,60 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - **Tests que fallaban "de siempre" (diagnóstico):** `test-server-boot` = entorno (falta `JWT_SECRET` de prueba); `test-sorteos-front` y
   `test-sorteos-server` = tests viejos (cambio de #1138-i: pasos numerados y `gran` en PRÓXIMAMENTE). Ninguno es un bug. No se actualizaron.
 - Tests: `test-story-segments` 26/26, `test-vip-exports` OK, repo 30/33. Nada probado en vivo.
+
+### 1160. 🏛️ Bancos — Configuración: hasta 3 cuentas hgcash, Finpro como segundo banco con API, "Bancos automáticos", rotación automática y pagar un retiro por el otro banco (2026-11-20) — panel v319
+- **Owner:** replicar acá "tal cual quedó" todo lo de BANCOS de AUTOREEMBOLSOSjygactivo (sus #181/#182/#194/#195/#202/#207–#216). Sólo bancos:
+  NO se trajo la mudanza a jugaygana.io ni `plat.*` (acá la plata sigue por 1girox, sin tocar).
+- **Qué hay ahora:**
+  - **Cuentas hgcash (hasta 3)** en `Config['hgcashAccounts']` (cifradas con `JWT_SECRET`; lo que había en `Config['hgcashCredentials']` se migra
+    solo a la cuenta `a1`, sin tocar la clave vieja). UNA en uso ("USAR ESTA"): paga retiros y gastos y es la que ve el cliente. Las cargas
+    entran por TODAS (el webhook acepta el secreto de cualquiera y etiqueta `BankMovement.accountKey`) salvo "solo la en uso" o pausa por cuenta.
+  - **Finpro**, segundo banco con API (`src/services/finproService.js`, hasta 3 cuentas en `Config['finproAccounts']`): webhook de entrantes
+    firmado (`POST /api/finpro/webhook`), verificación del comprobante contra Finpro, pago de retiros (lote + consulta, callback
+    `POST /api/finpro/callback`), saldos y diagnóstico. Un movimiento Finpro es un `BankMovement` con `provider:'finpro'` y entra al MISMO
+    `hgcashAutoCarga` (mismos candados, bonos y antifraude).
+  - **🏦 Bancos automáticos** (3 llaves): por dónde ENTRAN las cargas (`hgcash.enabled` / `Config['finpro'].enabled`), por dónde SALEN los
+    retiros (`Config['bankProvider']`) y qué cuenta VE el cliente (`Config['bankShown']`: sólo ese banco reescribe `Config['cbu']`).
+  - **Rotación automática** (`Config['bankRotation']`, apagada por defecto): por caída (N controles seguidos sin respuesta) o por tope de
+    lo recibido en el día / mes; destino elegible, otro banco opcional, mover retiros opcional, VUELTAS cuando todas llegan al tope del día.
+  - **Retiros:** botones `Pagar` / `Pagar nuevamente` · `🏦 Pagar con otro banco` (el otro banco con API, sólo ESE retiro) · `✅ Ya lo pagué por
+    fuera` (lo que antes se llamaba "Pagar con otro banco": marcar pagado a mano). Intento anterior dudoso por el otro banco ⇒ 409 con confirmación.
+  - **Panel:** sección nueva **🏛️ Bancos configuración** (sólo admin general; debajo de Configuración). Barra "El cliente transfiere a…" con
+    todas las cuentas de los dos bancos arriba de **⚡ Cargas automáticas** (la ven admin, depositor, withdrawer y cajero). Filtro por banco y
+    etiqueta de cuenta en "Movimientos del banco". La caja vieja "Cuenta hgcash conectada" de Configuración se reemplazó por un link a la sección.
+- **Adaptado distinto a la fuente (por diseño propio de este repo):**
+  - **#1012:** las cuentas / la rotación se leen ESTRICTO (`_cfgStrict` / `_cfgSetStrict`): si la base falla NO se guarda nada (en la fuente
+    `getConfig` devolvía el default y se podía pisar todo). `Config['hgcash']` sólo se toca con `_hgcashSetFields`; apagar hgcash desde "Bancos
+    automáticos" deja `manualOff` (si no, `_hgcashGuardTick` lo volvía a prender).
+  - **Permisos:** cargar / editar / borrar una cuenta, las tres llaves, el modo de Finpro, la rotación automática y la prueba de verificación son
+    `OWNER_ONLY_MUTATIONS` (sólo el dueño del panel). Rotar entre cuentas YA cargadas (USAR ESTA, pausar, modo, barra) lo puede hacer el staff.
+  - **Alertas:** acá no hay Telegram de alertas ⇒ `bankAlert` las manda al panel (`security_alert` a los admins) y al log.
+  - **Sin bandeja 🏦 Banco** (este repo no la tiene): lo que no se carga solo queda en "Movimientos del banco"; la barra va en ⚡ Cargas automáticas.
+    No se trajo `fromKey` (anti-multicuenta por banco de la fuente) ni las bajadas (`BankSweep`).
+  - **Retiros:** se conservó todo lo de acá (`_payPendingPayout` con pago automático, reintentos `-rN` #820, `_bankPayoutOk/Failed` #442, un retiro
+    por cliente #1008). Un envío a hgcash sin respuesta (`hgStatus:'UNKNOWN'`) cuenta como intento dudoso para pagar por Finpro. "¿Puede salir
+    solo?" ahora pregunta por el banco de retiros (`_payoutBankReady`), no sólo por hgcash.
+  - **Respaldo por consulta (#902):** `_hgcashPollTick` consulta TODAS las cuentas hgcash cargadas, cada una con su token.
+  - **Gastos por API y devolución de transferencias bajo el mínimo:** recuerdan la cuenta hgcash (`Expense.hgAccountKey`, `BankMovement.accountKey`)
+    y consultan / devuelven por ESA cuenta.
+- **Lo que NO cubre Finpro todavía (sigue siendo sólo hgcash):** carga adelantada con el banco caído (#1149), saldo del banco / arqueo / aviso de
+  saldo bajo, gastos por API, devolución automática bajo el mínimo y el comprobante PDF del retiro (Finpro deja el COELSA). El cierre diario suma
+  los movimientos de los dos bancos juntos; un retiro pagado por Finpro cuenta como pago por banco (no "a mano").
+- **Tests:** nuevos `test-finpro-accounts` 43/43, `test-finpro-webhook` 17, `test-bank-rotation` 19 (portados; dobles ajustados a este repo).
+  `test-receipt-match` y `test-loss-fixes-1090` necesitaron dobles nuevos (cuentas del panel) y siguen 11/11 y 13/13. `test-server-boot`
+  ("server.js carga OK"). Los dos de sorteos fallan igual que antes. **Nada probado en vivo:** ni Finpro real, ni la rotación, ni el panel en el navegador.
+- **Para prender:** todo queda como estaba (hgcash, misma cuenta, rotación apagada, Finpro apagado). Las credenciales se cargan desde el panel.
+
+## Sesión 2026-11-20
+
+### 1161. 🏦 Cambiar la cuenta en uso desde cualquier pantalla (todos los roles menos comunidad) + registro de quién la cambió — admin-sw v320
+- **Pedido del owner (2026-11-20):** que TODOS los roles del panel puedan cambiar la cuenta en uso, salvo `comunidad`, y que quede
+  registro de quién, con qué rol y a qué hora se hizo cada cambio manual.
+- **Botón fijo "🏦 <cuenta>"** (abajo a la izquierda, `bankQuickChip` en `admin.js`, se dibuja solo): abre un cuadro con el selector de
+  todas las cuentas de los dos bancos + "USAR ESTA" + el registro. No depende de ninguna sección, así que lo ven los encargados aunque no
+  entren a 🏛️ Bancos — Configuración. Usa `GET/POST /api/admin/bank-in-use`, ahora con `_bankCanSwitch` (cualquier rol del panel menos
+  `comunidad` / `publisher_admin`).
+- **Registro:** `Config['bankSwitchLog']` (últimos 200: `at, by, role, bank, account, from, via`), escrito por `_bankSwitchLog` desde la
+  barra y desde el "USAR ESTA" de las cards de hgcash y de Finpro. Se lee con `GET /api/admin/bank-in-use/log`. La rotación AUTOMÁTICA
+  sigue en su propio "Últimos cambios".
+- Validado solo con `node --check`, `check-tdz` y los tests de bancos; **no probado en navegador**.

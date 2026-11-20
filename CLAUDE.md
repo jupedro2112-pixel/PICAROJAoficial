@@ -185,11 +185,23 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
 - **API de 1girox desde el panel (#310, 2026-10-17):** Base URL + key en Config['giroxCredentials'] (cifradas con
   `JWT_SECRET`, panel > env/SSM, `giroxService.setCredentialsOverride`). Sin API, `connected:false` ⇒ la landing no
   crea cuentas y el casino no abre; se arregla cargándola en COMANDOS → Banco automático → "🎰 API de 1girox".
-- **hgcash desde el panel (2026-10-07):** token de API y secreto del webhook se cargan
-  en Comandos → Banco automático (cifrados con `JWT_SECRET` en `Config['hgcashCredentials']`,
-  **panel > SSM**; el webhook acepta la firma con cualquiera de los dos secretos). El
-  reenvío de avisos a otras páginas sale de `Config['hgcashFanout']` (si existe) o de
-  `HGCASH_FANOUT_URL`. Rotar `JWT_SECRET` ⇒ recargar las credenciales en el panel.
+- **hgcash desde el panel (2026-10-07 → #1160):** token de API y secreto del webhook se cargan en **🏛️ Bancos configuración** (hasta 3
+  cuentas, cifradas con `JWT_SECRET` en `Config['hgcashAccounts']`; lo viejo de `Config['hgcashCredentials']` se migra solo a `a1`;
+  **panel > SSM**; el webhook acepta la firma de cualquiera de las cuentas). El reenvío de avisos a otras páginas sale de
+  `Config['hgcashFanout']` (si existe) o de `HGCASH_FANOUT_URL`. Rotar `JWT_SECRET` ⇒ recargar las credenciales en el panel.
+- **DOS BANCOS CON API: hgcash y Finpro (#1160, réplica de AUTOREEMBOLSOS #194–#216; detalle en ARCHITECTURE "🏛️ Bancos"):** tres llaves en
+  "Bancos automáticos": por dónde ENTRAN las cargas (`hgcash.enabled` / `Config['finpro'].enabled`), por dónde SALEN los retiros
+  (`getBankProvider()`) y qué cuenta VE el cliente (`getBankShown()`: sólo ese banco reescribe `Config['cbu']`, sin heredar nada de la cuenta
+  anterior). Reglas: **un pago recuerda su banco y su cuenta** (`paidVia`, `hgAccountKey` / `fpAccountKey`) y se consulta SIEMPRE con
+  `_hgTokenFor(x.hgAccountKey)` / `_fpCtxFor(p.fpAccountKey)`, nunca con la cuenta en uso (la rotación `_bankRotationTick` la cambia SOLA); todo
+  flujo nuevo que pague guarda esa clave; **nunca se reenvía un lote de Finpro sin respuesta** (se consulta con `_finproSyncPayout`);
+  `_hgMovementAutoOff(m)` es el único punto de "no se carga solo" y cubre los dos bancos; un `BankMovement` sin `provider` es de hgcash; un texto
+  nuevo sobre una carga usa `_bankLabel(m.provider)`; "¿el banco puede pagar?" = `_payoutBankReady()`, no `hgcashPay.isEnabled()`. Las cuentas y
+  la rotación se leen/guardan ESTRICTO (`_cfgStrict` / `_cfgSetStrict`) y `Config['hgcash']` sólo con `_hgcashSetFields` (#1012). Cargar/borrar
+  cuentas, las tres llaves y la rotación son del dueño (`OWNER_ONLY_MUTATIONS`). Las alertas de bancos van por `bankAlert` (panel). Un banco o
+  cuenta nuevos se suman a `_rotSlots()` / `_rotProbe` / `_rotSlotBlocked`. Carga adelantada, saldo/arqueo, gastos por API y devolución bajo
+  el mínimo siguen siendo SÓLO hgcash. Las credenciales NO van en el repo. Tests: `node scripts/test-finpro-accounts.js`,
+  `test-finpro-webhook.js`, `test-bank-rotation.js`.
 - **Transaction** (cargas/retiros) es permanente (sin TTL). **Message** tiene TTL de 3
   días. La analítica de clientes se basa en Transaction.
 - **Montos en PESOS.** ⚠️ Ojo si mirás código o docs viejos: JUGAYGANA trabajaba en

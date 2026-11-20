@@ -38,6 +38,14 @@ const pendingPayoutSchema = new mongoose.Schema({
 
   // Datos del cash-out en hgcash
   hgTransactionId: { type: String, default: null, index: true }, // id del REQUEST del cash-out (createCashOut)
+  hgAccountKey: { type: String, default: null },                 // #1160 perfil de cuenta hgcash que pagó (su token consulta estado/recibo aunque se rote)
+  // #1160 Finpro (paidVia 'finpro'): un payout = un proceso (`process_id` uuid) con una transferencia.
+  fpProcessId: { type: String, default: null, index: true },     // process_id del lote en Finpro (se reusa SOLO si fpAccepted)
+  fpTransactionId: { type: String, default: null },              // transaction_id (≤ 11 chars, determinístico del payout.id)
+  fpCoelsaId: { type: String, default: null, index: true },      // coelsa_id del resultado = "número de comprobante" para el operador
+  fpAccepted: { type: Boolean, default: null },                  // true = Finpro aceptó el lote (0201); false = rechazado; null = sin respuesta / no enviado
+  hgSendUnknown: { type: Boolean, default: false },              // el envío a hgcash quedó SIN respuesta (no se sabe si salió): frena pagarlo por el otro banco sin confirmar
+  fpAccountKey: { type: String, default: null },                 // perfil de cuenta Finpro que pagó (sus credenciales consultan el estado aunque se rote)
   hgTxId: { type: String, default: null },                       // id de la TRANSACCIÓN real (ledger) → para el comprobante PDF
   receiptSentAt: { type: Date, default: null },                  // cuándo se le envió el comprobante PDF al cliente (idempotencia)
   hgStatus: { type: String, default: null },                     // PENDING/PROCESSING/DONE/ERROR...

@@ -7,7 +7,9 @@ const S = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
 const fn = (name) => { const m = new RegExp('^function ' + name + '\\(', 'm').exec(S); if (!m) throw new Error('no está ' + name); let d = 0; const i = S.indexOf('{', m.index); for (let j = i; j < S.length; j++) { if (S[j] === '{') d++; else if (S[j] === '}' && !--d) return S.slice(m.index, j + 1); } return ''; };
 const line = (re) => { const m = re.exec(S); if (!m) throw new Error('no está ' + re); return m[0]; };
 const src = [line(/^function _digits\(.*$/m), line(/^const _COELSA_LOOK = .*;$/m), ...['_normComprobanteKey', '_normName', '_nameMatch', '_amountsEqual', '_comprobanteToOurBank', '_destConsistentOk', '_coelsaNear', '_comprobanteMatchesMovement'].map(fn), 'return { _comprobanteMatchesMovement, _coelsaNear };'].join('\n');
-const { _comprobanteMatchesMovement: match, _coelsaNear } = new Function(src)();
+// #1160: `_comprobanteToOurBank` ahora también mira las cuentas hgcash / Finpro cargadas en el panel (acá: ninguna, como antes).
+const _banksNone = 'const _hgAccounts = []; const _hgAccountReceives = () => true; const _fpList = () => []; const _fpAccountReceives = () => true; const _fpAccountCvus = () => []; const _fpHolderOf = () => null; const _cbuSameAccount = () => null; const _hgIncomingMode = "all"; const _hgActiveKey = null;\n';
+const { _comprobanteMatchesMovement: match, _coelsaNear } = new Function(_banksNone + src)();
 const OUR = '0000999900000000000011';
 const cfg = { cbu: OUR, accountName: 'Empresa Receptora' };
 let ok = 0; const fails = [];

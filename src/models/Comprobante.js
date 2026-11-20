@@ -60,6 +60,11 @@ const comprobanteSchema = new mongoose.Schema({
 
   // Matcheo con el banco con API (hgcash) → carga automática
   toApiBank: { type: Boolean, default: false }, // el destino es el CBU del banco con API
+  // #1160 Finpro: estado de la verificación `transfers/verify/incoming` hecha a partir de este comprobante. 'pending' = Finpro
+  // todavía no la ve acreditada y `_finproReverifyTick` la vuelve a consultar (`finproVerify.nextAt`), hasta 90 min → 'gave_up'.
+  // 'confirmed' | 'ambiguous' | 'error' | 'resolved' (se cargó/resolvió por otro camino). null = nunca se verificó.
+  finproVerifyStatus: { type: String, default: null, index: true },
+  finproVerify: { type: mongoose.Schema.Types.Mixed, default: null }, // { startedAt, attempts, lastAt, nextAt, last, log[≤10], movementId }
   bankMatchStatus: {
     type: String,
     // awaiting_platform / redirected: multi-plataforma (2026-10-16) — espejo del BankMovement matcheado.

@@ -26,6 +26,18 @@ const bankMovementSchema = new mongoose.Schema({
   status: { type: String, default: null },
   type: { type: String, default: null },
   accountId: { type: String, default: null },
+  // #1160 (réplica bancos) Banco que lo originó: 'hgcash' (aviso / consulta al banco; default para lo histórico: un
+  // movimiento SIN `provider` es de hgcash) | 'finpro' (webhook secundario `eventType 'finpro.webhook'`, o verificación
+  // por comprobante `'finpro.verify'`; movementId = 'fp:<notification_id>' | 'fp:coelsa:<coelsa>' | 'fp:auth:<autorización>').
+  provider: { type: String, default: 'hgcash', index: true },
+  // Orígenes/eventos ya procesados de este movimiento ('finpro.verify', 'finpro.webhook'…) → un aviso repetido se descarta.
+  processedEvents: { type: [String], default: [] },
+  // Perfil de cuenta por el que entró: Config['hgcashAccounts'].accounts[].key ('a1'…) o Config['finproAccounts'] ('f1'…).
+  accountKey: { type: String, default: null },
+  // Salientes de Finpro (libro): payout | unknown, y el retiro al que corresponde.
+  outKind: { type: String, default: null },
+  payoutId: { type: String, default: null },
+  resolutionNote: { type: String, default: null }, // por qué un movimiento de Finpro quedó sólo en el libro (CVU no cargado, saliente…)
 
   // Partes
   fromName: { type: String, default: null, index: true }, // #1022

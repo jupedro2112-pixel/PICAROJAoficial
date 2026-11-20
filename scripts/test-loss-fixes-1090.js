@@ -36,7 +36,7 @@ const Expense = { find: (f) => q(() => exps.filter((d) => mt(d, f))), findOne: (
 const BankMovement = { findOne: (f) => q(() => movs.find((d) => mt(d, f)) || null) };
 const sent = []; const hgcashPay = { isEnabled: () => true, getTransactionStatus: async () => statusAns || { ok: false }, listMovements: async () => listAns, createCashOut: async (x) => { sent.push(x); return { ok: true }; } };
 const G = new Function('Expense', 'BankMovement', 'hgcashPay', 'logger', '_cronClaim', '_cronRelease', 'resolveHgcashAccountId', '_closeEnsure',
-  [fnIn(S, '_gastoAmbiguous'), lineIn(S, 'const _GASTO_REJ'), 'let _gastoPayingRunning = false;', fnIn(S, '_gastoPayingSet'), fnIn(S, '_gastoPayingTick'), 'return { _gastoAmbiguous, _gastoPayingTick };'].join('\n'))(
+  ['const _hgAccounts = []; const _hgTokenFor = () => null; // #1160: el gasto recuerda su cuenta hgcash (acá: sin cuentas en el panel, como antes)', fnIn(S, '_gastoAmbiguous'), lineIn(S, 'const _GASTO_REJ'), 'let _gastoPayingRunning = false;', fnIn(S, '_gastoPayingSet'), fnIn(S, '_gastoPayingTick'), 'return { _gastoAmbiguous, _gastoPayingTick };'].join('\n'))(
   Expense, BankMovement, hgcashPay, { info() {}, warn() {} }, async () => true, async () => {}, async () => 'acc-1', async (k) => { closes.push(k); });
 const old = (min) => new Date(Date.now() - min * 60000);
 

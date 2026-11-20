@@ -2248,3 +2248,46 @@ comprobante y se verifica después. Detalle de decisiones en WORKLOG #1149.
   insinúa que su carga se acreditó sin revisar (ni la IA, ni 1girox, ni avisos). `_supportPayoutDiagnose` volvió a funcionar (en #1152 un comentario en medio de la línea anulaba el `return`).
 - **#1154:** `_bonusVigenteOf(userId)` = qué bono lleva la próxima carga (sólo lectura, mismo orden que `resolveAutoBonus`); la usan
   `/api/bonus/vigente` (app) y la IA de soporte (`bonusNow`). Si cambia el orden de `resolveAutoBonus`, cambiar esa función.
+
+## 🏛️ Bancos: cuentas hgcash, Finpro, bancos automáticos y rotación (#1160, 2026-11-20 — réplica de AUTOREEMBOLSOSjygactivo #194–#216)
+
+**Claves de `Config`:** `hgcashAccounts` `{accounts:[{key:'a1'..,label,tokenEnc,secretEnc,titular,bank,cbu,alias,accountName,apiAccountId,incomingEnabled}],activeKey,incomingMode}` ·
+`finproAccounts` (ídem: apiKey/apiSecret/webhookSecret cifrados, `account`, `fromCvu`, `extraCvus`, `baseUrl`) · `finpro` `{enabled,mode}` ·
+`bankProvider` (`hgcash`|`finpro`: por dónde SALEN los retiros) · `bankShown` (`hgcash`|`finpro`|`manual`: qué cuenta VE el cliente) ·
+`bankRotation` (+ `bankRotationLock`, candado de 5 min; `bankRotationLap`, vuelta del día). `hgcashCredentials` (una sola cuenta) quedó como
+origen de la migración a `a1`: no se borra ni se escribe más salvo por los endpoints viejos `/api/admin/hgcash/credentials`, que ahora escriben en cuentas.
+
+**En memoria (cada instancia recarga cada 15 s):** `_hgAccounts` / `_hgActiveKey` (`_loadHgcashCredentials`) y `_fpAccounts` / `_fpActiveKey`
+(`_loadFinproCredentials`). Lectura y guardado ESTRICTOS (`_cfgStrict`, `_cfgSetStrict`, #1012).
+
+**Cargas:** hgcash → `POST /api/hgcash/webhook` (acepta el secreto de cualquier cuenta: `_hgcashWebhookSecretEntries`) + `_hgcashPollTick` (todas
+las cuentas). Finpro → `POST /api/finpro/webhook` (firma por cuenta; la cuenta se reconoce por CVU) y, si no llegó el aviso, verificación del
+comprobante (`_finproVerifyComprobante`, desde `hgcashMatchFromComprobante`). Los dos crean `BankMovement` (`provider`, `accountKey`) y terminan
+en `hgcashAutoCarga`. **`_hgMovementAutoOff(m)`** es el único punto que decide "esto no se carga solo" (banco apagado, cuenta pausada, modo
+"solo la en uso") y cubre los dos bancos; `hgcashAutoCarga` lo revisa al entrar. Si el cliente transfirió a una cuenta que no es la en uso, la
+nota interna lo dice. Un `BankMovement` sin `provider` es de hgcash.
+
+**Retiros:** `_payPendingPayout(id, actor, baseUrl, opts)` → banco = `opts.provider` (pagar ESTE retiro por el otro) o `getBankProvider()`.
+Finpro: `_payPayoutViaFinpro` (un lote por retiro, `fpProcessId`; nunca se reenvía un lote sin respuesta: se consulta con `_finproSyncPayout`).
+El pago recuerda banco y cuenta (`paidVia`, `hgAccountKey` / `fpAccountKey`) y toda consulta posterior usa `_hgTokenFor` / `_fpCtxFor`.
+`handlePayoutStatusWebhook(p, provider)` atiende a los dos: un estado de un banco no toca un pago del otro (y un DONE cruzado dispara
+"POSIBLE PAGO DOBLE"); en Finpro un ERROR sólo actúa sobre `paying`. Intento anterior dudoso por el otro banco (`fpAccepted !== false`,
+`hgSendUnknown`, `hgStatus:'UNKNOWN'`) ⇒ 409 `needsConfirm`, se paga recién con `confirmOtherBank`. `_pollPayingPayouts` sigue los de Finpro 24 h.
+`_payoutBankReady()` = "el banco de retiros puede pagar" (lo usan el pago automático y su reintento).
+
+**Rotación:** `_bankRotationTick` cada 2 min (candado atómico entre instancias). Rota la cuenta en uso del banco que ve el cliente por caída
+(`failChecks` controles seguidos) o tope día/mes de lo ENTRADO (hora Argentina; los movimientos sin `accountKey` cuentan para la cuenta `a1`/en uso
+según la fuente). Usa `_hgActivateAccount` / `_fpActivateAccount`, los mismos caminos del botón. Avisa por `bankAlert` (alerta en el panel).
+
+**Rutas del panel** (todas después de `authMiddleware`): `/api/admin/hgcash/accounts*`, `/api/admin/finpro/{config,accounts*,balance,diag,verify}`,
+`/api/admin/banks`, `/api/admin/bank-provider`, `/api/admin/bank-rotation`, `/api/admin/bank-in-use`. Dueño: ver `OWNER_ONLY_MUTATIONS`.
+**Front:** sección `banksConfigSection` (`loadBanksConfigSection`), barra `bankInUseBar` en ⚡ Cargas automáticas (`loadBankInUse`), cartel del retiro
+en el chat (`loadPayoutBanner` / `payPayout(id, confirmOtherBank, provider)`).
+**Tests:** `scripts/test-finpro-accounts.js`, `test-finpro-webhook.js`, `test-bank-rotation.js` (recortan bloques reales de server.js por marcadores
+de texto: `const FINPRO_DEFAULTS = `, `async function _banksPayload() {`, `const _finproLastProcessByCvu = `, `const BANK_ROT_DEFAULTS = `…).
+
+### Cuenta en uso: cambio manual y registro (#1161)
+Cualquier rol del panel menos `comunidad` cambia la cuenta que ve el cliente con el botón fijo "🏦" (`bankQuickChip`, `admin.js`) →
+`POST /api/admin/bank-in-use` (`_bankCanSwitch`). Todo cambio MANUAL (ese botón, la barra, o "USAR ESTA" en las cards de hgcash/Finpro)
+queda en `Config['bankSwitchLog']` vía `_bankSwitchLog` (quién, rol, hora, de cuál a cuál); se lee con `GET /api/admin/bank-in-use/log`.
+Un camino nuevo que cambie la cuenta en uso a mano tiene que llamar a `_bankSwitchLog`.

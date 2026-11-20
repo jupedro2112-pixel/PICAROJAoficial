@@ -25,6 +25,8 @@ const schema = new mongoose.Schema({
   bankMatch: { type: mongoose.Schema.Types.Mixed, default: null },
   status: { type: String, enum: ['paid', 'paying', 'failed'], default: 'paid', index: true },
   hgId: { type: String, default: null },
+  hgAccountKey: { type: String, default: null }, // #1160 perfil de cuenta hgcash que pagó (se consulta con su token aunque se rote)
+  hgAccountId: { type: String, default: null },
   hgError: { type: String, default: null },
   // #1090: pago por API que quedó EN PROCESO (timeout / error de red / 5xx / respuesta ambigua): { since, checks, lastAt, last } — lo resuelve
   // _gastoPayingTick consultando al banco (nunca se re-envía el pago solo).
