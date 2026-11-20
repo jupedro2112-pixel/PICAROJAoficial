@@ -2790,13 +2790,15 @@
                     <div class="pf-userlvl" id="pfUserLvl">Jugador</div>
                     <div class="pf-userhint">Tocá el ícono para cambiarlo</div>
                     <!-- #309: versión visible de la app (mismo número que CACHE_VERSION del SW; se bumpea junto) -->
-                    <div class="pf-build" id="appBuildTag">app v753</div>
+                    <div class="pf-build" id="appBuildTag">app v754</div>
                 </div>
             </div>
             <div class="pf-main pf-main-big">
                 <div class="pf-row"><span class="pf-k">Usuario</span><b class="pf-v" id="pfUser">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('user')">Copiar</button></div>
                 <div class="pf-row"><span class="pf-k">Contraseña</span><b class="pf-v" id="pfPass">••••••••</b><span class="pf-btns"><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('pass')">Copiar</button><button type="button" class="pf-copy" id="pfEye" onclick="VIP.home.profileTogglePw()">Ocultar</button></span></div>
                 <div class="pf-hint" id="pfHint"></div>
+                <!-- #1157 (owner): "que se pueda cambiar desde ese mismo sector, abajo de usuario y contraseña; si entra con asd123, le recomendamos cambiarla" -->
+                <div class="pf-pwchange"><span class="pf-pwreco" id="pfPwReco" hidden>⚠️ Estás usando la clave inicial. Te recomendamos cambiarla.</span><button type="button" class="pf-pwbtn" onclick="hideModal('profileModal');VIP.home.openChangePassword()">🔑 Cambiar clave</button></div>
             </div>
             <details class="pf-config" id="pfConfig">
                 <summary><i class="pi pi-sm">⚙️</i><span>Configuración<small>Modo nocturno, notificaciones, clave y más</small></span><em aria-hidden="true">›</em></summary>
@@ -2823,7 +2825,7 @@
                     <div class="pf-main pf-config-link">
                         <div class="pf-row pf-row-link"><span class="pf-k">Página de la app</span><b class="pf-v pf-link" id="pfLink">—</b><button type="button" class="pf-copy" onclick="VIP.home.profileCopy('link')">Copiar</button></div>
                     </div>
-                    <div class="pf-build pf-build-min" id="pfBuildMini">app v753</div> <!-- #790: espejo de #appBuildTag -->
+                    <div class="pf-build pf-build-min" id="pfBuildMini">app v754</div> <!-- #790: espejo de #appBuildTag -->
                 </div>
             </details>
             <div class="pf-actions">

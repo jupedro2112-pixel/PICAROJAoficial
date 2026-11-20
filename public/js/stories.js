@@ -147,7 +147,7 @@
                 // casino abierto, TODO se abre ADENTRO (ventana encima del casino o el chat de la burbuja), sin cerrar el casino ni ir al otro menú.
                 try { if (VIP.ui && VIP.ui._casinoOpen && VIP.home && VIP.home.spInfo) {
                     const H = VIP.home;
-                    const IN = { cargar: () => H.spDeposit(), soporte: () => (H.spNewCasino && H.spNewCasino() ? H.spShowChat() : H.casinoChatToggle()), juegos: () => {},
+                    const IN = { cargar: () => (H.spNewCasino && H.spNewCasino() && H.spCargar ? H.spCargar() : H.spDeposit()), /* #1157: abre el chat con los datos para cargar */ soporte: () => (H.spNewCasino && H.spNewCasino() ? H.spShowChat() : H.casinoChatToggle()), juegos: () => {},
                         retirar: () => H.spInfo('withdraw'), reembolso: () => H.spInfo('refund'), misiones: () => H.spInfo('misiones'), fueguito: () => H.spInfo('fueguito'), sorteos: () => H.spInfo('sorteos'),
                         referidos: () => H.spInfo('referidos'), ruleta: () => H.spInfo('ruleta'), verificar: () => H.spInfo('sms'), vip: () => H.spInfo('vip'), instalar: () => H.casinoInstall() };
                     const fin = IN[k];

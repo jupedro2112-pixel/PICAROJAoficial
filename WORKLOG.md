@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-20** (#1156)
+> **Última actualización: 2026-11-20** (#1157)
 
 ## Sesión 2026-11-09
 
@@ -15275,3 +15275,25 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   desde el panel). NO se tocó `setHomeMode`: sigue habiendo caminos de respaldo que usan la pantalla de carga completa si el casino no abre.
 - **Sabido y no cambiado:** el tema `referidos` sigue en la rotación de los activos aunque referidos esté apagado (venía de antes).
 - Tests: `test-story-segments` 22/22 (5 casos nuevos), `test-vip-exports` OK, repo 30/33 (los 3 de siempre). No probado en vivo.
+
+### 1157. Barra del casino: línea deslizante "próximamente otras plataformas" + botón Código; Perfil: Cambiar clave a la vista; burbuja Cargas MOVIBLE que se prende al volver (2026-11-20) — app v754
+- **Owner:** "abajo del sorteo, arriba de la página, una línea bien delgada deslizante: próximamente integraremos otras plataformas para que puedas
+  elegir, JugayGana, Buffalo, Ganamos" / "el canjear código dejalo en Perfil pero ponelo al lado de Historias, con el regalo y que diga Código" /
+  "la contraseña … que se pueda cambiar desde ese mismo sector, abajo de usuario y contraseña; si entra con asd123 ponemos (cambiar clave) abajo,
+  le recomendamos cambiar la contraseña; si la cambian, ponemos la actual" / "el círculo para abrir el chat: arriba, con el mismo formato de Cargas,
+  ponele movible, y adentro de lo verde el logo de WhatsApp" / "en las historias … si aprietan soporte o cargar que abra el chat, siempre adentro
+  de la página" / "cuando la gente sale de la app y vuelve a entrar, siempre el círculo de cargas prendido para que se vea el chat".
+- **Línea deslizante** `#casinoSoonBar` (home.js `renderCasinoTabs`, debajo de `#casinoSrtBar`): texto FIJO en el código, dos copias + animación
+  `csSoonSlide` (sin corte); respeta "reducir movimiento". Cuando lleguen las plataformas hay que cambiar o sacar el texto a mano.
+- **Botón Código** `#ctCode` al lado de Historias (ícono de regalo): `VIP.home.casinoCode()` abre `welcomeCodeModal` encima del casino. Sigue en Perfil.
+- **Contraseña en Perfil:** ya se mostraba la clave guardada en el DISPOSITIVO (`VIP.autoload.getPassword()`; "asd123" si entró con la inicial, la
+  nueva si la cambió desde la app). Nuevo: debajo de Usuario/Contraseña va el botón "🔑 Cambiar clave" (mismo flujo de siempre, `openChangePassword`)
+  y, si la clave es la inicial, el aviso "Te recomendamos cambiarla". NO se guarda ni se pide la clave al servidor (ahí sólo hay un hash): si el
+  cliente entró en otro teléfono o por link, Perfil sigue diciendo "no guardada". No hice un formulario dentro del Perfil: el cambio usa la ventana
+  existente (ya contempla los casos de clave obligatoria).
+- **Burbuja Cargas:** etiqueta "MOVIBLE" arriba (`.cq-mov`, mismo formato que CARGAS; sólo con el chat nuevo). El ícono de adentro ya era el globo
+  con teléfono estilo WhatsApp (#1137-u): no se cambió. `cqAttention()`: al volver a la app (visibilitychange / pageshow) con Girox abierto y el chat
+  cerrado, la burbuja se vuelve a mostrar, vuelve a su lugar si quedó fuera de pantalla y late fuerte ~8 s (`cqAttn`).
+- **Historias:** el botón "cargar" tocado adentro de Girox abre el CHAT con los datos para transferir (`spCargar`); con el chat clásico, la carga rápida.
+- Tests: `test-story-segments` 23/23, `test-vip-exports` OK, repo 30/33 (los 3 de siempre). Nada de esto se vio en un teléfono: revisar en vivo que la
+  barra de arriba no quede apretada en pantallas chicas (se sumó un botón) y que la línea deslizante no tape nada.

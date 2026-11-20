@@ -604,6 +604,8 @@
         try { setHomeMode('full'); } catch (_) {}
     }
     function spWithdraw() { try { VIP.withdraw.openWithdrawModal(); } catch (_) {} }
+    // #1157: botón "Código" de la barra del casino ⇒ la ventana de canjear código, encima del casino (sin salir de Girox).
+    function casinoCode() { try { _modalIntoCasino('welcomeCodeModal'); } catch (_) {} try { if (window.openWelcomeCodeModal) window.openWelcomeCodeModal(); } catch (_) {} }
     function openMenuChooser() {
         const m = _el('menuChooser'); if (!m) return;
         // #795 (owner): el recuadro marcado es el menú ACTUAL (antes el CSS marcaba siempre "Menú completo").
@@ -781,6 +783,7 @@
         try { const el = _el('pfLink'); if (el) el.textContent = (VIP.autoload && VIP.autoload.appLink && VIP.autoload.appLink()) || (location.origin + '/'); } catch (_) {}
         if (ep) ep.textContent = pw ? (_pfShown ? pw : '•'.repeat(Math.min(12, Math.max(6, pw.length)))) : 'no guardada';
         if (eye) { eye.textContent = _pfShown ? 'Ocultar' : 'Ver'; eye.style.display = pw ? '' : 'none'; }
+        try { const rc = _el('pfPwReco'); if (rc) rc.hidden = pw !== 'asd123'; } catch (_) {} // #1157: con la clave inicial se recomienda cambiarla, ahí mismo
         if (hint) {
             hint.textContent = !pw ? 'Tu clave no está guardada en este dispositivo. Si la cambiás desde acá, queda guardada.'
                 : (pw === 'asd123' ? 'Es la clave inicial: te recomendamos cambiarla desde "Cambiar clave".' : 'Es la misma clave para entrar a la app y a las plataformas.');
@@ -2979,6 +2982,22 @@
         clearTimeout(_cqTipT); _cqTipT = setTimeout(() => { try { tip.classList.add('out'); setTimeout(() => { try { tip.remove(); } catch (_) {} }, 300); } catch (_) {} }, 5000);
     }
     function casinoQuickClose() { toggleCasinoLoad(false); }
+    // #1157 (owner: "cuando la gente sale de la app y vuelve a entrar, siempre el círculo de cargas prendido para que se vea el chat"):
+    // al volver a la app con Girox abierto y el chat cerrado, el círculo vuelve a mostrarse y late fuerte unos segundos.
+    let _cqAttnT = null;
+    function cqAttention() {
+        try {
+            if (!_casinoIsOpen() || _spCasino || document.body.classList.contains('sp-classic')) return;
+            const b = _el('casinoSupportBubble'); if (!b) return;
+            _quickDismissed = false; b.style.display = '';
+            // si quedó guardada fuera de la pantalla (giro del teléfono, otra medida), vuelve a su lugar de siempre
+            const r = b.getBoundingClientRect();
+            if (r.width && (r.right < 30 || r.bottom < 30 || r.left > window.innerWidth - 30 || r.top > window.innerHeight - 30)) { b.style.left = ''; b.style.top = ''; b.style.right = '16px'; b.style.bottom = 'calc(18px + env(safe-area-inset-bottom,0px))'; try { localStorage.removeItem('vip_cq_pos'); } catch (_) {} }
+            b.classList.remove('cq-attn'); void b.offsetWidth; b.classList.add('cq-attn');
+            clearTimeout(_cqAttnT); _cqAttnT = setTimeout(() => { try { b.classList.remove('cq-attn'); } catch (_) {} }, 9000);
+        } catch (_) {}
+    }
+    try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(cqAttention, 600); }); window.addEventListener('pageshow', () => setTimeout(cqAttention, 1200)); } catch (_) {}
     function dismissCasinoQuick() {
         // #1137-r (owner): con el chat nuevo la burbuja "Cargas" NO se puede sacar (se mueve, pero queda siempre)
         if (!document.body.classList.contains('sp-classic')) { _quickDismissed = false; const bb = _el('casinoSupportBubble'); if (bb) bb.style.display = ''; return; }
@@ -3064,10 +3083,14 @@
                     // #994 (owner): Soporte vive ARRIBA en la barra del casino (salió del panel de Carga rápida)
                     '<button type="button" class="tn-btn" id="ctSupport" onclick="VIP.home.casinoSupport()" title="Carga aquí: cargas, retiros y bonos"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12.5a7.5 7.5 0 0 1-11 6.6L4 20l1.2-4.4A7.5 7.5 0 1 1 20 12.5z"/><path d="M8.5 11.5h7M8.5 14.5h4.5"/></svg></span><span class="tn-lbl">Carga aquí</span></button>' +
                     '<button type="button" class="tn-btn tn-stories" id="ctStories" onclick="VIP.stories.open()" title="Historias"><span class="tn-ico st-ring"><span class="st-core">▶</span><span class="st-badge" id="ctStoriesBadge" style="display:none">1</span></span><span class="tn-lbl">Historias</span></button>' +
+                    // #1157 (owner): "el canjear código ponelo al lado de Historias, con el regalo y que diga Código" (sigue también en Perfil)
+                    '<button type="button" class="tn-btn" id="ctCode" onclick="VIP.home.casinoCode()" title="Canjear un código"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12M12 8c-1.5-3.5-6-3.5-5 0M12 8c1.5-3.5 6-3.5 5 0"/></svg></span><span class="tn-lbl">Código</span></button>' +
                     '<button type="button" class="tn-btn" onclick="VIP.home.casinoInfo()" title="Información del servicio"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5.5M12 7.6v.2"/></svg></span><span class="tn-lbl">Info</span></button>' +
                     '<button type="button" class="tn-btn" onclick="VIP.home.openProfile()" title="Tu perfil"><span class="tn-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20.5c.8-4 3.9-6 7.5-6s6.7 2 7.5 6"/></svg></span><span class="tn-lbl">Perfil</span></button>' +
                   '</div>' +
                   '<div id="casinoSrtBar" class="casino-srt-bar" hidden></div>' + // #935: banner del sorteo debajo de la barra
+                  // #1157 (owner): "abajo del sorteo, una línea bien delgada deslizante" (dos copias del texto ⇒ el deslizado no tiene corte)
+                  '<div id="casinoSoonBar" class="casino-soon" aria-label="Próximamente integraremos otras plataformas para que puedas elegir: JugayGana · Buffalo · Ganamos"><div class="cs-track" aria-hidden="true"><span>🔜 Próximamente integraremos otras plataformas para que puedas elegir: JugayGana · Buffalo · Ganamos</span><span>🔜 Próximamente integraremos otras plataformas para que puedas elegir: JugayGana · Buffalo · Ganamos</span></div></div>' +
                 '</div>');
             bar = _el('casinoTopBar');
             try { _paintCtSms(); } catch (_) {}
@@ -3387,7 +3410,7 @@
 
     VIP.home = {
         playToggle, pvFold, pvPick, // #1032
-        casinoChatToggle, spGreetMsg, // #1042-x
+        casinoChatToggle, spGreetMsg, casinoCode, // #1042-x · #1157
         menuNow, chatNow, // #1042-y
         supportFaqOpen, supportFaqClose, pfInstall, openTelegramInvite, paintTelegramCard, storyBonusRefresh, goGiroxDirect, casinoInstall, onWithdrawRequested, testWithdraw, onDepositCredited, luckClose, casinoQuickMini, casinoQuickClose, testDeposit, openTerms, casinoFullMenu, casinoInfo, casinoSupport, casinoHelp, casinoLoadChat, spCargar, spHelpMenu, spHelpPick, firstGuideClose, installManifestSync, casinoWithdraw, vipLevelsLess, vpHelpToggle, vpHelpOpen, vpAreaPick, paintPfPhone, paintPfNotif, paintPfAvisos, setNotifLevel, openVerifyPhone, infoMore, infoFoldInit, platTap, supportClosedNotice, autoTap, toggleMenuPin, openTelegram, goHome, supportQuick, supportIntroToggle, refreshPendingDeposits, getMenuPref, setMenuPref, chooseMenu, openMenuChooser, closeMenuChooser, maybeShowMenuChooser, easyLoad, easyPlay, easyPlayPick, easyToggleMore, maybeFirstDepositPopup, fdGo, fdClose, spPromoPaint, spPromoOpen, spDeposit, spInfo, spNewCasino, spShowChat, spWithdraw, spCopy, loadStrategy, openMissions, toggleMissionsCard, basicPick, basicPlay, basicToggle, basicCopy, init, openSupport, closeSupport, toggleSupport, isSupportOpen, loadPlatforms, getHomeMode, setHomeMode, toggleHomeMode, syncWaHead: _mirrorHeadBits, renderEntryTabs, entrySwitch, entryOpen, openProfile, profileTogglePw, profileCopy, svcRefund, svcRoulette, showPlayNow, hidePlayNow, playNow, playNowTest, playNowLater, toggleEntryExpand, entryViewSite, installedTestToggle, vipStripOpen, openVipLevels, openAvatarPicker, pickAvatar, applyTesterClass: _applyTesterClass, showInstallGift, hideInstallGift, installGiftOpen, installGiftMain, installGiftLater, installGiftClaim, installGiftTest, entryShowSite, renderPlatforms, playOn, renderHowItWorks, toggleHow,
         playGame, // #782

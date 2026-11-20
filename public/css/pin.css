@@ -3834,3 +3834,27 @@ body:not(.sp-classic):not(.sp-casino) .casino-topbar .casino-srt:not([hidden]) {
 .casino-topbar .casino-back { box-shadow: none !important; }
 html:has(body.casino-open), body.casino-open { background: #000 !important; }
 #casinoOverlay { padding-bottom: 0; }
+
+/* ── #1157 (owner): barra del casino — botón "Código" al lado de Historias + línea delgada deslizante debajo del sorteo; Perfil — "Cambiar clave"
+   debajo de usuario y contraseña. Colores por tokens (claro y nocturno). ── */
+body.menus-one.no-menu-full.no-menu-basic.no-menu-easy .casino-topbar-row > #ctCode { order: 2 !important; }
+.casino-soon { overflow: hidden; white-space: nowrap; height: 16px; line-height: 16px; font-size: 10.5px; font-weight: 700; letter-spacing: .2px; color: var(--p-muted); background: var(--p-surface); border-radius: 8px; }
+.casino-soon .cs-track { display: inline-flex; will-change: transform; animation: csSoonSlide 26s linear infinite; }
+.casino-soon .cs-track span { flex: 0 0 auto; padding-right: 56px; }
+@keyframes csSoonSlide { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .casino-soon .cs-track { animation: none; } }
+.pf-pwchange { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.pf-pwchange .pf-pwreco { flex: 1 1 180px; font-size: 12px; font-weight: 700; line-height: 1.3; color: var(--p-red); }
+.pf-pwchange .pf-pwreco[hidden] { display: none; }
+.pf-pwchange .pf-pwbtn { flex: 0 0 auto; margin-left: auto; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--p-border-hi); background: var(--p-surface); color: var(--p-text); font: 800 12.5px/1 var(--p-font); cursor: pointer; }
+/* #1157 (owner): círculo "Cargas" — etiqueta MOVIBLE arriba (igual que CARGAS abajo) y, al volver a la app, late fuerte unos segundos. */
+#casinoSupportBubble > .cq-mov { display: none; }
+body:not(.sp-classic) #casinoOverlay #casinoSupportBubble > span.cq-mov:not(#casinoChatBadge) {
+  display: block !important; position: absolute; left: 50%; top: -13px; transform: translateX(-50%);
+  background: #0b2f1c; color: #fff; border: 1.5px solid #fff; border-radius: 999px; padding: 3px 7px 2px;
+  font: 800 8px/1 system-ui, -apple-system, "Segoe UI", sans-serif !important; letter-spacing: .8px !important; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.35); pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  body:not(.sp-classic) #casinoOverlay #casinoSupportBubble.cq-attn { animation: cqAttn 1.2s ease-out 7 !important; }
+  @keyframes cqAttn { 0%, 100% { transform: scale(1); box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 4px rgba(37,211,102,.35); } 40% { transform: scale(1.16); box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 20px rgba(37,211,102,0); } }
+}

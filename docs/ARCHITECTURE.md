@@ -1699,6 +1699,13 @@ ranking (`_sorteoWinners(key, pk, excludeUserId)`). Requisito teléfono = 10 dí
 - App: botón `app:<sección>` de una historia tocada con el casino abierto ⇒ se abre ADENTRO de Girox (`stories.js` → `VIP.home.spInfo` y
   compañía); un destino `app:` NUEVO se suma a `APP_LINKS` **y** al mapa `IN` de ese bloque (y a `spInfo` si es una ventana).
 
+### Barra del casino y burbuja Cargas #1157 (2026-11-20)
+- `renderCasinoTabs` (home.js): fila de botones + `#casinoSrtBar` (sorteo) + `#casinoSoonBar` (línea deslizante, texto fijo). `#ctCode` = canjear
+  código (`casinoCode`). En modo sólo-Girox el orden lo pone pin.css con `order` (`#ctCode` lleva `order: 2 !important`, al lado de Historias).
+- Burbuja `#casinoSupportBubble` (ui.js): arrastrable, posición en `localStorage vip_cq_pos`; `.cq-mov` = etiqueta MOVIBLE; `cqAttention()` la prende
+  al volver a la app.
+- Perfil: la contraseña que se muestra es la guardada en el dispositivo; el servidor nunca la devuelve.
+
 ### Historias por segmento, código sorpresa y regalos al azar #1003 (2026-11-01)
 - `Story.audience` 'all'|'new'|'active' (+ `audienceUserId` personal). `/api/stories/active` filtra por `_storySegmentOf` (carga real ⇒ active);
   `/api/stories/public` = 'new'. Una consulta NUEVA de historias para clientes tiene que filtrar audience y audienceUserId.

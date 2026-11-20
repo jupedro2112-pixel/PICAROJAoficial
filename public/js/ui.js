@@ -1407,6 +1407,7 @@ VIP.ui._showCasinoFrame = function() {
         '<img src="/icons/icon-96x96.png" alt="1G" style="width:32px;height:32px;border-radius:50%;' +
         'background:#0d0d1a;padding:3px;object-fit:contain;flex:0 0 auto;">' +
         '<span style="font-weight:800;font-size:12px;letter-spacing:0.4px;white-space:nowrap;">CARGA AQUÍ</span>' + // #723: simple, sin avisos · #1059: 'Carga aquí' (el soporte de juegos es el de Girox)
+        '<span class="cq-mov" aria-hidden="true">MOVIBLE</span>' + // #1157 (owner): arriba del círculo, mismo formato que CARGAS
         '<span id="casinoChatBadge" style="display:none;position:absolute;top:-2px;right:-2px;' +
         'background:#e53935;color:#fff;border-radius:11px;min-width:20px;height:20px;line-height:20px;' +
         'font-size:12px;font-weight:800;padding:0 5px;text-align:center;">0</span></button>' +
