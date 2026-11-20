@@ -3668,9 +3668,12 @@ const HGCASH_MAX_CHARGE_ATTEMPTS = 3;
 async function hgcashHandleChargeFailure(movement, comprobante, errMsg, dataDesc, user) {
   let attempts = (movement.chargeAttempts || 0) + 1;
   try {
+    // #1159: si el movimiento ya tuvo su ronda extra (#_hgcashReviveErrors), la marca [reintento] se CONSERVA; antes se pisaba y el movimiento
+    // se revivía cada 20 min sin fin (3 llamadas a 1girox por vuelta, gastando el cupo por minuto). No duplicaba plata (misma reference).
+    let _revived = false; try { _revived = !!(await BankMovement.exists({ movementId: movement.movementId, chargeError: /^\[reintento\]/ })); } catch (_) {}
     const upd = await BankMovement.findOneAndUpdate(
       { movementId: movement.movementId },
-      { $inc: { chargeAttempts: 1 }, $set: { chargeError: String(errMsg || '').slice(0, 300) } },
+      { $inc: { chargeAttempts: 1 }, $set: { chargeError: (_revived ? '[reintento] ' : '') + String(errMsg || '').replace(/^\[reintento\]\s*/, '').slice(0, 285) } },
       { new: true }
     );
     if (upd && typeof upd.chargeAttempts === 'number') attempts = upd.chargeAttempts;
@@ -26903,7 +26906,7 @@ app.get('/api/admin/api-failures', authMiddleware, adminMiddleware, async (req, 
       lastError: lastErr ? String(lastErr.errorReason || '').slice(0, 120) : null, pendingRecheck: aiPending };
     const bank = { failedPayouts, outage: !!(outage && outage.active) };
     const _advSt = ['unverified', 'verified', 'rejected', 'failed'];
-    const rc = await Comprobante.find({ $or: [{ createdAt: { $gte: since }, $or: [{ trustedFallback: true }, { 'advance.status': { $in: _advSt } }] }, { 'advance.status': 'unverified' }] }) // #1152: la sin verificar se ve SIEMPRE.sort({ createdAt: -1 }).limit(300)
+    const rc = await Comprobante.find({ $or: [{ createdAt: { $gte: since }, $or: [{ trustedFallback: true }, { 'advance.status': { $in: _advSt } }] }, { 'advance.status': 'unverified' }] }).sort({ createdAt: -1 }).limit(300) // #1152: la sin verificar se ve SIEMPRE · #1159: el orden y el tope habían quedado dentro del comentario
       .select('id userId username createdAt autoCharged bankMatchStatus reviewStatus matchedMovementId aiRetryPending aiRecheck shiftReview amount advance originHolder originCbu operationNumber coelsaId trustedFallback').lean();
     const mvIds = rc.map((c) => c.matchedMovementId).filter(Boolean);
     const mvs = mvIds.length ? await BankMovement.find({ movementId: { $in: mvIds } }).select('movementId amount fromName fromCBU coelsaCode externalId createdAt').lean() : [];
@@ -29550,7 +29553,7 @@ async function _notifyVipLevelUp(userLean, level) {
       username: userLean.username,
       level: level.name,
       emoji: level.emoji,
-      bonus: level.levelUpBonusArs.toLocaleString('es-AR')
+      bonus: _capGift(level.levelUpBonusArs).toLocaleString('es-AR') // #1159: lo que se acredita de verdad (tope por regalo)
     }
   );
   if (!content) return; // comando vaciado a propósito desde el panel
@@ -29587,8 +29590,8 @@ async function _notifyVipLevelUp(userLean, level) {
     const full = await User.findOne({ id: userLean.id })
       .select('id username fcmToken fcmTokens').lean();
     if (full) {
-      await sendPushIfOffline(full, `🎁 BONO $${level.levelUpBonusArs.toLocaleString('es-AR')} · Subiste a ${level.name} ${level.emoji}`, // #997
-        'Ya está acreditado en tu cuenta.',
+      await sendPushIfOffline(full, `🎁 BONO $${_capGift(level.levelUpBonusArs).toLocaleString('es-AR')} · Subiste a ${level.name} ${level.emoji}`, // #997 · #1159
+        'Reclamalo desde la app, en Nivel VIP.',
         { tag: 'vip-levelup' });
     }
   } catch (e) {
@@ -30619,7 +30622,8 @@ async function _storyAutoCtx(dayKey) {
     try { await Config.set('storyActiveCtx', act, 'historias-auto'); } catch (_) {}
   }
   let sorteosOn = false; try { sorteosOn = (await _sorteosCfg()).enabled === true; } catch (_) {} // #1030: historia del sorteo sólo si está encendido
-  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: [3], rolloverX, winners: act.winners || [], games: act.games || [], weekTop: act.weekTop || null, sorteosOn }; // #968 · #978: SEMANAL (miércoles), fuerte
+  const referralsOn = await _referralsEnabled(); // #1159: con referidos apagados no sale la historia de referidos
+  return { firstPct, dow, favorite, weeklyBonus: STORY_AUTO_BONUS, bonusDays: [3], rolloverX, winners: act.winners || [], games: act.games || [], weekTop: act.weekTop || null, sorteosOn, referralsOn }; // #968 · #978: SEMANAL (miércoles), fuerte
 }
 // #909 (owner 2026-10-23: "no vamos a publicar aún los partidos de fútbol, quiero ir primero con publicaciones explicando la app"):
 // los PARTIDOS del día salen sólo con la llave `Config['storyAutoMatches']` encendida (panel → Historias automáticas → ⚽ Partidos).
@@ -31101,7 +31105,7 @@ async function _codeDropClaimHandler(req, res) { // #1055: también desde Perfil
     _emitAdminOnlyChatNote(user.id, user.username, `🎁 Canjeó el CÓDIGO SORPRESA ${d.code}: ${_cdMoney(d.amount)} acreditado automático (${slot.claims}/${d.maxClaims}). No hay que hacer nada.`).catch(() => {});
     if (slot.claims >= d.maxClaims) setImmediate(() => _codeDropFinish(d.id).catch(() => {}));
     const rx = await _giftRolloverX().catch(() => 5);
-    res.json({ success: true, amount: d.amount, position: slot.claims, maxClaims: d.maxClaims, rolloverX: rx, message: `🎉 ¡Ganaste ${_cdMoney(d.amount)}! Sos el ${slot.claims}° de ${d.maxClaims}. Ya está en tu cuenta (se juega ×${rx}).` });
+    res.json({ success: true, status: 'credited' /* #1159: sin esto la app decía "te espera en tu próxima carga" con la plata ya acreditada */, amount: d.amount, position: slot.claims, maxClaims: d.maxClaims, rolloverX: rx, message: `🎉 ¡Ganaste ${_cdMoney(d.amount)}! Sos el ${slot.claims}° de ${d.maxClaims}. Ya está en tu cuenta (se juega ×${rx}).` });
   } catch (e) { logger.error('[código-sorpresa] claim ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 }
 // Panel → Historias automáticas → 🎁 Código sorpresa: config, plan de la semana, últimos códigos con sus ganadores, lanzar uno ahora.
@@ -31437,7 +31441,11 @@ async function _journeyScan(now) {
     const c = retentionJourney.classify(st, now); segments[c.segment] = (segments[c.segment] || 0) + 1;
     if (u.notifPrefs && u.notifPrefs.level === 'none') continue; // pidió no recibir avisos
     const p = retentionJourney.pickStep(st, now, _tuningCache); if (!p) continue;
-    const g = picks.get(p.step.id) || { pick: p, users: [] }; g.users.push({ id: u.id, username: u.username, key: p.key, segment: p.segment }); picks.set(p.step.id, g);
+    // #1159: antes se agrupaba sólo por paso y TODO el grupo recibía el regalo del primer cliente (monto y tipo equivocados). Ahora un lote por
+    // paso + tipo + monto + horas; las fichas pasan por el tope único (`_capGift`): sin eso el lote de $20.000 se rechazaba entero.
+    if (p.giftType === 'fixed') p.amount = _capGift(p.amount);
+    const gk = p.step.id + '|' + p.giftType + '|' + p.amount + '|' + p.hours;
+    const g = picks.get(gk) || { pick: p, users: [] }; g.users.push({ id: u.id, username: u.username, key: p.key, segment: p.segment }); picks.set(gk, g);
   }
   return { total: users.length, segments, picks: [...picks.values()] };
 }
@@ -31460,7 +31468,7 @@ async function _journeyTick(force) {
         const body = retentionJourney.batchBody(g.pick, chunk.map((x) => x.username), { monthlyCap: apCfg.cap, rolloverX, vars });
         const r = await _createNotifBatchFromBody(body, by);
         if (!r || r.http !== 200 || !r.body || !r.body.success) { err = (r && r.body && r.body.error) || 'lote no creado'; logger.warn(`[recorrido] ${g.pick.step.id}: ${err}`); continue; }
-        const skip = new Set([].concat(r.body.notFound || [], r.body.skipped || []));
+        const skip = new Set([].concat(r.body.notFound || [], r.body.skipped || [], r.body.cappedOut || [])); // #1159: + los que frenó el tope diario / mensual
         const okUsers = chunk.filter((x) => !skip.has(x.username));
         sent += (r.body.totals && r.body.totals.recipients != null) ? r.body.totals.recipients : okUsers.length;
         const ops = okUsers.map((x) => ({ updateOne: { filter: { id: x.id }, update: { $push: { 'journey.sent': { $each: [{ k: x.key, at: now }], $slice: -60 } }, $set: { 'journey.lastStep': g.pick.step.id, 'journey.lastAt': now, 'journey.segment': x.segment } } } }));
@@ -35843,7 +35851,8 @@ async function _resolveNotifBatchAudience(b) {
   const aud = Object.assign({}, r.audience || {});
   const base = aud.audienceLabel || (aud.audienceType === 'all' ? '🌍 todos' : aud.audienceType === 'list' ? '📋 lista' : '');
   aud.audienceLabel = [base, rg ? `grupo ${(rg.k % rg.n) + 1}/${rg.n}` : '', appOnly ? '📱 con app y notis' : '', cap != null ? `tope ${cap}/mes` : '', dcap ? `${dcap}/día` : ''].filter(Boolean).join(' · ').slice(0, 200);
-  return Object.assign({}, r, { users, audience: aud, filtered: { noApp, capped, dayCapped } });
+  const _kept = new Set(users.map((u) => u.id)); // #1159: quiénes quedaron afuera por tope / app / grupo (el Recorrido no los marca como enviados)
+  return Object.assign({}, r, { users, audience: aud, filtered: { noApp, capped, dayCapped }, cappedOut: (r.users || []).filter((u) => !_kept.has(u.id)).map((u) => u.username) });
 }
 async function _resolveNotifBatchAudienceBase(b) {
   const type = (b.audienceType === 'inactive' || b.audienceType === 'all' || b.audienceType === 'depositors') ? b.audienceType : 'list';
@@ -36655,6 +36664,7 @@ async function _createNotifBatchFromBody(body, user) {
       },
       notFound,
       skipped,
+      cappedOut: resolved.cappedOut || [], // #1159
       message: `Lote creado: ${users.length} destinatarios. Las notificaciones están saliendo en segundo plano.`
     });
   } catch (err) {

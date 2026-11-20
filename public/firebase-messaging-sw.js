@@ -34,7 +34,7 @@ try {
 // ============================================
 // CONFIGURACIÓN DE CACHÉ
 // ============================================
-const CACHE_VERSION = 'v755'; // v755: cartel de Telegram + sorteo del 208 para clientes activos, cada 10 días (#1158) · v754: línea deslizante de próximas plataformas, botón Código en la barra y Cambiar clave en Perfil (#1157) · v753: los botones de las historias abren todo ADENTRO de Girox (#1156) · v752: franja de Telegram del chat: "al llegar a 1.000 suscriptores sorteamos un auto 0 km" (#1155) · v751: iPhone instalada entra con la sesión (llave por cookie + recarga antes de Agregar a inicio) (#1138-o)
+const CACHE_VERSION = 'v756'; // v756: siempre adentro de Girox (deslizar, Cargar ahora de ruleta/misiones, historias de partidos) y cartel del 208 prolijo (#1159) · v755: cartel de Telegram + sorteo del 208 para clientes activos, cada 10 días (#1158) · v754: línea deslizante de próximas plataformas, botón Código en la barra y Cambiar clave en Perfil (#1157) · v753: los botones de las historias abren todo ADENTRO de Girox (#1156) · v752: franja de Telegram del chat: "al llegar a 1.000 suscriptores sorteamos un auto 0 km" (#1155) · v751: iPhone instalada entra con la sesión (llave por cookie + recarga antes de Agregar a inicio) (#1138-o)
 // v115: // v115: ruleta diaria con premios en % y tabla de probabilidades + bonos pendientes se aplican solos en la carga + sin bono de bienvenida para registros manuales
 // v114: // v114: el cartel del bono por instalar la app toma el % y los textos del server (editables en COMANDOS) — chau 100% fijo
 // v113: // v113: REEMBOLSO ACUMULATIVO de por vida en el perfil (tarjeta + reclamar + actualizar) — ESPEC-REEMBOLSO-1GIROX

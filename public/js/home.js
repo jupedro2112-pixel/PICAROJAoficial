@@ -681,7 +681,8 @@
             void away; void logged;
         });
     }
-    function easyLoad() { setHomeMode('full'); }
+    // #1159: con Girox abierto, "Cargar ahora" (ruleta, misiones…) abre la carga ADENTRO del casino; antes cambiaba el menú por detrás y escondía el chat.
+    function easyLoad() { if (_casinoIsOpen()) { try { if (spNewCasino()) spCargar(); else spDeposit(); } catch (_) {} return; } setHomeMode('full'); }
     // #470 (owner): "Ver la plataforma" abre un selector: Girox · Ganamos (Pronto) · Jugaygana (Pronto).
     function easyPlay() {
         const box = _el('easyPlatList'); if (!box) { openPlatform(_entryPlat || 'girox'); return; }
@@ -3477,6 +3478,8 @@
             if (mods.length) { const m = mods[mods.length - 1]; if (m.id && VIP.ui && VIP.ui.hideModal) VIP.ui.hideModal(m.id); else m.classList.add('hidden'); return true; }
             const sv = document.getElementById('storyViewer'); if (sv && (sv.classList.contains('open') || sv.getAttribute('aria-hidden') === 'false') && VIP.stories && VIP.stories.close) { VIP.stories.close(); return true; }
             const ios = document.querySelector('.ios-install-modal'); if (ios) { ios.remove(); return true; }
+            // #1159 (owner: "siempre adentro de Girox"): con sólo Girox, deslizar desde el borde ya no cierra el casino (dejaba a la gente en el Inicio viejo); a lo sumo cierra el chat.
+            if (_onlyGirox()) { try { if (_spCasino) _supportOutOfCasino(); } catch (_) {} return true; }
             if (VIP.ui && VIP.ui._casinoOpen && VIP.ui.closeCasinoFrame) { VIP.ui.closeCasinoFrame(); return true; }
             if (_homeMode === 'full' || _homeMode === 'mini') { goHome(); return true; }
         } catch (_) {}

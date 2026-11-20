@@ -334,7 +334,7 @@ function planActive(dayKey, ctx, hasMatches, themes, pct) {
   }
   // #1156: fija (al revés que los nuevos). El día que toca el comprobante (cada 3) no sale, así siempre queda lugar para un tema que rota.
   if (!(comp && dayN % 3 === 0)) { const wy = whyItem(themes, dayN + 1); if (wy && out.length < SLOTS.length) T(0, wy); }
-  const pool = themes.filter((t) => ACTIVE_KEYS.includes(t.key) && !(t.key === 'deportes' && hasMatches)).concat(ACTIVE_THEMES.filter((t) => t.key !== 'sorteos' || ctx.sorteosOn === true));
+  const pool = themes.filter((t) => ACTIVE_KEYS.includes(t.key) && !(t.key === 'deportes' && hasMatches) && !(t.key === 'referidos' && ctx.referralsOn === false) /* #1159: referidos apagados */).concat(ACTIVE_THEMES.filter((t) => t.key !== 'sorteos' || ctx.sorteosOn === true));
   // #1156: quedan 1-2 lugares que rotan ⇒ el paso se elige coprimo con la cantidad de temas, así pasan TODOS (con 12 temas y paso 3 salían sólo 4).
   const n = pool.length; const _gcd = (x, y) => (y ? _gcd(y, x % y) : x); const step = [3, 5, 7, 2, 1].find((k) => _gcd(k, n || 1) === 1) || 1;
   let ti = n ? (dayN * step) % n : 0; const cycle = n ? Math.floor((dayN * step) / n) : 0;

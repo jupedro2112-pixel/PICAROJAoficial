@@ -741,7 +741,7 @@ function setupRoleBasedUI() {
     // Depositor y withdrawer pueden ver "Usuarios" pero NO pueden exportar CSV
     const usersNavItem = document.querySelector('.nav-item[data-section="users"]');
     if (usersNavItem) {
-        usersNavItem.style.display = ['admin', 'depositor', 'withdrawer', 'cajero'].includes(role) ? '' : 'none';
+        usersNavItem.style.display = role === 'admin' ? '' : 'none'; // #1159: la sección sólo abre para el admin (antes se mostraba y daba 'sin permiso')
     }
     // Solo el admin general puede exportar usuarios
     const exportCsvBtn = document.getElementById('exportUsersCSVBtn');
@@ -5035,7 +5035,7 @@ function applyBlockStateToChatHeader(user) {
     const blockedAt = user.blockedAt ? new Date(user.blockedAt) : null;
     const isAdminUser = ['admin', 'depositor', 'withdrawer', 'cajero', 'comunidad'].includes(user.role);
     // Tanto admin general como depositor pueden bloquear (son los que operan en el chat).
-    const canBlock = ['admin', 'depositor', 'cajero'].includes(currentAdmin?.role) && !isAdminUser;
+    const canBlock = currentAdmin?.role === 'admin' && !isAdminUser; // #1159: el servidor sólo deja bloquear al admin
 
     if (elements.chatBlockedBanner) {
         elements.chatBlockedBanner.style.display = isBlocked ? 'block' : 'none';
@@ -7084,9 +7084,9 @@ async function datosIaGate(label) {
         const r = await authFetch('/api/admin/datos-ia-pin'); const j = r.ok ? await r.json() : { enabled: false };
         if (!j.enabled) return true;
         let pin = sessionStorage.getItem('datos_pin') || sessionStorage.getItem('inicio_pin'); // #982: una sola clave
-        if (!pin) { pin = prompt('🔒 ' + (label || 'Datos') + ' está protegido. Ingresá la clave:'); if (!pin) { showSection('commands'); return false; } sessionStorage.setItem('datos_pin', pin.trim()); }
+        if (!pin) { pin = prompt('🔒 ' + (label || 'Datos') + ' está protegido. Ingresá la clave:'); if (!pin) { switchSection('commands'); return false; } sessionStorage.setItem('datos_pin', pin.trim()); }
         const t = await authFetch('/api/admin/datos-ia/usdt');
-        if (t.status === 423) { sessionStorage.removeItem('datos_pin'); showToast('Clave incorrecta', 'error'); showSection('commands'); return false; }
+        if (t.status === 423) { sessionStorage.removeItem('datos_pin'); showToast('Clave incorrecta', 'error'); switchSection('commands'); return false; }
         return true;
     } catch (_) { return true; }
 }
@@ -7467,7 +7467,8 @@ function _advPanelHtml(a, fm, fd) {
 }
 function _advItemHtml(c, fm, fd, chip) {
     const st = c.advStatus === 'unverified' ? chip('⏳ acreditada SIN verificar') : c.advStatus === 'verified' ? chip('✅ verificada · ' + escapeHtml(c.advBy || '') + ' ' + fd(c.advAt)) : c.advStatus === 'rejected' ? chip('❌ NO LLEGÓ · ' + escapeHtml(c.advBy || '') + ' ' + fd(c.advAt) + (c.advNote ? ' · ' + escapeHtml(c.advNote) : ''), true) : chip('⚠️ no se pudo adelantar: ' + escapeHtml(c.advNote || ''), true);
-    const btn = c.advStatus === 'unverified' ? '<button class="btn-primary btn-small" onclick="advVerdict(\'' + c.id + '\',\'ok\')">✅ Llegó</button> <button class="btn-secondary btn-small" onclick="advVerdict(\'' + c.id + '\',\'reject\')">❌ No llegó</button> <button class="btn-secondary btn-small" style="color:var(--p-red,#d23a4e)" onclick="advVerdict(\'' + c.id + '\',\'fake\')">⛔ Trucho: cerrar cuenta</button>' : '';
+    const _advRole = (typeof currentAdmin !== 'undefined' && currentAdmin && currentAdmin.role) || ''; // #1159: cada rol ve sólo los botones que el servidor le acepta
+    const btn = c.advStatus === 'unverified' && ['admin', 'depositor', 'cajero'].includes(_advRole) ? '<button class="btn-primary btn-small" onclick="advVerdict(\'' + c.id + '\',\'ok\')">✅ Llegó</button> <button class="btn-secondary btn-small" onclick="advVerdict(\'' + c.id + '\',\'reject\')">❌ No llegó</button>' + (_advRole === 'admin' ? ' <button class="btn-secondary btn-small" style="color:var(--p-red,#d23a4e)" onclick="advVerdict(\'' + c.id + '\',\'fake\')">⛔ Trucho: cerrar cuenta</button>' : '') : '';
     return '<div style="border-top:1px solid var(--p-border,#e2e2e2);padding:8px 0;font-size:12.5px' + (c.advStatus === 'verified' ? ';opacity:.6' : '') + (c.problem ? ';border-left:3px solid var(--p-red,#d23a4e);padding-left:8px' : '') + '">' +
         '⚡ <b>' + escapeHtml(c.username || '') + '</b> · ' + fm(c.amount) + (c.bonus ? ' + bono ' + fm(c.bonus) : '') + ' · ADELANTADA · comprobante ' + fd(c.at) +
         '<div style="color:var(--p-muted,#767676)">Para buscar en el banco: ' + (c.fromName ? escapeHtml(c.fromName) : 'titular —') + (c.fromCbuTail ? ' · CBU ' + escapeHtml(c.fromCbuTail) : '') + (c.operation ? ' · op. ' + escapeHtml(String(c.operation)) : '') + (c.movementAt ? ' · entró ' + fd(c.movementAt) : '') + '</div>' +
@@ -20033,10 +20034,11 @@ async function spQuickPaint() {
     const box = document.getElementById('spQuick'); if (!box) return;
     if (!_spSelected || _spSelected.guest) { box.innerHTML = ''; return; }
     try {
+        const _qAdm = !!(currentAdmin && currentAdmin.role === 'admin'); // #1159: crear / borrar respuestas rápidas es sólo del admin
         if (!_spQuickItems) { const r = await authFetch('/api/admin/support/quick-replies'); const j = await r.json(); _spQuickItems = (r.ok && j.items) || []; }
         box.innerHTML = '<span class="sp-quick-h">Respuesta rápida (manda y cierra):</span>' + _spQuickItems.map(function (q) {
-            return '<span class="sp-quick-w"><button type="button" class="sp-quick-b" title="' + escapeHtml(q.preview || '') + '" onclick="spQuickSend(\'' + escapeHtml(q.key) + '\', this)">' + escapeHtml(q.label) + '</button>' + (q.builtin ? '' : '<button type="button" class="sp-quick-x" title="Borrar esta respuesta" onclick="spQuickDel(\'' + escapeHtml(q.key) + '\')">✕</button>') + '</span>';
-        }).join('') + '<button type="button" class="sp-quick-b sp-quick-add" onclick="spQuickNew()">➕ Nueva respuesta</button><div id="spQuickForm" class="sp-quick-form" hidden></div>';
+            return '<span class="sp-quick-w"><button type="button" class="sp-quick-b" title="' + escapeHtml(q.preview || '') + '" onclick="spQuickSend(\'' + escapeHtml(q.key) + '\', this)">' + escapeHtml(q.label) + '</button>' + (q.builtin || !_qAdm ? '' : '<button type="button" class="sp-quick-x" title="Borrar esta respuesta" onclick="spQuickDel(\'' + escapeHtml(q.key) + '\')">✕</button>') + '</span>';
+        }).join('') + (_qAdm ? '<button type="button" class="sp-quick-b sp-quick-add" onclick="spQuickNew()">➕ Nueva respuesta</button>' : '') + '<div id="spQuickForm" class="sp-quick-form" hidden></div>';
     } catch (_) { box.innerHTML = ''; }
 }
 async function spQuickSend(key, btn) {

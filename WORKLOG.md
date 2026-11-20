@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-20** (#1158)
+> **Última actualización: 2026-11-20** (#1159)
 
 ## Sesión 2026-11-09
 
@@ -15319,3 +15319,55 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   cambiaron: un depositor puede marcar "Llegó" con sólo una nota (el cierre igual no da OK, `adv_mano`); la adelantada confía en lo que la IA lee
   del comprobante (riesgo aceptado, con topes); una adelantada que falla 5 veces vuelve al camino normal con otra reference (si 1girox hubiera
   procesado un intento que dio timeout, la transferencia real cargaría de nuevo: caso raro, no lo provoca el cliente).
+
+### 1159. Revisión de punta a punta con 5 revisores (sólo lectura) + arreglos seguros (2026-11-20) — app v756 · panel v318
+- **Owner:** "revisá de punta a punta todo lo que es la página, completo, en todos los sectores, y revisamos si hay errores" (se fue a dormir).
+  Cinco agentes en paralelo (app, panel, cargas/retiros, regalos/crons, publicidad/notificaciones) + uno de seguridad. Cada hallazgo se verificó
+  en el código antes de tocar. Se arregló SÓLO lo claro y de bajo riesgo; lo delicado de plata quedó listado abajo SIN tocar.
+- **ARREGLADO**
+  - *Recorrido de recuperación* (`_journeyScan` / `_journeyTick`): se agrupaba por paso y todo el grupo recibía el regalo del PRIMER cliente
+    (monto y tipo equivocados; un no-fiel podía recibir fichas). Ahora un lote por paso + tipo + monto + horas. Las fichas pasan por `_capGift`
+    (el lote de $20.000 de los clientes grandes perdidos se rechazaba entero por el tope de $15.000). `_resolveNotifBatchAudience` devuelve
+    `cappedOut` y el recorrido ya no marca "enviado" a quien el tope diario/mensual dejó afuera.
+  - *Cargas sin verificar* (`GET /api/admin/api-failures`): el `.sort().limit(300)` había quedado DENTRO de un comentario (error mío de #1152,
+    segunda vez que pasa: nunca un comentario en medio de una cadena).
+  - *App, siempre adentro de Girox:* deslizar desde el borde ya no cierra el casino en modo sólo-Girox (`swipeBack`); "Cargar ahora" de Ruleta y
+    Misiones abre la carga adentro (`easyLoad` con casino abierto ⇒ `spCargar`/`spDeposit`); historias `app:deportes`/`juegos` ya no pasan por
+    `setHomeMode('full')`.
+  - *Código sorpresa / de Telegram:* `_codeDropClaimHandler` no mandaba `status:'credited'` ⇒ la ventana decía "te espera en tu próxima carga,
+    avisale al agente" con la plata ya acreditada.
+  - *Cartel del 208:* negritas a 18 px por herencia de `.pwreco b`.
+  - *Panel:* `datosIaGate` llamaba a `showSection` (no existe) ⇒ `switchSection`; se ocultan por rol botones que el servidor siempre rechazaba
+    (Usuarios, Bloquear/Desbloquear, Trucho, Llegó/No llegó para retiros, crear/borrar respuestas rápidas).
+  - *Reembolso semanal* (`models/refunds.js` `canClaimWeeklyRefund`): día y lunes en hora ARGENTINA (antes hora del servidor: martes 21-24 h
+    rechazaba; domingo 21-24 h abría antes y el cliente perdía la semana recién terminada). De paso se limpiaron espacios finales del archivo.
+  - *Historias:* el tema `referidos` no sale si referidos está apagado (`ctx.referralsOn`).
+  - *Nivel VIP:* el mensaje y la push anunciaban el bono completo ($37.500…) y "ya está acreditado"; ahora dicen el monto real (tope por
+    regalo) y "Reclamalo desde la app".
+  - *Banco:* `hgcashHandleChargeFailure` pisaba la marca `[reintento]` ⇒ un movimiento que 1girox rechaza siempre se revivía cada 20 min sin fin
+    (gastaba cupo de la API; no duplicaba plata).
+- **ENCONTRADO Y NO TOCADO — para decidir con el owner (ordenado por importancia)**
+  1. **Retiro: reintentar "Pagar" después de un descuento que SÍ se hizo** (`_deductChipsAtConfirm`): el precheck ve el saldo ya bajado y
+     CANCELA por "saldo insuficiente" ⇒ el cliente pierde las fichas y no cobra. Arreglo propuesto: marcar `debitAttempted` antes del descuento
+     y, si ya está, ir directo al `withdraw` con la misma reference.
+  2. **Carga manual y "Confirmar" de Cargas pendientes:** reference `vip-dep-<uuid nuevo>` por intento y Transaction recién al final ⇒ un
+     error de base después de acreditar deja plata sin registro, y reintentar puede cargar dos veces. Arreglo: Transaction apenas acredita +
+     reference estable (`vip-rev-<comprobante>` / `opId` del panel).
+  3. **Sorteo MENSUAL nunca cierra solo** (`periodOf` siempre da el mes en curso): el 01/12 no sale la huella ni el revelado automático; y lo
+     jugado en la última hora del mes no suma. Primer cierre: 30/11. Hasta arreglarlo, cerrar a mano con el período del mes anterior.
+  4. **Tickets del sorteo duplicables** si falla el guardado final o corre "recalcular" junto con el cron.
+  5. **Cierre:** retiro pagado por otro banco con intento previo en hgcash se cuenta como pagado por el banco (queda "revisar").
+  6. **Adelantada:** si la carga falla 5 veces, el bono reservado se pierde.
+  7. **Misiones:** lo cumplido el domingo a última hora no se paga (no hay pasada de la semana anterior).
+  8. **Lote nuevo pisa un bono más fuerte vigente** (`_activateBatchPromoBonus`): +60 % por 48 h reemplazado al otro día por +30 %.
+  9. **Autopiloto:** diciembre quedó programado con el refuerzo de oct-nov (12/mes, 6 h).
+  10. **Textos:** bienvenida usa el % general y no el del publicista; "Te DUPLICAMOS" no aclara el tope de $15.000; el tema `retiro` de
+      historias dice "código por SMS" y ya no hay.
+  11. **Panel por rol:** depositor ve Pagos a confirmar / Retirar y withdrawer ve Comprobantes / Depositar (403); "algo no cierra" no le
+      funciona al depositor; el manifest del panel no se sirve (instalar puede traer la app de clientes).
+  12. **Salidas de Girox que quedan:** botón atrás del teléfono (`popstate`), "Volver a la app" del error del casino, `openCasinoInTab`.
+  13. Seguridad (sin hallazgos explotables): "Llegó" con sólo una nota; adelantada confía en la lectura de la IA; adelantada fallida 5 veces
+      vuelve al camino normal con otra reference.
+- **Tests que fallaban "de siempre" (diagnóstico):** `test-server-boot` = entorno (falta `JWT_SECRET` de prueba); `test-sorteos-front` y
+  `test-sorteos-server` = tests viejos (cambio de #1138-i: pasos numerados y `gran` en PRÓXIMAMENTE). Ninguno es un bug. No se actualizaron.
+- Tests: `test-story-segments` 26/26, `test-vip-exports` OK, repo 30/33. Nada probado en vivo.

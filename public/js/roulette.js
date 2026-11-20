@@ -222,7 +222,7 @@
                     '<div class="rl-res-big">+' + _fmt(spin.wonPct || spin.prizePct) + '% extra</div>' +
                     '<div class="rl-res-note">' + (spin.keptHigher ? '✅ Ya tenías un <b>+' + _fmt(spin.prizePct) + '%</b> pendiente (mayor): se te mantiene ése para tu próxima carga.'
                         : (freeWin ? '✅ Se aplica solo en tu carga de <b>HOY</b> (vence a las 00 h).' : '✅ Se aplica solo en tu próxima carga. No tenés que avisar nada.')) + '</div>' +
-                    (freeWin && !spin.keptHigher ? '<button type="button" class="rl-spin" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.setHomeMode(\'full\');">Cargar ahora</button>' : '') + '</div>';
+                    (freeWin && !spin.keptHigher ? '<button type="button" class="rl-spin" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.easyLoad();">Cargar ahora</button>' : '') + '</div>';
             } else if (won && spin.status === 'credited') {
                 html += '<div id="rouletteResultBox" class="rl-result win"><div class="rl-emoji">🎉</div><div class="rl-res-k">¡Ganaste!</div>' +
                     '<div class="rl-res-big">$' + _fmt(spin.prizeARS) + '</div>' +
@@ -249,7 +249,7 @@
                 const _tl = Number(_state.todayLoaded); const _half = Math.ceil(minDep / 2); // #677
                 html += '<div class="rl-hero rl-locked"><div class="rl-emoji">🔒</div><div class="rl-hero-t">Cargá $' + _fmt(minDep) + ' hoy y girás gratis</div>' +
                     '<div class="rl-hero-s">Vale sumar cargas: por ejemplo <b>2 de $' + _fmt(_half) + '</b>. Cada día que llegás a <b>$' + _fmt(minDep) + '</b> tenés un giro: % extra en tu próxima carga o plata al instante.' + (_tl > 0 ? ' Hoy llevás <b>$' + _fmt(_tl) + '</b>.' : '') + '</div>' +
-                    '<button type="button" class="rl-spin" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.setHomeMode(\'full\');">Cargar ahora</button></div>';
+                    '<button type="button" class="rl-spin" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.easyLoad();">Cargar ahora</button></div>';
             }
             html += prizesHtml;
         } else {
@@ -258,7 +258,7 @@
                 '<div class="rl-hero-t">' + (isFree ? 'Tu giro GRATIS de hoy te espera' : (_state.mode === 'gold' ? '✨ Tu giro DORADO te espera' : 'Tu giro de hoy te espera')) + '</div>' +
                 '<div class="rl-hero-s">' + (isFree ? 'Si ganás, el extra se suma solo cuando cargues hoy.' : 'Tocá <b>Girar</b> y la suerte decide. Si ganás, se acredita solo.') + '</div>' +
                 '<button type="button" id="rouletteSpinBtn" class="rl-spin" onclick="VIP.roulette.spin()">Girar</button>' +
-                (isFree ? '<button type="button" class="rl-more" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.setHomeMode(\'full\');">💡 Si cargás $' + _fmt(minDep) + ' hoy, el giro es DORADO' + (topCash ? ': plata hasta $' + _fmt(topCash.value) : '') + ' ›</button>' : '') + '</div>';
+                (isFree ? '<button type="button" class="rl-more" onclick="VIP.roulette.close(); if (window.VIP && VIP.home) VIP.home.easyLoad();">💡 Si cargás $' + _fmt(minDep) + ' hoy, el giro es DORADO' + (topCash ? ': plata hasta $' + _fmt(topCash.value) : '') + ' ›</button>' : '') + '</div>';
             html += prizesHtml;
         }
 

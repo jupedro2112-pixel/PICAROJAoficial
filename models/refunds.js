@@ -46,24 +46,25 @@ async function canClaimDailyRefund(userId) {
 // Verificar si el usuario puede reclamar reembolso semanal
 async function canClaimWeeklyRefund(userId) {
   try {
-    const now = new Date();
-    const currentDay = now.getDay(); // 0 = Domingo, 1 = Lunes, 2 = Martes
-    
+    // #1159: todo en hora ARGENTINA (UTC-3), sin depender de la zona del servidor. Antes, con el servidor en UTC, el martes de 21 a 24 h
+    // rechazaba el reclamo y el domingo de 21 a 24 h lo abría antes de tiempo (y el cliente perdía el de la semana recién terminada).
+    const ART = 3 * 3600000;
+    const art = new Date(Date.now() - ART); // sus campos UTC = fecha y hora de Argentina
+    const currentDay = art.getUTCDay(); // 0 = Domingo, 1 = Lunes, 2 = Martes
+
     // Solo puede reclamar lunes (1) o martes (2)
     const canClaimByDay = currentDay === 1 || currentDay === 2;
-    
-    // Verificar si ya reclamó esta semana
-    const currentWeekStart = new Date(now);
-    currentWeekStart.setDate(now.getDate() - currentDay + 1); // Lunes de esta semana
-    currentWeekStart.setHours(0, 0, 0, 0);
-    
-    const lastWeekly = await RefundClaim.findOne({ 
-      userId, 
-      type: 'weekly' 
+
+    // Verificar si ya reclamó esta semana (lunes 00:00 de Argentina de la semana en curso)
+    const currentWeekStart = new Date(Date.UTC(art.getUTCFullYear(), art.getUTCMonth(), art.getUTCDate() - ((currentDay + 6) % 7)) + ART);
+
+    const lastWeekly = await RefundClaim.findOne({
+      userId,
+      type: 'weekly'
     }).sort({ claimedAt: -1 }).lean();
-    
+
     let canClaim = canClaimByDay;
-    
+
     if (lastWeekly) {
       const lastDate = new Date(lastWeekly.claimedAt);
       // Si ya reclamó esta semana, no puede reclamar de nuevo
@@ -71,13 +72,11 @@ async function canClaimWeeklyRefund(userId) {
         canClaim = false;
       }
     }
-    
+
     // Calcular próximo reclamo (próximo lunes)
-    const nextMonday = new Date(now);
     const daysUntilMonday = currentDay === 0 ? 1 : 8 - currentDay;
-    nextMonday.setDate(now.getDate() + daysUntilMonday);
-    nextMonday.setHours(0, 0, 0, 0);
-    
+    const nextMonday = new Date(Date.UTC(art.getUTCFullYear(), art.getUTCMonth(), art.getUTCDate() + daysUntilMonday) + ART);
+
     return {
       canClaim,
       nextClaim: canClaim ? null : nextMonday.toISOString(),
@@ -95,20 +94,20 @@ async function canClaimMonthlyRefund(userId) {
   try {
     const now = new Date();
     const currentDay = now.getDate();
-    
+
     // Solo puede reclamar del día 7 en adelante
     const canClaimByDay = currentDay >= 7;
-    
+
     // Verificar si ya reclamó este mes
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    const lastMonthly = await RefundClaim.findOne({ 
-      userId, 
-      type: 'monthly' 
+
+    const lastMonthly = await RefundClaim.findOne({
+      userId,
+      type: 'monthly'
     }).sort({ claimedAt: -1 }).lean();
-    
+
     let canClaim = canClaimByDay;
-    
+
     if (lastMonthly) {
       const lastDate = new Date(lastMonthly.claimedAt);
       // Si ya reclamó este mes, no puede reclamar de nuevo
@@ -116,11 +115,11 @@ async function canClaimMonthlyRefund(userId) {
         canClaim = false;
       }
     }
-    
+
     // Calcular próximo reclamo (día 7 del próximo mes)
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 7);
     nextMonth.setHours(0, 0, 0, 0);
-    
+
     return {
       canClaim,
       nextClaim: canClaim ? null : nextMonth.toISOString(),
@@ -138,7 +137,7 @@ async function canClaimMonthlyRefund(userId) {
 async function recordRefund(userId, username, type, amount, netAmount, deposits, withdrawals) {
   try {
     const { v4: uuidv4 } = require('uuid');
-    
+
     const refund = await RefundClaim.create({
       id: uuidv4(),
       userId,
@@ -150,7 +149,7 @@ async function recordRefund(userId, username, type, amount, netAmount, deposits,
       withdrawals,
       claimedAt: new Date()
     });
-    
+
     return refund;
   } catch (error) {
     console.error('Error registrando reembolso:', error);

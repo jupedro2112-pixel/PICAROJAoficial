@@ -154,7 +154,7 @@
                     if (fin) { setTimeout(() => { try { fin(); } catch (e) { console.warn('[stories] app link (girox)', e); } }, 80); return; }
                 } } catch (_) {}
                 let wait = 0; try { if (VIP.ui && VIP.ui._casinoOpen) { VIP.ui.closeCasinoFrame(); wait = 350; } } catch (_) {}
-                try { if (wait && !['cargar', 'soporte'].includes(k)) VIP.home.setHomeMode('full'); } catch (_) {}
+                try { if (wait && !['cargar', 'soporte', 'deportes', 'juegos'].includes(k)) VIP.home.setHomeMode('full'); /* #1159: deportes/juegos reabren el casino solos, sin pasar por el menú viejo */ } catch (_) {}
                 setTimeout(() => { try { if (fn) fn(); } catch (e) { console.warn('[stories] app link', e); } }, wait); }; }
             else if (playPath) { link.href = '#'; link.textContent = s.linkLabel || 'Jugar ahora ›'; link.style.display = ''; link.onclick = (ev) => { ev.preventDefault(); close();
                 if (VIP.ui && VIP.ui.casinoGoTo && VIP.ui.casinoGoTo(playPath[1])) return; // #854
