@@ -1692,6 +1692,13 @@ ranking (`_sorteoWinners(key, pk, excludeUserId)`). Requisito teléfono = 10 dí
 - Cupo: `rpm` (15) pedidos/min del batch; con N usuarios activos son ceil(N/100) pedidos por franja (+1 por key de publicista).
 - Rutas: `GET /api/admin/fraud/mirror` (staff), `POST …/mirror/run` y `…/mirror/config` (sólo admin).
 
+### Historias #1156 (2026-11-20): partidos importantes, Top 10, pagos y "por qué elegirnos"
+- Partidos: `planDay` filtra `score ≥ IMPORTANT_SCORE` (15), hasta 4 (`m0..m3`; la ruta de borrar acepta `m[0-3]`).
+- Activos: `kind:'slot'` = uno por día del Top 10 de `popularSlots()` con su puesto. Lugar fijo `whyItem` (`WHY_KEYS = ['porque','pagos']`):
+  todos los días para los nuevos, 2 de cada 3 para los activos. El resto rota con paso coprimo.
+- App: botón `app:<sección>` de una historia tocada con el casino abierto ⇒ se abre ADENTRO de Girox (`stories.js` → `VIP.home.spInfo` y
+  compañía); un destino `app:` NUEVO se suma a `APP_LINKS` **y** al mapa `IN` de ese bloque (y a `spInfo` si es una ventana).
+
 ### Historias por segmento, código sorpresa y regalos al azar #1003 (2026-11-01)
 - `Story.audience` 'all'|'new'|'active' (+ `audienceUserId` personal). `/api/stories/active` filtra por `_storySegmentOf` (carga real ⇒ active);
   `/api/stories/public` = 'new'. Una consulta NUEVA de historias para clientes tiene que filtrar audience y audienceUserId.

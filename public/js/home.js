@@ -2666,6 +2666,7 @@
             if (t === 'fueguito') { into('fireModal'); return VIP.fire.showFireModal(); }
             if (t === 'sms') { into('verifyPhoneModal'); return openVerifyPhone(); }
             if (t === 'withdraw') { into('withdrawModal'); return spWithdraw(); }
+            if (t === 'vip') { into('vipLevelsModal'); return openVipLevels(); } // #1156: botón de historia tocado adentro de Girox
         } catch (_) {}
         return spDeposit();
     }

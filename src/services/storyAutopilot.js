@@ -122,10 +122,15 @@ const THEMES = [
   // #1030 (owner 2026-11-08): "importante: una historia que explique bien detallado cómo subir el comprobante". FIJA todos los días para los
   // NUEVOS (2º lugar) y cada 3 días para los ACTIVOS. Sale del rotativo (`rot`) porque ya tiene su lugar.
   { key: 'comprobante', title: '📸 Cómo mandar el comprobante', text: 'Para que tu carga entre SOLA, el comprobante tiene que leerse completo:\n1️⃣ App de tu banco o billetera → Movimientos.\n2️⃣ Tocá la transferencia → «Ver / Compartir comprobante».\n3️⃣ Mandá esa captura ENTERA, sin recortar.\nTiene que verse: titular, CUIT, fecha y hora, monto y N° de operación.', link: 'app:cargar', label: 'Cargar ahora ›', bg: '#9a3412', img: { style: 'page', accent: '#e60023', kicker: 'Cómo mandar el comprobante', icon: 'comprobante', h1: 'Que tu carga', h2: 'entre sola', bullets: [['1', 'App del banco → Movimientos', 'Tocá la transferencia que hiciste'], ['2', '«Ver / Compartir comprobante»', 'Captura ENTERA, sin recortar'], ['3', 'Que se vea todo', 'Titular, CUIT, fecha y hora, monto, N° op.']], cta: 'Cargar ahora', note: 'La pantalla «Transferencia realizada» NO sirve: no trae esos datos' } },
+  // #1156 (owner): "pagos sin límites" y "¿por qué elegir Pica Roja? mostrar todos los beneficios". Van en un lugar FIJO de cada día (un día
+  // uno, al día siguiente el otro, con redacciones que rotan), para nuevos y para activos. No nombrar referidos (apagados) ni ruleta.
+  { key: 'pagos', title: '💸 Pagos sin límites', text: 'Lo que ganás es tuyo: retirás tus premios sin tope de monto, directo a tu cuenta bancaria y a cualquier hora. El pago sale solo, en minutos.', link: 'app:retirar', label: 'Ver cómo retirar ›', bg: '#1e3a8a', img: { style: 'page', accent: '#2563eb', kicker: 'Pagos sin límites', icon: 'retiro', h1: 'Cobrá todo lo que', h2: 'ganaste', bullets: [['$', 'Sin tope de monto', 'Retirás todo tu premio'], ['✓', 'Directo a tu cuenta', 'A tu CBU o alias, a tu nombre'], ['★', 'A cualquier hora', 'El pago sale solo, en minutos']], cta: 'Ver cómo retirar', note: 'Los bonos se juegan ×{rx} (rollover) antes de retirarlos' } },
+  { key: 'porque', title: '❤️ ¿Por qué elegir Pica Roja?', text: '⚡ Carga automática las 24 hs\n💸 Retiros a tu cuenta en minutos, sin tope\n🔁 Reembolso diario, semanal y mensual\n🎁 Bonos en tus cargas\n💎 Niveles VIP con regalo\n🛟 Soporte todos los días', link: 'app:cargar', label: 'Cargar ahora ›', bg: '#d23a4e', img: { style: 'page', accent: '#e60023', kicker: 'Por qué elegirnos', icon: 'regalo', h1: '¿Por qué elegir', h2: 'Pica Roja?', bullets: [['✓', 'Carga y retiro automáticos', 'Las 24 hs, sin esperar a nadie'], ['%', 'Reembolso todos los días', 'Más el semanal y el mensual'], ['★', 'Bonos, VIP y soporte real', 'Todo desde la app']], cta: 'Cargar ahora' } },
 ];
 // #1003 (owner 2026-11-01): "para los NUEVOS, historias informativas del servicio; para los que ya son ACTIVOS, más rotación de contenido
 // así no se cansan". NEW_KEYS = lo que ve quien todavía no cargó; los activos rotan por ACTIVE_KEYS + estos temas propios.
-const NEW_KEYS = ['como', 'carga', 'retiro', 'seguro', 'app', 'primera', 'reembolso', 'comprobante']; // #1030: comprobante (fija, 2º lugar)
+const WHY_KEYS = ['porque', 'pagos']; // #1156: lugar fijo, un día cada uno
+const NEW_KEYS = ['como', 'carga', 'retiro', 'seguro', 'app', 'primera', 'reembolso', 'comprobante', 'porque', 'pagos']; // #1030: comprobante (fija, 2º lugar)
 const ACTIVE_KEYS = ['reembolso', 'misiones', 'vip', 'referidos', 'juegos', 'deportes', 'favoritos', 'semana', 'retiro'];
 const ACTIVE_THEMES = [
   { key: 'favoritos', title: '⭐ Tus juegos, a un toque', text: 'En el Inicio tenés tus juegos favoritos: agregá los que más te gustan y entrá directo, sin buscar.', link: 'app:juegos', label: 'Ver mis juegos ›', bg: '#9d174d', img: { style: 'page', accent: '#e60023', kicker: 'Tus favoritos', icon: 'app', h1: 'Tus juegos', h2: 'a un toque', bullets: [['★', 'Armá tu lista', 'Desde el Inicio de la app'], ['✓', 'Entrás directo', 'Sin buscar el juego'], ['$', 'Cargá y jugá', 'Tus fichas al instante']], cta: 'Ver mis juegos' } },
@@ -147,6 +152,11 @@ const ACTIVE_ALTS = {
 // OTRAS redacciones; cuando el tema vuelve a tocar (cada ~3 días) sale con la siguiente, así ningún día repite texto con el anterior.
 // Textos de SERVICIO (nunca ruleta ni plata/sueldos). `{pct}` = bono de la primera carga (Config).
 const ALTS = {
+  pagos: [{ title: '🏦 Ganaste: es tuyo', text: 'Sin tope de retiro: pedís tu premio desde la app y va completo a tu cuenta bancaria. Sin trámites y a cualquier hora.' },
+    { title: '💰 Premio grande, pago completo', text: 'No importa cuánto ganes: el retiro sale a tu CBU a tu nombre. Acá los premios se pagan, todos los días.' }],
+  porque: [{ title: '🏆 6 razones para jugar acá', text: '1. Cargás y se acredita solo.\n2. Retirás a tu cuenta en minutos.\n3. Reembolso todos los días.\n4. Bonos en tus cargas.\n5. Niveles VIP con regalo.\n6. Personas reales en Soporte.' },
+    { title: '🔴 Todo lo que tenés en Pica Roja', text: 'Carga automática 24 hs · retiros sin tope a tu cuenta · reembolso diario, semanal y mensual · misiones con premio · fueguito por tu racha · niveles VIP · soporte todos los días.' },
+    { title: '✅ Acá se paga, siempre', text: 'Premios pagados todos los días, directo a la cuenta del jugador. Y además: reembolsos, bonos, misiones y niveles VIP. Por eso nos eligen.' }],
   como: [{ title: '🧭 Pica Roja en 3 pasos', text: 'Transferís y mandás la foto del comprobante, jugás en 1Girox y retirás a tu cuenta. Todo desde la app, sin vueltas.' },
     { title: '❓ ¿Cómo se juega acá?', text: 'Cargás con una transferencia (la foto del comprobante alcanza), entrás a 1Girox y tus premios vuelven a tu cuenta cuando quieras.' }],
   carga: [{ title: '🕐 Cargá a cualquier hora', text: 'De día o de madrugada: transferís, mandás la foto y la carga entra sola en minutos. No dependés de nadie.' },
@@ -190,6 +200,7 @@ const ALTS = {
 const SLOTS = ['00:05', '00:06', '00:07', '00:08', '00:09'];
 const BONUS_TIME = '19:00'; // #971 → #979 (owner): "el mejor horario para activar un bono en Argentina es a las 19 h"
 const MATCH_TIME = '00:05'; // #834: los partidos salen apenas cambia el día
+const IMPORTANT_SCORE = 15; // #1156: partido "importante" = suma de los dos equipos (+3 si es de acá) ≥ 15
 
 /** Slot (juego) favorito: el más jugado de 1girox (catálogo público ordenado por popularidad). La Partner API no da netwin por juego,
  *  así que "favorito" = más partidas. Si hay una foto anterior de los conteos (prev: {gameKey: plays}) gana el que MÁS creció en la semana. */
@@ -203,6 +214,14 @@ async function favoriteSlot(prev) {
   const snapshot = {}; for (const g of games) snapshot[key(g)] = Number(g.play_count) || 0;
   return { name: String(best.name || '').replace(/™/g, '').trim(), path: '/play/' + best.aggregator_id + '/' + best.game_id, plays: Number(best.play_count) || 0,
     weekPlays: bestDelta >= 0 ? bestDelta : null, image: best.image_url || best.thumbnail || '', provider: best.provider_name || best.provider || '', snapshot };
+}
+
+// #1156: la historia fija "por qué elegirnos / pagos sin límites" del día (alterna y rota la redacción).
+function whyItem(themes, dayN) {
+  const key = WHY_KEYS[dayN % WHY_KEYS.length]; const t = themes.find((x) => x.key === key); if (!t) return null;
+  const alts = ALTS[key] || []; const v = Math.floor(dayN / WHY_KEYS.length) % (alts.length + 1);
+  const tt = v > 0 && alts[v - 1] ? Object.assign({}, t, alts[v - 1]) : t;
+  return { kind: 'servicio', theme: key, variant: v, title: tt.title, text: tt.text, link: t.link, label: t.label, bg: t.bg, img: t.img ? Object.assign({}, t.img) : null };
 }
 
 /** Lo que sale cada horario del día `dayKey`. Determinístico para un mismo día y mismos partidos.
@@ -219,7 +238,8 @@ function planDay(dayKey, matches, ctx) {
   const out = new Array(SLOTS.length).fill(null);
   // 1) #834 (owner): "la historia de los partidos publicala apenas cambia el día, siempre" ⇒ los partidos destacados van en horarios PROPIOS
   //    (slot 'm0', 'm1', 'm2' a las 00:05) y los 5 horarios de siempre quedan para el servicio. Foto: cancha con los escudos de ESPN.
-  const ms = (matches || []).filter((m, i) => i < 2 || (i === 2 && m.score >= 16)).slice(0, 3);
+  // #1156 (owner): "más de los partidos importantes solamente" ⇒ sólo los fuertes (score ≥ 15), hasta 4 por día (antes: 2 cualquiera + un 3º fuerte).
+  const ms = (matches || []).filter((m) => Number(m.score) >= IMPORTANT_SCORE).slice(0, 4);
   const matchItems = ms.map((m, i) => ({ slot: 'm' + i, time: MATCH_TIME, kind: 'deporte', title: `⚽ HOY: ${m.home} vs ${m.away}`.slice(0, 60),
     text: `${m.league} · ${m.hour} hs.\nViví el partido y apostá antes y durante el juego desde Deportes en Pica Roja 🔴`, link: 'app:deportes', label: 'Ir a Deportes ›', bg: '#14532d', match: m,
     img: { style: 'page', accent: '#16a34a', kicker: 'Partido de hoy · ' + m.league, match: { home: m.home, away: m.away, league: m.league, hour: m.hour, venue: m.venue, homeColor: m.homeColor, awayColor: m.awayColor },
@@ -245,7 +265,7 @@ function planDay(dayKey, matches, ctx) {
   //    nunca son los de ayer. Y cada vuelta completa del catálogo (`cycle`) usa OTRA redacción del tema (ALTS), así tampoco se repite el texto.
   // #931 (owner): "siempre quiero que vaya del lado de la atención" ⇒ el primer lugar de cada día es SIEMPRE Soporte/atención (con sus
   //    redacciones rotando); los otros 4 rotan por el resto del catálogo.
-  const rot = themes.filter((t) => t.key !== 'soporte' && t.key !== 'comprobante' && (ctx.segmented === false || NEW_KEYS.includes(t.key))); const sop = themes.find((t) => t.key === 'soporte'); // #1003: los 5 de siempre = para los NUEVOS
+  const rot = themes.filter((t) => t.key !== 'soporte' && t.key !== 'comprobante' && !WHY_KEYS.includes(t.key) && (ctx.segmented === false || NEW_KEYS.includes(t.key))); const sop = themes.find((t) => t.key === 'soporte'); // #1003: los 5 de siempre = para los NUEVOS
   const comp = themes.find((t) => t.key === 'comprobante'); // #1030: fija en el 2º lugar (todos los días para los nuevos)
   const compItem = (v) => { const alts = ALTS.comprobante || []; const tt = v > 0 && alts[v - 1] ? Object.assign({}, comp, alts[v - 1]) : comp; return { kind: 'servicio', theme: 'comprobante', variant: v, title: tt.title, text: tt.text, link: comp.link, label: comp.label, bg: comp.bg, img: comp.img ? Object.assign({}, comp.img) : null }; };
   const n = rot.length;
@@ -255,6 +275,7 @@ function planDay(dayKey, matches, ctx) {
   const cycle = Math.floor((dayN * STEP) / n);
   if (sop && !out[0]) { const alts = ALTS.soporte || []; const v = dayN % (alts.length + 1); const tt = v > 0 && alts[v - 1] ? Object.assign({}, sop, alts[v - 1]) : sop; out[0] = { kind: 'servicio', theme: 'soporte', variant: v, title: tt.title, text: tt.text, link: sop.link, label: sop.label, bg: sop.bg, img: sop.img ? Object.assign({}, sop.img) : null }; }
   if (comp && !out[1]) out[1] = compItem(dayN % ((ALTS.comprobante || []).length + 1));
+  { const wy = whyItem(themes, dayN); const wi = wy ? freeSlot(2) : -1; if (wi >= 0) out[wi] = wy; } // #1156
   for (let i = 0; i < SLOTS.length; i++) {
     if (out[i]) continue;
     let t = rot[ti % n]; ti++;
@@ -305,20 +326,25 @@ function planActive(dayKey, ctx, hasMatches, themes, pct) {
   }
   const games = (ctx.games || []).filter((g) => g && g.name && g.path);
   if (games.length) {
-    const g = games[dayN % games.length];
-    T(0, { kind: 'slot', title: `🎰 El slot del día: ${g.name}`.slice(0, 60), text: `Hoy te recomendamos ${g.name}${g.provider ? ' (' + g.provider + ')' : ''}, de los más jugados de la comunidad. Entrá directo y probá suerte 🍀`,
+    // #1156 (owner): "más del juego semanal, a los primeros 10 más jugados, que vaya rotando" ⇒ cada día uno del TOP 10, con su puesto.
+    const top = games.slice(0, 10); const gi = dayN % top.length; const g = top[gi]; const rank = gi + 1;
+    T(0, { kind: 'slot', title: `🎰 Top 10 · N.º ${rank}: ${g.name}`.slice(0, 60), text: `${g.name}${g.provider ? ' (' + g.provider + ')' : ''} está N.º ${rank} entre los ${top.length} juegos más jugados. Cada día te mostramos uno del Top 10: entrá directo y probá suerte 🍀`,
       link: 'app:play:' + g.path, label: 'Jugar ' + String(g.name).slice(0, 22) + ' ›', bg: '#9d174d', game: g,
-      img: { style: 'page', accent: '#e60023', kicker: 'El slot del día', photos: [g.image || ''], h1: g.name, h2: 'el de hoy', bullets: [['★', g.name, g.provider || 'De los más jugados'], ['✓', 'Elegido para hoy', 'Cambia todos los días'], ['$', 'Entrá directo', 'Un toque y estás jugando']], cta: 'Jugar ahora' } });
+      img: { style: 'page', accent: '#e60023', kicker: 'Top 10 más jugados', photos: [g.image || ''], h1: g.name, h2: `N.º ${rank} del Top 10`, bullets: [['★', g.name, g.provider || 'De los más jugados'], ['✓', `N.º ${rank} del Top 10`, 'Cada día, uno distinto'], ['$', 'Entrá directo', 'Un toque y estás jugando']], cta: 'Jugar ahora' } });
   }
+  // #1156: fija (al revés que los nuevos). El día que toca el comprobante (cada 3) no sale, así siempre queda lugar para un tema que rota.
+  if (!(comp && dayN % 3 === 0)) { const wy = whyItem(themes, dayN + 1); if (wy && out.length < SLOTS.length) T(0, wy); }
   const pool = themes.filter((t) => ACTIVE_KEYS.includes(t.key) && !(t.key === 'deportes' && hasMatches)).concat(ACTIVE_THEMES.filter((t) => t.key !== 'sorteos' || ctx.sorteosOn === true));
-  const n = pool.length; let ti = (dayN * 3) % n; const cycle = Math.floor((dayN * 3) / n);
+  // #1156: quedan 1-2 lugares que rotan ⇒ el paso se elige coprimo con la cantidad de temas, así pasan TODOS (con 12 temas y paso 3 salían sólo 4).
+  const n = pool.length; const _gcd = (x, y) => (y ? _gcd(y, x % y) : x); const step = [3, 5, 7, 2, 1].find((k) => _gcd(k, n || 1) === 1) || 1;
+  let ti = n ? (dayN * step) % n : 0; const cycle = n ? Math.floor((dayN * step) / n) : 0;
   while (out.length < SLOTS.length && n) {
     const t = pool[ti % n]; ti++;
     const alts = ALTS[t.key] || ACTIVE_ALTS[t.key] || []; const v = (cycle + 1) % (alts.length + 1);
     const tt = v > 0 && alts[v - 1] ? Object.assign({}, t, alts[v - 1]) : t;
     let im = t.img ? Object.assign({}, t.img) : null;
     // #1030: fotos que cambian: el tema "juegos" muestra 3 fotos distintas según el día (rotan sobre las del repo y las del catálogo).
-    if (t.key === 'juegos' && im) { const ph = GAME_PHOTOS.concat((ctx.games || []).map((g) => g && g.image).filter(Boolean)); if (ph.length >= 3) { const o = (dayN * 3) % ph.length; im.photos = [0, 1, 2].map((k) => ph[(o + k) % ph.length]); } }
+    if (t.key === 'juegos' && im) { const ph = GAME_PHOTOS.concat((ctx.games || []).map((g) => g && g.image).filter(Boolean)); if (ph.length >= 3) { const o = (dayN + Math.floor(dayN / 10)) % ph.length; /* #1156: el tema ahora vuelve cada ~10 días: que no caiga siempre en las mismas fotos */ im.photos = [0, 1, 2].map((k) => ph[(o + k) % ph.length]); } }
     T(0, { kind: 'servicio', theme: t.key, variant: v, title: tt.title, text: tt.text.replace('{pct}', String(pct)), link: t.link, label: t.label, bg: t.bg, img: im });
   }
   return out;
@@ -331,4 +357,4 @@ async function popularSlots() {
     .map((g) => ({ name: String(g.name || '').replace(/™/g, '').trim(), path: '/play/' + g.aggregator_id + '/' + g.game_id, image: g.image_url || g.thumbnail || '', provider: g.provider_name || g.provider || '' }));
 }
 
-module.exports = { topMatches, planDay, planActive, popularSlots, favoriteSlot, SLOTS, THEMES, ALTS, ACTIVE_THEMES, NEW_KEYS, ACTIVE_KEYS, MATCH_TIME };
+module.exports = { topMatches, planDay, planActive, popularSlots, favoriteSlot, SLOTS, THEMES, ALTS, ACTIVE_THEMES, NEW_KEYS, ACTIVE_KEYS, MATCH_TIME, WHY_KEYS, IMPORTANT_SCORE };

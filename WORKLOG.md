@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-20** (#1155)
+> **Última actualización: 2026-11-20** (#1156)
 
 ## Sesión 2026-11-09
 
@@ -15252,3 +15252,26 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - Es un texto FIJO en el HTML (no hay contador ni se apaga solo): cuando el canal llegue a 1.000 o se haga el sorteo, hay que cambiarlo a mano.
   El sorteo del auto NO existe en el sistema (no hay motor ni inscripción): es una promesa del owner que se resuelve por fuera.
 - No se tocó el canal (el bot no publica nada nuevo) ni el servidor. SW v752 + `app v752`. No probado en vivo.
+
+### 1156. Historias: partidos sólo importantes, Top 10 que rota, "pagos sin límites" y "¿por qué elegir Pica Roja?" + botones de historia ADENTRO de Girox (2026-11-20) — app v753
+- **Owner:** "en las historias diarias quiero más de los partidos importantes solamente, más del juego semanal a los primeros 10 más jugados, que
+  vaya rotando, los premios más altos pagados en el momento, pagos sin límites, ¿por qué elegir Pica Roja? mostrar todos los beneficios" / "en las
+  historias cuando se aprietan los botones se va de la sección de Girox; quiero que siempre estemos dentro del menú Girox, que el otro menú quede
+  inhabilitado 100% por ahora, dejalo desactivado desde configuración así la gente no se pierde".
+- **Partidos** (`storyAutopilot.planDay`): sólo los de `score ≥ IMPORTANT_SCORE` (15) y hasta 4 por día (`m0..m3`; antes 2 cualquiera + un 3º fuerte).
+  Un día sin partido importante no publica ninguno. Siguen dependiendo de la llave `storyAutoMatches`.
+- **Top 10** (activos): "el slot del día" pasa a "🎰 Top 10 · N.º N: juego", uno distinto por día de los 10 primeros de `popularSlots()`. OJO: el
+  orden es el catálogo público de 1girox por popularidad (no es un ranking semanal propio de Pica Roja); el texto no dice "de la semana".
+- **Temas nuevos** `pagos` ("💸 Pagos sin límites") y `porque` ("❤️ ¿Por qué elegir Pica Roja?") con redacciones (ALTS): lugar FIJO todos los días
+  para los nuevos (alternan; `whyItem`, `WHY_KEYS`) y 2 de cada 3 días para los activos (el día del comprobante no sale). No nombran referidos
+  (apagados) ni ruleta. "Sin tope de monto" es cierto en el código (no hay retiro máximo); la foto aclara el rollover de los bonos.
+- **Premios pagados:** ya existía y no se tocó (ganadores de ayer o, si no hubo, el retiro más alto de la semana; nombre tapado).
+- **Rotación de activos:** quedan 1-2 lugares que rotan ⇒ el paso del cursor se elige coprimo con la cantidad de temas (antes, con 12 temas y paso 3,
+  salían sólo 4). Simulado 30 días: pasan todos.
+- **Botones de historia adentro de Girox** (`stories.js`): con el casino abierto ya NO se cierra el casino ni se hace `setHomeMode('full')`; cada
+  destino se abre adentro (`VIP.home.spInfo` / `spDeposit` / chat de la burbuja / `casinoInstall`; `spInfo('vip')` nuevo). Con el casino cerrado
+  queda como antes.
+- **Menú sólo Girox:** migración de arranque `mig1156GiroxOnly` vuelve a dejar `Config['menusEnabled']` en sólo Girox (una vez; después se cambia
+  desde el panel). NO se tocó `setHomeMode`: sigue habiendo caminos de respaldo que usan la pantalla de carga completa si el casino no abre.
+- **Sabido y no cambiado:** el tema `referidos` sigue en la rotación de los activos aunque referidos esté apagado (venía de antes).
+- Tests: `test-story-segments` 22/22 (5 casos nuevos), `test-vip-exports` OK, repo 30/33 (los 3 de siempre). No probado en vivo.

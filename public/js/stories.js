@@ -143,6 +143,16 @@
                 const k = appKey[1].toLowerCase();
                 // #854: Deportes con el casino YA abierto ⇒ directo adentro (la sesión ya está), sin cerrar ni volver a entrar.
                 if (k === 'deportes' && VIP.ui && VIP.ui.casinoGoTo && VIP.ui.casinoGoTo('/sports')) return;
+                // #1156 (owner: "cuando se aprietan los botones se va de la sección de Girox; quiero estar siempre dentro del menú Girox"): con el
+                // casino abierto, TODO se abre ADENTRO (ventana encima del casino o el chat de la burbuja), sin cerrar el casino ni ir al otro menú.
+                try { if (VIP.ui && VIP.ui._casinoOpen && VIP.home && VIP.home.spInfo) {
+                    const H = VIP.home;
+                    const IN = { cargar: () => H.spDeposit(), soporte: () => (H.spNewCasino && H.spNewCasino() ? H.spShowChat() : H.casinoChatToggle()), juegos: () => {},
+                        retirar: () => H.spInfo('withdraw'), reembolso: () => H.spInfo('refund'), misiones: () => H.spInfo('misiones'), fueguito: () => H.spInfo('fueguito'), sorteos: () => H.spInfo('sorteos'),
+                        referidos: () => H.spInfo('referidos'), ruleta: () => H.spInfo('ruleta'), verificar: () => H.spInfo('sms'), vip: () => H.spInfo('vip'), instalar: () => H.casinoInstall() };
+                    const fin = IN[k];
+                    if (fin) { setTimeout(() => { try { fin(); } catch (e) { console.warn('[stories] app link (girox)', e); } }, 80); return; }
+                } } catch (_) {}
                 let wait = 0; try { if (VIP.ui && VIP.ui._casinoOpen) { VIP.ui.closeCasinoFrame(); wait = 350; } } catch (_) {}
                 try { if (wait && !['cargar', 'soporte'].includes(k)) VIP.home.setHomeMode('full'); } catch (_) {}
                 setTimeout(() => { try { if (fn) fn(); } catch (e) { console.warn('[stories] app link', e); } }, wait); }; }

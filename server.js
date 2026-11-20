@@ -14851,6 +14851,15 @@ async function initializeData() {
         console.log('✅ Menú de la app: sólo Girox (#1042-r)');
       }
     } catch (e) { console.warn('[startup-migration] menú Girox #1042-r:', e.message); }
+    // #1156 (owner 2026-11-20): "quiero que siempre estemos dentro del menú Girox, que el otro menú quede inhabilitado 100% por ahora, dejalo
+    // desactivado desde configuración" ⇒ UNA vez más, sólo Girox (por si alguien lo cambió desde el panel). Después se puede volver a cambiar ahí.
+    try {
+      if (!(await getConfig('mig1156GiroxOnly', null))) {
+        await Config.set('mig1156GiroxOnly', new Date().toISOString(), 'startup-migration'); // primero la marca (multi-instancia)
+        await Config.set('menusEnabled', { basic: false, easy: false, full: false, girox: true }, 'startup-migration');
+        console.log('✅ Menú de la app: sólo Girox (#1156)');
+      }
+    } catch (e) { console.warn('[startup-migration] menú Girox #1156:', e.message); }
     // #273 (owner 2026-10-17): "agregá 33 reseñas y que en total promedie 4,7 estrellas". Se siembran UNA
   // vez (flag en Config) como reseñas aprobadas: 26×5 + 4×4 + 3×3 = 155 puntos / 33 = 4,70. Usuarios
   // ficticios (userId 'seed-review-NN', nunca chocan con clientes reales); el feed los enmascara igual.
@@ -35396,7 +35405,7 @@ app.post('/api/admin/stories-autopilot/remove', authMiddleware, adminMiddleware,
   try {
     if (!['admin', 'depositor', 'cajero'].includes(req.user.role)) return res.status(403).json({ error: 'Sin permiso.' });
     const day = String((req.body || {}).day || ''), rawSlot = String((req.body || {}).slot == null ? '' : (req.body || {}).slot);
-    const slot = /^m[0-2]$/.test(rawSlot) ? rawSlot : parseInt(rawSlot, 10); // #834: 'm0'..'m2' = partidos de las 00:05
+    const slot = /^m[0-3]$/.test(rawSlot) ? rawSlot : parseInt(rawSlot, 10); // #834: 'm0'..'m3' = partidos de las 00:05 (#1156: hasta 4)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !(typeof slot === 'string' || (slot >= 0 && slot < storyAuto.SLOTS.length))) return res.status(400).json({ error: 'Datos inválidos.' });
     const autoKey = `sa-${day}-${slot}`;
     const upd = await Story.updateOne({ autoKey }, { $set: { isActive: false } });
