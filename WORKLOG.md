@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-19** (#1154)
+> **Última actualización: 2026-11-20** (#1155)
 
 ## Sesión 2026-11-09
 
@@ -15243,3 +15243,12 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - **Decisión (mía):** NO agregué un aviso automático nuevo "al volver al otro día": sería otro mensaje masivo sin probar en vivo y el bono ya se ve al
   entrar al chat. Si el owner lo quiere igual, va por el Centro de avisos (topes) y sin push.
 - Tests: 30/33 del repo (los 3 de siempre), `test-advance-load` 16/16 con chequeo nuevo. Sin cambio de panel ni PWA. No probado en vivo.
+
+### 1155. Franja de Telegram del chat: "al llegar a 1.000 suscriptores sorteamos un auto 0 km" (2026-11-20) — app v752
+- **Owner:** "en el canal de Telegram poné: unite, a los 1000 suscriptores sorteamos un auto 0km" → "en la misma parte donde está hoy lo de Telegram".
+- La franja celeste de Telegram del chat de la app (`#spTgRow`, index.html) mantiene el título "Canal Telegram PICA ROJA · Unite haciendo click aquí" y
+  cambia el renglón de abajo: antes "Unite para recibir beneficios todas las semanas", ahora "🚗 Al llegar a 1.000 suscriptores sorteamos un auto 0 km".
+  Texto corto a propósito: ese renglón va en una sola línea y se corta con "…" en pantallas angostas.
+- Es un texto FIJO en el HTML (no hay contador ni se apaga solo): cuando el canal llegue a 1.000 o se haga el sorteo, hay que cambiarlo a mano.
+  El sorteo del auto NO existe en el sistema (no hay motor ni inscripción): es una promesa del owner que se resuelve por fuera.
+- No se tocó el canal (el bot no publica nada nuevo) ni el servidor. SW v752 + `app v752`. No probado en vivo.
