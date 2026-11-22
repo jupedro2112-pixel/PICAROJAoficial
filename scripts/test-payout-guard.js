@@ -33,7 +33,7 @@ const S = {
   BankMovement: { find: (q) => ({ sort() { return this; }, limit() { return this; }, lean: async () => movements.filter((m) => match(m, q)) }) },
   PendingPayout: { updateOne: async (q, u) => { updates.push({ q, u }); } },
   _hgAccountByKey: (k) => ({ a1: { key: 'a1', label: 'CUENTA-A' }, a2: { key: 'a2', label: 'CUENTA-B' } }[k] || null),
-  _fpAccountByKey: (k) => (k === 'f1' ? { key: 'f1', label: 'QUICKPAY' } : null),
+  _fpAccountByKey: (k) => (k === 'f1' ? { key: 'f1', label: 'CUENTA-F' } : null),
   _hgAccountLabel: (x) => x.label, _fpAccountLabel: (x) => x.label,
   _hgAccountLabelFor: (m) => (m.accountKey ? { label: m.accountKey === 'a1' ? 'CUENTA-A' : 'CUENTA-B' } : null),
   _bankLabel: (p) => (p === 'finpro' ? 'Finpro' : 'hgcash'),
@@ -74,7 +74,7 @@ t('incidente CUENTA-A → CUENTA-B a los 46 s: se frena por la espera', async ()
 });
 t('incidente Finpro → hgcash a los 35 s: se frena por la espera', async () => {
   const g = await X._payoutResendGuard(P({ lastSendAt: ago(35000), lastSendBank: 'finpro', lastSendAccount: 'f1', lastSendResult: 'rejected' }), 'hgcash', 'a1', CBU, false);
-  assert.ok(g && g.body.wait === true && /Finpro · QUICKPAY/.test(g.body.error));
+  assert.ok(g && g.body.wait === true && /Finpro · CUENTA-F/.test(g.body.error));
 });
 t('reintento por la MISMA cuenta: no espera (ahí vale la idempotencia del banco)', async () => {
   const g = await X._payoutResendGuard(P({ lastSendAt: ago(5000), lastSendBank: 'hgcash', lastSendAccount: 'a1', lastSendResult: 'unknown' }), 'hgcash', 'a1', CBU, false);
