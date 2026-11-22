@@ -189,6 +189,14 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   cuentas, cifradas con `JWT_SECRET` en `Config['hgcashAccounts']`; lo viejo de `Config['hgcashCredentials']` se migra solo a `a1`;
   **panel > SSM**; el webhook acepta la firma de cualquiera de las cuentas). El reenvío de avisos a otras páginas sale de
   `Config['hgcashFanout']` (si existe) o de `HGCASH_FANOUT_URL`. Rotar `JWT_SECRET` ⇒ recargar las credenciales en el panel.
+- **PAGOS DE RETIROS: candado anti pago doble (#1163–#1165, réplica de AUTOREEMBOLSOS #219–#221; detalle en ARCHITECTURE "🛑 Pagos de retiros"):**
+  la idempotencia del banco sólo vale dentro de UNA cuenta. Todo camino que mande un retiro al banco (hoy sólo `_payPendingPayout` y
+  `_payPayoutViaFinpro`, que también usa el pago AUTOMÁTICO) respeta `_payoutVerifyBlock`, llama a `_payoutResendGuard(...)` ANTES de
+  reclamarlo, `_payoutNoteSend(...)` justo antes del envío y `_payoutNoteResult(...)` con la respuesta. En hgcash el token va EXPLÍCITO
+  (`createCashOut({ token })`, cuenta fijada al empezar el pedido). Un pago automático NUNCA manda `confirmOtherBank`: si el candado pide
+  confirmación queda para una persona (`_payoutGuardAutoHold`). No aflojar la espera de 2 minutos ni dar por "rechazado" un envío sin
+  respuesta clara (queda VERIFICANDO 3 min: no se paga, no se marca pagado, no se rechaza). Un flujo propio nuevo que saque plata por hgcash
+  suma su prefijo de externalID a `_CAJA_OUR_EXT`. Test: `node scripts/test-payout-guard.js`.
 - **DOS BANCOS CON API: hgcash y Finpro (#1160, réplica de AUTOREEMBOLSOS #194–#216; detalle en ARCHITECTURE "🏛️ Bancos"):** tres llaves en
   "Bancos automáticos": por dónde ENTRAN las cargas (`hgcash.enabled` / `Config['finpro'].enabled`), por dónde SALEN los retiros
   (`getBankProvider()`) y qué cuenta VE el cliente (`getBankShown()`: sólo ese banco reescribe `Config['cbu']`, sin heredar nada de la cuenta

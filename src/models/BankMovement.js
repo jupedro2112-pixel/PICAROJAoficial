@@ -34,7 +34,9 @@ const bankMovementSchema = new mongoose.Schema({
   processedEvents: { type: [String], default: [] },
   // Perfil de cuenta por el que entró: Config['hgcashAccounts'].accounts[].key ('a1'…) o Config['finproAccounts'] ('f1'…).
   accountKey: { type: String, default: null },
-  // Salientes de Finpro (libro): payout | unknown, y el retiro al que corresponde.
+  // Salientes (libro): payout | unknown, y el retiro al que corresponde. Finpro desde #1160; hgcash desde #1164 (réplica #220): 'payout'
+  // (externalID de un retiro, sin el sufijo `-rN`), 'own' (gasto por API / devolución: externalID `gasto-…` / `refund-…`) o 'unknown'
+  // (sin externalID ⇒ transferencia hecha por FUERA de la app: la mira `_alertUnknownOutbound`).
   outKind: { type: String, default: null },
   payoutId: { type: String, default: null },
   resolutionNote: { type: String, default: null }, // por qué un movimiento de Finpro quedó sólo en el libro (CVU no cargado, saliente…)

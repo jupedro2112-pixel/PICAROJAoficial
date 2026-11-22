@@ -46,6 +46,14 @@ const pendingPayoutSchema = new mongoose.Schema({
   fpAccepted: { type: Boolean, default: null },                  // true = Finpro aceptó el lote (0201); false = rechazado; null = sin respuesta / no enviado
   hgSendUnknown: { type: Boolean, default: false },              // el envío a hgcash quedó SIN respuesta (no se sabe si salió): frena pagarlo por el otro banco sin confirmar
   fpAccountKey: { type: String, default: null },                 // perfil de cuenta Finpro que pagó (sus credenciales consultan el estado aunque se rote)
+  // #1163 (réplica #219) Último ENVÍO que llegó a salir hacia un banco (se anota ANTES del POST) + historial. Lo usa
+  // `_payoutResendGuard`: un reintento por OTRA cuenta/banco espera y verifica que el anterior no salió.
+  lastSendAt: { type: Date, default: null },
+  lastSendBank: { type: String, default: null },                 // 'hgcash' | 'finpro'
+  lastSendAccount: { type: String, default: null },              // key del perfil (a1…/f1…/'env')
+  lastSendResult: { type: String, default: null },               // 'sending' | 'accepted' | 'rejected' | 'unknown'
+  sendLog: { type: [mongoose.Schema.Types.Mixed], default: [] }, // [{ at, bank, account, label, by, result, detail }] (últimos 20)
+  verifyUntil: { type: Date, default: null },                    // #1165 (réplica #221) hasta cuándo está "VERIFICANDO" (envío a hgcash sin respuesta clara): bloquea pagar / marcar pagado / rechazar
   hgTxId: { type: String, default: null },                       // id de la TRANSACCIÓN real (ledger) → para el comprobante PDF
   receiptSentAt: { type: Date, default: null },                  // cuándo se le envió el comprobante PDF al cliente (idempotencia)
   hgStatus: { type: String, default: null },                     // PENDING/PROCESSING/DONE/ERROR...

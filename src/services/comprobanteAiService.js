@@ -67,7 +67,7 @@ const PROMPT = [
   '  (formato XX-XXXXXXXX-X, ej: 30-71876498-6) como número de operación — el CUIT identifica a',
   '  una persona/empresa y se REPITE entre transferencias distintas. Si el comprobante NO muestra',
   '  un número de operación/referencia claro y distinto del CUIT/CBU, poné null.',
-  '- coelsa_id: el ID de COELSA de la transferencia (string). Aparece como "COELSA ID", "ID COELSA", "Código COELSA",',
+  '- coelsa_id: el ID de COELSA de la transferencia (string). Aparece como "COELSA ID", "ID COELSA", "Código COELSA", "Código de identificación",',
   '  "Identificación de la transferencia" o similar: un código alfanumérico de ~22 caracteres en MAYÚSCULAS y números',
   '  (ej: 3QK7M2XWZ8H4N6P1R9T5VB). Copialo EXACTO, carácter por carácter (ojo con 0/O, 1/I, 5/S, 8/B). Si no está, null.',
   '  Algunos bancos (ej. BNA+) lo rotulan "Número de transacción": todo código de EXACTAMENTE 22 letras MAYÚSCULAS y números es el COELSA, diga lo que diga el rótulo.',

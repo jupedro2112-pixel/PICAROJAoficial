@@ -2293,3 +2293,37 @@ Cualquier rol del panel menos `comunidad` cambia la cuenta que ve el cliente con
 `POST /api/admin/bank-in-use` (`_bankCanSwitch`). Todo cambio MANUAL (ese botón, la barra, o "USAR ESTA" en las cards de hgcash/Finpro)
 queda en `Config['bankSwitchLog']` vía `_bankSwitchLog` (quién, rol, hora, de cuál a cuál); se lee con `GET /api/admin/bank-in-use/log`.
 Un camino nuevo que cambie la cuenta en uso a mano tiene que llamar a `_bankSwitchLog`.
+
+## 🛑 Pagos de retiros: candado anti pago doble, VERIFICANDO y salidas por fuera de la app (#1163–#1165, 2026-11-22 — réplica de AUTOREEMBOLSOSjygactivo #219–#221)
+
+**El problema:** la idempotencia del banco sólo vale dentro de UNA cuenta (externalID en hgcash, process_id en Finpro). Con 3 cuentas
+por banco, dos bancos y rotación, un reintento puede salir por otra ruta y pagar dos veces.
+
+**Caminos que mandan plata al banco:**
+| Camino | Envío | Candado |
+|---|---|---|
+| `_payPendingPayout` (botón Pagar, Pagos a confirmar y el pago AUTOMÁTICO: al pedir el retiro, `_payoutFraudRecheckTick`, `_payoutAutoRetryTick`) | `hgcashPay.createCashOut({ token })` | `_payoutVerifyBlock` → `_payoutResendGuard` → reclamo → `_payoutNoteSend` → envío → `_payoutNoteResult` |
+| `_payPayoutViaFinpro` (sólo se llama desde el anterior) | `finpro.createCvuTransfer` | ídem |
+| `_refundBelowMinMovement` (devolución de una carga bajo el mínimo) | `createCashOut`, externalID `refund-<movementId>` | no es un retiro: sin candado; su salida se clasifica `own` |
+| Gastos por API | `createCashOut`, externalID `gasto-<id>` | ídem (`_gastoAmbiguous` / `_gastoPayingTick` propios) |
+
+**`_payoutResendGuard`** devuelve `null` (se puede mandar) o `{ http: 409, body }` con `alreadySent` (nunca se paga), `wait` + `retryInSec`
+(esperar) o `needsConfirm` (una persona confirma con `confirmOtherBank: true`). Orden: 1) salida ligada al retiro; 1b) salida `unknown`
+igual desde que se pidió; 2) salida igual desde el primer envío; 3) otra cuenta/banco: espera de 2 min y confirmación si no hubo rechazo claro.
+
+**Pago automático:** actor `PAYOUT_AUTO_ACTOR`, nunca pasa `confirmOtherBank`. Ante `needsConfirm` / `alreadySent`,
+`_payoutGuardAutoHold` lo deja en Confirmación de pagos y avisa al cliente; `_payoutAutoFailNote` no duplica esa nota.
+
+**VERIFICANDO:** `PendingPayout.verifyUntil` + `status:'failed'` + `hgSendUnknown:true`. `_payoutVerifyLeft(p)` = segundos que faltan.
+Lo cierra el aviso del banco (`handlePayoutStatusWebhook`, rama `_wasUnknown`; el aviso de MOVIMIENTO de salida también lo dispara) o el
+vencimiento de la ventana.
+
+**Salidas del banco:** `BankMovement.outKind` = `payout` | `own` | `unknown` (hgcash, al entrar el aviso; Finpro en `_finproIngestLedger`).
+`payoutId` guarda el id del retiro SIN el sufijo `-rN`. `_alertUnknownOutbound` sólo avisa de las `unknown` que coinciden con un retiro abierto.
+
+**Trampas:**
+- Un camino nuevo que pague un retiro tiene que repetir la secuencia de la tabla. `scripts/test-payout-guard.js` cuenta los
+  `createCashOut` / `createCvuTransfer` del archivo y falla si aparece uno nuevo sin revisar.
+- Un flujo propio nuevo que saque plata por hgcash necesita un prefijo de externalID en `_CAJA_OUR_EXT`; si no, su salida se clasifica
+  como retiro (`payout`) con un `payoutId` que no existe.
+- No aflojar la espera de 2 min ni tratar un envío sin respuesta como "rechazado".
