@@ -31,6 +31,7 @@ const comprobanteSchema = new mongoose.Schema({
   amount: { type: Number, default: null },
   originHolder: { type: String, default: null, trim: true }, // titular / origen
   originCbu: { type: String, default: null, trim: true },    // CBU/CVU/alias origen
+  originAccount: { type: String, default: null, trim: true }, // #1162: sucursal-cuenta/dígito cuando no muestra CBU (Santander)
   destHolder: { type: String, default: null, trim: true },   // titular / destino (quién recibe)
   destCbu: { type: String, default: null, trim: true },      // CBU/CVU/alias destino (a quién se envió)
   bank: { type: String, default: null, trim: true },

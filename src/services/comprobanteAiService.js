@@ -70,6 +70,7 @@ const PROMPT = [
   '- coelsa_id: el ID de COELSA de la transferencia (string). Aparece como "COELSA ID", "ID COELSA", "Código COELSA",',
   '  "Identificación de la transferencia" o similar: un código alfanumérico de ~22 caracteres en MAYÚSCULAS y números',
   '  (ej: 3QK7M2XWZ8H4N6P1R9T5VB). Copialo EXACTO, carácter por carácter (ojo con 0/O, 1/I, 5/S, 8/B). Si no está, null.',
+  '  Algunos bancos (ej. BNA+) lo rotulan "Número de transacción": todo código de EXACTAMENTE 22 letras MAYÚSCULAS y números es el COELSA, diga lo que diga el rótulo.',
   '  No lo confundas con el "Código de transacción" / id interno de la billetera (ej. un UUID como 1a2b3c4d-…): ese va en numero_operacion.',
   '- monto: el importe transferido, sólo el número sin símbolos ni puntos de miles (number).',
   '- monto_texto: el importe EXACTO como está impreso, con sus puntos y comas (string, ej. "$ 447.116,99").',
@@ -80,6 +81,7 @@ const PROMPT = [
   '  Si la imagen está GIRADA o de costado, girala mentalmente y leé el número grande dígito por dígito, sin saltear ninguno.',
   '- titular_origen: nombre del que envió el dinero (string).',
   '- cbu_origen: CBU/CVU o alias de la cuenta de ORIGEN (string).',
+  '- cuenta_origen: número de cuenta de quien ENVÍA cuando NO muestra CBU, rotulado "Cuenta débito" / "Cuenta origen" (string, tal cual, ej. "CTA $ 123-456789/0"). No lo pongas en cbu_origen. Si no está, null.',
   '- cuit_origen: CUIT/CUIL de quien ENVÍA el dinero (string, ej. 20-12345678-9), o null.',
   '- titular_destino: nombre del que RECIBE el dinero (string).',
   '- cbu_destino: CBU/CVU o alias de la cuenta de DESTINO (a quién se le transfirió) (string).',
@@ -89,7 +91,7 @@ const PROMPT = [
   'Respondé ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin markdown, con',
   'exactamente estas claves:',
   '{"es_comprobante": true|false, "confianza": 0..1, "numero_operacion": string|null, "coelsa_id": string|null,',
-  ' "monto": number|null, "monto_texto": string|null, "monto_pesos": string|null, "monto_centavos": string|null, "titular_origen": string|null, "cbu_origen": string|null, "cuit_origen": string|null,',
+  ' "monto": number|null, "monto_texto": string|null, "monto_pesos": string|null, "monto_centavos": string|null, "titular_origen": string|null, "cbu_origen": string|null, "cuenta_origen": string|null, "cuit_origen": string|null,',
   ' "titular_destino": string|null, "cbu_destino": string|null,',
   ' "banco": string|null, "fecha": string|null}'
 ].join('\n');
@@ -166,7 +168,8 @@ async function analyzeComprobante(content, opts = {}) { // opts.model: otro mode
       confidence: typeof parsed.confianza === 'number' ? parsed.confianza : 0,
       operationNumber: parsed.numero_operacion ? String(parsed.numero_operacion).trim() : null,
       // #999: COELSA ID (lo trae el banco en cada transferencia: cruce exacto) y CUIT de origen (cruce con fromCUIT del movimiento).
-      coelsaId: /^[A-Za-z0-9]{12,40}$/.test(String(parsed.coelsa_id || '').replace(/[\s-]/g, '')) ? String(parsed.coelsa_id).replace(/[\s-]/g, '').toUpperCase() : null,
+      coelsaId: resolveCoelsa(parsed),
+      originAccount: parseOriginAccount(parsed.cuenta_origen), // #1162: Santander muestra "CTA $ sucursal-cuenta/dígito" en vez de CBU
       originCuit: String(parsed.cuit_origen || '').replace(/\D/g, '').length === 11 ? String(parsed.cuit_origen).replace(/\D/g, '') : null,
       amount: amountNum, amountConflict: amt.conflict, amountCandidates: amt.candidates,
       amountRaw: parsed.monto == null ? null : String(parsed.monto).slice(0, 40), // #1099: el texto tal cual (USDT viene como 1,234.56)
@@ -215,4 +218,31 @@ function resolveAmount(parsed, numeric) {
   return { amount: parts || r2(txt || numOk), conflict: true, candidates: uniq };
 }
 
-module.exports = { isEnabled, analyzeComprobante, getModel, parseArAmount, resolveAmount };
+// #1162: el COELSA puede venir rotulado como "Número de transacción" (BNA+): 22 caracteres con letras y números en numero_operacion también lo es.
+function resolveCoelsa(parsed) {
+  const c = String(parsed.coelsa_id || '').replace(/[\s-]/g, '');
+  if (/^[A-Za-z0-9]{12,40}$/.test(c)) return c.toUpperCase();
+  const op = String(parsed.numero_operacion || '').replace(/\s/g, '');
+  return /^[A-Za-z0-9]{22}$/.test(op) && /[A-Za-z]/.test(op) && /\d/.test(op) ? op.toUpperCase() : null;
+}
+// #1162: "CTA $ 123-456789/0" ⇒ "123-456789/0" (sucursal-cuenta/dígito). Otro formato ⇒ null.
+function parseOriginAccount(txt) {
+  const m = String(txt || '').match(/(\d{3,4})\s*-\s*(\d{6,8})\s*\/\s*(\d)/);
+  return m ? `${m[1]}-${m[2]}/${m[3]}` : null;
+}
+// #1162: ¿esa cuenta Santander es este CBU? Banco 072 + sucursal + número de cuenta dentro del bloque de cuenta. Ante la duda, false.
+function originAccountMatchesCbu(account, cbu) {
+  const m = String(account || '').match(/^(\d{3,4})-(\d{6,8})\/\d$/);
+  const d = String(cbu || '').replace(/\D/g, '');
+  if (!m || d.length !== 22 || !d.startsWith('072' + m[1].padStart(4, '0'))) return false;
+  return d.slice(8, 21).includes(m[2]);
+}
+// #1162: la fecha impresa (dd/mm/aaaa) tiene que ser la de la transferencia (±1 día). Sin fecha legible ⇒ false.
+function receiptDateNear(paymentDate, when) {
+  const m = String(paymentDate || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  const t = new Date(when).getTime();
+  if (!m || !Number.isFinite(t)) return false;
+  return Math.abs(Date.UTC(+m[3], +m[2] - 1, +m[1], 15) - t) <= 36 * 3600 * 1000; // 15 UTC = mediodía argentino
+}
+
+module.exports = { isEnabled, analyzeComprobante, getModel, parseArAmount, resolveAmount, resolveCoelsa, parseOriginAccount, originAccountMatchesCbu, receiptDateNear };

@@ -2858,7 +2858,7 @@ async function _receiptAiRecheckTick() {
         .select('id username userId autoCharged reviewStatus').lean() : null;
       const dupOther = !!dupOf && String(dupOf.userId) !== String(c.userId);
       const dupSelfCredited = !!dupOf && !dupOther && (!!dupOf.autoCharged || dupOf.reviewStatus === 'confirmed');
-      const data = { amount: r.amount || null, operationNumber: r.operationNumber || null, coelsaId: r.coelsaId || null, originHolder: r.originHolder || null, originCbu: r.originCbu || null,
+      const data = { amount: r.amount || null, operationNumber: r.operationNumber || null, coelsaId: r.coelsaId || null, originHolder: r.originHolder || null, originCbu: r.originCbu || null, originAccount: r.originAccount || null,
         destHolder: r.destHolder || null, destCbu: r.destCbu || null, bank: r.bank || null, paymentDate: r.paymentDate || null, rawText: r.rawText || null, aiConfidence: r.confidence || 0 };
       const problems = [];
       if (!r.isComprobante) problems.push('la imagen NO es un comprobante');
@@ -3367,7 +3367,7 @@ async function analyzeComprobanteFromMessage({ userId, username, content, messag
       operationNumber: result.operationNumber || null,
       coelsaId: result.coelsaId || null, originCuit: result.originCuit || null, // #999
       amount: result.amount, originHolder: result.originHolder || null,
-      originCbu: result.originCbu || null,
+      originCbu: result.originCbu || null, originAccount: result.originAccount || null, // #1162
       destHolder: result.destHolder || null, destCbu: result.destCbu || null,
       bank: result.bank || null,
       paymentDate: result.paymentDate || null, rawText: result.rawText || null,
@@ -3676,6 +3676,12 @@ function _comprobanteMatchesMovement(comprobante, movement, cfg) {
   if (oCbu.length === 22 && mCbu.length === 22 && oCbu === mCbu && _destConsistentOk(comprobante, movement, cfg)) return true;
   const oCuit = _digits(comprobante.originCuit), mCuit = _digits(movement.fromCUIT);
   if (oCuit.length === 11 && mCuit.length === 11 && oCuit === mCuit && _destConsistentOk(comprobante, movement, cfg)) return true;
+
+  // (1d) #1162: Santander no muestra CBU ni titular, sólo "Cuenta débito": se cruza con el CBU real del movimiento. La fecha impresa tiene que ser
+  // la de la transferencia: un comprobante viejo de la misma cuenta no puede acreditar una transferencia nueva.
+  if (comprobante.originAccount && comprobanteAi.originAccountMatchesCbu(comprobante.originAccount, movement.fromCBU) &&
+      comprobanteAi.receiptDateNear(comprobante.paymentDate, movement.date || movement.createdAt) &&
+      _destConsistentOk(comprobante, movement, cfg)) return true;
 
   // (2) Fallback por nombre de origen + destino consistente.
   if (comprobante.originHolder && movement.fromName &&

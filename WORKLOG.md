@@ -15428,3 +15428,15 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
   barra y desde el "USAR ESTA" de las cards de hgcash y de Finpro. Se lee con `GET /api/admin/bank-in-use/log`. La rotación AUTOMÁTICA
   sigue en su propio "Últimos cambios".
 - Validado solo con `node --check`, `check-tdz` y los tests de bancos; **no probado en navegador**.
+
+## Sesión 2026-11-22
+
+### 1162. 🧾 Comprobantes BNA+ y Santander que no se cruzaban con el banco
+- **Pedido del owner:** dos comprobantes reales no se detectaban.
+- **BNA+:** muestra el COELSA rotulado "Número de transacción". Ahora un código de 22 letras y números es COELSA aunque venga en `numero_operacion`
+  (`resolveCoelsa`), así también aplica la tolerancia a letras confundidas (0/O, 1/I) de `_coelsaNear`.
+- **Santander:** no muestra CBU, titular ni COELSA, sólo "Cuenta débito". Se guarda en `Comprobante.originAccount` y se cruza con el CBU real del
+  movimiento (banco 072 + sucursal + cuenta, `originAccountMatchesCbu`) con mismo monto, destino coherente y fecha impresa ±1 día (`receiptDateNear`).
+- **Ojo:** el comprobante Santander que mandó el owner tiene fecha 04/11/2026: por la regla de fecha NO acredita una transferencia de hoy (a propósito).
+- **Sin verificar:** la lectura real con la IA y que el CBU de Santander contenga la cuenta como se asume (si no, no cruza y queda para un agente; no acredita de más).
+- Tests: nuevo `scripts/test-receipt-1162.js`; `test-receipt-amount` 7/7, `test-receipt-match` 11/11, `test-rcptbot-flow` 52 OK.

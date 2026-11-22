@@ -134,6 +134,8 @@ modelos); sus migraciones corren únicamente si algo llamara a ese connectDB.
 - **Comprobante** — cada imagen que la IA (Claude vision) clasificó como comprobante.
   `dedupeKey` (N° operación normalizado, descartando CBU/CUIT) + `imageHash` (SHA-256)
   para detectar reutilización. `bankMatchStatus` para la auto-carga.
+  **#1162:** un código de 22 alfanuméricos es COELSA aunque el banco lo rotule distinto (BNA+). `originAccount` = "Cuenta débito"
+  sin CBU (Santander): cruza con `movement.fromCBU` sólo con mismo monto, destino coherente y fecha impresa ±1 día.
 - **HgcashCharge** — candado de idempotencia de la carga automática: índice único por
   `chargeKey` (coelsaCode) — la MISMA transferencia se acredita UNA sola vez entre
   instancias. Si la carga falla en 1girox, el registro se BORRA para permitir retry
