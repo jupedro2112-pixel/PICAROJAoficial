@@ -2327,3 +2327,9 @@ vencimiento de la ventana.
 - Un flujo propio nuevo que saque plata por hgcash necesita un prefijo de externalID en `_CAJA_OUR_EXT`; si no, su salida se clasifica
   como retiro (`payout`) con un `payoutId` que no existe.
 - No aflojar la espera de 2 min ni tratar un envío sin respuesta como "rechazado".
+
+### Webhook saliente `visita` (#1166)
+Opcional por destino (`events.visita`). `_notifyVisit(req.user, {installed})` se llama desde `/api/auth/verify` y `/api/activity/ping`;
+reclama `User.lastVisitWebhookAt` (una cada 30 min por jugador, atómico) y recién ahí hace `outboundWebhook.notify('visita', …)` con
+`eventKey` `visita_<userId>_<ms>`. Body igual al resto + `visit: { installed }`. Solo rol `user` y con sesión; si ningún destino lo pidió
+no toca la base. Un punto nuevo de "el jugador abrió la app" llama a `_notifyVisit`.

@@ -1002,3 +1002,7 @@ window.webhookScopeChanged = webhookScopeChanged; window.webhookSave = webhookSa
    lo reintenta cada 5 min; borrar el destino descarta su cola.
 5. Si el receptor responde 401 con el secreto bien cargado: cambiar el "modo de autenticación" del
    destino a lo que pida su plataforma (HMAC del body / Bearer / header).
+
+## Agregado posterior: evento `visita` (#1166)
+El código copiado en esta espec es el original (sin `visita`). El evento `visita` se agregó después: ver WORKLOG #1166 y
+`docs/ARCHITECTURE.md` ("Webhook saliente `visita`"). Al portar a otro repo, tomar el servicio actual de `src/services/`.

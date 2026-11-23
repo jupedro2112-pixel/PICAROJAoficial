@@ -15496,3 +15496,18 @@ la app pueda expandir todo lo que ya tenemos; el chat con el mismo formato y fon
 - **Validación (los tres):** `node --check` en lo tocado, `test-server-boot` ("server.js carga OK" con un JWT_SECRET de prueba) y todos los
   `scripts/test-*.js`. Fallan los mismos que antes de tocar nada: `test-sorteos-front`, `test-sorteos-server` (y `test-server-boot` sin
   `JWT_SECRET`). **Nada probado en vivo:** ni un pago real por hgcash/Finpro, ni un timeout real, ni el panel en el navegador.
+
+### 1166. 👀 Webhooks salientes: evento nuevo "visita" (el jugador abrió la página / la app) — réplica #235 de CARGASGIROXactivo
+Pedido de un publicista (23/11): recibir las visitas (PageView) de cada persona, identificada igual que en los demás eventos, para tener
+la actividad de último ingreso.
+- **Qué manda:** evento `visita`, OPCIONAL por destino (casilla "Visitas a la página" en 🔗 Webhooks salientes; apagado por defecto, los
+  destinos que ya existen no reciben nada nuevo). Mismo body y mismas cabeceras/firma que el resto: `user.id` identifica al jugador (el
+  username sigue sin viajar), `occurred_at` = momento del ingreso, `visit.installed` (app instalada o navegador), `amount` /
+  `transaction_id` en null. Respeta el alcance por publicista del destino y los datos extra tildados.
+- **Cuándo:** cuando un jugador CON SESIÓN INICIADA abre la página o la app: `_notifyVisit(req.user)` en `/api/auth/verify` y en
+  `/api/activity/ping` (primera línea, así sale aunque Datos IA esté apagado). **A lo sumo una cada 30 minutos por jugador**
+  (`outboundWebhook.VISIT_GAP_MS`): reclamo atómico sobre `User.lastVisitWebhookAt` (campo nuevo), sirve con varias instancias.
+  Si ningún destino lo pidió, no se toca la base (`outboundWebhook.wants('visita')`). Solo rol `user`.
+- **Lo que NO cubre:** visitantes anónimos (sin sesión no hay a quién identificar).
+- **Archivos:** `outboundWebhookService.js`, `server.js`, `User.js`, panel (index.html / admin.js, admin-sw v322), test nuevo
+  `scripts/test-webhook-visit.js` (7). **Validado:** `node --check` y tests en frío. **NO probado** con un receptor real.
