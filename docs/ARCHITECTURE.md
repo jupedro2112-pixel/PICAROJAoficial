@@ -2346,3 +2346,32 @@ Opcional por destino (`events.visita`). `_notifyVisit(req.user, {installed})` se
 reclama `User.lastVisitWebhookAt` (una cada 30 min por jugador, atómico) y recién ahí hace `outboundWebhook.notify('visita', …)` con
 `eventKey` `visita_<userId>_<ms>`. Body igual al resto + `visit: { installed }`. Solo rol `user` y con sesión; si ningún destino lo pidió
 no toca la base. Un punto nuevo de "el jugador abrió la app" llama a `_notifyVisit`.
+
+## 💸 ¿De qué CUENTA salen los retiros? (#1168, 2026-11-25 — réplica #223 de AUTOREEMBOLSOSjygactivo)
+**Dos niveles distintos:** el PERFIL (`a1…` de `Config['hgcashAccounts']`, `f1…` de Finpro) y, sólo en hgcash, la CUENTA REAL que debita ese
+perfil (un token puede ver varias en `GET /accounts`).
+- **Cuenta real de un perfil hgcash** — `_hgPickApiAccount(perfil, lista, moneda)` → `{ pick, how }`: `pinned` (perfil.`payAccountId`, fijada
+  a mano) > `only` (el token ve una sola) > `cbu` > `name` (titular / accountName / label normalizados, UNA sola coincidencia) > `id`
+  (accountId guardado) > `guess` (primera en pesos operativa: lo de antes). `resolveHgcashAccountId({acct})` la usa; con `guess` y varias a
+  la vista no escribe el `accountId` del perfil. `_hgLastApiPick` (Map por key) = lo último resuelto, para `_hgDebitNote(key)` en la nota del
+  pago. Lecturas (consulta periódica, saldo, cierre, diagnóstico): `_hgApiAccountOf(lista, perfil)` (null si habría que adivinar ⇒ criterio viejo).
+  Token nuevo en un perfil: `_hgTokenAccountId(perfil, v)` (null si ve varias y no se identifica) y `payAccountId = null`.
+- **Qué perfil paga** — `Config['payoutSource'] = { mode, fixed }` (estricto al guardar): `active` (default: la cuenta EN USO del banco de
+  `getBankProvider()`), `fixed` (`'hgcash:a2'` / `'finpro:f1'`), `richest` (la de más saldo entre TODAS las que pueden pagar; si ninguna
+  alcanza el monto → error antes de tocar nada; si no se lee ningún saldo → la cuenta en uso). `_paySlots()` = cuentas que hoy pueden pagar;
+  `_paySlotInfo(slot)` = saldo + cuenta real (caché 20 s; 8 s al pagar). `_payoutPickSource(body, monto)`: `body.source` > `body.provider` > modo.
+- **Dónde se aplica** — `_payPendingPayout` (lo usan `POST /api/admin/payouts/:id/pay` y el pago AUTOMÁTICO): valida el pedido, resuelve la
+  fuente y la deja en `req._paySrc`; hgcash usa `_hgKeyPay = req._paySrc.key || _hgActiveKey` con el token y el perfil de ESA key;
+  `_payPayoutViaFinpro` usa la cuenta de `req._paySrc.key`. El candado (`_payoutResendGuard` / `_payoutNoteSend`) recibe esa key y el pago la
+  guarda (`hgAccountKey` / `fpAccountKey`) + `hgDebitAccountId` (cuenta real de hgcash).
+- **Frenos propios de este repo:** `_payoutAutoJump` (el automático no cambia solo de cuenta con `fixed`/`richest` si ya hubo un envío ⇒
+  revisión de una persona); mismo perfil pero otra cuenta real que el envío anterior no rechazado ⇒ `needsConfirm`; cuenta elegida que ya no
+  está ⇒ error (nunca cae a la en uso).
+- **Endpoints:** `GET /api/admin/payout-sources[?fresh=1]` (quien paga retiros; `canEdit` = dueño) · `POST /api/admin/payout-sources`
+  `{mode, fixed}` y `POST /api/admin/hgcash/accounts/:key/pay-account` `{accountId | ''}` (sólo el dueño, `OWNER_ONLY_MUTATIONS`).
+  `GET /api/admin/payouts` suma `payFrom`, `paySources`, `payFromReady`, `otherAccount`.
+- **NO siguen `payoutSource`:** devolución bajo el mínimo (sale por la cuenta por la que entró), gastos por API (cuenta en uso), bajadas.
+- **Trampas:** el test recorta server.js entre `const _hgLastApiPick = new Map();` y `async function _payoutSourcesPayload(` (no renombrar);
+  `_psNorm` NO es `_normName` (este deja espacios y lo usa el matcheo de comprobantes); `_payoutAutoJump` mira `src` ANTES que
+  `PAYOUT_AUTO_ACTOR` (el sandbox de `test-finpro-accounts.js` no lo tiene). Test: `node scripts/test-payout-source.js`.
+

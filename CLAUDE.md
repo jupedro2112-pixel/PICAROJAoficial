@@ -216,6 +216,13 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   cuenta nuevos se suman a `_rotSlots()` / `_rotProbe` / `_rotSlotBlocked`. Carga adelantada, saldo/arqueo, gastos por API y devolución bajo
   el mínimo siguen siendo SÓLO hgcash. Las credenciales NO van en el repo. Tests: `node scripts/test-finpro-accounts.js`,
   `test-finpro-webhook.js`, `test-bank-rotation.js`.
+- **¿DE QUÉ CUENTA SALEN LOS RETIROS? (#1168, réplica #223 de AUTOREEMBOLSOS; detalle en ARCHITECTURE "💸 ¿De qué CUENTA…"):** un token de hgcash
+  puede ver VARIAS cuentas: la de un perfil sale de `_hgPickApiAccount` (fijada `payAccountId` > única > CBU > titular > id > adivinar), nunca
+  `acc.data[0]` ni "la primera en pesos". El retiro sale por lo que diga `_payoutPickSource` (`Config['payoutSource']`: `active` por defecto /
+  `fixed` / `richest`, o `source` del pedido), resuelto UNA vez en `_payPendingPayout` → `req._paySrc`. Un camino nuevo que pague un retiro pasa
+  por `_payPendingPayout`; si no puede, usa `req._paySrc.key`, le pasa esa MISMA key al candado y la guarda (`hgAccountKey` + `hgDebitAccountId`
+  / `fpAccountKey`). Nunca caer en silencio a otra cuenta si la elegida no está, ni dejar que el pago automático cambie solo de cuenta
+  (`_payoutAutoJump`). Devoluciones bajo el mínimo, gastos por API y bajadas NO siguen esta regla. Test: `node scripts/test-payout-source.js`.
 - **Transaction** (cargas/retiros) es permanente (sin TTL). **Message** tiene TTL de 3
   días. La analítica de clientes se basa en Transaction.
 - **Montos en PESOS.** ⚠️ Ojo si mirás código o docs viejos: JUGAYGANA trabajaba en

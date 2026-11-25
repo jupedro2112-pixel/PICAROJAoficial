@@ -38,6 +38,7 @@ const pendingPayoutSchema = new mongoose.Schema({
 
   // Datos del cash-out en hgcash
   hgTransactionId: { type: String, default: null, index: true }, // id del REQUEST del cash-out (createCashOut)
+  hgDebitAccountId: { type: String, default: null },             // #1168 id de la cuenta REAL de hgcash que debitó el último envío (un token puede ver varias)
   hgAccountKey: { type: String, default: null },                 // #1160 perfil de cuenta hgcash que pagó (su token consulta estado/recibo aunque se rote)
   // #1160 Finpro (paidVia 'finpro'): un payout = un proceso (`process_id` uuid) con una transferencia.
   fpProcessId: { type: String, default: null, index: true },     // process_id del lote en Finpro (se reusa SOLO si fpAccepted)
