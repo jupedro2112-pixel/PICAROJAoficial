@@ -35,7 +35,7 @@ const S = {
   logger: { info() {}, warn() {}, error() {} },
   __out: null
 };
-new Function('S', 'with (S) {\n' + block + '\n__out = { _hgPickApiAccount, _hgApiAccountOf, _hgTokenAccountId, _paySlots, _paySlotInfo, _payoutPickSource, getPayoutSource, _paySlotInfoCache }; }')(S);
+new Function('S', 'with (S) {\n' + block + '\n__out = { _hgNameContains, _hgPickApiAccount, _hgApiAccountOf, _hgTokenAccountId, _paySlots, _paySlotInfo, _payoutPickSource, getPayoutSource, _paySlotInfoCache }; }')(S);
 const X = S.__out;
 
 let n = 0;
@@ -70,8 +70,20 @@ const LIST = [
   assert.strictEqual(X._hgTokenAccountId({ titular: 'NADA QUE VER' }, { apiList: LIST, apiAccountId: 'id-1' }), null);
   assert.strictEqual(X._hgTokenAccountId({ titular: 'X' }, { apiList: [LIST[0]], apiAccountId: 'id-1' }), 'id-1'); ok('token nuevo que ve varias cuentas: nunca se guarda "la primera"');
 
+  // Casos de la auditoría (#1168c, réplica #223c)
+  const L2 = [{ id: 'x1', name: 'JOSE MARIA GOMEZ', currency: 'ARS' }, { id: 'x2', name: 'MARIA GOMEZ', currency: 'ARS' }];
+  r = X._hgPickApiAccount({ key: 'b1', titular: 'MARIA GOMEZ' }, L2, 'ARS');
+  assert.strictEqual(r.pick.id, 'x2'); assert.strictEqual(r.how, 'name'); ok('titular EXACTO gana aunque otra cuenta lo contenga');
+  r = X._hgPickApiAccount({ key: 'b2', titular: 'JUANA' }, [{ id: 'y1', name: 'JUAN ALVAREZ' }, { id: 'y2', name: 'OTRA SA' }], 'ARS');
+  assert.strictEqual(r.how, 'guess'); ok('no matchea por pedazos de palabra ("JUANA" no es "JUAN ALVAREZ")');
+  r = X._hgPickApiAccount({ key: 'b3', label: 'Cuenta SRL', accountId: 'z2' }, [{ id: 'z1', name: 'OTRA CUENTA SRL' }, { id: 'z2', name: 'LA BUENA SA' }], 'ARS');
+  assert.strictEqual(r.pick.id, 'z2'); assert.strictEqual(r.how, 'id'); ok('la ETIQUETA del perfil no pisa un id guardado por parecerse a otra cuenta');
+  assert.strictEqual(X._hgNameContains('Distribuidora Dos', 'DISTRIBUIDORA DOS S.A.'), true); assert.strictEqual(X._hgNameContains('JUANA', 'JUAN ALVAREZ'), false); ok('"contiene" va por palabras enteras');
+  assert.strictEqual(X._hgTokenAccountId({ titular: 'NADA QUE VER', cbu: CBU_B }, { apiList: LIST, apiAccountId: 'id-1' }), 'id-3'); ok('alta de perfil con token que ve varias: identifica por CBU (lista cruda `apiList`)');
+  assert.strictEqual(X._hgTokenAccountId({ label: 'Tercera', titular: 'NADA QUE VER' }, { apiList: LIST, apiAccountId: 'id-1' }), null); ok('… y una etiqueta parecida no alcanza: queda sin cuenta, con aviso');
+
   console.log('2) De dónde sale un retiro');
-  S._hgAccounts.push({ key: 'a1', label: 'CUENTA-A', token: 'tA', titular: 'EMPRESA UNO SA' }, { key: 'a2', label: 'CUENTA-B', token: 'tB', titular: 'Distribuidora Dos' }, { key: 'a3', label: 'SIN-TOKEN' });
+  S._hgAccounts.push({ key: 'a1', label: 'CUENTA-A', token: 'tA', secret: 's', titular: 'EMPRESA UNO SA' }, { key: 'a2', label: 'CUENTA-B', token: 'tB', secret: 's', titular: 'Distribuidora Dos' }, { key: 'a3', label: 'SIN-TOKEN' });
   S.__fp = [{ key: 'f1', label: 'CUENTA-F', ready: true, account: 'acc-f1' }, { key: 'f2', label: 'F-NO-LISTA', ready: false }];
   apiByToken = { tA: { ok: true, data: LIST }, tB: { ok: true, data: LIST } };
   fpBalances = { 'acc-f1': { ok: true, available: 20000 } };
@@ -103,6 +115,22 @@ const LIST = [
   X._paySlotInfoCache.clear(); apiByToken = { tA: { ok: true, data: LIST } };
   r = await X._payoutPickSource({}, 500); assert.strictEqual(r.key, 'a1'); ok('una cuenta que no responde no participa');
 
+  // #1168c (réplica #223c) un REINTENTO en modo automático vuelve por la misma cuenta; y una cuenta sin webhook no se elige sola
+  X._paySlotInfoCache.clear(); apiByToken = { tA: { ok: true, data: LIST }, tB: { ok: true, data: LIST } }; fpBalances = {};
+  r = await X._payoutPickSource({}, 500, { lastSendBank: 'hgcash', lastSendAccount: 'a1', lastSendResult: 'unknown' });
+  assert.strictEqual(r.key, 'a1'); assert.strictEqual(r.why, 'retry-same'); ok('reintento con envío dudoso → MISMA cuenta (aunque otra tenga más saldo)');
+  r = await X._payoutPickSource({}, 500, { lastSendBank: 'hgcash', lastSendAccount: 'a1', lastSendResult: 'rejected' });
+  assert.strictEqual(r.key, 'a2'); assert.strictEqual(r.why, 'richest'); ok('reintento tras un RECHAZO claro → puede ir a la de más saldo');
+  r = await X._payoutPickSource({}, 500, { lastSendBank: 'hgcash', lastSendAccount: 'a9', lastSendResult: 'unknown' });
+  assert.strictEqual(r.key, 'a2'); assert.strictEqual(r.why, 'richest'); ok('… y si aquella cuenta ya no está, la de más saldo (al automático lo frena _payoutAutoJump; a una persona, el candado)');
+  r = await X._payoutPickSource({ source: 'hgcash:a2' }, 500, { lastSendBank: 'hgcash', lastSendAccount: 'a1', lastSendResult: 'unknown' });
+  assert.strictEqual(r.key, 'a2'); ok('… y la elegida a mano sigue mandando (el candado pide esperar y confirmar)');
+  S._hgAccounts[1].secret = null; X._paySlotInfoCache.clear();
+  r = await X._payoutPickSource({}, 500); assert.strictEqual(r.key, 'a1'); ok('una cuenta SIN secreto de webhook no entra en la elección automática');
+  S._hgAccounts[0].secret = null; S._hgAccounts[1].secret = null; X._paySlotInfoCache.clear();
+  r = await X._payoutPickSource({}, 500); assert.strictEqual(r.key, 'a2'); assert.strictEqual(r.why, 'richest'); ok('… pero si NINGÚN perfil tiene secreto (avisos por el de AWS), todas participan');
+  S._hgAccounts[0].secret = 's'; S._hgAccounts[1].secret = 's';
+
   console.log('3) Cableado en server.js');
   assert.ok(/const _hgKeyPay = \(req\._paySrc && req\._paySrc\.key\) \|\| _hgActiveKey;/.test(src)); ok('el pago por hgcash usa la cuenta elegida');
   assert.ok(/const _hgAcctPay = _hgAccountByKey\(_hgKeyPay\) \|\| _hgActiveAccount\(\);/.test(src)); ok('… con SU token y SU perfil');
@@ -111,7 +139,7 @@ const LIST = [
   assert.ok(/_payoutResendGuard\(payout, 'hgcash', _hgKeyPay \|\| 'env'/.test(src)); ok('el candado anti pago doble recibe la cuenta REAL que paga');
   assert.ok(/hgAccountKey: _hgKeyPay \|\| null, hgDebitAccountId: String\(accountId\)/.test(src)); ok('el pago recuerda la cuenta que lo mandó (perfil + cuenta real de hgcash)');
   assert.ok(/!\(_pk\.how === 'guess' && acc\.data\.length > 1\)/.test(src)); ok('una cuenta adivinada no se guarda como propia del perfil');
-  assert.ok(/const _src = await _payoutPickSource\(opts \|\| \{\}, payout\.amount\);/.test(src)); ok('el pago manual Y el automático (_payPendingPayout) resuelven la cuenta en el mismo lugar');
+  assert.ok(/const _src = await _payoutPickSource\(opts \|\| \{\}, payout\.amount, payout\);/.test(src)); ok('el pago manual Y el automático (_payPendingPayout) resuelven la cuenta en el mismo lugar, con el retiro (reintento → misma cuenta)');
   // El pago automático nunca cambia solo de cuenta (se recorta la función real).
   const ja = src.indexOf('function _payoutAutoJump('), jb = src.indexOf('function _payoutAcctLabel(', ja);
   const J = { PAYOUT_AUTO_ACTOR: { username: 'auto-retiros' }, _payoutAcctLabel: (b, k) => b + ':' + k, __f: null };
@@ -122,9 +150,24 @@ const LIST = [
   assert.strictEqual(J.__f(prev, AUTO, { why: 'richest' }, 'hgcash', 'a1'), null);
   assert.strictEqual(J.__f({}, AUTO, { why: 'richest' }, 'hgcash', 'a2'), null);
   assert.strictEqual(J.__f(prev, AUTO, { why: 'active' }, 'hgcash', 'a2'), null);
+  assert.strictEqual(J.__f(prev, AUTO, { why: 'retry-same' }, 'hgcash', 'a1'), null); // #1168c un reintento que vuelve por la misma cuenta no se frena
   assert.strictEqual(J.__f(prev, { username: 'una-persona' }, { why: 'richest' }, 'hgcash', 'a2'), null); ok('el pago AUTOMÁTICO no cambia solo de cuenta (fija / más saldo): queda para una persona; modo por defecto y personas, igual que antes');
   assert.ok(/_payoutAutoJump\(payout, actor, req\._paySrc, 'hgcash', _hgKeyPay \|\| 'env'\)/.test(src) && /_payoutAutoJump\(payout, req\.user, req\._paySrc, 'finpro', acctKey\)/.test(src)); ok('… y está cableado en los dos caminos, antes del candado');
-  assert.ok(/payout\.hgDebitAccountId && String\(payout\.hgDebitAccountId\) !== String\(accountId\)/.test(src)); ok('mismo perfil pero otra cuenta real de hgcash que el envío anterior → pide confirmar');
+  // #1168c: la cuenta REAL del envío anterior (`hgDebitAccountId`) la compara el candado (espera de 2 min + confirmación), no un chequeo aparte.
+  assert.ok(/_payoutResendGuard\(payout, 'hgcash', _hgKeyPay \|\| 'env', resolvedCbu, [^;]+, accountId\);/.test(src) && /_payoutNoteSend\(id, 'hgcash', _hgKeyPay \|\| 'env', req\.user\.username, accountId\)/.test(src)); ok('el candado y el registro del envío reciben la cuenta REAL');
+  assert.ok(/payout\.hgDebitAccountId && realAccountId && String\(payout\.hgDebitAccountId\) !== String\(realAccountId\)/.test(src)); ok('mismo perfil pero otra cuenta real de hgcash que el envío anterior → NO es la misma ruta');
+  assert.strictEqual((src.match(/hgDebitAccountId: String\(accountId\)/g) || []).length, 2); assert.ok(!/lastSendAccountId/.test(src)); ok('UN solo campo para la cuenta real del envío (hgDebitAccountId)');
+  assert.ok(/if \(acct\) return null;\s*\n\s*const _movKey = /.test(src)); ok('un pago nunca usa "la cuenta del último movimiento" como respaldo');
+  assert.ok(/accountId = fresh;\s*\n\s*await PendingPayout\.updateOne\(\{ id \}, \{ \$set: \{ hgDebitAccountId: String\(accountId\) \} \}\)/.test(src)); ok('el reintento por 403 actualiza la cuenta REAL anotada');
+  assert.ok(/!\(_src\.key \? !!_hgTokenFor\(_src\.key\) : hgcashPay\.isEnabled\(\)\)/.test(src)); ok('alcanza con que la cuenta elegida tenga token');
+  assert.ok(/paidFrom: _payoutAcctLabel\('hgcash', _hgKeyPay\) \+ _hgDebitNote\(_hgKeyPay\)/.test(src) && /paidFrom: _payoutAcctLabel\('finpro', acctKey\)/.test(src)); ok('la respuesta del pago dice por dónde SALIÓ (los dos bancos)');
+  const adm = fs.readFileSync(path.join(__dirname, '..', 'public', 'adminprivado2026', 'admin.js'), 'utf8');
+  assert.strictEqual((adm.match(/SALIÓ POR ' \+ escapeHtml\(j\.paidFrom\)/g) || []).length, 2); assert.ok(/s\.noWebhook \?/.test(adm)); ok('el panel lo muestra escapado (chat y Confirmación de pagos) y marca las cuentas sin webhook');
+  for (const [f, code] of [['server.js', src], ['admin.js', adm]]) {
+    const dupFns = (code.match(/^(?:async )?function [A-Za-z0-9_$]+/gm) || []).map((x) => x.split(' ').pop()).filter((x, i, arr) => arr.indexOf(x) !== i);
+    assert.deepStrictEqual(dupFns, [], f);
+  }
+  ok('no hay NINGUNA función declarada dos veces en server.js ni en admin.js');
   const own = src.slice(src.indexOf('const OWNER_ONLY_MUTATIONS'), src.indexOf('const adminMiddleware'));
   assert.ok(/payout-sources/.test(own) && /pay-account/.test(own)); ok('cambiar de dónde salen los retiros es sólo del dueño');
   const iAuth = src.indexOf('const withdrawerMiddleware'), iRoute = src.indexOf("app.get('/api/admin/payout-sources'");

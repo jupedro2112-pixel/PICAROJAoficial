@@ -4,7 +4,7 @@
 > commit por commit está en `git log --oneline`. Esto captura decisiones, umbrales de
 > negocio y pendientes que NO se ven leyendo el código.
 >
-> **Última actualización: 2026-11-25** (#1168)
+> **Última actualización: 2026-11-25** (#1168c)
 
 ## Sesión 2026-11-09
 
@@ -15605,3 +15605,47 @@ si falla y ver el saldo de cada una.
   `netBalance/balance`): si no matchea nada, el panel lo avisa ("el token ve N cuentas…") y hay que fijarla a mano.
 - **Riesgo a tener presente al desplegar:** un perfil que venía debitando de "la primera" puede pasar a debitar de la suya. Un retiro con un
   envío ANTERIOR al despliegue que quedó sin respuesta no tiene `hgDebitAccountId`: antes de reintentarlo, mirarlo en hgcash.
+
+#### 1168c. Correcciones AUDITADAS de "¿De qué CUENTA salen los retiros?" — réplica #223c de AUTOREEMBOLSOSjygactivo (commits `0f22895` y `c01b064` de allá) — admin-sw v325
+Dos auditorías independientes revisaron el #223 en el origen. Acá se llevó cada corrección, comparándola primero con lo que este repo ya
+tenía (varias ya estaban, con otros nombres).
+- **Titulares (aplicada):** `_hgPickApiAccount` ya no usa "igual O contiene" en forma compacta mezclando la etiqueta del perfil. Orden nuevo:
+  fijada > única > CBU > titular IGUAL (`_psNorm`; titular, `accountName` y etiqueta) > titular CONTENIDO por palabras enteras
+  (`_hgNameWords` / `_hgNameContains`; solo titular y `accountName`, nunca la etiqueta) > id guardado > adivinar. Casos que antes fallaban:
+  un titular contenido en el de otra cuenta anulaba el match exacto (dos coincidencias ⇒ se caía al id guardado); "JUANA" matcheaba
+  "JUAN ALVAREZ"; una etiqueta parecida a otra cuenta pisaba el id guardado. `_hgDebitNote` usa el mismo criterio.
+- **Alta / edición de perfil (ya estaba):** `_hgValidateCreds` devuelve `apiList` (la lista cruda de hgcash, con CBU) y `_hgTokenAccountId`
+  la usa en el alta/edición y en la ruta vieja `/hgcash/credentials` (limpia `payAccountId`, no guarda "la primera", `hgcash.accountId`
+  global queda null si no se identifica). Equivale al `_hgIdForNewToken` del origen: no se duplicó. Hereda el criterio nuevo de titulares.
+- **Pago doble:**
+  - *(aplicada)* `resolveHgcashAccountId({ acct })`: con perfil fijado (un pago, o la devolución por la cuenta por la que entró) ya NO cae en
+    "la cuenta del último movimiento" (`if (acct) return null;`): sin cuenta cierta el pago responde 400 y no sale. La devolución sigue con
+    su propio respaldo (`_rfAcc.accountId || mv.accountId`). Sin perfil (token de AWS, gastos por API) el respaldo sigue como antes.
+  - *(UNA sola solución, la de acá reforzada)* El origen agregó `lastSendAccountId`; este repo ya guardaba lo mismo en
+    `PendingPayout.hgDebitAccountId`. **No se creó un segundo campo.** Lo que sí cambió: la comparación estaba en un chequeo aparte dentro de
+    `_payPendingPayout` que solo pedía confirmar; ahora la hace el candado — `_payoutResendGuard(…, realAccountId)` — y "misma ruta" exige
+    mismo banco, mismo perfil Y misma cuenta real. Efecto: mismo perfil pero otra cuenta real ⇒ espera de 2 minutos (ni confirmando, ni con
+    rechazo claro: igual que al cambiar de cuenta) y después confirmación si el envío anterior no quedó rechazado. Es MÁS estricto que antes
+    (antes no había espera). El pago automático sigue quedando para una persona (`_payoutGuardAutoHold`). `_payoutNoteSend(…, realAccountId)`
+    deja la cuenta real en el renglón del `sendLog`. Finpro no pasa cuenta real (correcto).
+  - *(ya estaba)* El reintento por 403 actualiza `hgDebitAccountId` después de `accountId = fresh`.
+  - *(aplicada)* `_payoutPickSource(body, monto, retiro)`: en "la de más saldo", un REINTENTO de un retiro cuyo envío anterior no quedó
+    rechazado con claridad vuelve por la MISMA cuenta (`why:'retry-same'`) si sigue pudiendo pagar. **Convivencia con `_payoutAutoJump`:**
+    el automático ya no se frena en ese caso (vuelve por la misma, donde el banco deduplica); `_payoutAutoJump` sigue siendo la red para lo
+    que queda: rechazo claro y otra cuenta con más saldo, cuenta anterior que ya no está, o cambio de cuenta fija ⇒ queda para una persona.
+  - *(aplicada)* `_paySlotNoWebhook(s)`: un perfil de hgcash sin secreto propio queda fuera de "la de más saldo" SOLO si otro perfil tiene
+    secreto (ahí el de AWS deja de valer y sus salidas no avisan: el candado no las vería). El panel lo marca (`noWebhook`).
+- **Varios:** *(ya estaba)* el pago no se bloquea por `hgcashPay.isEnabled()` si la cuenta elegida tiene token. *(aplicada)* la respuesta
+  del pago trae `paidFrom` (hgcash con `_hgDebitNote`, y Finpro) y el panel muestra "SALIÓ POR …" con `escapeHtml` en el chat y también en
+  Confirmación de pagos (`payReviewApprove`, propio de este repo); el selector de cuenta a fijar muestra moneda y estado.
+- **Tests:** `test-payout-source.js` 37 → 57 casos (incluye "ninguna función declarada dos veces" en server.js y admin.js, y "un solo campo
+  para la cuenta real"); `test-payout-guard.js` 17 → 19. Suite completa (41 scripts, `JWT_SECRET=x`) igual antes y después: fallan solo
+  `test-sorteos-front` y `test-sorteos-server`, de antes. `test-server-boot` pasa (no hay rutas ni `const` nuevos: solo funciones).
+- **SIN hacer / a saber:** (1) no hay alarma de pago doble entre dos cuentas del MISMO banco (el candado frena el reintento, pero si salieran
+  dos pagos nadie lo avisa solo). (2) Un retiro fallado ANTES del deploy del #1168 no tiene `hgDebitAccountId`: se comporta como antes;
+  mirarlo en hgcash antes de reintentar. (3) Los perfiles cuyo id se guardó con el criterio viejo hay que revisarlos UNA vez en el panel
+  ("→ debita de «…»" en ¿De qué CUENTA salen los retiros?): con el criterio nuevo un perfil que matcheaba por "contiene" o por etiqueta
+  puede pasar a usar su id guardado, o quedar en "elegila". (4) El candado solo mira el ÚLTIMO envío: hgcash (dudoso) → Finpro (rechazado)
+  → hgcash por otra cuenta real pasa tras la espera sin pedir confirmación (igual que en el origen). (5) `lookupName` y `message` del toast
+  del pago siguen sin escapar (de antes, igual que en el origen).
+- **NO probado:** nada contra hgcash ni Finpro reales, ni el panel en un navegador. Solo tests en frío y arranque del server de prueba.

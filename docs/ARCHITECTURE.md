@@ -2347,11 +2347,12 @@ reclama `User.lastVisitWebhookAt` (una cada 30 min por jugador, atómico) y reci
 `eventKey` `visita_<userId>_<ms>`. Body igual al resto + `visit: { installed }`. Solo rol `user` y con sesión; si ningún destino lo pidió
 no toca la base. Un punto nuevo de "el jugador abrió la app" llama a `_notifyVisit`.
 
-## 💸 ¿De qué CUENTA salen los retiros? (#1168, 2026-11-25 — réplica #223 de AUTOREEMBOLSOSjygactivo)
+## 💸 ¿De qué CUENTA salen los retiros? (#1168 + #1168c, 2026-11-25 — réplica #223 / #223c de AUTOREEMBOLSOSjygactivo)
 **Dos niveles distintos:** el PERFIL (`a1…` de `Config['hgcashAccounts']`, `f1…` de Finpro) y, sólo en hgcash, la CUENTA REAL que debita ese
 perfil (un token puede ver varias en `GET /accounts`).
 - **Cuenta real de un perfil hgcash** — `_hgPickApiAccount(perfil, lista, moneda)` → `{ pick, how }`: `pinned` (perfil.`payAccountId`, fijada
-  a mano) > `only` (el token ve una sola) > `cbu` > `name` (titular / accountName / label normalizados, UNA sola coincidencia) > `id`
+  a mano) > `only` (el token ve una sola) > `cbu` > `name` (#1168c: primero titular IGUAL en forma compacta `_psNorm` — titular, accountName y etiqueta —; después titular CONTENIDO
+  por palabras enteras `_hgNameContains` — solo titular y accountName, nunca la etiqueta —; siempre UNA sola coincidencia) > `id`
   (accountId guardado) > `guess` (primera en pesos operativa: lo de antes). `resolveHgcashAccountId({acct})` la usa; con `guess` y varias a
   la vista no escribe el `accountId` del perfil. `_hgLastApiPick` (Map por key) = lo último resuelto, para `_hgDebitNote(key)` en la nota del
   pago. Lecturas (consulta periódica, saldo, cierre, diagnóstico): `_hgApiAccountOf(lista, perfil)` (null si habría que adivinar ⇒ criterio viejo).
@@ -2359,14 +2360,24 @@ perfil (un token puede ver varias en `GET /accounts`).
 - **Qué perfil paga** — `Config['payoutSource'] = { mode, fixed }` (estricto al guardar): `active` (default: la cuenta EN USO del banco de
   `getBankProvider()`), `fixed` (`'hgcash:a2'` / `'finpro:f1'`), `richest` (la de más saldo entre TODAS las que pueden pagar; si ninguna
   alcanza el monto → error antes de tocar nada; si no se lee ningún saldo → la cuenta en uso). `_paySlots()` = cuentas que hoy pueden pagar;
-  `_paySlotInfo(slot)` = saldo + cuenta real (caché 20 s; 8 s al pagar). `_payoutPickSource(body, monto)`: `body.source` > `body.provider` > modo.
+  `_paySlotInfo(slot)` = saldo + cuenta real (caché 20 s; 8 s al pagar). `_payoutPickSource(body, monto, retiro)`: `body.source` > `body.provider` > modo.
+  #1168c en `richest`: un reintento cuyo envío anterior no quedó `rejected` vuelve por la MISMA cuenta (`why:'retry-same'`) si sigue en
+  `_paySlots()`; y un perfil hgcash sin secreto de webhook queda fuera de la elección si otro perfil tiene secreto (`_paySlotNoWebhook`,
+  `noWebhook` en el payload).
 - **Dónde se aplica** — `_payPendingPayout` (lo usan `POST /api/admin/payouts/:id/pay` y el pago AUTOMÁTICO): valida el pedido, resuelve la
   fuente y la deja en `req._paySrc`; hgcash usa `_hgKeyPay = req._paySrc.key || _hgActiveKey` con el token y el perfil de ESA key;
   `_payPayoutViaFinpro` usa la cuenta de `req._paySrc.key`. El candado (`_payoutResendGuard` / `_payoutNoteSend`) recibe esa key y el pago la
   guarda (`hgAccountKey` / `fpAccountKey`) + `hgDebitAccountId` (cuenta real de hgcash).
 - **Frenos propios de este repo:** `_payoutAutoJump` (el automático no cambia solo de cuenta con `fixed`/`richest` si ya hubo un envío ⇒
-  revisión de una persona); mismo perfil pero otra cuenta real que el envío anterior no rechazado ⇒ `needsConfirm`; cuenta elegida que ya no
-  está ⇒ error (nunca cae a la en uso).
+  revisión de una persona; con `retry-same` no salta: vuelve por la misma); cuenta elegida que ya no está ⇒ error (nunca cae a la en uso).
+- **Cuenta REAL en el candado (#1168c, réplica #223c):** UN solo campo, `PendingPayout.hgDebitAccountId` (el origen lo llama
+  `lastSendAccountId`: no duplicar). `_payoutResendGuard(payout, banco, perfil, cbu, confirmado, realAccountId)`: "misma ruta" = mismo
+  banco + mismo perfil + misma cuenta real; mismo perfil con otra cuenta real ⇒ espera de `PAYOUT_RESEND_COOLDOWN_MS` y después
+  `needsConfirm` si el anterior no quedó `rejected`. `_payoutNoteSend(…, realAccountId)` la deja en el `sendLog`. El reintento por 403
+  reescribe `hgDebitAccountId`. Finpro no pasa cuenta real. Un envío viejo sin el dato se comporta como antes.
+- **`resolveHgcashAccountId({ acct })` (#1168c):** con perfil fijado NO usa el respaldo "último movimiento" (devuelve null ⇒ el pago
+  responde 400). Sin perfil (token de AWS) el respaldo sigue.
+- **Respuesta del pago:** `paidFrom` (banco · cuenta + nota de la cuenta real) ⇒ el panel muestra "SALIÓ POR …" escapado.
 - **Endpoints:** `GET /api/admin/payout-sources[?fresh=1]` (quien paga retiros; `canEdit` = dueño) · `POST /api/admin/payout-sources`
   `{mode, fixed}` y `POST /api/admin/hgcash/accounts/:key/pay-account` `{accountId | ''}` (sólo el dueño, `OWNER_ONLY_MUTATIONS`).
   `GET /api/admin/payouts` suma `payFrom`, `paySources`, `payFromReady`, `otherAccount`.

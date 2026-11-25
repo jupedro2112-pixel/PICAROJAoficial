@@ -135,6 +135,30 @@ t('anotar el envío y su resultado deja el rastro en el retiro', async () => {
   assert.strictEqual(updates[0].u.$push.sendLog.$each[0].label, 'hgcash · CUENTA-A');
   assert.strictEqual(updates[1].u.$set.lastSendResult, 'unknown');
 });
+t('#1168c (réplica #223c) mismo perfil pero OTRA cuenta real de hgcash → NO es la misma ruta (espera y confirmación)', async () => {
+  const base = { id: 'pX', amount: 5000, createdAt: ago(20 * 60 * 1000), lastSendBank: 'hgcash', lastSendAccount: 'a1', hgDebitAccountId: 'real-1', lastSendResult: 'unknown', sendLog: [{ at: ago(10 * 60 * 1000) }] };
+  let g = await X._payoutResendGuard(Object.assign({ lastSendAt: ago(10 * 60 * 1000) }, base), 'hgcash', 'a1', CBU, false, 'real-1');
+  assert.strictEqual(g, null); // misma cuenta real: el banco deduplica por externalID
+  g = await X._payoutResendGuard(Object.assign({ lastSendAt: ago(10 * 60 * 1000) }, base), 'hgcash', 'a1', CBU, false, 'real-2');
+  assert.ok(g && g.http === 409 && g.body.needsConfirm === true && /OTRA cuenta de hgcash/.test(g.body.error));
+  assert.strictEqual(await X._payoutResendGuard(Object.assign({ lastSendAt: ago(10 * 60 * 1000) }, base), 'hgcash', 'a1', CBU, true, 'real-2'), null); // pasada la espera y confirmado: pasa
+  g = await X._payoutResendGuard(Object.assign({ lastSendAt: ago(20 * 1000) }, base), 'hgcash', 'a1', CBU, true, 'real-2');
+  assert.ok(g && g.body.wait === true && g.body.retryInSec > 90); // dentro de los 2 minutos ni confirmando
+  g = await X._payoutResendGuard(Object.assign({ lastSendAt: ago(20 * 1000) }, base, { lastSendResult: 'rejected' }), 'hgcash', 'a1', CBU, false, 'real-2');
+  assert.ok(g && g.body.wait === true); // … ni con un rechazo claro (igual que al cambiar de cuenta)
+  assert.strictEqual(await X._payoutResendGuard(Object.assign({ lastSendAt: ago(10 * 60 * 1000) }, base, { lastSendResult: 'rejected' }), 'hgcash', 'a1', CBU, false, 'real-2'), null);
+  g = await X._payoutResendGuard(Object.assign({ lastSendAt: ago(10 * 60 * 1000) }, base, { hgDebitAccountId: null }), 'hgcash', 'a1', CBU, false, 'real-2');
+  assert.strictEqual(g, null); // envío viejo sin cuenta real anotada: se comporta como antes
+  g = await X._payoutResendGuard(Object.assign({ lastSendAt: ago(10 * 60 * 1000) }, base, { lastSendBank: 'finpro', lastSendAccount: 'f1' }), 'finpro', 'f1', CBU, false);
+  assert.strictEqual(g, null); // Finpro no pasa cuenta real: un `hgDebitAccountId` viejo de hgcash no lo afecta
+});
+t('#1168c el envío anota la cuenta REAL que debita en el renglón del sendLog', async () => {
+  await X._payoutNoteSend('p2', 'hgcash', 'a1', 'operador1', 'real-7');
+  assert.strictEqual(updates[0].u.$push.sendLog.$each[0].accountId, 'real-7');
+  assert.strictEqual(updates[0].u.$set.hgDebitAccountId, undefined); // el campo del retiro lo escribe el pago (junto con paidVia), no esta función
+  await X._payoutNoteSend('p2', 'finpro', 'f1', 'operador1');
+  assert.strictEqual(updates[1].u.$push.sendLog.$each[0].accountId, null);
+});
 
 // ── Propios de PICA ROJA ─────────────────────────────────────────────────────────────────────────
 t('PICA ROJA: la salida de un reintento con externalID `<id>-rN` (#820) también cuenta como "ya salió"', async () => {

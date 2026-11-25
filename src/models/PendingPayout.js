@@ -38,7 +38,7 @@ const pendingPayoutSchema = new mongoose.Schema({
 
   // Datos del cash-out en hgcash
   hgTransactionId: { type: String, default: null, index: true }, // id del REQUEST del cash-out (createCashOut)
-  hgDebitAccountId: { type: String, default: null },             // #1168 id de la cuenta REAL de hgcash que debitó el último envío (un token puede ver varias)
+  hgDebitAccountId: { type: String, default: null },             // #1168 id de la cuenta REAL de hgcash que debitó el último envío (un token puede ver varias); #1168c la compara `_payoutResendGuard`
   hgAccountKey: { type: String, default: null },                 // #1160 perfil de cuenta hgcash que pagó (su token consulta estado/recibo aunque se rote)
   // #1160 Finpro (paidVia 'finpro'): un payout = un proceso (`process_id` uuid) con una transferencia.
   fpProcessId: { type: String, default: null, index: true },     // process_id del lote en Finpro (se reusa SOLO si fpAccepted)
@@ -53,7 +53,7 @@ const pendingPayoutSchema = new mongoose.Schema({
   lastSendBank: { type: String, default: null },                 // 'hgcash' | 'finpro'
   lastSendAccount: { type: String, default: null },              // key del perfil (a1…/f1…/'env')
   lastSendResult: { type: String, default: null },               // 'sending' | 'accepted' | 'rejected' | 'unknown'
-  sendLog: { type: [mongoose.Schema.Types.Mixed], default: [] }, // [{ at, bank, account, label, by, result, detail }] (últimos 20)
+  sendLog: { type: [mongoose.Schema.Types.Mixed], default: [] }, // [{ at, bank, account, accountId, label, by, result, detail }] (últimos 20)
   verifyUntil: { type: Date, default: null },                    // #1165 (réplica #221) hasta cuándo está "VERIFICANDO" (envío a hgcash sin respuesta clara): bloquea pagar / marcar pagado / rechazar
   hgTxId: { type: String, default: null },                       // id de la TRANSACCIÓN real (ledger) → para el comprobante PDF
   receiptSentAt: { type: Date, default: null },                  // cuándo se le envió el comprobante PDF al cliente (idempotencia)
