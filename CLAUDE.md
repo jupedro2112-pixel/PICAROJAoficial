@@ -627,3 +627,20 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
    SW siguen usando el bundle viejo. Un js/css nuevo se agrega sólo como etiqueta en index.html (la lista se lee de ahí).
 3. Actualizar `WORKLOG.md`.
 4. Commitear y pushear a `main` cuando el owner lo pida (o si pidió "todo seguido").
+
+## Reglas permanentes del owner (valen en TODOS sus repos)
+
+- **AUDITAR ANTES DE REPLICAR (owner, 2026-11-25):** cuando un cambio se va a replicar a los demás repos con subagentes,
+  ANTES se lanza un subagente auditor independiente que revise errores al detalle y en profundidad sobre lo implementado en el
+  repo de origen (se le da el diff y el código, no la conclusión). Recién con sus hallazgos corregidos se replica — y conviene
+  hacerlo también antes de decirle al owner que despliegue. Motivo: un subagente que replicaba encontró un error ya desplegado
+  (una `function` nueva con el mismo nombre que otra existente, que la pisaba por hoisting). Chequeo mínimo propio antes de cerrar
+  un cambio en `server.js`: buscar declaraciones `function` duplicadas
+  (`grep -oE '^(async )?function [A-Za-z0-9_$]+' server.js | awk '{print $NF}' | sort | uniq -d` tiene que salir vacío);
+  ni `node --check` ni los tests lo avisan.
+- **El "reembolso en vivo" (cashback acumulativo) NO se usa (owner, 2026-11-25):** está apagado en todas las apps y no se va a
+  usar. No plantear riesgos, pendientes ni trabajo sobre ese flujo salvo que el owner lo pida.
+- **NADA SOLO EN LA MEMORIA LOCAL (owner, 2026-11-25):** el owner trabaja en Tails y al reiniciar se borra todo lo local,
+  incluida la memoria del asistente (`~/.claude/...`). Toda regla, preferencia o dato que el owner pida recordar se escribe
+  en ESTE archivo (sección "Reglas permanentes del owner"), se commitea y se pushea en el momento — y si vale para todas sus
+  apps, en el `CLAUDE.md` de TODOS sus repos. La memoria local sirve, a lo sumo, de copia dentro de la misma sesión.
