@@ -1191,10 +1191,18 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
   // un bonus_out_of_range tiene que verse como error (no convertirse en carga).
   if (opts && opts.multiplier != null) {
     // #1040: `carryOver` (reembolsos, nivel VIP) ⇒ con rollover >0 el bono nuevo PISA al activo: se le suma lo que le quedaba (bonusCarryOver).
-    let sendAmt = amt; let carry = 0; let desc = opts.description || '';
+    let sendAmt = amt; let carry = 0; let desc = opts.description || ''; let balBefore = null;
     if (opts.carryOver && Number(opts.multiplier) > 0) {
       const co = await bonusCarryOver(username);
       if (!co.ok) return { success: false, error: co.reason, code: 'claim_failed', httpStatus: 503 };
+      balBefore = co.balBefore;
+      // #1167: arrastre EN PAUSA (lo frenó el control de plata o el dueño) ⇒ este regalo no pisa ni arrastra: va por depósito con el mismo rollover y la MISMA reference.
+      if (co.carry > 0 && await bonusCarryPaused()) {
+        logger.warn(`[girox] bono a ${username} $${amt} (x${opts.multiplier}) va por DEPÓSITO con rollover (figura como Carga) — arrastre de bonos EN PAUSA y el jugador tiene un bono activo de $${co.carry}`);
+        const d = await depositToUser(username, amt, _giftAsDepositDesc(desc), reference, { multiplier: Number(opts.multiplier) });
+        if (d && d.success) { d.creditedAs = 'deposit'; d.fallbackReason = `arrastre de bonos en pausa (bono activo de $${co.carry})`; }
+        return d;
+      }
       if (co.carry > 0) { carry = co.carry; sendAmt = Math.round((amt + carry) * 100) / 100; desc = `${desc || 'Bono'} (+ $${carry.toLocaleString('es-AR')} que quedaban del bono anterior)`; logger.info(`[girox] bono a ${username} $${amt} con bono activo $${carry} ⇒ $${sendAmt}`); }
     }
     const body = {
@@ -1217,7 +1225,7 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
     _invalidatePlayer(username);
     const out = _moneyResult(r.data);
     out.creditedAs = 'bonus';
-    if (carry > 0) { out.carriedBonus = carry; out.bonusTotal = sendAmt; if (!out.duplicate) _notifyCarry(username, body.reference, carry, sendAmt, 'bonus'); }
+    if (carry > 0) { out.carriedBonus = carry; out.bonusTotal = sendAmt; if (!out.duplicate) { _notifyCarry(username, body.reference, carry, sendAmt, 'bonus'); checkBonusCarry({ username, reference: body.reference, gift: amt, carry, total: sendAmt, balBefore, result: out, kind: 'bonus' }); } }
     return out;
   }
 
@@ -1257,7 +1265,7 @@ async function creditUserBalance(username, amount, reference = null, opts = {}) 
   }
 
   // Depósito libre (fallback / kill switch)
-  const out = await depositToUser(username, amt, description, ref);
+  const out = await depositToUser(username, amt, _giftAsDepositDesc(description), ref); // #1167 (réplica #238)
   if (out && out.success) out.creditedAs = 'deposit';
   return out;
 }
@@ -1296,18 +1304,60 @@ function _notifyCarry(username, reference, carry, total, kind) {
   if (!_carryHook || !(carry > 0)) return;
   try { Promise.resolve(_carryHook({ username, reference, carry, total, kind })).catch(() => {}); } catch (_) {}
 }
+// #1167 (réplica #237 de CARGASGIROXactivo) — CONTROL DE PLATA del arrastre. El arrastre da por hecho que 1girox, al otorgar el bono nuevo,
+// le DEBITA al jugador lo que le quedaba del viejo ("bono sobre bono"): por eso el bono nuevo sale por regalo + resto y el jugador gana sólo
+// el regalo. Si 1girox NO lo debitara, cada arrastre le regalaría el resto de más. La respuesta de la operación trae el saldo: se compara con el de
+// la lectura fresca de `bonusCarryOver` y, si subió bastante más que lo esperado, se avisa por `setBonusCarryAnomalyHook` (server.js pone el
+// arrastre EN PAUSA y alerta). Con el arrastre en pausa (`setBonusCarryPausedResolver`), un regalo a un jugador con bono activo vuelve a ir por
+// depósito con rollover (lo de antes del #1040): figura como Carga pero no pisa ni duplica nada. Por defecto NO hay pausa: nada cambia.
+let _carryAnomalyHook = null;
+function setBonusCarryAnomalyHook(fn) { _carryAnomalyHook = typeof fn === 'function' ? fn : null; }
+let _carryPausedResolver = null;
+function setBonusCarryPausedResolver(fn) { _carryPausedResolver = typeof fn === 'function' ? fn : null; }
+async function bonusCarryPaused() { try { return !!(_carryPausedResolver && await _carryPausedResolver()); } catch (_) { return false; } }
+/**
+ * ¿El saldo subió lo esperado tras un arrastre? `expected` = lo que el jugador tenía que ganar (el regalo; en una carga con bono pegado,
+ * carga + bono). Umbral del origen: esperado + max($100, 50% del resto arrastrado). Sin saldo antes/después no se puede juzgar (no avisa).
+ * Nunca en `duplicate` (la respuesta trae el saldo de AHORA, no el de la operación). Devuelve true si avisó. Nunca rompe el crédito.
+ */
+function checkBonusCarry({ username, reference, gift, carry, total, balBefore, result, kind, expected }) {
+  try {
+    if (!(carry > 0) || !result || !result.success || result.duplicate) return false;
+    const after = result.data && result.data.user_balance_after != null ? Number(result.data.user_balance_after) : NaN;
+    const before = balBefore == null ? NaN : Number(balBefore);
+    if (!Number.isFinite(after) || !Number.isFinite(before)) return false;
+    const exp = expected != null && Number.isFinite(Number(expected)) ? Number(expected) : Number(gift) || 0;
+    const gained = Math.round((after - before) * 100) / 100;
+    logger.info(`[girox] arrastre de ${username}: saldo $${before} → $${after} (subió $${gained}; esperado $${exp}; resto arrastrado $${carry})`);
+    if (gained > exp + Math.max(100, carry * 0.5)) {
+      logger.error(`[girox] ⚠️ ARRASTRE ANÓMALO de ${username}: el saldo subió $${gained} y lo esperado era $${exp} (resto del bono anterior $${carry}, ref=${reference}) — 1girox no habría debitado el bono anterior`);
+      if (_carryAnomalyHook) Promise.resolve(_carryAnomalyHook({ username, reference, gift: Number(gift) || 0, carry, total, balBefore: before, balAfter: after, gained, expected: exp, kind: kind || null })).catch(() => {});
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+// #1167 (réplica #238): un REGALO que no pudo salir como bono y va por depósito figura como "Carga" en 1girox ⇒ la descripción le avisa a quien
+// hace el cierre en el panel de 1girox que hay que contarlo como BONO.
+function _giftAsDepositDesc(description) {
+  const d = String(description || 'Regalo de la sala');
+  if (d.indexOf('BONO (contar como BONO') === 0) return d.slice(0, 500);
+  return ('BONO (contar como BONO, NO como carga): ' + d + ' — sale como depósito por una limitación de la API de 1girox').slice(0, 500);
+}
 async function bonusCarryOver(username) {
   let info = null;
   try { info = await getUserInfoByName(username, { fresh: true }); } catch (_) { return { ok: true, carry: 0 }; }
   if (!info) return { ok: true, carry: 0 };
   const locked = Number(info.bonusLocked) || 0;
   const claim = Number(info.claimableTotal) || 0;
+  // #1167: saldo de ESTA lectura, para el control de después. Si hubo que reclamar un bono pendiente el saldo cambia ⇒ no se puede comparar (null).
+  const balBefore = claim > 0 || info.balance == null || !Number.isFinite(Number(info.balance)) ? null : Number(info.balance);
   if (claim > 0) {
     const c = await claimPendingBonus(username);
     if (!c.success) return { ok: false, reason: `tiene $${claim} de bono a reclamar y no se pudo reclamar (${c.code || c.error}) — un bono nuevo podría llevárselo` };
     logger.info(`[girox] ${username}: se reclamó su bono pendiente ($${c.amount || claim}) antes de otorgar uno nuevo`);
   }
-  return { ok: true, carry: locked > 0 ? Math.round(locked * 100) / 100 : 0 };
+  return { ok: true, carry: locked > 0 ? Math.round(locked * 100) / 100 : 0, balBefore };
 }
 async function creditGift(username, amount, opts = {}) {
   const amt = _normalizeAmount(amount);
@@ -1343,10 +1393,13 @@ async function creditGift(username, amount, opts = {}) {
   let carry = 0;
   let sendAmt = amt;
   let sendDesc = description;
+  let balBefore = null;
   if (viaBonus) {
     const co = await bonusCarryOver(username);
     if (!co.ok) { viaBonus = false; why = co.reason; }
+    else if (co.carry > 0 && await bonusCarryPaused()) { viaBonus = false; why = `arrastre de bonos EN PAUSA y el jugador tiene un bono activo de $${co.carry}`; } // #1167
     else if (co.carry > 0) {
+      balBefore = co.balBefore;
       carry = co.carry;
       sendAmt = Math.round((amt + carry) * 100) / 100;
       let mx = 0;
@@ -1363,14 +1416,14 @@ async function creditGift(username, amount, opts = {}) {
 
   if (viaBonus) {
     const r = await creditUserBalance(username, sendAmt, reference, { multiplier: roll, description: sendDesc, noGiftGuard: true });
-    if (r && r.success) { r.creditedAs = 'bonus'; r.claimRequired = true; if (carry > 0) { r.carriedBonus = carry; r.bonusTotal = sendAmt; if (!r.duplicate) _notifyCarry(username, reference, carry, sendAmt, 'gift'); } return r; }
+    if (r && r.success) { r.creditedAs = 'bonus'; r.claimRequired = true; if (carry > 0) { r.carriedBonus = carry; r.bonusTotal = sendAmt; if (!r.duplicate) { _notifyCarry(username, reference, carry, sendAmt, 'gift'); checkBonusCarry({ username, reference, gift: amt, carry, total: sendAmt, balBefore, result: r, kind: 'gift' }); } } return r; }
     const definitivo = r && (['feature_disabled', 'bonus_out_of_range', 'validation_error', 'invalid_multiplier', 'player_not_found'].includes(r.code) || r.httpStatus === 422);
     if (!definitivo) return r; // transitorio: no cambiar de vía
     why = `la plataforma rechazó el bono (${r.code || r.error})`;
   }
 
   logger.warn(`[girox] regalo a ${username} $${amt} (x${roll}) va por DEPÓSITO con rollover (figura como Carga) — ${why || 's/motivo'}`);
-  const r = await depositToUser(username, amt, description, reference, { multiplier: roll });
+  const r = await depositToUser(username, amt, _giftAsDepositDesc(description), reference, { multiplier: roll }); // #1167 (réplica #238)
   if (r && r.success) { r.creditedAs = 'deposit'; r.fallbackReason = why; }
   return r;
 }
@@ -1851,6 +1904,7 @@ module.exports = {
   bonusCarryOver, // #1040
   setBonusCarryHook, // #1040
   notifyBonusCarry: _notifyCarry, // #1040 (bono pegado a la carga)
+  setBonusCarryAnomalyHook, setBonusCarryPausedResolver, bonusCarryPaused, checkBonusCarry, giftAsDepositDesc: _giftAsDepositDesc, // #1167
   formatStatsDate,
   // configuración del sitio
   getPlatformConfig,

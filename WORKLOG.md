@@ -15511,3 +15511,57 @@ la actividad de último ingreso.
 - **Lo que NO cubre:** visitantes anónimos (sin sesión no hay a quién identificar).
 - **Archivos:** `outboundWebhookService.js`, `server.js`, `User.js`, panel (index.html / admin.js, admin-sw v322), test nuevo
   `scripts/test-webhook-visit.js` (7). **Validado:** `node --check` y tests en frío. **NO probado** con un receptor real.
+
+## Sesión 2026-11-25
+
+### 1167. 🎁 Arrastre de bonos (#1040): control de plata con pausa automática + descripciones detalladas en 1girox + tarjetas en Transacciones — réplica #236–#239 de CARGASGIROXactivo — admin-sw v323
+Encargo: traer de CARGASGIROXactivo lo que hizo en sus #236–#239 (regalos que 1girox anotaba como "Carga"). **Este repo ya unifica desde el
+#1040** (`bonusCarryOver` / `creditGift` / `creditUserBalance({carryOver})` / `_depositWithBonus` / `bonus_carry_log`): eso NO se tocó ni
+cambió su comportamiento por defecto. Se SUMÓ lo que el origen tenía y acá faltaba:
+- **Control de plata del arrastre (réplica #237).** El arrastre da por hecho que 1girox, al otorgar el bono nuevo, le debita al jugador lo
+  que le quedaba del viejo. Ahora se verifica: `bonusCarryOver` devuelve además `balBefore` (saldo de la lectura fresca) y
+  `giroxService.checkBonusCarry` lo compara con el saldo de la respuesta. Si subió más que **lo esperado + max($100, 50 % del resto)**
+  (umbral del origen) ⇒ log `[girox] ⚠️ ARRASTRE ANÓMALO` + hook `setBonusCarryAnomalyHook` ⇒ server.js pone el arrastre **EN PAUSA**
+  (`Config['bonusCarryPause']`), alerta roja del panel (`bankAlert` → `security_alert`; este repo no tiene Telegram de alertas de plata),
+  nota interna en el chat del jugador y marca `anomaly:true` en `bonus_carry_log`. Cubre los tres caminos: `creditGift`,
+  `creditUserBalance({carryOver})` y el bono pegado a la carga (`_depositWithBonus`, esperado = carga + bono). Nunca en `duplicate`; si hubo
+  que reclamar un bono pendiente antes, no se juzga (el saldo cambió por el reclamo).
+- **Arrastre en pausa = lo de antes del #1040, sin pisar a nadie.** Con la pausa puesta, un regalo a un jugador CON bono activo va por
+  depósito con el mismo rollover y la MISMA reference (figura como Carga, queda `metadata.creditedAs:'deposit'` + `giftFallback`); la carga
+  con bono va SIN bono pegado y el bono aparte (`<ref>-bono`, también por depósito). A quien no tiene bono activo no le cambia nada. Se
+  reactiva en **Transacciones → cartel rojo "ARRASTRE DE BONOS EN PAUSA" → "Ya lo revisé: reactivar"** (sólo admin general;
+  `GET/POST /api/admin/strategy/bonus-carry`, que también permite pausarlo a mano con `{paused:true}`). La pausa se lee con caché de 20 s
+  (con varias instancias, las otras frenan en ≤20 s). **Por defecto NO hay pausa.**
+- **Regalo que igual sale por depósito (réplica #238):** la descripción hacia 1girox empieza con
+  `BONO (contar como BONO, NO como carga): <qué regalo es> — sale como depósito por una limitación de la API de 1girox`
+  (`giroxService.giftAsDepositDesc`; en `creditGift`, en el depósito libre de `creditUserBalance`, en la pausa y en `_creditFireReward`).
+- **Descripción detallada de TODO lo que se acredita (réplica #239).** Sólo cambia el texto que viaja a 1girox (montos, references, rollover,
+  descripción de la Transaction local y textos al cliente NO cambian; revisado que nada los parsea: cierre, panel y tests miran la Transaction
+  local). Empiezan con el TIPO: `REEMBOLSO diario del <fecha>` / `semanal del … al …` / `mensual …` (antes "Reembolso daily:2026-…") ·
+  `REEMBOLSO ACUMULATIVO — N% de la pérdida acumulada` · `REGALO — Rakeback semanal VIP del … al …: N% de $X apostados` ·
+  `REGALO — Fueguito (racha diaria): …` · `REGALO — Premio de la ruleta diaria: …` · `REGALO — Misión semanal cumplida: …` ·
+  `REGALO — Extra por instalar la app: …` (y su diferencia) · `REGALO — N% por dejar su opinión (reseña)…` · `REGALO — Código sorpresa …` ·
+  `REGALO — Fichas de regalo del lote de notificaciones "…"` · `BONO manual — bonificación otorgada por el agente <usuario> desde el panel` ·
+  `BONO — Premio por alcanzar el nivel VIP …` · `BONO — Bono sorpresa por el código de bienvenida…` · `BONO de la carga — …` (el bono que va
+  aparte) · `COMISIÓN de referidos — …` · `DEVOLUCIÓN de retiro rechazado — …` (fichas / bono; la parte bono iba sin texto). Se mantiene el
+  sufijo de arrastre "(+ $X que quedaban del bono anterior)".
+- **Transacciones (réplica #236/#237):** tarjetas **"Regalos que 1girox muestra como Carga"** (`summary.giftsAsDeposit`, Transactions de
+  regalo con `metadata.creditedAs:'deposit'`) y **"Bonos anteriores arrastrados"** (`summary.carriedBonus`, suma de `bonus_carry_log` del
+  período y del usuario filtrado). Sólo aparecen si hay alguno. El cierre diario vs 1girox ya los calculaba por DÍA (`app.regalosComoCarga`,
+  `app.arrastreBonos`) pero el panel no los mostraba como número ni por período. `_giftMeta(r)` guarda `creditedAs` / `giftFallback` /
+  `carriedBonus` en las Transactions de regalo que no lo tenían (reembolsos ×3, rakeback, Bonificación manual, código de bienvenida, lotes).
+- **Mensajes al cliente:** el del Fueguito decía "apostar $(premio × N)"; con arrastre el objetivo real es (premio + resto) × N ⇒ ahora lo
+  calcula sobre el total y lo aclara (`rolloverTarget` de la respuesta también). Las fichas de un lote: con arrastre dice el total en pesos
+  (`_batchRollTxt`). El resto de los textos dicen "apostalo ×N" sin monto (ruleta, reembolso acumulativo, /sys_*): no se tocaron.
+- **Archivos:** `src/services/giroxService.js`, `server.js`, `src/services/referralPayoutService.js`, panel (`admin.js`, admin-sw v323),
+  test nuevo `scripts/test-gift-carry-check.js` (12 casos, API simulada con "bono sobre bono" y modo "no debita"); tests estáticos
+  acompañados: `test-gift-rollovers` (texto de referidos) y `test-dup-account` (devolución con descripción).
+- **Validado:** `node --check` de lo tocado y todos los `scripts/test-*.js` (fallan los mismos que antes: `test-sorteos-front` y
+  `test-sorteos-server`). **NO probado contra 1girox real:** (a) que `balance` de la respuesta de `/bonus` y de `/deposit` sea el saldo TOTAL
+  comparable con el de `GET /players/{u}` (si no lo fuera, el control no avisa nunca o avisa de más); (b) cuántos caracteres de la descripción
+  muestra el panel de 1girox (por eso el TIPO va primero); (c) el panel nuevo en un navegador. **Falso positivo posible:** si el jugador gana
+  una apuesta grande en el segundo que pasa entre la lectura y el bono, el control puede pausar el arrastre sin que haya un problema: se
+  revisa el caso en 1girox y se reactiva. **Mirar el primer log** `[girox] arrastre de X: saldo A → B (subió …; esperado …)`.
+- **Pendiente para decidir (no se cambió, es comportamiento del #1040):** si no se puede LEER al jugador, el bono sale igual sin arrastre
+  (pisaría un bono activo); en los `/bonus` estrictos con arrastre (reembolsos, VIP, rakeback, manual, código, lotes) un total sobre el
+  `fixed_max` de 1girox rebota en vez de caer a depósito; `_creditFireReward` con rollover NO entero sigue yendo a depósito con bono activo.

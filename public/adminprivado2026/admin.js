@@ -5609,6 +5609,19 @@ function renderTransactionsPagination(data) {
         ${mk('Siguiente →', page + 1, page >= totalPages)}`;
 }
 
+// #1167: pausar / reactivar el arrastre de bonos (sólo admin general; el control de plata lo pausa solo si un arrastre da un saldo raro).
+async function bonusCarrySet(paused) {
+    if (!confirm(paused ? '¿Pausar el arrastre de bonos? Los regalos a quien tenga un bono activo van a salir por depósito (figuran como Carga).' : '¿Reactivar el arrastre de bonos? Hacelo sólo si ya revisaste en 1girox el caso que lo pausó.')) return;
+    try {
+        const r = await authFetch('/api/admin/strategy/bonus-carry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paused: !!paused }) });
+        const j = await r.json();
+        if (!r.ok) { showToast(j.error || 'No se pudo', 'error'); return; }
+        showToast(j.paused ? 'Arrastre de bonos en pausa' : 'Arrastre de bonos reactivado', 'success');
+        if (typeof loadTransactions === 'function') loadTransactions();
+    } catch (_) { showToast('Error de conexión', 'error'); }
+}
+window.bonusCarrySet = bonusCarrySet;
+
 function renderTransactionStats(summary) {
     const statsContainer = document.getElementById('transactionStats');
     if (statsContainer) {
@@ -5669,6 +5682,24 @@ function renderTransactionStats(summary) {
                 <span class="stat-number">${formatMoney(summary.gifts || 0)}</span>
                 <span class="stat-label">Total regalos (no cargas)</span>
             </div>
+            ${summary.giftsAsDeposit > 0 ? `
+            <div class="stat-card" style="border-color:#ef4444" title="Regalos del período que 1girox anotó como CARGA (no pudieron salir como bono: monto fuera del rango de bono, total sobre el máximo, rechazo de la plataforma o arrastre en pausa). En el panel de 1girox figuran en Cargas con la descripción 'BONO (contar como BONO, NO como carga)'. Al cerrar: restalos de las cargas de 1girox y sumalos a los bonos.">
+                <span style="font-size:1.2rem">⚠️</span>
+                <span class="stat-number" style="color:#ef4444">${formatMoney(summary.giftsAsDeposit || 0)}</span>
+                <span class="stat-label">Regalos que 1girox muestra como Carga <small style="opacity:.7">(${summary.giftsAsDepositCount || 0})</small></span>
+            </div>` : ''}
+            ${summary.carriedBonus > 0 ? `
+            <div class="stat-card" style="border-color:#8b5cf6" title="Resto de bonos anteriores que se volvió a dar ADENTRO de un bono nuevo (el cliente ya tenía un bono activo). En 1girox el Bono figura por regalo + resto y hay una 'Cancelación de bono' por el resto: al cerrar, los bonos de 1girox van a dar esto de más respecto de los regalos de la app.">
+                <span style="font-size:1.2rem">🔗</span>
+                <span class="stat-number" style="color:#8b5cf6">${formatMoney(summary.carriedBonus || 0)}</span>
+                <span class="stat-label">Bonos anteriores arrastrados <small style="opacity:.7">(${summary.carriedBonusCount || 0})</small></span>
+            </div>` : ''}
+            ${summary.carryPause && summary.carryPause.paused ? `
+            <div class="stat-card" style="border-color:#ef4444;grid-column:1/-1;text-align:left;">
+                <span class="stat-label" style="color:#ef4444;font-weight:700;">🚨 ARRASTRE DE BONOS EN PAUSA${summary.carryPause.by ? ' — ' + escapeHtml(String(summary.carryPause.by)) : ''}${summary.carryPause.at ? ' · ' + escapeHtml(new Date(summary.carryPause.at).toLocaleString('es-AR')) : ''}</span>
+                <span class="stat-label" style="display:block;margin-top:6px;white-space:normal;">${escapeHtml(String(summary.carryPause.reason || 'Los regalos a quien tiene un bono activo salen por depósito con rollover (figuran como Carga) hasta reactivarlo.'))}</span>
+                <button onclick="bonusCarrySet(false)" style="margin-top:8px;padding:7px 14px;border:none;border-radius:6px;background:#ef4444;color:#fff;font-weight:700;cursor:pointer;">Ya lo revisé: reactivar el arrastre</button>
+            </div>` : ''}
             <div class="stat-card net-balance ${netBalanceClass}">
                 <span class="icon icon-balance"></span>
                 <span class="stat-number">${formatMoney(netBalance)}</span>

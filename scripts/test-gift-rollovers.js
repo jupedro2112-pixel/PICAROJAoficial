@@ -258,7 +258,7 @@ caso('referralPayoutService: rollover de referidos = Config referralRolloverX (d
   assert.strictEqual(await svc.getReferralRolloverX(), 1);
   configStore.referralRolloverX = 2; assert.strictEqual(await svc.getReferralRolloverX(), 2); delete configStore.referralRolloverX;
   const src = fs.readFileSync(path.join(ROOT, 'src/services/referralPayoutService.js'), 'utf8');
-  assert.ok(/giroxService\.creditGift\(\s*referrer\.username,\s*totalAmount,\s*\{ description, reference: payoutReference, rolloverX: referralRolloverX \}/.test(src));
+  assert.ok(/giroxService\.creditGift\(\s*referrer\.username,\s*totalAmount,\s*\{ description: `COMISIÓN de referidos — [^\n]*, reference: payoutReference, rolloverX: referralRolloverX \}/.test(src)) /* #1167: hacia 1girox el texto empieza con el TIPO */;
   assert.ok(!/giroxService\.creditUserBalance\(/.test(src), 'quedó un creditUserBalance en el pago de referidos');
 });
 caso('Misiones y reembolso acumulativo usan el rollover GLOBAL (_giftRolloverX) en server.js', async () => {

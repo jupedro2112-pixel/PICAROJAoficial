@@ -153,7 +153,7 @@ caso('server.js: cargas siguen (resolveAutoBonus devuelve sin bono), hgcash cheq
   assert.ok(/Comprobante\.find\(\{ userId: u\.id, \.\.\.CQ \}\)/.test(dac) && /Comprobante\.find\(\{ userId: \{ \$ne: u\.id \}, \.\.\.CQ, \$or: cOr \}\)/.test(dac));
   // #1033: el comprobante tardío de una transferencia que el banco YA acreditó no se confirma sin force.
   assert.ok(/code: 'BANK_ALREADY_CHARGED'/.test(SERVER));
-  assert.ok(/vip-payoutref-bonus-\$\{payout\.id\}`, \{ noGiftGuard: true \}\)/.test(SERVER));
+  assert.ok(/vip-payoutref-bonus-\$\{payout\.id\}`, \{ noGiftGuard: true, description: 'DEVOLUCIÓN [^']*' \}\)/.test(SERVER)) /* #1167: ahora viaja con descripción */;
   assert.ok(/noGiftGuard: true, \/\/ #992: la Bonificación MANUAL/.test(SERVER));
   assert.ok(/res\.json\(\{ \.\.\.user, metaMatching, dupMain \}\)/.test(SERVER));
 });

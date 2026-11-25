@@ -462,6 +462,19 @@ reintento manda la misma reference y la plataforma responde `duplicate:true`.
 > el monto del regalo, sin el arrastre (`carriedBonus` en el resultado). Desde la 2ª pasada también llevan arrastre el rakeback, el welcome code, los lotes y la Bonificación manual
 > (ya no rebotan/saltean por bono activo). Cierre vs 1girox: regalos con `metadata.creditedAs:'deposit'` van a "cargas" esperadas;
 > arrastres en la colección `bonus_carry_log` (hook `setBonusCarryHook`), mostrados como `app.arrastreBonos`.
+>
+> **#1167 (2026-11-25, réplica #236–#239 de CARGASGIROXactivo) — control del arrastre.** `bonusCarryOver` devuelve también `balBefore`;
+> tras cada arrastre `giroxService.checkBonusCarry` compara ese saldo con el de la respuesta: si subió más que lo esperado + max($100, 50 %
+> del resto) ⇒ `setBonusCarryAnomalyHook` ⇒ server.js guarda `Config['bonusCarryPause'] = { paused:true, at, by, reason, anomaly }`, alerta
+> roja (`bankAlert`) y nota interna en el chat. **Con la pausa** (`setBonusCarryPausedResolver`, caché 20 s) un regalo a quien tiene bono
+> activo va por DEPÓSITO con rollover y la misma reference (`creditedAs:'deposit'`), y la carga con bono va sin bono pegado + bono aparte
+> (`<ref>-bono`). Se reactiva / pausa con `GET/POST /api/admin/strategy/bonus-carry` (sólo admin general; cartel rojo en Transacciones).
+> Todo regalo que cae a depósito viaja con `BONO (contar como BONO, NO como carga): … — sale como depósito por una limitación de la API de
+> 1girox` (`giftAsDepositDesc`). **Descripciones hacia 1girox:** toda acreditación empieza con el TIPO en mayúsculas (`REEMBOLSO …`,
+> `REGALO — …`, `BONO — …`, `BONO manual — …`, `BONO de la carga — …`, `COMISIÓN de referidos — …`, `DEVOLUCIÓN de retiro rechazado — …`);
+> la descripción de la Transaction local es OTRA y no cambió. `_giftMeta(r)` (server.js) arma `creditedAs` / `giftFallback` / `carriedBonus`
+> para el `metadata` de la Transaction de regalo. `GET /api/admin/transactions` → `summary.giftsAsDeposit(+Count)`,
+> `summary.carriedBonus(+Count)` (de `bonus_carry_log`) y `summary.carryPause`. Test: `node scripts/test-gift-carry-check.js`.
 
 1girox tiene el feature "Rollover y Bonos" **activo**. Consecuencias:
 

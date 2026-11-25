@@ -401,10 +401,11 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
       );
 
       const referralRolloverX = await getReferralRolloverX();
+      // #1167 (réplica #239): hacia 1girox el texto empieza con el TIPO; la Transaction local conserva `description`.
       const creditResult = await giroxService.creditGift(
         referrer.username,
         totalAmount,
-        { description, reference: payoutReference, rolloverX: referralRolloverX }
+        { description: `COMISIÓN de referidos — ganancias por referidos de ${periodLabel}${isDeltaPayout ? ` (pago #${payoutIndex})` : ''}`, reference: payoutReference, rolloverX: referralRolloverX }
       );
 
       if (!creditResult.success) {
@@ -468,6 +469,7 @@ async function executePayoutsForPeriod(periodKey, options = {}) {
           payoutIndex,
           isDelta: isDeltaPayout,
           creditedAs: creditResult.creditedAs || null,
+          ...(Number(creditResult.carriedBonus) > 0 ? { carriedBonus: Number(creditResult.carriedBonus) } : {}), // #1167
           rollover: referralRolloverX
         }
       });

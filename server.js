@@ -547,6 +547,44 @@ function validatePassword(password) {
 const girox = require('./src/services/giroxService');
 // #1040: cada bono que arrastró el resto de uno anterior queda anotado (el cierre vs 1girox lo usa para explicar la diferencia de bonos).
 try { girox.setBonusCarryHook((x) => mongoose.connection.collection('bonus_carry_log').updateOne({ _id: String(x.reference || (x.username + '-' + Date.now())) }, { $setOnInsert: { username: x.username, carry: Number(x.carry) || 0, total: Number(x.total) || 0, kind: x.kind || null, at: new Date() } }, { upsert: true })); } catch (_) {}
+// #1167 (réplica #237 de CARGASGIROXactivo): CONTROL DE PLATA del arrastre de bonos (#1040). Si tras un arrastre el saldo del jugador subió
+// bastante más que el regalo (1girox no habría debitado el bono anterior), el arrastre queda EN PAUSA (`Config['bonusCarryPause']`): desde ahí
+// un regalo a un jugador con bono activo vuelve a ir por depósito con rollover (figura como Carga, marcado `creditedAs:'deposit'`) hasta que el
+// admin general lo revise y lo reactive (Transacciones → cartel rojo, o POST /api/admin/strategy/bonus-carry). Aviso: log `[arrastre-bonos]`,
+// alerta roja del panel (`bankAlert`, este repo no tiene Telegram de alertas de plata) y nota interna en el chat del jugador.
+let _carryPauseCache = { at: 0, v: false };
+async function _bonusCarryPauseGet() { try { const c = await getConfig('bonusCarryPause', null); return c && typeof c === 'object' ? c : null; } catch (_) { return null; } }
+try {
+  girox.setBonusCarryPausedResolver(async () => {
+    if (Date.now() - _carryPauseCache.at < 20000) return _carryPauseCache.v;
+    const c = await _bonusCarryPauseGet();
+    _carryPauseCache = { at: Date.now(), v: !!(c && c.paused) };
+    return _carryPauseCache.v;
+  });
+  girox.setBonusCarryAnomalyHook(async (a) => {
+    _carryPauseCache = { at: Date.now(), v: true }; // esta instancia frena YA; las demás en ≤20 s (leen la Config)
+    const m = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-AR');
+    const txt = `🚨 ARRASTRE DE BONOS EN PAUSA — al darle un regalo de ${m(a.gift)} a ${a.username} (tenía ${m(a.carry)} de un bono anterior) su saldo en 1girox subió ${m(a.gained)} (de ${m(a.balBefore)} a ${m(a.balAfter)}; lo esperado era ${m(a.expected)}). 1girox no habría descontado el bono anterior. Desde ahora los regalos a quien tenga un bono activo salen por depósito con rollover (figuran como Carga) hasta que el admin general lo revise y lo reactive en Transacciones. Revisar en 1girox el movimiento ref ${a.reference || 's/ref'}.`;
+    logger.error('[arrastre-bonos] ' + txt);
+    try {
+      const cur = await _bonusCarryPauseGet();
+      if (!(cur && cur.paused)) await Config.set('bonusCarryPause', { paused: true, at: new Date().toISOString(), by: 'control automático', reason: txt, anomaly: a }, 'control-arrastre');
+    } catch (e) { logger.error('[arrastre-bonos] no se pudo guardar la pausa: ' + e.message); }
+    try { await mongoose.connection.collection('bonus_carry_log').updateOne({ _id: String(a.reference || (a.username + '-' + Date.now())) }, { $set: { anomaly: true, gained: Number(a.gained) || 0, balBefore: Number(a.balBefore) || 0, balAfter: Number(a.balAfter) || 0, anomalyAt: new Date() }, $setOnInsert: { username: a.username, carry: Number(a.carry) || 0, total: Number(a.total) || 0, kind: a.kind || null, at: new Date() } }, { upsert: true }); } catch (_) {}
+    try { if (bankAlert.isEnabled()) await bankAlert.send(bankAlert.esc(txt)); } catch (_) {}
+    try { const u = await User.findOne({ username: a.username }).select('id username').lean(); if (u) await _emitAdminOnlyChatNote(u.id, u.username, txt); } catch (_) {}
+  });
+} catch (_) {}
+// #1167: cómo quedó anotado un regalo en 1girox, para la Transaction local (el cierre vs 1girox y las tarjetas de Transacciones lo leen).
+// El monto de la Transaction es SIEMPRE el regalo pedido; `carriedBonus` es lo que se arrastró del bono anterior (no es regalo nuevo).
+function _giftMeta(r) {
+  const o = {};
+  if (r && r.creditedAs) o.creditedAs = r.creditedAs;
+  if (r && r.creditedAs === 'deposit' && r.fallbackReason) o.giftFallback = String(r.fallbackReason).slice(0, 200);
+  // en un `duplicate` (reintento de algo que ya había entrado) el resto leído incluye al propio regalo: no es el arrastre real ⇒ no se anota
+  if (r && !r.duplicate && Number(r.carriedBonus) > 0) o.carriedBonus = Number(r.carriedBonus);
+  return o;
+}
 // MULTI-PLATAFORMA (2026-10-16): registro de plataformas de juego. `girox` sigue
 // siendo el cliente directo para todo lo que hoy es sólo girox; los flujos que
 // pueden ir a OTRA plataforma (carga automática con pregunta "¿dónde querés
@@ -4397,15 +4435,27 @@ async function _depositWithBonus(adapter, username, amount, description, referen
   // activo (le debita el resto). Se reclama lo pendiente y se le SUMA al bono adjunto lo que le quedaba (`bonusCarryOver`); si no se pudo
   // reclamar, el bono sale igual (como antes). Si 1girox rechaza el total por rango, el camino de abajo lo manda aparte (creditGift arrastra igual).
   let bonusSend = bonus;
+  let _coBal = null; // #1167: saldo de la lectura fresca, para el control del arrastre
+  let _carryPaused = false; // #1167: arrastre en pausa + bono activo ⇒ la carga va SIN bono pegado y el bono aparte (creditGift lo manda por depósito con rollover)
   if (mult > 0 && typeof adapter.bonusCarryOver === 'function') {
-    try { const co = await adapter.bonusCarryOver(username); if (co && co.ok && co.carry > 0) { bonusSend = Math.round((bonus + co.carry) * 100) / 100; logger.info(`[auto-bonus] ${username}: bono activo $${co.carry} ⇒ bono de la carga $${bonus} + resto = $${bonusSend}`); } } catch (_) {}
+    try {
+      const co = await adapter.bonusCarryOver(username);
+      if (co && co.ok && co.carry > 0) {
+        if (typeof adapter.bonusCarryPaused === 'function' && await adapter.bonusCarryPaused()) { _carryPaused = true; logger.warn(`[auto-bonus] ${username}: arrastre de bonos EN PAUSA y bono activo $${co.carry} ⇒ carga sin bono pegado + bono aparte`); }
+        else { bonusSend = Math.round((bonus + co.carry) * 100) / 100; _coBal = co.balBefore; logger.info(`[auto-bonus] ${username}: bono activo $${co.carry} ⇒ bono de la carga $${bonus} + resto = $${bonusSend}`); }
+      }
+    } catch (_) {}
   }
-  let r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonusSend, bonusMultiplier: mult }));
+  let r = await adapter.depositToUser(username, amount, description, reference, _carryPaused ? _wg({ noBonus: true }) : _wg({ bonusAmount: bonusSend, bonusMultiplier: mult }));
   // si rechaza el ×N de la carga: se prueba ×2 (siempre aceptado) y recién después sin rollover propio — misma reference, un 422 no movió plata
-  for (const fb of [2, 1, 0]) { /* #903 (owner): ×3 → ×2 → ×1 (y sólo si 1girox no acepta ninguno, sin rollover propio + alerta) */ if (!(_multRejected(r) && depMult > 0 && depMult !== fb)) break; logger.warn(`[auto-bonus] ${username}: 1girox rechazó el rollover ×${depMult} de la carga (${r.code || r.error}) ⇒ pruebo ×${fb}`); depMult = fb; r = await adapter.depositToUser(username, amount, description, reference, _wg({ bonusAmount: bonusSend, bonusMultiplier: mult })); }
-  if (r.success && bonusSend !== bonus) { r.carriedBonus = Math.round((bonusSend - bonus) * 100) / 100; if (!r.duplicate && typeof girox.notifyBonusCarry === 'function' && (adapter === girox || adapter.id === 'girox')) girox.notifyBonusCarry(username, reference, r.carriedBonus, bonusSend, 'deposit'); }
+  for (const fb of [2, 1, 0]) { /* #903 (owner): ×3 → ×2 → ×1 (y sólo si 1girox no acepta ninguno, sin rollover propio + alerta) */ if (!(_multRejected(r) && depMult > 0 && depMult !== fb)) break; logger.warn(`[auto-bonus] ${username}: 1girox rechazó el rollover ×${depMult} de la carga (${r.code || r.error}) ⇒ pruebo ×${fb}`); depMult = fb; r = await adapter.depositToUser(username, amount, description, reference, _carryPaused ? _wg({ noBonus: true }) : _wg({ bonusAmount: bonusSend, bonusMultiplier: mult })); }
+  if (r.success && bonusSend !== bonus) { r.carriedBonus = Math.round((bonusSend - bonus) * 100) / 100; if (!r.duplicate && typeof girox.notifyBonusCarry === 'function' && (adapter === girox || adapter.id === 'girox')) { girox.notifyBonusCarry(username, reference, r.carriedBonus, bonusSend, 'deposit'); if (typeof girox.checkBonusCarry === 'function') girox.checkBonusCarry({ username, reference, gift: bonus, carry: r.carriedBonus, total: bonusSend, balBefore: _coBal, result: r, kind: 'deposit', expected: Number(amount) + bonus }); /* #1167 */ } }
   let needSeparate = false;
-  if (!r.success && (r.code === 'bonus_out_of_range' || (r.httpStatus === 422 && /bon(o|us)/i.test(String(r.error || ''))))) {
+  if (_carryPaused) {
+    // #1167: la carga entró sin bono pegado ⇒ el bono va aparte. Si la carga ya EXISTÍA (reintento), el primer intento pudo llevar el bono pegado ⇒ NO se manda aparte (mismo criterio que abajo, revisión #1124).
+    if (r.success && r.duplicate) { r.bonusVia = 'duplicate'; logger.warn(`[auto-bonus] ${username}: reintento de una carga que ya existía (${reference}) con el arrastre en pausa ⇒ el bono NO se manda aparte; revisar en 1girox si entró con la carga`); }
+    else needSeparate = !!r.success;
+  } else if (!r.success && (r.code === 'bonus_out_of_range' || (r.httpStatus === 422 && /bon(o|us)/i.test(String(r.error || ''))))) {
     logger.warn(`[auto-bonus] ${username}: 1girox rechazó la carga por el bono $${bonus} (${r.code || r.error}) ⇒ carga sin bono + bono aparte`);
     r = await adapter.depositToUser(username, amount, description, reference, _wg({ noBonus: true }));
     for (const fb of [2, 1, 0]) { /* #903 (owner): ×3 → ×2 → ×1 (y sólo si 1girox no acepta ninguno, sin rollover propio + alerta) */ if (!(_multRejected(r) && depMult > 0 && depMult !== fb)) break; depMult = fb; r = await adapter.depositToUser(username, amount, description, reference, _wg({ noBonus: true })); }
@@ -4415,13 +4465,13 @@ async function _depositWithBonus(adapter, username, amount, description, referen
   } else if (r.success && r.bonusFailed) needSeparate = true;
   if (r.success) r.depositRolloverX = depMult;
   if (r.success && depMult === 0 && (await _depositRolloverXFor(adapter)) > 0) { logger.error(`[deposit] ⚠️ ${username}: la carga entró SIN rollover propio (1girox no aceptó ×3/×2/×1 en la carga). Pedirle a 1girox que habilite el rollover en la red. ref=${reference}`); try { mongoose.connection.collection('hgcash_webhook_diag').updateOne({ _id: _schedArtKey(new Date()) }, { $inc: { cargasSinRollover: 1 }, $set: { lastSinRollover: { at: new Date(), username, reference } } }, { upsert: true }).catch(() => {}); } catch (_) {} }
-  if (r.success && !needSeparate) { r.bonusVia = 'attached'; return r; }
+  if (r.success && !needSeparate) { if (!r.bonusVia) r.bonusVia = 'attached'; return r; }
   if (needSeparate) {
     r.bonusFailed = true;
     if (typeof adapter.creditGift === 'function') {
       try {
-        const g = await adapter.creditGift(username, bonus, { description: `Bono de la carga de $${Number(amount).toLocaleString('es-AR')}`, reference: `${reference}-bono`, rolloverX: mult });
-        if (g && g.success) { r.bonusFailed = false; r.bonusVia = 'separate'; r.bonusCreditedAs = g.creditedAs || null; logger.info(`[auto-bonus] ${username}: bono $${bonus} acreditado APARTE (${g.creditedAs || 'ok'})`); }
+        const g = await adapter.creditGift(username, bonus, { description: `BONO de la carga — bono de $${Number(bonus).toLocaleString('es-AR')} sobre la carga de $${Number(amount).toLocaleString('es-AR')} (no entró pegado a la carga: va aparte)`, reference: `${reference}-bono`, rolloverX: mult }); // #1167: texto hacia 1girox
+        if (g && g.success) { r.bonusFailed = false; r.bonusVia = 'separate'; r.bonusCreditedAs = g.creditedAs || null; if (Number(g.carriedBonus) > 0) r.carriedBonus = Number(g.carriedBonus); /* #1167 */ logger.info(`[auto-bonus] ${username}: bono $${bonus} acreditado APARTE (${g.creditedAs || 'ok'})`); }
         else logger.error(`[auto-bonus] ${username}: el bono $${bonus} tampoco entró aparte: ${g && g.error}`);
       } catch (e) { logger.error(`[auto-bonus] ${username}: bono aparte excepción: ${e.message}`); }
     }
@@ -12411,7 +12461,7 @@ app.post('/api/refunds/claim/daily', authMiddleware, async (req, res) => {
         throw e;
       }
 
-      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
+      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: `REEMBOLSO diario del ${dateStr} — regalo automático de la sala por lo perdido ese día`, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse · #1167: texto hacia 1girox
       if (!depositResult.success) {
         await RefundClaim.deleteOne({ id: _refundClaimId }).catch(() => {});
         return res.json({ success: false, message: 'Error al acreditar el reembolso: ' + depositResult.error, canClaim: true });
@@ -12421,7 +12471,7 @@ app.post('/api/refunds/claim/daily', authMiddleware, async (req, res) => {
 
       await Transaction.create({
         id: uuidv4(), type: 'refund', amount: refundAmount, username,
-        description: `Reembolso diario (${dateStr})`, transactionId: _refundTxId, timestamp: new Date()
+        description: `Reembolso diario (${dateStr})`, transactionId: _refundTxId, metadata: _giftMeta(depositResult), timestamp: new Date()
       });
 
       try {
@@ -12558,7 +12608,7 @@ app.post('/api/refunds/claim/weekly', authMiddleware, async (req, res) => {
         throw e;
       }
 
-      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
+      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: `REEMBOLSO semanal del ${fromDateStr} al ${toDateStr} — regalo automático de la sala por lo perdido esa semana`, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
 
       if (!depositResult.success) {
         // No se pudo acreditar → liberar la reserva para permitir reintentar.
@@ -12581,6 +12631,7 @@ app.post('/api/refunds/claim/weekly', authMiddleware, async (req, res) => {
         amount: refundAmount,
         username,
         description: `Reembolso semanal (${fromDateStr} a ${toDateStr})`,
+        metadata: _giftMeta(depositResult), // #1167
         transactionId: _refundTxId,
         timestamp: new Date()
       });
@@ -12724,7 +12775,7 @@ app.post('/api/refunds/claim/monthly', authMiddleware, async (req, res) => {
         throw e;
       }
 
-      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: 'Reembolso ' + _refundPeriodKey, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
+      const depositResult = await girox.creditUserBalance(username, refundAmount, _refundReference(_refundPeriodKey, userId), { multiplier: await _giftRolloverX(), description: `REEMBOLSO mensual del ${fromDateStr} al ${toDateStr} — regalo automático de la sala por lo perdido ese mes`, carryOver: true /* #1040 */ }); // #659 (owner): los reembolsos se juegan ×N (rollover global) antes de retirarse
 
       if (!depositResult.success) {
         // No se pudo acreditar → liberar la reserva para permitir reintentar.
@@ -12747,6 +12798,7 @@ app.post('/api/refunds/claim/monthly', authMiddleware, async (req, res) => {
         amount: refundAmount,
         username,
         description: `Reembolso mensual (${fromDateStr} a ${toDateStr})`,
+        metadata: _giftMeta(depositResult), // #1167
         transactionId: _refundTxId,
         timestamp: new Date()
       });
@@ -12998,7 +13050,7 @@ app.post('/api/cashback/claim', authMiddleware, authLimiter, async (req, res) =>
     const _stuck = await CashbackClaim.findOneAndUpdate({ userId, status: 'pending', uncertain: true, createdAt: { $lt: new Date(Date.now() - 20000) } }, { $set: { uncertain: false } }, { new: false }).lean();
     if (_stuck) {
       const sref = `vip-cbk-${userId}-${_stuck.dateKey}-${_stuck.seq}`.slice(0, 100);
-      let sc; try { sc = await girox.creditGift(username, _stuck.amount, { description: `Reembolso ${_stuck.pct}% de tu pérdida acumulada`, reference: sref, rolloverX: _stuck.rolloverX }); } catch (e) { sc = { success: false, error: e.message, code: 'network_error' }; }
+      let sc; try { sc = await girox.creditGift(username, _stuck.amount, { description: `REEMBOLSO ACUMULATIVO — ${_stuck.pct}% de la pérdida acumulada del jugador (regalo automático de la sala)`, reference: sref, rolloverX: _stuck.rolloverX }); } catch (e) { sc = { success: false, error: e.message, code: 'network_error' }; }
       if (!sc || !sc.success) {
         // revisión #1124: un freno LOCAL (gifts_blocked) no dice nada del primer intento, que pudo haber pagado ⇒ el reclamo NO se borra (si se borra, otro día se paga de nuevo)
         if (_giftUncertain(sc) || (sc && sc.code === 'gifts_blocked')) await CashbackClaim.updateOne({ id: _stuck.id }, { $set: { uncertain: true } }).catch(() => {});
@@ -13009,7 +13061,7 @@ app.post('/api/cashback/claim', authMiddleware, authLimiter, async (req, res) =>
       const stx = sc.data?.transfer_id || sc.data?.transferId || null;
       await CashbackClaim.updateOne({ id: _stuck.id }, { $set: { status: 'credited', transactionId: stx, creditedAs: sc.creditedAs || null } }).catch(() => {});
       await Transaction.create({ id: uuidv4(), type: 'bonus', userId, username, amount: _stuck.amount, description: `Reembolso acumulativo ${_stuck.pct}% (pérdida neta de por vida)`, transactionId: stx,
-        metadata: { source: 'instant_cashback', dateKey: _stuck.dateKey, seq: _stuck.seq, creditedAs: sc.creditedAs || null, rollover: _stuck.rolloverX, retried: true }, timestamp: new Date() }).catch((e) => logger.error(`[cashback] Transaction (reintento) ${username}: ${e.message}`));
+        metadata: { source: 'instant_cashback', dateKey: _stuck.dateKey, seq: _stuck.seq, creditedAs: sc.creditedAs || null, rollover: _stuck.rolloverX, retried: true, ..._giftMeta(sc) }, timestamp: new Date() }).catch((e) => logger.error(`[cashback] Transaction (reintento) ${username}: ${e.message}`));
       await _emitAdminOnlyChatNote(userId, username, `📉 REEMBOLSO ACUMULATIVO: se confirmó el reclamo de $${Number(_stuck.amount).toLocaleString('es-AR')} que había quedado sin respuesta de la plataforma${sc.duplicate ? ' (ya había entrado: no se pagó dos veces)' : ''}.`).catch(() => {});
       return res.json({ success: true, amount: _stuck.amount, rolloverX: _stuck.rolloverX, pct: _stuck.pct, creditedAs: sc.creditedAs || null, transactionId: stx, retried: true });
     }
@@ -13061,7 +13113,7 @@ app.post('/api/cashback/claim', authMiddleware, authLimiter, async (req, res) =>
     let credit;
     try {
       credit = await girox.creditGift(username, amount, {
-        description: `Reembolso ${st.pct}% de tu pérdida acumulada`, reference: ref, rolloverX: st.rolloverX
+        description: `REEMBOLSO ACUMULATIVO — ${st.pct}% de la pérdida acumulada del jugador (regalo automático de la sala)`, reference: ref, rolloverX: st.rolloverX // #1167: texto hacia 1girox
       });
     } catch (e) { credit = { success: false, error: e.message, code: 'network_error' }; } // #995: una excepción a mitad de camino también puede haber acreditado
     if (_giftUncertain(credit)) {
@@ -13086,7 +13138,7 @@ app.post('/api/cashback/claim', authMiddleware, authLimiter, async (req, res) =>
       id: uuidv4(), type: 'bonus', userId, username, amount,
       description: `Reembolso acumulativo ${st.pct}% (pérdida neta de por vida)`,
       transactionId: txId,
-      metadata: { source: 'instant_cashback', dateKey: st.dateKey, seq: claimDoc.seq, creditedAs: credit.creditedAs || null, rollover: st.rolloverX },
+      metadata: { source: 'instant_cashback', dateKey: st.dateKey, seq: claimDoc.seq, creditedAs: credit.creditedAs || null, rollover: st.rolloverX, ..._giftMeta(credit) },
       timestamp: new Date()
     }).catch((e) => logger.error(`[cashback] Transaction no se pudo guardar (${username}, $${amount}): ${e.message}`));
     await _emitAdminOnlyChatNote(userId, username,
@@ -13294,7 +13346,7 @@ app.post('/api/vip/level-bonus/claim', authMiddleware, authLimiter, async (req, 
     const adapter = platforms.getAdapter(pid) || girox;
     const _lvlAmt = _capGift(level.levelUpBonusArs); // #1010
     const ref = `vip-lvl-${user.id}-${idx}`;
-    const r = await adapter.creditUserBalance(user.username, _lvlAmt, ref, { multiplier: await _giftRolloverX(), description: `Bono por alcanzar el nivel VIP ${level.name}`, carryOver: true /* #1040 */ }); // #659: rollover global
+    const r = await adapter.creditUserBalance(user.username, _lvlAmt, ref, { multiplier: await _giftRolloverX(), description: `BONO — Premio por alcanzar el nivel VIP ${level.name}`, carryOver: true /* #1040 */ }); // #659: rollover global
     if (!r || !r.success) {
       logger.warn(`[vip] reclamo nivel ${level.name} de ${user.username} en ${pid} falló: ${(r && r.error) || 's/detalle'}`);
       return res.status(503).json({ error: 'No pudimos acreditar el bono ahora. Probá en unos minutos.' });
@@ -13304,7 +13356,7 @@ app.post('/api/vip/level-bonus/claim', authMiddleware, authLimiter, async (req, 
       try {
         await Transaction.create({ id: uuidv4(), type: 'vip_levelup', platform: pid, userId: user.id, username: user.username, amount: _lvlAmt,
           description: `Nivel VIP ${level.name} alcanzado ${level.emoji} — reclamado por el cliente`, transactionId: (r.data && (r.data.transfer_id || r.data.transferId)) || null,
-          metadata: { source: 'vip_levelup', creditedAs: r.creditedAs || null, platform: pid, levelIdx: idx }, timestamp: new Date() });
+          metadata: { source: 'vip_levelup', creditedAs: r.creditedAs || null, platform: pid, levelIdx: idx, ..._giftMeta(r) }, timestamp: new Date() });
       } catch (e) { logger.warn(`[vip] Transaction del reclamo de nivel falló: ${e.message}`); }
     }
     logger.info(`[vip] ${user.username} reclamó el bono del nivel ${level.name} ($${_lvlAmt}) en ${pid}${r.duplicate ? ' (duplicate)' : ''}`);
@@ -13365,7 +13417,7 @@ app.post('/api/vip/rakeback/claim', authMiddleware, async (req, res) => {
 
       const depositResult = await girox.creditUserBalance(username, amount, _rakebackReference(week.fromDateStr, userId), {
         multiplier: await _giftRolloverX(), // #659: rollover global
-        description: `Rakeback semanal VIP (${week.fromDateStr} a ${week.toDateStr})`,
+        description: `REGALO — Rakeback semanal VIP del ${week.fromDateStr} al ${week.toDateStr}: ${pct}% de $${Math.round(Number(wagered) || 0).toLocaleString('es-AR')} apostados`, // #1167: texto hacia 1girox
         carryOver: true // #1040: con bono activo, BONO + lo que quedaba (no pisa)
       });
 
@@ -13386,6 +13438,7 @@ app.post('/api/vip/rakeback/claim', authMiddleware, async (req, res) => {
         amount,
         description: `Rakeback semanal VIP (${week.fromDateStr} a ${week.toDateStr})`,
         transactionId: txId,
+        metadata: _giftMeta(depositResult), // #1167
         timestamp: new Date()
       }).catch(() => {});
 
@@ -14664,7 +14717,7 @@ app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, re
         multiplier: await getGiroxBonusMultiplier(),
         noGiftGuard: true, // #992: la Bonificación MANUAL del panel vale también para una cuenta secundaria (decisión del agente)
         carryOver: true, // #1040
-        description: 'Bonificación otorgada'
+        description: `BONO manual — bonificación otorgada por el agente ${(req.user && req.user.username) || '?'} desde el panel` // #1167: texto hacia 1girox
       }
     );
 
@@ -14696,6 +14749,7 @@ app.post('/api/admin/bonus', authMiddleware, depositorMiddleware, async (req, re
         adminUsername: req.user?.username,
         adminRole: req.user?.role || 'admin',
         transactionId: depositResult.data?.transfer_id || depositResult.data?.transferId,
+        metadata: _giftMeta(depositResult), // #1167
         timestamp: new Date()
       });
 
@@ -19685,7 +19739,7 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
     let adapter = platforms.getAdapter(pid);
     if (!adapter || typeof adapter.isConnected !== 'function' || !adapter.isConnected() || typeof adapter.creditGift !== 'function') { pid = 'girox'; adapter = girox; }
     const reference = `vip-igift-${user.id}`;
-    const credit = await adapter.creditGift(user.username, amount, { description: ig.pct != null ? `${ig.pct}% extra por instalar la app (sobre la primera carga)` : 'Extra por instalar la app', reference, rolloverX: await _installGiftRolloverX() }); // #509 · #1043: ×10 propio
+    const credit = await adapter.creditGift(user.username, amount, { description: ig.pct != null ? `REGALO — Extra por instalar la app: ${ig.pct}% sobre la primera carga de $${Number(ig.baseAmount || 0).toLocaleString('es-AR')}` : 'REGALO — Extra por instalar la app (monto fijo)', reference, rolloverX: await _installGiftRolloverX() }); // #509 · #1043: ×10 propio
     if (!credit || !credit.success) {
       await User.updateOne({ id: user.id }, { $set: { 'installGift.status': prevStatus, 'installGift.claimedAt': null, 'installGift.amount': Math.round(Number(ig.amount) || 0), 'installGift.lastError': String((credit && credit.error) || 'unknown').slice(0, 200) } }).catch(() => {});
       logger.error(`[install-gift] credit FAIL user=${user.username} $${amount}: ${(credit && credit.error) || 'unknown'}`);
@@ -19697,7 +19751,7 @@ app.post('/api/install-gift/claim', authMiddleware, async (req, res) => {
       id: uuidv4(), type: 'install_gift', platform: pid, userId: user.id, username: user.username, amount,
       description: ig.pct != null ? `Extra por instalar la app (${ig.pct}% de su primera carga de $${Number(ig.baseAmount || 0).toLocaleString('es-AR')})` : `Extra por instalar la app (monto fijo; primera carga de $${Number(ig.baseAmount || 0).toLocaleString('es-AR')})`,
       adminUsername: 'auto-install-gift', adminRole: 'system', transactionId: txId,
-      metadata: { source: 'install_gift', creditedAs: credit.creditedAs || null, baseAmount: ig.baseAmount || null, pct: ig.pct != null ? ig.pct : null },
+      metadata: { source: 'install_gift', creditedAs: credit.creditedAs || null, baseAmount: ig.baseAmount || null, pct: ig.pct != null ? ig.pct : null, ..._giftMeta(credit) },
       timestamp: new Date()
     }).catch((e) => logger.warn(`[install-gift] no se pudo registrar la Transaction (${user.username}): ${e.message}`));
     const vars = { username: user.username, monto: amount.toLocaleString('es-AR'), pct: ig.pct != null ? ig.pct : '', plataforma: platforms.labelOf(pid, { emoji: false }) };
@@ -19746,7 +19800,7 @@ async function _installGiftTopup(userId, by) {
   if (!adapter || typeof adapter.isConnected !== 'function' || !adapter.isConnected() || typeof adapter.creditGift !== 'function') { pid = 'girox'; adapter = girox; }
   const reference = `vip-igift-fix-${u.id}`;
   let credit = null;
-  try { credit = await adapter.creditGift(u.username, chk.diff, { description: `Diferencia del extra por instalar la app (completa ${chk.total})`, reference, rolloverX: await _installGiftRolloverX() }); } catch (e) { credit = { success: false, error: e.message }; }
+  try { credit = await adapter.creditGift(u.username, chk.diff, { description: `REGALO — Diferencia del extra por instalar la app (completa $${Number(chk.total || 0).toLocaleString('es-AR')})`, reference, rolloverX: await _installGiftRolloverX() }); } catch (e) { credit = { success: false, error: e.message }; }
   if (!credit || !credit.success) {
     await User.updateOne({ id: u.id }, { $unset: { 'installGift.topupAt': 1 } }).catch(() => {});
     logger.error(`[install-gift] topup FAIL user=${u.username} $${chk.diff}: ${(credit && credit.error) || 'unknown'}`);
@@ -19758,7 +19812,7 @@ async function _installGiftTopup(userId, by) {
     id: uuidv4(), type: 'install_gift', platform: pid, userId: u.id, username: u.username, amount: chk.diff,
     description: `Diferencia del extra por instalar la app (cobró $${Math.round(chk.total - chk.diff).toLocaleString('es-AR')}, el extra es $${chk.total.toLocaleString('es-AR')})`,
     adminUsername: by === 'bot' ? 'support-bot' : 'auto-install-gift', adminRole: 'system', transactionId: txId,
-    metadata: { source: 'install_gift_topup', creditedAs: credit.creditedAs || null, by: by || null }, timestamp: new Date()
+    metadata: { source: 'install_gift_topup', creditedAs: credit.creditedAs || null, by: by || null, ..._giftMeta(credit) }, timestamp: new Date()
   }).catch((e) => logger.warn(`[install-gift] topup sin Transaction (${u.username}): ${e.message}`));
   await _emitAdminOnlyChatNote(u.id, u.username, `🎁 EXTRA por instalar COMPLETADO${by === 'bot' ? ' por el bot (el cliente lo reclamó)' : ''}: +$${chk.diff.toLocaleString('es-AR')} en ${platforms.labelOf(pid)} (había cobrado $${Math.round(chk.total - chk.diff).toLocaleString('es-AR')} con la regla vieja; el extra es $${chk.total.toLocaleString('es-AR')}). Ref ${reference}. No hay que hacer nada.`).catch(() => {});
   logger.info(`[install-gift] topup user=${u.username} +$${chk.diff} platform=${pid} by=${by || '?'}`);
@@ -19989,7 +20043,7 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
       const _welcomeRolloverX = await getWelcomeCodeRolloverX();
       const credit = await girox.creditUserBalance(
         user.username, amount, `vip-welcome-${user.id}`,
-        { multiplier: _welcomeRolloverX, description: 'Bono sorpresa — código de bienvenida de la Comunidad', carryOver: true /* #1040 */ }
+        { multiplier: _welcomeRolloverX, description: 'BONO — Bono sorpresa por el código de bienvenida de la Comunidad', carryOver: true /* #1040 */ }
       );
       if (!credit.success) {
         // Restaurar la reserva (guard en 'pending') para que pueda reintentar.
@@ -20026,7 +20080,7 @@ app.post('/api/community-code/claim', authMiddleware, authLimiter, async (req, r
         amount,
         description: 'Bono sorpresa — código de bienvenida de la Comunidad',
         transactionId: (credit.data && (credit.data.transfer_id || credit.data.transferId)) || null,
-        metadata: { source: 'welcome_code' },
+        metadata: { source: 'welcome_code', ..._giftMeta(credit) },
         timestamp: new Date()
       }).catch((e) => logger.warn(`[welcome-code] no se pudo guardar la Transaction: ${e.message}`));
 
@@ -20522,8 +20576,8 @@ async function _creditFireReward(username, amount, desc, ref, mult) {
     }
   }
   logger.warn(`[FIRE_REWARD] ${username} $${amount} va por DEPÓSITO con rollover x${mult} (figura como Carga) — ${why}`);
-  const r = await girox.depositToUser(username, amount, desc, ref, { multiplier: mult });
-  if (r && r.success) r.creditedAs = 'deposit';
+  const r = await girox.depositToUser(username, amount, girox.giftAsDepositDesc(desc), ref, { multiplier: mult }); // #1167 (réplica #238)
+  if (r && r.success) { r.creditedAs = 'deposit'; r.fallbackReason = why; }
   return r;
 }
 
@@ -20824,7 +20878,7 @@ app.post('/api/fire/claim-reward', authMiddleware, async (req, res) => {
     // PISARÍA → cae al depósito con multiplier de antes (mismo candado, figura
     // como Carga). La reference es la MISMA en todas las ramas → idempotencia.
     const _fireMult = Math.max(await getFireRolloverMultiplier(), await _giftRolloverX()); // #1088-b: nunca menos que el global (#659)
-    const bonusResult = await _creditFireReward(username, rewardAmount, rewardDesc, _fireRef, _fireMult);
+    const bonusResult = await _creditFireReward(username, rewardAmount, `REGALO — Fueguito (racha diaria): ${rewardDesc}`, _fireRef, _fireMult); // #1167: texto hacia 1girox
 
     if (!bonusResult.success) {
       // La acreditación falló → DEVOLVER el premio a pendiente para que el cliente
@@ -20867,7 +20921,7 @@ app.post('/api/fire/claim-reward', authMiddleware, async (req, res) => {
         amount: rewardAmount,
         description: `Fueguito - ${rewardDesc}`,
         transactionId: bonusResult.data?.transfer_id || bonusResult.data?.transferId || null,
-        metadata: { source: 'fire_reward', creditedAs: bonusResult.creditedAs || null, rollover: _fireMult },
+        metadata: { source: 'fire_reward', creditedAs: bonusResult.creditedAs || null, rollover: _fireMult, ..._giftMeta(bonusResult) },
         timestamp: new Date()
       });
     } catch (txErr) {
@@ -20876,15 +20930,18 @@ app.post('/api/fire/claim-reward', authMiddleware, async (req, res) => {
 
     logger.info(`[FIRE_REWARD] claim-reward OK userId=${userId} username=${username} amount=${rewardAmount}`);
 
+    // #1167: si el premio se sumó al resto de un bono anterior (arrastre #1040), el objetivo real es sobre el TOTAL (premio + resto), no sobre el premio solo.
+    const _fireCarry = bonusResult.creditedAs === 'bonus' && !bonusResult.duplicate ? (Number(bonusResult.carriedBonus) || 0) : 0;
+    const _fireTarget = _fireMult > 0 ? Math.round((rewardAmount + _fireCarry) * _fireMult) : 0;
     const _rolloverMsg = _fireMult > 0
-      ? ` Para poder RETIRARLOS tenés que cumplir el rollover x${_fireMult}: apostar $${Math.round(rewardAmount * _fireMult).toLocaleString('es-AR')} en la plataforma (apostar, no cargar). ¡Ya podés jugarlos!` +
+      ? ` Para poder RETIRARLOS tenés que cumplir el rollover x${_fireMult}: apostar $${_fireTarget.toLocaleString('es-AR')} en la plataforma (apostar, no cargar)${_fireCarry > 0 ? ` — el premio se sumó a los $${Math.round(_fireCarry).toLocaleString('es-AR')} que te quedaban de tu bono anterior y el objetivo es sobre el total` : ''}. ¡Ya podés jugarlos!` +
         (bonusResult.claimRequired ? ' Cuando completes el objetivo, tocá el regalito 🎁 en el casino para liberarlos.' : '')
       : '';
     res.json({
       success: true,
       reward: rewardAmount,
       rolloverMultiplier: _fireMult,
-      rolloverTarget: _fireMult > 0 ? Math.round(rewardAmount * _fireMult) : 0,
+      rolloverTarget: _fireTarget,
       message: `🎉 ¡$${rewardAmount.toLocaleString()} acreditados en tu cuenta!${_rolloverMsg}`
     });
   } catch (error) {
@@ -23060,6 +23117,25 @@ app.get('/api/admin/transactions', authMiddleware, adminMiddleware, async (req, 
       }
     }
 
+    // #1167 (réplica #236/#237): regalos del período que 1girox anotó como CARGA (hay que restarlos de las cargas de 1girox al cerrar) y el
+    // resto de bonos anteriores que se volvió a dar adentro de un bono nuevo (arrastre #1040; en 1girox el Bono figura por regalo + resto y hay
+    // una "Cancelación de bono" por el resto). El arrastre sale de `bonus_carry_log` (lo anota el hook de giroxService en TODOS los flujos).
+    let giftsAsDeposit = 0, giftsAsDepositCount = 0, carriedBonus = 0, carriedBonusCount = 0, carryPause = null;
+    try {
+      const gd = await Transaction.aggregate([
+        { $match: Object.assign({}, baseQuery, { type: { $nin: ['deposit', 'withdrawal'] }, status: { $nin: ['failed', 'cancelled'] }, 'metadata.creditedAs': 'deposit' }) },
+        { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }]);
+      if (gd[0]) { giftsAsDeposit = gd[0].total || 0; giftsAsDepositCount = gd[0].count || 0; }
+    } catch (e) { logger.warn('[transactions] regalos como carga: ' + e.message); }
+    try {
+      const cq = {};
+      if (baseQuery.timestamp) cq.at = baseQuery.timestamp;
+      if (baseQuery.username) cq.username = baseQuery.username;
+      const ca = await mongoose.connection.collection('bonus_carry_log').aggregate([{ $match: cq }, { $group: { _id: null, total: { $sum: '$carry' }, count: { $sum: 1 } } }]).toArray();
+      if (ca[0]) { carriedBonus = ca[0].total || 0; carriedBonusCount = ca[0].count || 0; }
+    } catch (e) { logger.warn('[transactions] arrastre de bonos: ' + e.message); }
+    try { const cp = await _bonusCarryPauseGet(); if (cp && cp.paused) carryPause = { paused: true, at: cp.at || null, by: cp.by || null, reason: cp.reason || null }; } catch (_) {}
+
     // Saldo neto = depósitos - retiros (bonos y reembolsos no afectan).
     // `gifts` = TODO lo que no es carga ni retiro (lo que en 1girox va como Bono).
     const gifts = bonuses + refunds + fireRewards + referrals + rakebacks + vipLevelups + roulette;
@@ -23075,6 +23151,8 @@ app.get('/api/admin/transactions', authMiddleware, adminMiddleware, async (req, 
       vipLevelups,
       roulette,
       gifts,
+      giftsAsDeposit, giftsAsDepositCount, // #1167
+      carriedBonus, carriedBonusCount, carryPause, // #1167
       netBalance: deposits - withdrawals,
       totalTransactions: totalAll
     };
@@ -28054,9 +28132,9 @@ async function _missionCredit(m, st, wk, af) {
   let claim; try { claim = await MissionClaim.create({ id: uuidv4(), userId: user.id, username: user.username, missionId: m.id, weekKey: wk, title: m.title, rewardArs: m.rewardArs, status: 'credited' }); } catch (e) { if (e && e.code === 11000) { claim = await MissionClaim.findOne({ userId: user.id, missionId: m.id, weekKey: wk }); if (!claim || claim.status !== 'failed') return null; await MissionClaim.updateOne({ id: claim.id }, { $set: { status: 'credited', error: null } }); } else throw e; }
   let pid = user.preferredPlatform || 'girox'; let adapter = platforms.getAdapter(pid);
   if (!adapter || typeof adapter.isConnected !== 'function' || !adapter.isConnected() || typeof adapter.creditGift !== 'function') { pid = 'girox'; adapter = girox; }
-  const credit = await adapter.creditGift(user.username, m.rewardArs, { description: `Misión semanal: ${m.title}`, reference, rolloverX: af.rolloverX || 0 });
+  const credit = await adapter.creditGift(user.username, m.rewardArs, { description: `REGALO — Misión semanal cumplida: ${m.title}`, reference, rolloverX: af.rolloverX || 0 });
   if (!credit || !credit.success) { await MissionClaim.updateOne({ id: claim.id }, { $set: { status: 'failed', error: String((credit && credit.error) || 'unknown').slice(0, 200) } }); logger.error(`[misiones] credit FAIL ${user.username} ${m.id}: ${(credit && credit.error) || 'unknown'}`); return null; }
-  const tx = await Transaction.create({ id: uuidv4(), type: 'mission', userId: user.id, username: user.username, amount: m.rewardArs, platform: pid, description: `Misión semanal cumplida: ${m.title}`, transactionId: credit.data && (credit.data.transfer_id || credit.data.transferId) || null, metadata: { source: 'mission', missionId: m.id, weekKey: wk, creditedAs: credit.creditedAs || null, rollover: af.rolloverX || 0, cappedFrom: reward !== (arguments[0] && arguments[0].rewardArs) ? arguments[0].rewardArs : null }, timestamp: new Date() });
+  const tx = await Transaction.create({ id: uuidv4(), type: 'mission', userId: user.id, username: user.username, amount: m.rewardArs, platform: pid, description: `Misión semanal cumplida: ${m.title}`, transactionId: credit.data && (credit.data.transfer_id || credit.data.transferId) || null, metadata: { ..._giftMeta(credit), source: 'mission', missionId: m.id, weekKey: wk, creditedAs: credit.creditedAs || null, rollover: af.rolloverX || 0, cappedFrom: reward !== (arguments[0] && arguments[0].rewardArs) ? arguments[0].rewardArs : null }, timestamp: new Date() });
   await MissionClaim.updateOne({ id: claim.id }, { $set: { txId: tx.id } });
   const vars = { username: user.username, titulo: m.title, monto: m.rewardArs.toLocaleString('es-AR') };
   vars.rollover = af.rolloverX || 0;
@@ -28199,6 +28277,24 @@ app.post('/api/admin/strategy/rollover', authMiddleware, adminMiddleware, async 
     logger.info(`[anti-estafa] rollover global ×${x} (carga con bono ×${await getDepositRolloverX()}) por ${by}`);
     res.json({ success: true, x, depositX: await getDepositRolloverX() });
   } catch (e) { res.status(500).json({ error: 'Error' }); }
+});
+// #1167: arrastre de bonos (#1040) — estado y pausa. El control de plata lo pausa solo; el admin general lo reactiva (o lo pausa a mano) acá.
+app.get('/api/admin/strategy/bonus-carry', authMiddleware, adminMiddleware, async (req, res) => {
+  try { const c = await _bonusCarryPauseGet(); res.json({ success: true, paused: !!(c && c.paused), at: (c && c.at) || null, by: (c && c.by) || null, reason: (c && c.reason) || null, anomaly: (c && c.anomaly) || null }); }
+  catch (e) { res.status(500).json({ error: 'Error del servidor' }); }
+});
+app.post('/api/admin/strategy/bonus-carry', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo admin general' });
+    const paused = !!(req.body && req.body.paused);
+    const by = req.user.username;
+    await Config.set('bonusCarryPause', paused
+      ? { paused: true, at: new Date().toISOString(), by, reason: 'Pausado a mano por ' + by }
+      : { paused: false, at: new Date().toISOString(), by, reason: null }, by);
+    _carryPauseCache = { at: Date.now(), v: paused };
+    logger.warn(`[arrastre-bonos] ${paused ? 'PAUSADO' : 'REACTIVADO'} por ${by}`);
+    res.json({ success: true, paused });
+  } catch (e) { logger.error('[arrastre-bonos] ' + e.message); res.status(500).json({ error: 'Error del servidor' }); }
 });
 app.get('/api/admin/strategy/rollover', authMiddleware, adminMiddleware, async (req, res) => { try { const x = await _giftRolloverX(); const fire = await getFireRolloverMultiplier(); const wc = await getWelcomeCodeRolloverX(); const st = await getStrategyConfig(); const flagged = await User.countDocuments({ 'fraudFlags.0': { $exists: true } }); res.json({ depositX: await getDepositRolloverX(), success: true, bonos: x, fueguito: fire, codigo: wc, misiones: st.missions.antiFraud.rolloverX, flagged }); } catch (e) { res.status(500).json({ error: 'Error' }); } });
 app.post('/api/admin/strategy', authMiddleware, adminMiddleware, async (req, res) => {
@@ -30123,7 +30219,7 @@ async function _payoutCancelHandler(req, res) { // #996: con nombre para que "Re
         let ok = false, data = null;
         // `reference` derivada del payout: la devolución de un retiro rechazado ocurre
         // UNA sola vez por payout, así que un reintento nunca puede devolver dos veces.
-        try { const r = await (platforms.getAdapter(payout.platform) || girox).depositToUser(payout.username, W, 'Devolución de retiro rechazado', `vip-payoutref-${payout.id}`); if (r && r.success) { ok = true; data = r.data; } } catch (e) { logger.error(`[payout-cancel] devolución (deductAtPay) falló payout=${id}: ${e.message}`); }
+        try { const r = await (platforms.getAdapter(payout.platform) || girox).depositToUser(payout.username, W, 'DEVOLUCIÓN de retiro rechazado — vuelven al jugador las fichas del retiro que no se pagó (no es una carga nueva)', `vip-payoutref-${payout.id}`); if (r && r.success) { ok = true; data = r.data; } } catch (e) { logger.error(`[payout-cancel] devolución (deductAtPay) falló payout=${id}: ${e.message}`); }
         if (ok) {
           await PendingPayout.updateOne({ id }, { $set: { chipsReturned: true } });
           try {
@@ -30204,11 +30300,11 @@ async function _payoutCancelHandler(req, res) { // #996: con nombre para que "Re
     let bonusOk = bonusPart <= 0; // sin parte de bonus  → ya "ok"
     try {
       if (chipsPart > 0) {
-        const r = await (platforms.getAdapter(payout.platform) || girox).depositToUser(payout.username, chipsPart, 'Devolución de retiro rechazado (fichas)', `vip-payoutref-chips-${payout.id}`);
+        const r = await (platforms.getAdapter(payout.platform) || girox).depositToUser(payout.username, chipsPart, 'DEVOLUCIÓN de retiro rechazado — parte del retiro que eran fichas (no es una carga nueva)', `vip-payoutref-chips-${payout.id}`);
         if (r && r.success) { chipsOk = true; await mkRefundTx(chipsPart, 'chips', r.data); }
       }
       if (bonusPart > 0) {
-        const r = await (platforms.getAdapter(payout.platform) || girox).creditUserBalance(payout.username, bonusPart, `vip-payoutref-bonus-${payout.id}`, { noGiftGuard: true }); // #992: es SU bono devuelto, no un regalo
+        const r = await (platforms.getAdapter(payout.platform) || girox).creditUserBalance(payout.username, bonusPart, `vip-payoutref-bonus-${payout.id}`, { noGiftGuard: true, description: 'DEVOLUCIÓN de retiro rechazado — parte del retiro que era bono (no es un regalo nuevo)' }); // #992: es SU bono devuelto, no un regalo
         if (r && r.success) { bonusOk = true; await mkRefundTx(bonusPart, 'bonus', r.data); }
       }
     } catch (e) {
@@ -31322,7 +31418,7 @@ async function _recordRouletteTransaction(spinId, userId, username, prizeARS, la
       amount: Number(prizeARS) || 0,
       description: `Premio de la ruleta diaria${label ? ` — ${label}` : ''}`,
       transactionId: txId || null,
-      metadata: { source: 'roulette', spinId, creditedAs: (credit && credit.creditedAs) || null },
+      metadata: { source: 'roulette', spinId, creditedAs: (credit && credit.creditedAs) || null, ..._giftMeta(credit) },
       timestamp: new Date()
     });
   } catch (e) {
@@ -31897,7 +31993,7 @@ app.post('/api/roulette/spin', authMiddleware, async (req, res) => {
     const _roll = Number(spinDoc.rolloverX) || 0; // #1088-b: el grabado (nunca menos que el global)
     let credit;
     try {
-      credit = await girox.creditGift(username, prizeARS, { description: `Ruleta diaria — ${pick.label}`, reference: `vip-roulette-${spinDoc.id}`, rolloverX: _roll });
+      credit = await girox.creditGift(username, prizeARS, { description: `REGALO — Premio de la ruleta diaria: ${pick.label}`, reference: `vip-roulette-${spinDoc.id}`, rolloverX: _roll });
     } catch (e) {
       credit = { success: false, error: e.message };
     }
@@ -32039,7 +32135,7 @@ app.post('/api/admin/roulette/:id/retry-credit', authMiddleware, adminMiddleware
     try {
       // MISMA reference que el giro original: si el premio ya se había acreditado y
       // sólo falló el registro local, este reintento no lo paga de nuevo.
-      credit = await girox.creditGift(spin.username, spin.prizeARS, { description: `Ruleta diaria — ${spin.prizeLabel || 'premio'}`, reference: `vip-roulette-${spin.id}`, rolloverX: Number(spin.rolloverX) || 0 });
+      credit = await girox.creditGift(spin.username, spin.prizeARS, { description: `REGALO — Premio de la ruleta diaria: ${spin.prizeLabel || 'premio'}`, reference: `vip-roulette-${spin.id}`, rolloverX: Number(spin.rolloverX) || 0 });
     } catch (e) {
       credit = { success: false, error: e.message };
     }
@@ -32877,9 +32973,9 @@ app.post('/api/reviews', authMiddleware, async (req, res) => {
       const c = await _reviewGiftCalc(userId); c.amount = _capGift(c.amount); // #1010
       if (c.deposits >= REVIEW_GIFT_MIN_DEPOSITS && c.amount > 0 && !(await Transaction.exists({ userId, type: 'review_gift' }))) {
         const reference = `vip-review-${userId}`;
-        const cr = await girox.creditGift(username, c.amount, { description: `${REVIEW_GIFT_PCT}% de regalo por dejar tu opinión`, reference, rolloverX: await _giftRolloverX() });
+        const cr = await girox.creditGift(username, c.amount, { description: `REGALO — ${REVIEW_GIFT_PCT}% por dejar su opinión (reseña) tras ${c.deposits} cargas`, reference, rolloverX: await _giftRolloverX() });
         if (cr && cr.success) {
-          await Transaction.create({ id: uuidv4(), type: 'review_gift', amount: c.amount, username, userId, description: `${REVIEW_GIFT_PCT}% de regalo por opinar (tras ${c.deposits} cargas)`, adminUsername: 'auto-reseñas', adminRole: 'system', metadata: { source: 'review_gift', reference, creditedAs: cr.creditedAs || null }, timestamp: new Date() });
+          await Transaction.create({ id: uuidv4(), type: 'review_gift', amount: c.amount, username, userId, description: `${REVIEW_GIFT_PCT}% de regalo por opinar (tras ${c.deposits} cargas)`, adminUsername: 'auto-reseñas', adminRole: 'system', metadata: { source: 'review_gift', reference, creditedAs: cr.creditedAs || null, ..._giftMeta(cr) }, timestamp: new Date() });
           gift = { amount: c.amount, pct: REVIEW_GIFT_PCT };
           logger.info(`[reseñas] regalo $${c.amount} a ${username} por opinar (${c.deposits} cargas)`);
         } else logger.warn(`[reseñas] el regalo de ${username} no entró: ${cr && cr.error}`);
@@ -33800,7 +33896,7 @@ async function _codeDropClaimHandler(req, res) { // #1055: también desde Perfil
       slot = await CodeDrop.findOneAndUpdate({ id: d.id, status: 'active', claims: { $lt: d.maxClaims }, endsAt: { $gt: new Date() } }, { $inc: { claims: 1 } }, { new: true }).lean();
       if (!slot) { await CodeDropClaim.deleteOne({ dropId: d.id, userId: user.id }); return res.status(410).json({ error: `Llegaste tarde: ya se lo llevaron los ${d.maxClaims} primeros. ¡Estate atento al próximo!`, code: 'GONE' }); }
     }
-    let credit; try { credit = await girox.creditGift(user.username, d.amount, { description: `Código sorpresa ${d.code}`, reference, rolloverX: await _giftRolloverX() }); } catch (e) { credit = { success: false, error: e.message }; }
+    let credit; try { credit = await girox.creditGift(user.username, d.amount, { description: `REGALO — Código sorpresa ${d.code} canjeado en la app`, reference, rolloverX: await _giftRolloverX() }); } catch (e) { credit = { success: false, error: e.message }; }
     if (!credit || !credit.success) {
       // Rechazo DEFINITIVO (cuenta sin regalos, jugador inexistente, validación, 4xx) ⇒ se libera el lugar. Si no (timeout, 5xx, red), pudo haber
       // entrado: el lugar queda tomado y el canje en 'unknown' para que el reintento use la misma reference (nunca acredita dos veces).
@@ -33812,7 +33908,7 @@ async function _codeDropClaimHandler(req, res) { // #1055: también desde Perfil
       return res.status(503).json({ error: cd === 'gifts_blocked' ? 'Esta cuenta no participa de los códigos.' : (definitive ? 'No pudimos acreditarlo. Escribinos a Soporte.' : 'Se cortó la conexión: tocá "Reclamar ahora" de nuevo, tu lugar está guardado.') });
     }
     await CodeDropClaim.updateOne({ dropId: d.id, userId: user.id }, { $set: { status: 'credited', creditedAs: credit.creditedAs || null } });
-    try { await Transaction.create({ id: uuidv4(), type: 'code_drop', platform: 'girox', amount: d.amount, username: user.username, userId: user.id, description: `Código sorpresa ${d.code} (${slot.claims}/${d.maxClaims})`, transactionId: (credit.data && (credit.data.transfer_id || credit.data.transferId)) || null, metadata: { codeDropId: d.id, reference, creditedAs: credit.creditedAs || null }, timestamp: new Date() }); } catch (e) { logger.warn('[código-sorpresa] tx: ' + e.message); }
+    try { await Transaction.create({ id: uuidv4(), type: 'code_drop', platform: 'girox', amount: d.amount, username: user.username, userId: user.id, description: `Código sorpresa ${d.code} (${slot.claims}/${d.maxClaims})`, transactionId: (credit.data && (credit.data.transfer_id || credit.data.transferId)) || null, metadata: { codeDropId: d.id, reference, creditedAs: credit.creditedAs || null, ..._giftMeta(credit) }, timestamp: new Date() }); } catch (e) { logger.warn('[código-sorpresa] tx: ' + e.message); }
     _emitAdminOnlyChatNote(user.id, user.username, `🎁 Canjeó el CÓDIGO SORPRESA ${d.code}: ${_cdMoney(d.amount)} acreditado automático (${slot.claims}/${d.maxClaims}). No hay que hacer nada.`).catch(() => {});
     if (slot.claims >= d.maxClaims) setImmediate(() => _codeDropFinish(d.id).catch(() => {}));
     const rx = await _giftRolloverX().catch(() => 5);
@@ -38690,7 +38786,7 @@ async function _creditNotifBatchGift(uDoc, batch) {
   const _ref = `vip-nbatch-${batch.id}-${uDoc.id}`.slice(0, 100);
   const credit = await girox.creditUserBalance(
     uDoc.username, batch.amount, _ref,
-    { multiplier: rollover, description: `Regalo por notificación — lote de ${batch.sentBy}`, carryOver: true /* #1040 */ }
+    { multiplier: rollover, description: `REGALO — Fichas de regalo del lote de notificaciones${batch.name ? ` "${batch.name}"` : ''} (enviado por ${batch.sentBy})`, carryOver: true /* #1040 */ }
   );
   if (!credit.success) {
     logger.warn(`[notif-batch] crédito de fichas falló para ${uDoc.username} (lote ${batch.id}): ${credit.error || 's/detalle'}`);
@@ -38707,12 +38803,21 @@ async function _creditNotifBatchGift(uDoc, batch) {
   await Transaction.create({
     id: uuidv4(), type: 'bonus', userId: uDoc.id, username: uDoc.username,
     amount: batch.amount, description: `Regalo por notificación — lote de ${batch.sentBy}${batch.name ? ' ("' + batch.name + '")' : ''}`,
-    transactionId: txId, metadata: { source: 'notif_batch', batchId: batch.id },
+    transactionId: txId, metadata: { source: 'notif_batch', batchId: batch.id, ..._giftMeta(credit) },
     timestamp: new Date()
   }).catch((e) => logger.warn(`[notif-batch] no se pudo guardar la Transaction: ${e.message}`));
-  return { ok: true, txId };
+  return { ok: true, txId, carried: credit.creditedAs === 'deposit' || credit.duplicate ? 0 : (Number(credit.carriedBonus) || 0) };
 }
 
+// #1167: texto del rollover de las fichas de un lote. Si el regalo se sumó al resto de un bono anterior (arrastre #1040), el objetivo de
+// apuesta real es sobre el TOTAL (regalo + resto): se le dice en pesos. Sin arrastre, el texto de siempre.
+function _batchRollTxt(rollover, amount, carried) {
+  if (!(rollover > 0)) return '';
+  const c = Number(carried) || 0;
+  if (!(c > 0)) return ` (bono con rollover x${rollover}: apostá ${rollover}× el monto y después podés retirar)`;
+  const total = Math.round((Number(amount) || 0) + c);
+  return ` (bono con rollover x${rollover}: se sumó a los $${Math.round(c).toLocaleString('es-AR')} que te quedaban de tu bono anterior — apostá $${Math.round(total * rollover).toLocaleString('es-AR')} en total y después podés retirar)`;
+}
 // Texto que ve el cliente en el chat (el push lleva title + message pelado).
 function _notifBatchChatContent(batch) {
   if (batch.mode === 'code') {
@@ -38799,6 +38904,7 @@ async function _processOneNotifBatch(batchId) {
       if (u) {
         let mensajeChat = chatContent;
         let notificar = true;
+        let _batchCarried = 0; // #1167: resto del bono anterior arrastrado en este regalo
         if (batch.mode === 'window' && batch.giftType === 'fixed') {
           // FICHAS POR TIEMPO = acreditación AUTOMÁTICA al enviar (owner
           // 2026-08-10), con los mismos guards anti-abuso que el canje por
@@ -38809,6 +38915,7 @@ async function _processOneNotifBatch(batchId) {
             // ya acreditado en un pase anterior: solo asegurar la notificación
           } else {
             const res2 = await _creditNotifBatchGift(u, batch);
+            if (res2 && res2.ok) _batchCarried = Number(res2.carried) || 0;
             if (!res2.ok && res2.retryable) {
               // API caída/lenta: dejar el recipient EN 'sending' — el claim
               // vence a los 10 min y el motor lo reintenta solo (la reference
@@ -38836,9 +38943,7 @@ async function _processOneNotifBatch(batchId) {
           }
           if (notificar) {
             const rollover = await _batchRolloverX(batch);
-            const rollTxt = rollover > 0
-              ? ` (bono con rollover x${rollover}: apostá ${rollover}× el monto y después podés retirar)`
-              : '';
+            const rollTxt = _batchRollTxt(rollover, batch.amount, _batchCarried); // #1167: con arrastre, el objetivo es sobre el total
             mensajeChat = `${batch.message}\n\n💰 ¡Te ACREDITAMOS $${Number(batch.amount).toLocaleString('es-AR')} en fichas${rollTxt}! Ya están en tu cuenta. ¡A jugarlas! 🎰`;
           }
         } else if (batch.mode === 'window' && batch.giftType !== 'none' && !rec.promoBonusId) { // #295: sin regalo = sin PromoBonus
@@ -39060,9 +39165,7 @@ async function _tryClaimNotifBatchCode(reqUser, attempt) {
     ).catch(() => {});
 
     const rollover = await _batchRolloverX(batch);
-    const rollTxt = rollover > 0
-      ? ` (bono con rollover x${rollover}: apostá ${rollover}× el monto y después podés retirar)`
-      : '';
+    const rollTxt = _batchRollTxt(rollover, batch.amount, res2 && res2.carried); // #1167: con arrastre, el objetivo es sobre el total
     await Message.create({
       id: uuidv4(), senderId: 'system', senderUsername: 'Sistema', senderRole: 'admin',
       receiverId: uDoc.id, receiverRole: 'user',

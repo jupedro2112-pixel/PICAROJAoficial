@@ -147,6 +147,12 @@ Landing de pauta en Vercel: grupospicaroja.com (carpeta `landing/`). Git user: j
   el viejo): antes caía a CARGA y figuraba como "Carga" en 1girox (reclamo del owner). Un bono NUEVO con rollover tiene que pasar por `creditGift` o por
   `creditUserBalance(..., {multiplier, carryOver:true})`, nunca un `/bonus` directo. Un regalo que igual entre como carga se marca `metadata.creditedAs:'deposit'`
   (el cierre vs 1girox lo cuenta en cargas); los arrastres quedan en `bonus_carry_log`.
+  **#1167 (2026-11-25):** el arrastre tiene CONTROL DE PLATA: si tras arrastrar el saldo sube bastante más que el regalo, se pone solo EN PAUSA
+  (`Config['bonusCarryPause']`; se reactiva en Transacciones, sólo admin general) y los regalos a quien tiene bono activo salen por depósito. Un
+  camino NUEVO que arrastre tiene que llamar `girox.checkBonusCarry(...)` con el `balBefore` de `bonusCarryOver` y respetar
+  `girox.bonusCarryPaused()`. Toda acreditación NUEVA manda a 1girox una `description` que empieza con el TIPO en mayúsculas (`REEMBOLSO …`,
+  `REGALO — …`, `BONO — …`, `COMISIÓN …`, `DEVOLUCIÓN …`) y guarda `..._giftMeta(resultado)` en el `metadata` de su Transaction (el monto de la
+  Transaction es SIEMPRE el regalo pedido, nunca regalo + resto). Test: `node scripts/test-gift-carry-check.js`.
   **#882/#883 → #976:** TODA carga real (hgcash y manual) va con rollover propio ×`Config['depositRolloverX']` (**1** desde 2026-10-24, antes 3) en
   `_depositWithBonus`; el bono ×5. Retiro mínimo `Config['withdrawMinArs']` $5.000 (#976). Registro abierto (`noWelcomeGifts`): sin fichas gratis ni 2ª
   carga hasta ser CLIENTE FIEL (**#1039:** `Config['trustRule']` = 3 cargas reales + 7 días desde la primera, `_isTrustedClient` / `_noWelcomeActive`;
